@@ -1,5 +1,6 @@
 pub mod ask;
 pub mod autopilot;
+pub mod backup;
 pub mod cleanup;
 pub mod config_cmd;
 pub mod doctor;

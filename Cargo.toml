@@ -34,6 +34,7 @@ thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing-appender = "0.2"
+humantime = "2.1"
 
 # Text processing
 regex = "1.11"
