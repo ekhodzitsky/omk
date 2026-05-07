@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
-use tracing::{info, warn};
+use tracing::info;
 
 mod cli;
 mod mcp;
@@ -170,8 +170,116 @@ enable_metrics = true
 }
 
 async fn run_update() -> Result<()> {
-    warn!("omk update: not yet implemented");
-    println!("omk update is not yet implemented.");
-    println!("Please update via your package manager (cargo install omk).");
+    use std::process::Command;
+
+    let current = env!("CARGO_PKG_VERSION");
+    println!("Current version: {current}");
+
+    // Detect platform
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    let target = match (os, arch) {
+        ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
+        ("macos", "x86_64") => "x86_64-apple-darwin",
+        ("macos", "aarch64") => "aarch64-apple-darwin",
+        _ => {
+            anyhow::bail!("Unsupported platform: {os} {arch}");
+        }
+    };
+
+    // Fetch latest release tag
+    println!("Checking for latest release...");
+    let latest = match Command::new("curl")
+        .args([
+            "-fsSL",
+            "-H", "Accept: application/vnd.github+json",
+            "https://api.github.com/repos/ekhodzitsky/oh-my-kimi/releases/latest",
+        ])
+        .output()
+    {
+        Ok(out) if out.status.success() => {
+            let json: serde_json::Value = serde_json::from_slice(&out.stdout)?;
+            json["tag_name"].as_str().unwrap_or("").to_string()
+        }
+        _ => {
+            anyhow::bail!("Failed to check for updates. Are you online?");
+        }
+    };
+
+    if latest.is_empty() {
+        anyhow::bail!("Could not determine latest version");
+    }
+
+    let latest_version = latest.trim_start_matches('v');
+    println!("Latest version: {latest_version}");
+
+    if latest_version == current {
+        println!("✓ You are already on the latest version.");
+        return Ok(());
+    }
+
+    let url = format!(
+        "https://github.com/ekhodzitsky/oh-my-kimi/releases/download/{latest}/omk-{latest_version}-{target}.tar.gz"
+    );
+
+    println!("Downloading {url}...");
+
+    let tmp_dir = tempfile::tempdir()?;
+    let tar_path = tmp_dir.path().join("omk.tar.gz");
+
+    let download = Command::new("curl")
+        .args(["-fsSL", "-o", tar_path.to_str().unwrap(), &url])
+        .status()?;
+
+    if !download.success() {
+        anyhow::bail!("Download failed. Prebuilt binary may not be available for {target}.");
+    }
+
+    println!("Extracting...");
+    let extract = Command::new("tar")
+        .args(["-xzf", tar_path.to_str().unwrap(), "-C", tmp_dir.path().to_str().unwrap()])
+        .status()?;
+
+    if !extract.success() {
+        anyhow::bail!("Failed to extract archive");
+    }
+
+    // Find the binary
+    let new_binary = tmp_dir.path().join(format!("omk-{latest_version}-{target}")).join("omk");
+    if !new_binary.exists() {
+        // Fallback: binary might be at top level
+        let fallback = tmp_dir.path().join("omk");
+        if fallback.exists() {
+            std::fs::copy(&fallback, &new_binary)?;
+        } else {
+            anyhow::bail!("Could not find omk binary in downloaded archive");
+        }
+    }
+
+    // Replace current binary
+    let current_exe = std::env::current_exe()?;
+    println!("Replacing {}...", current_exe.display());
+
+    // On Unix, we can atomically replace
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&new_binary)?.permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&new_binary, perms)?;
+    }
+
+    std::fs::copy(&new_binary, &current_exe)?;
+
+    println!("✓ Updated to {latest_version}");
+    println!("  Binary: {}", current_exe.display());
+
+    // Update completions
+    println!("Updating shell completions...");
+    let _ = Command::new(&current_exe).args(["completions", "bash"]).output();
+    let _ = Command::new(&current_exe).args(["completions", "zsh"]).output();
+    let _ = Command::new(&current_exe).args(["completions", "fish"]).output();
+
+    println!("Run `omk doctor` to verify the installation.");
     Ok(())
 }
