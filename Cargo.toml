@@ -10,6 +10,10 @@ keywords = ["kimi", "ai", "cli", "orchestration", "agent"]
 categories = ["command-line-utilities", "development-tools"]
 rust-version = "1.78"
 
+[lib]
+name = "omk"
+path = "src/lib.rs"
+
 [[bin]]
 name = "omk"
 path = "src/main.rs"
@@ -68,3 +72,4 @@ server = ["dep:axum", "dep:tower"]
 
 [dev-dependencies]
 tempfile = "3.19"
+criterion = { version = "0.5", features = ["async_tokio"] }

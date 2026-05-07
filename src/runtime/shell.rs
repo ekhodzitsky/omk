@@ -10,8 +10,9 @@
 /// # Example
 /// ```
 /// use omk::runtime::shell::shell_escape;
-/// assert_eq!(shell_escape("hello"), "'hello'");
-/// assert_eq!(shell_escape("it's"), "'it'\\''s'");
+/// assert_eq!(shell_escape("hello"), "hello");
+/// assert_eq!(shell_escape("it's"), "\"it's\"");
+/// assert_eq!(shell_escape("$HOME"), "'$HOME'");
 /// ```
 pub fn shell_escape(s: &str) -> String {
     shlex::try_quote(s)

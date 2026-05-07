@@ -49,7 +49,6 @@ pub async fn migrate_if_needed(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[tokio::test]
     async fn test_migrate_no_file() {
