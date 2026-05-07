@@ -45,6 +45,8 @@ enum Commands {
     McpServer,
     /// Generate shell completions
     Completions(CompletionsArgs),
+    /// Generate man page
+    Man,
 }
 
 #[derive(Parser, Debug)]
@@ -103,6 +105,12 @@ async fn main() -> Result<()> {
             };
             let mut cmd = Omk::command();
             generate(shell, &mut cmd, "omk", &mut std::io::stdout());
+            Ok(())
+        }
+        Commands::Man => {
+            let cmd = Omk::command();
+            let man = clap_mangen::Man::new(cmd);
+            man.render(&mut std::io::stdout())?;
             Ok(())
         }
     }
