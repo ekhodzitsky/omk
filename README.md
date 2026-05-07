@@ -49,6 +49,14 @@ omk team status coder-a1b2
 
 # Done
 omk team shutdown coder-a1b2
+
+# Shell completions
+omk completions bash > ~/.local/share/bash-completion/completions/omk
+omk completions zsh > ~/.zsh/completions/_omk
+omk completions fish > ~/.config/fish/completions/omk.fish
+
+# Man page
+omk man > ~/.local/share/man/man1/omk.1
 ```
 
 ## 🏗️ Architecture

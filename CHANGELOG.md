@@ -7,27 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-05-07
+
 ### Added
-- `omk team status <name>` — inspect team state, workers, and task progress.
-- `omk team shutdown <name>` — gracefully terminate a team session.
-- Skill injection into lead prompt via `--skill` flag (default: `team`).
-- Bundled skill loader (`load_bundled_skill`) from `CARGO_MANIFEST_DIR/skills/`.
+
+- **XDG-compliant paths**: Config, state, data, and cache directories now follow the XDG Base Directory Specification. Legacy `~/.omk/` is still supported if it exists.
+- **State schema versioning**: All state files (`TeamState`, `AutopilotState`, `RalphState`) now carry a `version` field with forward-migration support.
+- **Metrics collection**: Telemetry for spawns, shutdowns, tasks, ask calls, autopilot/ralph runs. Persisted atomically in the state directory.
+- **Atomic file writes**: `runtime/atomic.rs` writes to temp files and renames atomically to prevent corruption.
+- **Retry logic**: Exponential backoff retry helper for resilient I/O and CLI calls.
+- **Shell completions**: `omk completions <shell>` generates completions for bash, zsh, fish, elvish, and PowerShell.
+- **Man page generation**: `omk man` outputs a roff man page.
+- **Release CI**: GitHub Actions workflow builds multi-platform binaries (x86_64 Linux, x86_64 macOS, aarch64 macOS) on tag push.
+- **Safe shell escaping**: Replaced all naive escaping with `shlex::try_quote` plus `validate_safe` input validation.
 
 ### Changed
-- `omk team` restructured to clap subcommands: `spawn`, `status`, `shutdown`.
 
-## [0.1.0] - 2026-05-07
+- `install.sh` now installs shell completions and man pages alongside the binary.
+- All hardcoded `~/.omk` paths migrated to centralized `runtime/config.rs` helpers.
+- Zero compiler warnings in release build.
+
+## [0.1.0] - 2026-05-06
 
 ### Added
-- Initial scaffold for `omk` CLI.
-- `omk team <N:ROLE> <TASK>` — spawn N Kimi agents in tmux with JSONL IPC.
-- `omk autopilot <TASK>` — scaffold for 6-phase autonomous execution.
-- `omk ralph <TASK>` — scaffold for persistent verify/fix loops.
-- `omk ask <PROVIDER> <PROMPT>` — cross-provider consultation scaffold.
-- `omk hud` — statusline (`--tmux`) and TUI (`--tui`, requires `tui` feature).
-- `omk setup` — initialize `~/.omk/` directory structure.
-- Skill system: YAML frontmatter parser, skill discovery, bundled skills.
-- Bundled skills: `team`, `autopilot`, `ralph`, `ultrawork`.
-- Agent prompts: `executor`, `architect`, `critic`, `planner`.
-- Runtime: tmux session/pane management, file-based bridge (inbox/outbox), worker lifecycle.
-- Hook template for Kimi CLI `UserPromptSubmit`.
+
+- Initial release with Team Mode, Autopilot scaffold, Ralph scaffold, Ask scaffold, HUD scaffold, and MCP server scaffold.
+- Tmux-native multi-agent orchestration with JSONL file-based IPC.
+- Skill injection system compatible with Claude Code `SKILL.md` format.
+- 23 unit and integration tests.

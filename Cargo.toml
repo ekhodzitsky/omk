@@ -1,6 +1,6 @@
 [package]
 name = "omk"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["oh-my-kimi contributors"]
 description = "Multi-agent orchestration for Kimi CLI"
