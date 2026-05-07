@@ -11,6 +11,14 @@ pub struct Args {
     /// Show live TUI
     #[arg(long)]
     pub tui: bool,
+
+    /// Start web dashboard
+    #[arg(long)]
+    pub web: bool,
+
+    /// Port for web dashboard
+    #[arg(long, default_value = "8080")]
+    pub port: u16,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -23,6 +31,15 @@ pub async fn run(args: Args) -> Result<()> {
         {
             anyhow::bail!("TUI feature is not enabled. Rebuild with --features tui");
         }
+    } else if args.web {
+        #[cfg(feature = "server")]
+        {
+            crate::vis::server::run_server(args.port).await?;
+        }
+        #[cfg(not(feature = "server"))]
+        {
+            anyhow::bail!("Server feature is not enabled. Rebuild with --features server");
+        }
     } else if args.tmux {
         let status = generate_status_bar().await?;
         println!("{}", status);
@@ -30,6 +47,8 @@ pub async fn run(args: Args) -> Result<()> {
         println!("omk hud");
         println!("  --tmux   Output tmux status bar string");
         println!("  --tui    Run interactive TUI");
+        println!("  --web    Start web dashboard");
+        println!("  --port   Port for web dashboard (default: 8080)");
     }
     Ok(())
 }
