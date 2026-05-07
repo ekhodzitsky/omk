@@ -1,88 +1,171 @@
-# oh-my-kimi (omk)
+<div align="center">
 
-Multi-agent orchestration for [Kimi CLI](https://github.com/MoonshotAI/kimi-cli). Inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode).
+# 🌙 oh-my-kimi (omk)
+
+**Multi-agent orchestration for [Kimi CLI](https://github.com/MoonshotAI/kimi-cli)**
+
+*Inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode) — reimagined for the Kimi ecosystem.*
+
+[![CI](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml/badge.svg)](https://github.com/ekhodzitsky/oh-my-kimi/actions)
+[![Crates.io](https://img.shields.io/crates/v/omk.svg)](https://crates.io/crates/omk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
+
+</div>
+
+---
 
 > **Zero learning curve.** Don't learn Kimi CLI. Just use OMK.
 
-## Features
+`omk` turns Kimi CLI into a **multi-agent powerhouse**. Spawn teams of agents, run persistent execution loops, consult multiple AI providers, and manage everything from a single CLI — all through tmux panes and file-based IPC.
 
-- **Team Mode** — Spawn N Kimi agents in tmux panes with file-based IPC
-- **Autopilot** — 6-phase autonomous execution pipeline
-- **Ralph** — Persistent mode with verify/fix loops until complete
-- **Skills System** — Portable `SKILL.md` format (compatible with Claude Code skills)
-- **Cross-Provider Ask** — Consult Claude, Codex, Gemini, or Kimi and synthesize answers
-- **HUD / TUI** — Real-time statusline and terminal UI
+## ✨ Features
 
-## Requirements
+| Mode | What it does | Status |
+|------|--------------|--------|
+| 🚀 **Team** | Spawn N Kimi agents in tmux panes with shared task lists | ✅ Ready |
+| 🤖 **Autopilot** | 6-phase autonomous execution (plan → execute → qa → validate) | 🚧 Active dev |
+| 🔄 **Ralph** | Persistent verify/fix loops until every task is complete | 🚧 Active dev |
+| 🧠 **Ask** | Cross-provider consultation (Claude, Codex, Gemini, Kimi) | 🚧 Active dev |
+| 📊 **HUD** | Real-time tmux statusline + interactive TUI | ✅ Scaffold |
+| 🔌 **MCP** | Model Context Protocol server for Cursor/Claude Desktop | 🚧 Scaffold |
 
-- [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) installed and authenticated
-- [tmux](https://github.com/tmux/tmux)
-- Rust 1.78+ (for building from source)
-
-## Quick Start
+## 🎬 Quick Start
 
 ```bash
 # Install
-cargo install --path .
+ cargo install omk
+# or
+ curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
 
 # Setup
 omk setup
 
-# Run a team of 3 coder agents
-omk team 3:coder "fix all TypeScript errors"
+# Spawn a team of 3 coder agents
+omk team spawn 3:coder "refactor authentication to use JWT"
 
-# Autonomous execution
+# Check progress
+omk team status coder-a1b2
+
+# Done
+omk team shutdown coder-a1b2
+```
+
+## 🏗️ Architecture
+
+```
+┌─────────┐     ┌─────────┐     ┌─────────┐
+│  User   │────▶│   omk   │────▶│  tmux   │
+└─────────┘     │  (Rust) │     └────┬────┘
+                └─────────┘          │
+                                     │
+        ┌────────────────────────────┼────────────────────────────┐
+        ▼                            ▼                            ▼
+ ┌──────────────┐            ┌──────────────┐            ┌──────────────┐
+ │  Lead Kimi   │            │ Worker Kimi  │            │ Worker Kimi  │
+ │   (pane 0)   │            │   (pane 1)   │            │   (pane N)   │
+ └──────┬───────┘            └──────┬───────┘            └──────┬───────┘
+        │                           │                           │
+        ▼                           ▼                           ▼
+ ┌──────────────┐            ┌──────────────┐            ┌──────────────┐
+ │ inbox.jsonl  │            │ inbox.jsonl  │            │ inbox.jsonl  │
+ │ outbox.jsonl │            │ outbox.jsonl │            │ outbox.jsonl │
+ │heartbeat.json│            │heartbeat.json│            │heartbeat.json│
+ └──────────────┘            └──────────────┘            └──────────────┘
+```
+
+OMK is an **external orchestrator** — it does not fork or patch Kimi CLI. It spawns real `kimi` processes, coordinates them via JSONL files, and lets you attach to any session with standard tmux commands.
+
+Read more in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## 📚 Commands
+
+### Team Mode
+
+```bash
+# Spawn a team
+omk team spawn 3:coder "fix all TypeScript errors"
+
+# Check status (reads state + heartbeats + inbox/outbox counts)
+omk team status <name>
+
+# Graceful shutdown
+omk team shutdown <name>
+# Force kill
+omk team shutdown <name> --force
+```
+
+### Autopilot
+
+```bash
+# Full autonomous pipeline
 omk autopilot "build a REST API for task management"
 
-# Persistent mode
-omk ralph "refactor authentication module"
+# With persistence
+omk autopilot --ralph "refactor the database layer"
 ```
 
-## Architecture
+### Ralph
 
-OMK is an **external orchestrator** — it does not fork or patch Kimi CLI. Instead, it:
+```bash
+# Persistent verify/fix loop
+omk ralph "migrate from Express to Fastify"
 
-1. Spawns multiple `kimi` processes in tmux panes
-2. Injects orchestration prompts and skills
-3. Coordinates agents via JSONL inboxes/outboxes
-4. Observes state through wire files and heartbeat JSON
-
-```
-┌─────────────────┐
-│   omk team      │
-│  (orchestrator) │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    │  tmux   │
-    └────┬────┘
-   ┌─────┼─────┐
-   ▼     ▼     ▼
-┌────┐┌────┐┌────┐
-│lead││w0  ││w1  │
-│kimi││kimi││kimi│
-└────┘└────┘└────┘
+# Limit iterations
+omk ralph --max-iterations 5 "update all dependencies"
 ```
 
-## Project Structure
+### Ask (Cross-Provider)
 
-```
-oh-my-kimi/
-├── src/
-│   ├── cli/          # Subcommands: team, autopilot, ralph, ask, hud
-│   ├── runtime/      # tmux IPC, bridge, state machine, worker lifecycle
-│   ├── skills/       # Skill discovery, parser, injector
-│   ├── vis/          # HUD / TUI
-│   └── mcp/          # MCP server (future)
-├── skills/           # Bundled skills (team, autopilot, ralph, ultrawork)
-├── agents/           # Agent prompt definitions
-└── hooks/            # Shell hook templates for Kimi CLI
+```bash
+# Single advisor
+omk ask claude "review my API design"
+
+# Multi-advisor synthesis
+omk ask all "architecture for real-time chat"
 ```
 
-## Status
+### HUD
 
-This project is in **early MVP** stage. Team mode is functional; autopilot and ralph are scaffolded.
+```bash
+# Tmux status bar
+omk hud --tmux
 
-## License
+# Interactive TUI
+omk hud --tui
+```
 
-MIT
+## 🧪 Development
+
+```bash
+git clone https://github.com/ekhodzitsky/oh-my-kimi
+cd oh-my-kimi
+
+# Run checks (fmt + clippy + test)
+make check
+
+# Build release binary
+make release
+
+# Install locally
+make install
+```
+
+We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## 📋 Roadmap
+
+- [x] Team mode with tmux + JSONL IPC
+- [x] Status & shutdown lifecycle
+- [x] Skill injection system
+- [x] TUI scaffold
+- [ ] Autopilot 6-phase state machine
+- [ ] Ralph persistence loop
+- [ ] Cross-provider `ask` with synthesis
+- [ ] MCP server for IDE integration
+- [ ] Web dashboard (`omk vis`)
+- [ ] Plugin marketplace
+
+## 📄 License
+
+MIT © oh-my-kimi contributors
