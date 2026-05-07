@@ -85,10 +85,7 @@ async fn spawn(args: SpawnArgs) -> Result<()> {
 
     tmux::ensure_tmux()?;
 
-    let state_dir = dirs::home_dir()
-        .context("No home directory")?
-        .join(".omk")
-        .join("state")
+    let state_dir = crate::runtime::config::omk_state_dir()
         .join("team")
         .join(&team_name);
     tokio::fs::create_dir_all(&state_dir).await?;
@@ -146,10 +143,7 @@ async fn spawn(args: SpawnArgs) -> Result<()> {
 }
 
 async fn status(args: StatusArgs) -> Result<()> {
-    let state_dir = dirs::home_dir()
-        .context("No home directory")?
-        .join(".omk")
-        .join("state")
+    let state_dir = crate::runtime::config::omk_state_dir()
         .join("team")
         .join(&args.name);
 
@@ -216,10 +210,7 @@ async fn status(args: StatusArgs) -> Result<()> {
 }
 
 async fn shutdown(args: ShutdownArgs) -> Result<()> {
-    let state_dir = dirs::home_dir()
-        .context("No home directory")?
-        .join(".omk")
-        .join("state")
+    let state_dir = crate::runtime::config::omk_state_dir()
         .join("team")
         .join(&args.name);
 

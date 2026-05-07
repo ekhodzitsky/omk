@@ -80,32 +80,50 @@ async fn main() -> Result<()> {
 
 async fn run_setup() -> Result<()> {
     info!("Running omk setup");
-    
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?
-        .join("omk");
-    
-    let omk_dir = dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?
-        .join(".omk");
 
-    tokio::fs::create_dir_all(&config_dir).await?;
-    tokio::fs::create_dir_all(&omk_dir).await?;
-    tokio::fs::create_dir_all(omk_dir.join("skills")).await?;
-    tokio::fs::create_dir_all(omk_dir.join("state")).await?;
-    tokio::fs::create_dir_all(omk_dir.join("artifacts")).await?;
+    crate::runtime::config::ensure_dirs().await?;
 
-    // TODO: Install bundled skills to ~/.omk/skills/
-    // TODO: Install Kimi CLI hooks if requested
-    // TODO: Write default config.toml
+    let config_dir = crate::runtime::config::config_dir();
+    let state_dir = crate::runtime::config::state_dir();
+    let data_dir = crate::runtime::config::data_dir();
+
+    // Write default config if missing
+    let config_path = config_dir.join("config.toml");
+    if !config_path.exists() {
+        let default_config = r#"# OMK Configuration
+# See https://github.com/ekhodzitsky/oh-my-kimi for docs
+
+# Default number of workers for team mode
+default_team_size = 2
+
+# Enable YOLO (auto-approve) mode by default
+default_yolo = false
+
+# Path to Kimi CLI binary (leave empty for auto-detect)
+# kimi_binary = "/usr/local/bin/kimi"
+
+# Additional skill directories
+# extra_skill_dirs = ["~/.omk/skills"]
+
+# Enable metrics collection
+enable_metrics = true
+"#;
+        tokio::fs::write(&config_path, default_config).await?;
+    }
+
+    // Install bundled skills to data dir
+    let skills_dir = data_dir.join("skills");
+    tokio::fs::create_dir_all(&skills_dir).await?;
+    // TODO: copy bundled skills from repo to skills_dir
 
     println!("✓ omk setup complete");
     println!("  Config: {}", config_dir.display());
-    println!("  State:  {}", omk_dir.display());
+    println!("  State:  {}", state_dir.display());
+    println!("  Data:   {}", data_dir.display());
     println!();
     println!("Next steps:");
     println!("  1. Ensure 'kimi' CLI is installed and authenticated");
-    println!("  2. Run 'omk team 2:coder \"fix TypeScript errors\"' to try team mode");
+    println!("  2. Run 'omk team spawn 2:coder \"fix TypeScript errors\"' to try team mode");
 
     Ok(())
 }

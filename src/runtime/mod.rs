@@ -2,6 +2,7 @@ pub mod ask;
 pub mod atomic;
 pub mod autopilot;
 pub mod bridge;
+pub mod config;
 pub mod ralph;
 pub mod retry;
 pub mod shell;

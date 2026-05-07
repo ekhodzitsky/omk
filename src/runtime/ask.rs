@@ -38,8 +38,7 @@ pub fn provider_command(provider: &str, prompt: &str) -> Result<String> {
 
 /// Directory where ask artifacts are persisted.
 pub fn artifact_dir() -> Result<PathBuf> {
-    let home = dirs::home_dir().context("No home directory")?;
-    Ok(home.join(".omk").join("artifacts").join("ask"))
+    Ok(crate::runtime::config::omk_data_dir().join("artifacts").join("ask"))
 }
 
 /// Full path for a named artifact at a given timestamp.

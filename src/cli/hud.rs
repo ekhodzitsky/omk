@@ -38,9 +38,7 @@ async fn generate_status_bar() -> Result<String> {
     // TODO: Read .omk/state/ for active teams, ralph modes, token usage
     let mut parts = vec!["omk".to_string()];
 
-    let omk_dir = dirs::home_dir()
-        .map(|h| h.join(".omk").join("state"))
-        .filter(|p| p.exists());
+    let omk_dir = Some(crate::runtime::config::omk_state_dir()).filter(|p| p.exists());
 
     if let Some(state_dir) = omk_dir {
         let mut read = tokio::fs::read_dir(&state_dir).await?;

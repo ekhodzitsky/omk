@@ -51,6 +51,8 @@ pub async fn discover_skills(project_root: Option<&Path>) -> Result<Vec<Skill>> 
     }
 
     // User scope
+    dirs.push(crate::runtime::config::data_dir().join("skills"));
+    // Legacy fallback
     if let Some(home) = dirs::home_dir() {
         dirs.push(home.join(".omk").join("skills"));
     }
