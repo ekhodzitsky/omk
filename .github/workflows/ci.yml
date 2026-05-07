@@ -52,6 +52,9 @@ jobs:
       - name: Build
         run: cargo build --release
 
+      - name: Build with server feature
+        run: cargo build --release --features server
+
       - name: Run tests
         run: cargo test
 

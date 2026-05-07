@@ -142,6 +142,9 @@ omk hud --tmux
 
 # Interactive TUI
 omk hud --tui
+
+# Web dashboard
+omk hud --web --port 8080
 ```
 
 ### Diagnostics
@@ -231,7 +234,7 @@ We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [C
 - [ ] Ralph persistence loop (scaffolded)
 - [ ] Cross-provider `ask` with synthesis (scaffolded)
 - [ ] MCP server for IDE integration (scaffolded)
-- [ ] Web dashboard (`omk vis`)
+- [x] Web dashboard (`omk hud --web`)
 - [ ] Plugin marketplace
 
 ## 📄 License
