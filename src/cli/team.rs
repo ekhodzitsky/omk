@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tracing::info;
 
 use crate::runtime::{bridge::TeamBridge, state::TeamState, tmux, worker::WorkerSpec};
+use crate::skills::discovery::load_bundled_skill;
 
 #[derive(Parser, Debug, Clone)]
 pub struct Args {
@@ -40,6 +41,10 @@ pub struct SpawnArgs {
 
     #[arg(long)]
     pub yolo: bool,
+
+    /// Skill to inject into lead prompt
+    #[arg(short, long, default_value = "team")]
+    pub skill: String,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -98,7 +103,8 @@ async fn spawn(args: SpawnArgs) -> Result<()> {
         tmux::create_session(&session_name, window_name, &args.dir)?;
     }
 
-    let lead_prompt = build_lead_prompt(&task, count, &role, &state_dir, args.yolo);
+    let skill_md = load_bundled_skill(&args.skill).unwrap_or_default();
+    let lead_prompt = build_lead_prompt(&task, count, &role, &state_dir, args.yolo, &skill_md);
     tmux::send_keys(&session_name, window_name, &format!("kimi -p {}", shell_escape(&lead_prompt)))?;
 
     for i in 0..count {
@@ -270,23 +276,20 @@ fn parse_spec(spec: &str) -> Result<(usize, String)> {
     Ok((count, parts[1].to_string()))
 }
 
-fn build_lead_prompt(task: &str, count: usize, role: &str, state_dir: &std::path::Path, yolo: bool) -> String {
+fn build_lead_prompt(task: &str, count: usize, role: &str, state_dir: &std::path::Path, yolo: bool, skill_md: &str) -> String {
     let mut prompt = format!(
         r#"You are the Lead Orchestrator of a team of {count} {role} agent(s).
 
 Your task: {task}
 
-## Team Coordination Rules
-1. Decompose the task into subtasks suitable for parallel execution.
-2. Write each subtask as a JSON object to the worker inbox files at {inbox_dir}
-3. Wait for outbox results and synthesize the final answer.
-4. If a worker fails, reassign or fix the subtask.
-
-## Inbox Format (JSONL)
-Each line: {{"id":"uuid","task":"description","acceptance_criteria":["..."]}}
+## Orchestration Skill
+{skill_md}
 
 ## State Directory
 {state_dir}
+
+## Worker Inbox/Outbox Paths
+{inbox_dir}
 
 ## Available Tools
 - ReadFile / WriteFile for inbox/outbox
@@ -296,8 +299,9 @@ Each line: {{"id":"uuid","task":"description","acceptance_criteria":["..."]}}
         count = count,
         role = role,
         task = task,
-        inbox_dir = state_dir.join("workers").display(),
+        skill_md = skill_md,
         state_dir = state_dir.display(),
+        inbox_dir = state_dir.join("workers").display(),
     );
 
     if yolo {

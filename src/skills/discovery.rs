@@ -1,8 +1,39 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tracing::{debug, info};
 
 use super::parser::{parse_skill, Skill};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_load_bundled_team_skill() {
+        // This test only works when CARGO_MANIFEST_DIR is set (cargo test)
+        let result = load_bundled_skill("team");
+        assert!(result.is_ok(), "Failed to load bundled team skill: {:?}", result);
+        let content = result.unwrap();
+        assert!(content.contains("Team Mode"), "Skill content missing expected header");
+    }
+}
+
+/// Load a bundled skill by name from the built-in skills directory.
+/// Falls back to CARGO_MANIFEST_DIR/skills/<name>/SKILL.md
+pub fn load_bundled_skill(name: &str) -> Result<String> {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .or_else(|_| std::env::current_exe().map(|p| p.parent().unwrap_or(Path::new(".")).to_path_buf()))
+        .context("Cannot determine omk install directory")?;
+
+    let skill_path = manifest_dir.join("skills").join(name).join("SKILL.md");
+    if skill_path.exists() {
+        std::fs::read_to_string(&skill_path)
+            .with_context(|| format!("Failed to read skill: {}", skill_path.display()))
+    } else {
+        anyhow::bail!("Bundled skill '{}' not found at: {}", name, skill_path.display())
+    }
+}
 
 /// Discover skills from multiple directories in priority order:
 /// 1. Project scope: .omk/skills/

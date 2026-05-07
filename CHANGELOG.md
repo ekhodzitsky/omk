@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `omk team status <name>` — inspect team state, workers, and task progress.
 - `omk team shutdown <name>` — gracefully terminate a team session.
+- Skill injection into lead prompt via `--skill` flag (default: `team`).
+- Bundled skill loader (`load_bundled_skill`) from `CARGO_MANIFEST_DIR/skills/`.
+
+### Changed
+- `omk team` restructured to clap subcommands: `spawn`, `status`, `shutdown`.
 
 ## [0.1.0] - 2026-05-07
 
