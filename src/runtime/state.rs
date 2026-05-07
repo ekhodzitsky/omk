@@ -6,6 +6,8 @@ use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TeamState {
+    #[serde(default = "default_state_version")]
+    pub version: u32,
     pub name: String,
     pub task: String,
     pub created_at: DateTime<Utc>,
@@ -14,6 +16,10 @@ pub struct TeamState {
     pub phase: TeamPhase,
     pub tasks: Vec<Task>,
     pub state_dir: std::path::PathBuf,
+}
+
+pub fn default_state_version() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +54,7 @@ pub enum TaskStatus {
 impl TeamState {
     pub fn new(name: &str, task: &str, state_dir: &Path, worker_count: usize, worker_role: &str) -> Self {
         Self {
+            version: 1,
             name: name.to_string(),
             task: task.to_string(),
             created_at: Utc::now(),
@@ -73,6 +80,7 @@ impl TeamState {
 
     pub async fn load(state_dir: &Path) -> Result<Self> {
         let path = state_dir.join("team-state.json");
+        crate::runtime::migrate::migrate_if_needed(&path).await?;
         let json = tokio::fs::read_to_string(&path).await?;
         let state: Self = serde_json::from_str(&json)?;
         Ok(state)
@@ -81,6 +89,8 @@ impl TeamState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutopilotState {
+    #[serde(default = "default_state_version")]
+    pub version: u32,
     pub task: String,
     pub phase: AutopilotPhase,
     pub plans_dir: std::path::PathBuf,
@@ -100,6 +110,8 @@ pub enum AutopilotPhase {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RalphState {
+    #[serde(default = "default_state_version")]
+    pub version: u32,
     pub task: String,
     pub prd: Prd,
     pub iteration: usize,
@@ -121,6 +133,7 @@ impl RalphState {
 
     pub async fn load(state_dir: &Path) -> anyhow::Result<Self> {
         let path = state_dir.join("ralph-state.json");
+        crate::runtime::migrate::migrate_if_needed(&path).await?;
         let json = tokio::fs::read_to_string(&path).await?;
         let state: Self = serde_json::from_str(&json)?;
         Ok(state)

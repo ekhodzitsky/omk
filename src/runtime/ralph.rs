@@ -106,9 +106,8 @@ fn verify_story(_story: &UserStory, _kimi_output: &str, tests_pass: bool) -> boo
 }
 
 /// Compute the Ralph state directory for a task.
-pub fn state_dir_for(dir: &Path, task: &str) -> PathBuf {
-    dir.join(".omk")
-        .join("state")
+pub fn state_dir_for(_dir: &Path, task: &str) -> PathBuf {
+    crate::runtime::config::state_dir()
         .join("ralph")
         .join(slugify_task(task))
 }
@@ -130,6 +129,7 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize) -> Result<
             let prd = generate_prd(task);
             info!(stories = prd.user_stories.len(), "Generated PRD");
             RalphState {
+                version: 1,
                 task: task.to_string(),
                 prd,
                 iteration: 0,

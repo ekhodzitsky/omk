@@ -9,6 +9,8 @@ use tracing::{debug, info, warn};
 /// Full autopilot state persisted as JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutopilotState {
+    #[serde(default = "crate::runtime::state::default_state_version")]
+    pub version: u32,
     pub task: String,
     pub phase: AutopilotPhase,
     pub plans_dir: PathBuf,
@@ -56,9 +58,10 @@ pub struct Autopilot {
 
 impl Autopilot {
     pub fn new(name: &str, task: &str, dir: &Path, enable_ralph: bool) -> Self {
-        let state_dir = dir.join(".omk").join("state").join("autopilot").join(name);
-        let plans_dir = dir.join(".omk").join("plans");
+        let state_dir = crate::runtime::config::state_dir().join("autopilot").join(name);
+        let plans_dir = crate::runtime::config::data_dir().join("plans");
         let state = AutopilotState {
+            version: 1,
             task: task.to_string(),
             phase: AutopilotPhase::Expansion,
             plans_dir: plans_dir.clone(),
@@ -93,6 +96,7 @@ impl Autopilot {
 
     pub async fn load_state(state_dir: &Path) -> Result<AutopilotState> {
         let path = state_dir.join("autopilot-state.json");
+        crate::runtime::migrate::migrate_if_needed(&path).await?;
         let json = tokio::fs::read_to_string(&path).await?;
         let state: AutopilotState = serde_json::from_str(&json)?;
         Ok(state)

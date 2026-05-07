@@ -50,12 +50,8 @@ pub async fn discover_skills(project_root: Option<&Path>) -> Result<Vec<Skill>> 
         dirs.push(root.join(".omk").join("skills"));
     }
 
-    // User scope
+    // User scope (XDG or legacy)
     dirs.push(crate::runtime::config::data_dir().join("skills"));
-    // Legacy fallback
-    if let Some(home) = dirs::home_dir() {
-        dirs.push(home.join(".omk").join("skills"));
-    }
 
     // Bundled skills (relative to binary — for dev, use CARGO_MANIFEST_DIR)
     if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {

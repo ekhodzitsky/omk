@@ -129,6 +129,13 @@ async fn spawn(args: SpawnArgs) -> Result<()> {
 
     tmux::select_layout(&session_name, window_name, "tiled")?;
 
+    // Record metrics
+    let _ = crate::runtime::metrics::record(
+        &crate::runtime::config::state_dir().join("metrics.json"),
+        |m| m.total_spawns += 1,
+    )
+    .await;
+
     println!("✓ Team '{}' started with {} {} worker(s)", team_name, count, role);
     println!("  Session: {}", session_name);
     println!("  State:   {}", state_dir.display());
@@ -238,6 +245,13 @@ async fn shutdown(args: ShutdownArgs) -> Result<()> {
     let mut state = TeamState::load(&state_dir).await?;
     state.phase = crate::runtime::state::TeamPhase::Shutdown;
     state.save().await?;
+
+    // Record metrics
+    let _ = crate::runtime::metrics::record(
+        &crate::runtime::config::state_dir().join("metrics.json"),
+        |m| m.total_shutdowns += 1,
+    )
+    .await;
 
     println!("✓ Team '{}' shut down", args.name);
     println!("  State:   {}", state_dir.display());
