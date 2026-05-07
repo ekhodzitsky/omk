@@ -168,6 +168,11 @@ omk cleanup --older-than 7
 
 # Remove all state (with confirmation)
 omk cleanup --all
+
+# Backup state
+omk backup create
+omk backup list
+omk backup restore 20260507-121530
 ```
 
 ### Shell Integration
@@ -216,6 +221,7 @@ We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [C
 - [x] Environment diagnostics (`omk doctor`)
 - [x] State cleanup (`omk cleanup`)
 - [x] Config validation (`omk config`)
+- [x] State backup/restore (`omk backup`)
 - [ ] Autopilot 6-phase state machine (scaffolded)
 - [ ] Ralph persistence loop (scaffolded)
 - [ ] Cross-provider `ask` with synthesis (scaffolded)
