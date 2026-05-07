@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Autopilot state machine — 6-phase pipeline
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};

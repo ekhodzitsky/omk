@@ -14,7 +14,9 @@
 /// assert_eq!(shell_escape("it's"), "'it'\\''s'");
 /// ```
 pub fn shell_escape(s: &str) -> String {
-    shlex::quote(s).into_owned()
+    shlex::try_quote(s)
+        .expect("validate_safe should have filtered out null bytes")
+        .into_owned()
 }
 
 /// Validate that a string does not contain null bytes or other

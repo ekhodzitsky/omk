@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Configuration and XDG-compliant path resolution.
 //!
 //! Follows the XDG Base Directory Specification:

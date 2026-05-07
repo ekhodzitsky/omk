@@ -58,11 +58,11 @@ fn generate_bridge_script(spec: &WorkerSpec) -> String {
     let name = &spec.name;
 
     // Use shlex to safely quote paths for bash
-    let inbox_q = shlex::quote(&inbox);
-    let outbox_q = shlex::quote(&outbox);
-    let heartbeat_q = shlex::quote(&heartbeat);
-    let name_q = shlex::quote(name);
-    let role_q = shlex::quote(&spec.role);
+    let inbox_q = shlex::try_quote(&inbox).expect("path is valid utf8 without nulls");
+    let outbox_q = shlex::try_quote(&outbox).expect("path is valid utf8 without nulls");
+    let heartbeat_q = shlex::try_quote(&heartbeat).expect("path is valid utf8 without nulls");
+    let name_q = shlex::try_quote(name).expect("name is valid utf8 without nulls");
+    let role_q = shlex::try_quote(&spec.role).expect("role is valid utf8 without nulls");
 
     format!(r#"#!/usr/bin/env bash
 set -euo pipefail

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::parser::Skill;
 
 /// Build a prompt with skill injection

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Ralph persistent loop — prd.json + verify/fix
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

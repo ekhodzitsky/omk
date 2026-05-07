@@ -1,8 +1,10 @@
+#![allow(dead_code)]
+
 //! Retry logic with exponential backoff for async operations.
 
 use std::future::Future;
 use std::time::Duration;
-use tracing::{debug, warn};
+use tracing::warn;
 
 /// Retry configuration.
 #[derive(Debug, Clone)]
