@@ -57,17 +57,34 @@ fn generate_bridge_script(spec: &WorkerSpec) -> String {
     let heartbeat = spec.heartbeat.display().to_string();
     let name = &spec.name;
 
+    // Use shlex to safely quote paths for bash
+    let inbox_q = shlex::quote(&inbox);
+    let outbox_q = shlex::quote(&outbox);
+    let heartbeat_q = shlex::quote(&heartbeat);
+    let name_q = shlex::quote(name);
+    let role_q = shlex::quote(&spec.role);
+
     format!(r#"#!/usr/bin/env bash
 set -euo pipefail
 
-INBOX="{inbox}"
-OUTBOX="{outbox}"
-HEARTBEAT="{heartbeat}"
-NAME="{name}"
+INBOX={inbox_q}
+OUTBOX={outbox_q}
+HEARTBEAT={heartbeat_q}
+NAME={name_q}
+
+# Pick JSON parser: jq preferred, fallback to python3
+json_get() {{
+    local key="$1"
+    if command -v jq >/dev/null 2>&1; then
+        jq -r ".$key // empty"
+    else
+        python3 -c "import sys,json; print(json.load(sys.stdin).get('$key',''))"
+    fi
+}}
 
 # Initialize
 mkdir -p "$(dirname "$INBOX")" "$(dirname "$OUTBOX")"
-echo '{{"status":"ready","name":"'$NAME'","pid":"$$"}}' > "$HEARTBEAT"
+printf '%s\n' '{{"status":"ready","name":"'$NAME'","pid":"'$$'"}}' > "$HEARTBEAT"
 
 echo "[$NAME] Worker bridge ready. Waiting for tasks..."
 
@@ -76,64 +93,76 @@ LAST_POS=$(wc -c < "$INBOX" | tr -d ' ')
 
 while true; do
     # Update heartbeat
-    echo '{{"status":"alive","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}' > "$HEARTBEAT"
+    printf '%s\n' '{{"status":"alive","ts":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}}' > "$HEARTBEAT"
 
-    # Check for new lines in inbox
     CURRENT_POS=$(wc -c < "$INBOX" | tr -d ' ')
     if [ "$CURRENT_POS" -gt "$LAST_POS" ]; then
-        # Read new lines
         tail -c +$((LAST_POS + 1)) "$INBOX" | while IFS= read -r line; do
-            if [ -z "$line" ]; then continue; fi
-            TASK_ID=$(echo "$line" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id','unknown'))" 2>/dev/null || echo "unknown")
-            TASK_DESC=$(echo "$line" | python3 -c "import sys,json; print(json.load(sys.stdin).get('task',''))" 2>/dev/null || echo "$line")
+            [ -z "$line" ] && continue
+
+            TASK_ID=$(printf '%s\n' "$line" | json_get "id" || echo "unknown")
+            TASK_DESC=$(printf '%s\n' "$line" | json_get "task" || echo "$line")
+
+            # Validate task_id is safe (alphanumeric, dash, underscore)
+            if ! printf '%s' "$TASK_ID" | grep -qE '^[a-zA-Z0-9_.-]+$'; then
+                TASK_ID="invalid-id"
+            fi
 
             echo "[$NAME] Processing task: $TASK_ID"
 
-            # Build prompt for kimi
-            PROMPT=$(cat <<EOF
+            # Write task description to temp file to avoid heredoc injection
+            TASK_FILE=$(mktemp /tmp/omk-task.XXXXXX)
+            printf '%s\n' "$TASK_DESC" > "$TASK_FILE"
+            trap 'rm -f "$TASK_FILE"' EXIT
+
+            PROMPT_FILE=$(mktemp /tmp/omk-prompt.XXXXXX)
+            cat > "$PROMPT_FILE" <<'PROMPT_EOF'
 You are a specialized {role} agent named {name}.
 Execute the following task precisely. Report results in structured format.
 
-TASK (ID: $TASK_ID):
-$TASK_DESC
+TASK (ID: TASK_ID_PLACEHOLDER):
+PROMPT_EOF
+            cat "$TASK_FILE" >> "$PROMPT_FILE"
+            cat >> "$PROMPT_FILE" <<'PROMPT_EOF'
 
 RULES:
 1. Use tools (ReadFile, Shell, WriteFile) as needed.
 2. When complete, output a JSON result block:
    ```result
    {{
-     "task_id": "$TASK_ID",
+     "task_id": "TASK_ID_PLACEHOLDER",
      "status": "success|partial|failed",
      "summary": "one-line summary",
      "artifacts": ["file paths"]
    }}
    ```
 3. Be concise but thorough.
-EOF
-)
+PROMPT_EOF
 
-            # Run kimi and capture output
+            # Replace placeholder safely
+            sed -i.bak "s/TASK_ID_PLACEHOLDER/$TASK_ID/g" "$PROMPT_FILE"
+            rm -f "$PROMPT_FILE.bak"
+
             START_TIME=$(date +%s)
             if command -v kimi >/dev/null 2>&1; then
-                OUTPUT=$(kimi -p "$PROMPT" 2>&1) || true
+                OUTPUT=$(kimi -p "$(cat "$PROMPT_FILE")" 2>&1) || true
             else
                 OUTPUT="Error: kimi CLI not found"
             fi
             END_TIME=$(date +%s)
             ELAPSED=$((END_TIME - START_TIME))
 
-            # Extract result JSON from kimi output
-            RESULT_JSON=$(echo "$OUTPUT" | awk '/^```result$/,/^```$/{{if (!/^```result$/ && !/^```$/) print}}' | head -1)
+            rm -f "$PROMPT_FILE" "$TASK_FILE"
+
+            RESULT_JSON=$(printf '%s\n' "$OUTPUT" | awk '/^```result$/,/^```$/{{if (!/^```result$/ && !/^```$/) print}}' | head -1)
             if [ -z "$RESULT_JSON" ]; then
-                # Fallback: try to parse last JSON line
-                RESULT_JSON=$(echo "$OUTPUT" | grep -E '^\s*{{' | tail -1)
+                RESULT_JSON=$(printf '%s\n' "$OUTPUT" | grep -E '^\s*{{' | tail -1)
             fi
             if [ -z "$RESULT_JSON" ]; then
                 RESULT_JSON='{{"task_id":"'$TASK_ID'","status":"failed","summary":"No result block found","artifacts":[],"elapsed_secs":'$ELAPSED'}}'
             fi
 
-            # Append to outbox
-            echo "$RESULT_JSON" >> "$OUTBOX"
+            printf '%s\n' "$RESULT_JSON" >> "$OUTBOX"
             echo "[$NAME] Completed task: $TASK_ID (${{ELAPSED}}s)"
         done
         LAST_POS=$CURRENT_POS
@@ -142,10 +171,10 @@ EOF
     sleep 2
 done
 "#,
-        inbox = inbox,
-        outbox = outbox,
-        heartbeat = heartbeat,
-        name = name,
-        role = spec.role,
+        inbox_q = inbox_q,
+        outbox_q = outbox_q,
+        heartbeat_q = heartbeat_q,
+        name_q = name_q,
+        role = role_q,
     )
 }

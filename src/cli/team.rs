@@ -105,7 +105,9 @@ async fn spawn(args: SpawnArgs) -> Result<()> {
 
     let skill_md = load_bundled_skill(&args.skill).unwrap_or_default();
     let lead_prompt = build_lead_prompt(&task, count, &role, &state_dir, args.yolo, &skill_md);
-    tmux::send_keys(&session_name, window_name, &format!("kimi -p {}", shell_escape(&lead_prompt)))?;
+    crate::runtime::shell::validate_safe(&lead_prompt)
+        .map_err(|e| anyhow::anyhow!("Invalid prompt: {}", e))?;
+    tmux::send_keys(&session_name, window_name, &format!("kimi -p {}", crate::runtime::shell::shell_escape(&lead_prompt)))?;
 
     for i in 0..count {
         let worker_name = format!("worker-{i}");
@@ -311,6 +313,3 @@ Your task: {task}
     prompt
 }
 
-fn shell_escape(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
-}

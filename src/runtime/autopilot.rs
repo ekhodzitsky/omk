@@ -472,5 +472,5 @@ async fn detect_project_type(dir: &Path) -> ProjectType {
 }
 
 fn shell_escape(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
+    crate::runtime::shell::shell_escape(s)
 }

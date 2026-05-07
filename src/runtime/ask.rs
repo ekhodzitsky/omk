@@ -271,7 +271,7 @@ pub fn is_known_provider(name: &str) -> bool {
 
 /// Escape a string for safe inclusion in a single-quoted shell context.
 fn shell_escape(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
+    crate::runtime::shell::shell_escape(s)
 }
 
 #[cfg(test)]
@@ -354,11 +354,11 @@ mod tests {
     async fn test_provider_command_generation() {
         assert_eq!(
             provider_command("kimi", "hello").unwrap(),
-            "kimi -p 'hello'"
+            "kimi -p hello"
         );
         assert_eq!(
             provider_command("claude", "it's working").unwrap(),
-            "claude -p 'it'\"'\"'s working'"
+            "claude -p \"it's working\""
         );
     }
 
