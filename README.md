@@ -181,6 +181,11 @@ omk backup restore 20260507-121530
 # Export/import state as JSON
 omk state export --output my-state.json
 omk state import --input my-state.json
+
+# Manage skills
+omk skill install https://github.com/user/omk-skill-repo
+omk skill list
+omk skill remove omk-skill-repo
 ```
 
 ### Shell Integration
@@ -231,6 +236,7 @@ We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [C
 - [x] Config validation (`omk config`)
 - [x] State backup/restore (`omk backup`)
 - [x] State export/import (`omk state`)
+- [x] Skill management (`omk skill`)
 - [ ] Autopilot 6-phase state machine (scaffolded)
 - [ ] Ralph persistence loop (scaffolded)
 - [ ] Cross-provider `ask` with synthesis (scaffolded)
