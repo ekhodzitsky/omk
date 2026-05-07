@@ -61,6 +61,13 @@ jobs:
       - name: Build docs
         run: cargo doc --no-deps
 
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: omk-${{ matrix.os }}
+          path: target/release/omk
+          retention-days: 7
+
   cargo-deny:
     name: Audit Dependencies
     runs-on: ubuntu-latest
