@@ -144,6 +144,44 @@ omk hud --tmux
 omk hud --tui
 ```
 
+### Diagnostics
+
+```bash
+# Check environment and dependencies
+omk doctor
+
+# Validate configuration
+omk config validate
+
+# Show current config
+omk config show
+```
+
+### Maintenance
+
+```bash
+# Update omk to the latest release
+omk update
+
+# Clean up old state files
+omk cleanup --older-than 7
+
+# Remove all state (with confirmation)
+omk cleanup --all
+```
+
+### Shell Integration
+
+```bash
+# Generate completions
+omk completions bash > ~/.local/share/bash-completion/completions/omk
+omk completions zsh > ~/.zsh/completions/_omk
+omk completions fish > ~/.config/fish/completions/omk.fish
+
+# Generate man page
+omk man > ~/.local/share/man/man1/omk.1
+```
+
 ## 🧪 Development
 
 ```bash
@@ -173,6 +211,11 @@ We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [C
 - [x] State schema versioning + migration
 - [x] Metrics collection
 - [x] Multi-platform release CI
+- [x] Shell completions + man page
+- [x] Self-update
+- [x] Environment diagnostics (`omk doctor`)
+- [x] State cleanup (`omk cleanup`)
+- [x] Config validation (`omk config`)
 - [ ] Autopilot 6-phase state machine (scaffolded)
 - [ ] Ralph persistence loop (scaffolded)
 - [ ] Cross-provider `ask` with synthesis (scaffolded)
