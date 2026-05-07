@@ -8,7 +8,6 @@ use tracing::{debug, info, warn};
 
 /// Full autopilot state persisted as JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct AutopilotState {
     pub task: String,
     pub phase: AutopilotPhase,
@@ -20,14 +19,12 @@ pub struct AutopilotState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct QaResults {
     pub passed: bool,
     pub errors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ValidationResult {
     pub reviewer: String,
     pub passed: bool,
@@ -423,12 +420,16 @@ pub async fn run_autopilot(name: &str, task: &str, dir: &Path, enable_ralph: boo
 // ------------------------------------------------------------------
 
 async fn run_kimi_prompt(prompt: &str) -> Result<String> {
-    let output = Command::new("kimi")
-        .arg("-p")
-        .arg(prompt)
-        .output()
-        .await
-        .context("Failed to run kimi command")?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        Command::new("kimi")
+            .arg("--print")
+            .arg("-p")
+            .arg(prompt)
+            .output(),
+    )
+    .await
+    .context("kimi prompt timed out")??;
 
     if !output.status.success() {
         anyhow::bail!("kimi exited with non-zero status");

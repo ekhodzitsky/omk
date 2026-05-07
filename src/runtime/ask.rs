@@ -321,7 +321,8 @@ mod tests {
     #[tokio::test]
     async fn test_run_advisor_direct_with_mock() {
         let dir = tempfile::tempdir().unwrap();
-        let script_path = dir.path().join("mock-advisor");
+        // Use a known provider name so provider_command accepts it.
+        let script_path = dir.path().join("kimi");
         std::fs::write(&script_path, "#!/bin/bash\necho 'mock output'\n").unwrap();
         #[cfg(unix)]
         {
@@ -337,7 +338,7 @@ mod tests {
         new_path.push(original_path.clone().unwrap_or_default());
         std::env::set_var("PATH", &new_path);
 
-        let result = run_advisor_direct("mock-advisor", "test prompt").await;
+        let result = run_advisor_direct("kimi", "test prompt").await;
 
         if let Some(path) = original_path {
             std::env::set_var("PATH", path);
@@ -345,7 +346,7 @@ mod tests {
             std::env::remove_var("PATH");
         }
 
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "run_advisor_direct failed: {:?}", result);
         assert_eq!(result.unwrap(), "mock output");
     }
 

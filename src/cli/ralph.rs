@@ -24,8 +24,5 @@ pub async fn run(args: Args) -> Result<()> {
         anyhow::bail!("Task description is required");
     }
 
-    println!("omk ralph: {}", task);
-    println!("(not yet implemented — will run persistence loop with prd.json and verification gates)");
-
-    Ok(())
+    crate::runtime::ralph::run_ralph(&task, &args.dir, args.max_iterations).await
 }

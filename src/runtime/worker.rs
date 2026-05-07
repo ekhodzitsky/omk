@@ -1,7 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tokio::io::AsyncWriteExt;
 use tracing::info;
 
 /// Specification for a single worker in a team

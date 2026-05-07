@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 // Helper: create a mock team state directory for testing status/shutdown logic

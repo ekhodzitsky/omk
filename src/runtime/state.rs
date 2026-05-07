@@ -107,6 +107,26 @@ pub struct RalphState {
     pub state_dir: std::path::PathBuf,
 }
 
+impl RalphState {
+    pub fn state_file(&self) -> std::path::PathBuf {
+        self.state_dir.join("ralph-state.json")
+    }
+
+    pub async fn save(&self) -> anyhow::Result<()> {
+        let path = self.state_file();
+        let json = serde_json::to_string_pretty(self)?;
+        tokio::fs::write(&path, json).await?;
+        Ok(())
+    }
+
+    pub async fn load(state_dir: &Path) -> anyhow::Result<Self> {
+        let path = state_dir.join("ralph-state.json");
+        let json = tokio::fs::read_to_string(&path).await?;
+        let state: Self = serde_json::from_str(&json)?;
+        Ok(state)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Prd {
     pub user_stories: Vec<UserStory>,
