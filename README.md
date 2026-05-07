@@ -173,6 +173,10 @@ omk cleanup --all
 omk backup create
 omk backup list
 omk backup restore 20260507-121530
+
+# Export/import state as JSON
+omk state export --output my-state.json
+omk state import --input my-state.json
 ```
 
 ### Shell Integration
@@ -222,6 +226,7 @@ We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [C
 - [x] State cleanup (`omk cleanup`)
 - [x] Config validation (`omk config`)
 - [x] State backup/restore (`omk backup`)
+- [x] State export/import (`omk state`)
 - [ ] Autopilot 6-phase state machine (scaffolded)
 - [ ] Ralph persistence loop (scaffolded)
 - [ ] Cross-provider `ask` with synthesis (scaffolded)
