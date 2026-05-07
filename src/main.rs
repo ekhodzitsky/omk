@@ -1,5 +1,6 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::{generate, Shell};
 use tracing::{info, warn};
 
 mod cli;
@@ -42,6 +43,23 @@ enum Commands {
     Update,
     /// Run MCP server
     McpServer,
+    /// Generate shell completions
+    Completions(CompletionsArgs),
+}
+
+#[derive(Parser, Debug)]
+struct CompletionsArgs {
+    #[arg(value_enum)]
+    shell: ShellArg,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+enum ShellArg {
+    Bash,
+    Zsh,
+    Fish,
+    Elvish,
+    PowerShell,
 }
 
 #[tokio::main]
@@ -75,6 +93,18 @@ async fn main() -> Result<()> {
         Commands::Setup => run_setup().await,
         Commands::Update => run_update().await,
         Commands::McpServer => mcp::run_mcp_server().await,
+        Commands::Completions(args) => {
+            let shell = match args.shell {
+                ShellArg::Bash => Shell::Bash,
+                ShellArg::Zsh => Shell::Zsh,
+                ShellArg::Fish => Shell::Fish,
+                ShellArg::Elvish => Shell::Elvish,
+                ShellArg::PowerShell => Shell::PowerShell,
+            };
+            let mut cmd = Omk::command();
+            generate(shell, &mut cmd, "omk", &mut std::io::stdout());
+            Ok(())
+        }
     }
 }
 
