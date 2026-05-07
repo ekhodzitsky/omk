@@ -9,7 +9,7 @@ mod runtime;
 mod skills;
 mod vis;
 
-use cli::{ask, autopilot, hud, ralph, team};
+use cli::{ask, autopilot, doctor, hud, ralph, team};
 
 /// Oh My Kimi — Multi-agent orchestration for Kimi CLI
 #[derive(Parser, Debug)]
@@ -47,6 +47,8 @@ enum Commands {
     Completions(CompletionsArgs),
     /// Generate man page
     Man,
+    /// Diagnose environment and dependencies
+    Doctor(doctor::Args),
 }
 
 #[derive(Parser, Debug)]
@@ -113,6 +115,7 @@ async fn main() -> Result<()> {
             man.render(&mut std::io::stdout())?;
             Ok(())
         }
+        Commands::Doctor(args) => doctor::run(args).await,
     }
 }
 
