@@ -159,10 +159,15 @@ We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [C
 - [x] Status & shutdown lifecycle
 - [x] Skill injection system
 - [x] TUI scaffold
-- [ ] Autopilot 6-phase state machine
-- [ ] Ralph persistence loop
-- [ ] Cross-provider `ask` with synthesis
-- [ ] MCP server for IDE integration
+- [x] XDG-compliant config paths
+- [x] Atomic file writes + retry logic
+- [x] State schema versioning + migration
+- [x] Metrics collection
+- [x] Multi-platform release CI
+- [ ] Autopilot 6-phase state machine (scaffolded)
+- [ ] Ralph persistence loop (scaffolded)
+- [ ] Cross-provider `ask` with synthesis (scaffolded)
+- [ ] MCP server for IDE integration (scaffolded)
 - [ ] Web dashboard (`omk vis`)
 - [ ] Plugin marketplace
 
