@@ -9,7 +9,7 @@ mod runtime;
 mod skills;
 mod vis;
 
-use cli::{ask, autopilot, backup, cleanup, config_cmd, doctor, hud, ralph, team};
+use cli::{ask, autopilot, backup, cleanup, config_cmd, doctor, hud, ralph, state, team};
 
 /// Oh My Kimi — Multi-agent orchestration for Kimi CLI
 #[derive(Parser, Debug)]
@@ -55,6 +55,8 @@ enum Commands {
     Config(config_cmd::Args),
     /// Backup and restore state
     Backup(backup::Args),
+    /// Export/import state
+    State(state::Args),
 }
 
 #[derive(Parser, Debug)]
@@ -140,6 +142,7 @@ async fn main() -> Result<()> {
         Commands::Cleanup(args) => cleanup::run(args).await,
         Commands::Config(args) => config_cmd::run(args).await,
         Commands::Backup(args) => backup::run(args).await,
+        Commands::State(args) => state::run(args).await,
     }
 }
 
