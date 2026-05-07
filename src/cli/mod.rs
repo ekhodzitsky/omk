@@ -6,5 +6,6 @@ pub mod config_cmd;
 pub mod doctor;
 pub mod hud;
 pub mod ralph;
+pub mod skill;
 pub mod state;
 pub mod team;
