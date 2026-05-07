@@ -1,1 +1,4 @@
-// MCP server module — placeholder for future implementation
+pub mod server;
+pub mod tools;
+
+pub use server::run_mcp_server;

@@ -40,6 +40,8 @@ enum Commands {
     Setup,
     /// Update OMK
     Update,
+    /// Run MCP server
+    McpServer,
 }
 
 #[tokio::main]
@@ -72,6 +74,7 @@ async fn main() -> Result<()> {
         Commands::Hud(args) => hud::run(args).await,
         Commands::Setup => run_setup().await,
         Commands::Update => run_update().await,
+        Commands::McpServer => mcp::run_mcp_server().await,
     }
 }
 

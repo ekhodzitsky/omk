@@ -16,6 +16,10 @@ pub struct Args {
     /// Enable Ralph persistence loop
     #[arg(long)]
     pub ralph: bool,
+
+    /// Autopilot run name (auto-generated if omitted)
+    #[arg(short, long)]
+    pub name: Option<String>,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -24,8 +28,12 @@ pub async fn run(args: Args) -> Result<()> {
         anyhow::bail!("Task description is required");
     }
 
-    println!("omk autopilot: {}", task);
-    println!("(not yet implemented — will run 6-phase pipeline: expansion → planning → execution → qa → validation → cleanup)");
+    let name = args.name.unwrap_or_else(|| {
+        format!(
+            "ap-{}",
+            uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
+        )
+    });
 
-    Ok(())
+    crate::runtime::autopilot::run_autopilot(&name, &task, &args.dir, args.ralph).await
 }
