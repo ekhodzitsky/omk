@@ -48,7 +48,7 @@ pub fn parse_skill(path: &Path) -> Result<Skill> {
 fn extract_frontmatter(content: &str) -> Result<(String, String)> {
     lazy_static::lazy_static! {
         static ref RE: Regex = Regex::new(
-            r"^---\s*\n(.*?)\n---\s*\n?(.*)$"
+            r"(?s)^---\s*\n(.*?)\n---\s*\n?(.*)$"
         ).unwrap();
     }
 
@@ -77,20 +77,11 @@ mod tests {
 
     #[test]
     fn test_parse_frontmatter() {
-        let input = r#"---
-name: team
-description: N coordinated agents
-level: 4
-aliases: ["tm", "swarm"]
-triggers: ["team", "orchestrate"]
----
-
-# Team Mode
-
-Use this when coordinating multiple agents.
-"#;
+        let input = "---\nname: team\ndescription: N coordinated agents\nlevel: 4\naliases: [\"tm\", \"swarm\"]\ntriggers: [\"team\", \"orchestrate\"]\n---\n\n# Team Mode\n\nUse this when coordinating multiple agents.\n";
         let (fm, body) = extract_frontmatter(input).unwrap();
-        assert!(fm.contains("name: team"));
-        assert!(body.contains("# Team Mode"));
+        eprintln!("FM: {:?}", fm);
+        eprintln!("BODY: {:?}", body);
+        assert!(fm.contains("name: team"), "frontmatter missing name: {:?}", fm);
+        assert!(body.contains("# Team Mode"), "body missing header: {:?}", body);
     }
 }

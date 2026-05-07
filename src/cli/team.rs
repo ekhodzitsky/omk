@@ -1,39 +1,71 @@
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::info;
 
 use crate::runtime::{bridge::TeamBridge, state::TeamState, tmux, worker::WorkerSpec};
 
-/// Spawn a team of Kimi agents in tmux
 #[derive(Parser, Debug, Clone)]
 pub struct Args {
-    /// Team specification, e.g. "3:coder" or "2:executor"
+    #[command(subcommand)]
+    pub command: TeamCommands,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum TeamCommands {
+    /// Spawn a team of Kimi agents in tmux
+    Spawn(SpawnArgs),
+    /// Check team status
+    Status(StatusArgs),
+    /// Shutdown a team
+    Shutdown(ShutdownArgs),
+}
+
+#[derive(Parser, Debug, Clone)]
+pub struct SpawnArgs {
     #[arg(value_name = "N:ROLE")]
     pub spec: String,
 
-    /// Task description
     #[arg(trailing_var_arg = true, value_name = "TASK")]
     pub task: Vec<String>,
 
-    /// Team name (auto-generated if omitted)
     #[arg(short, long)]
     pub name: Option<String>,
 
-    /// Working directory
     #[arg(short, long, default_value = ".")]
     pub dir: PathBuf,
 
-    /// Disable Ralph loop (run once)
     #[arg(long)]
     pub no_ralph: bool,
 
-    /// YOLO mode (auto-approve)
     #[arg(long)]
     pub yolo: bool,
 }
 
+#[derive(Parser, Debug, Clone)]
+pub struct StatusArgs {
+    #[arg(value_name = "NAME")]
+    pub name: String,
+}
+
+#[derive(Parser, Debug, Clone)]
+pub struct ShutdownArgs {
+    #[arg(value_name = "NAME")]
+    pub name: String,
+
+    #[arg(long)]
+    pub force: bool,
+}
+
 pub async fn run(args: Args) -> Result<()> {
+    match args.command {
+        TeamCommands::Spawn(args) => spawn(args).await,
+        TeamCommands::Status(args) => status(args).await,
+        TeamCommands::Shutdown(args) => shutdown(args).await,
+    }
+}
+
+async fn spawn(args: SpawnArgs) -> Result<()> {
     let task = args.task.join(" ");
     if task.is_empty() {
         anyhow::bail!("Task description is required");
@@ -46,10 +78,8 @@ pub async fn run(args: Args) -> Result<()> {
 
     info!(team = %team_name, workers = count, role = role, task = %task, "Starting team");
 
-    // Ensure tmux is available
     tmux::ensure_tmux()?;
 
-    // Create state directory
     let state_dir = dirs::home_dir()
         .context("No home directory")?
         .join(".omk")
@@ -61,7 +91,6 @@ pub async fn run(args: Args) -> Result<()> {
     let state = TeamState::new(&team_name, &task, &state_dir, count, &role);
     state.save().await?;
 
-    // Create or attach tmux session
     let session_name = format!("omk-team-{team_name}");
     let window_name = "lead";
 
@@ -69,11 +98,9 @@ pub async fn run(args: Args) -> Result<()> {
         tmux::create_session(&session_name, window_name, &args.dir)?;
     }
 
-    // Spawn lead agent in first pane
     let lead_prompt = build_lead_prompt(&task, count, &role, &state_dir, args.yolo);
     tmux::send_keys(&session_name, window_name, &format!("kimi -p {}", shell_escape(&lead_prompt)))?;
 
-    // Spawn worker panes
     for i in 0..count {
         let worker_name = format!("worker-{i}");
         let worker_dir = state_dir.join("workers").join(&worker_name);
@@ -95,7 +122,6 @@ pub async fn run(args: Args) -> Result<()> {
         bridge.spawn_worker(i + 1).await?;
     }
 
-    // Arrange layout
     tmux::select_layout(&session_name, window_name, "tiled")?;
 
     println!("✓ Team '{}' started with {} {} worker(s)", team_name, count, role);
@@ -109,6 +135,125 @@ pub async fn run(args: Args) -> Result<()> {
     println!("Attach with: tmux attach -t {}", session_name);
 
     Ok(())
+}
+
+async fn status(args: StatusArgs) -> Result<()> {
+    let state_dir = dirs::home_dir()
+        .context("No home directory")?
+        .join(".omk")
+        .join("state")
+        .join("team")
+        .join(&args.name);
+
+    if !state_dir.exists() {
+        anyhow::bail!("Team '{}' not found. Expected state at: {}", args.name, state_dir.display());
+    }
+
+    let state = TeamState::load(&state_dir).await?;
+    let session_name = format!("omk-team-{}", args.name);
+    let tmux_alive = tmux::session_exists(&session_name).unwrap_or(false);
+
+    println!("Team:        {}", state.name);
+    println!("Task:        {}", state.task);
+    println!("Phase:       {:?}", state.phase);
+    println!("Created:     {}", state.created_at);
+    println!("Tmux:        {}", if tmux_alive { "running" } else { "not found" });
+    println!();
+    println!("Workers:");
+
+    let workers_dir = state_dir.join("workers");
+    if workers_dir.exists() {
+        let mut entries = tokio::fs::read_dir(&workers_dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let worker_dir = entry.path();
+            let spec_path = worker_dir.join("worker-spec.json");
+            if !spec_path.exists() {
+                continue;
+            }
+
+            let spec: WorkerSpec = {
+                let json = tokio::fs::read_to_string(&spec_path).await?;
+                serde_json::from_str(&json)?
+            };
+
+            let hb_status = if spec.heartbeat.exists() {
+                match tokio::fs::read_to_string(&spec.heartbeat).await {
+                    Ok(json) => match serde_json::from_str::<serde_json::Value>(&json) {
+                        Ok(v) => v.get("status").and_then(|s| s.as_str()).unwrap_or("unknown").to_string(),
+                        Err(_) => "invalid".to_string(),
+                    },
+                    Err(_) => "unreadable".to_string(),
+                }
+            } else {
+                "missing".to_string()
+            };
+
+            let inbox_count = count_jsonl_lines(&spec.inbox).await;
+            let outbox_count = count_jsonl_lines(&spec.outbox).await;
+
+            println!(
+                "  {:12} role={:10} hb={:8} inbox={:2} outbox={:2}",
+                spec.name, spec.role, hb_status, inbox_count, outbox_count
+            );
+        }
+    }
+
+    println!();
+    println!("Tasks:       {} total", state.tasks.len());
+    for task in &state.tasks {
+        println!("  [{:?}] {}", task.status, task.description);
+    }
+
+    Ok(())
+}
+
+async fn shutdown(args: ShutdownArgs) -> Result<()> {
+    let state_dir = dirs::home_dir()
+        .context("No home directory")?
+        .join(".omk")
+        .join("state")
+        .join("team")
+        .join(&args.name);
+
+    if !state_dir.exists() {
+        anyhow::bail!("Team '{}' not found. Expected state at: {}", args.name, state_dir.display());
+    }
+
+    let session_name = format!("omk-team-{}", args.name);
+
+    if tmux::session_exists(&session_name)? {
+        if !args.force {
+            println!("Sending interrupt to team '{}'...", args.name);
+            // Send Ctrl-C to all panes
+            let _ = tmux::send_keys(&session_name, "lead", "C-c");
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+
+        tmux::kill_session(&session_name)?;
+        println!("✓ Tmux session '{}' killed", session_name);
+    } else {
+        println!("⚠ Tmux session '{}' not found (already dead?)", session_name);
+    }
+
+    // Update state
+    let mut state = TeamState::load(&state_dir).await?;
+    state.phase = crate::runtime::state::TeamPhase::Shutdown;
+    state.save().await?;
+
+    println!("✓ Team '{}' shut down", args.name);
+    println!("  State:   {}", state_dir.display());
+
+    Ok(())
+}
+
+async fn count_jsonl_lines(path: &PathBuf) -> usize {
+    if !path.exists() {
+        return 0;
+    }
+    match tokio::fs::read_to_string(path).await {
+        Ok(content) => content.lines().filter(|l| !l.trim().is_empty()).count(),
+        Err(_) => 0,
+    }
 }
 
 fn parse_spec(spec: &str) -> Result<(usize, String)> {
@@ -137,7 +282,7 @@ Your task: {task}
 3. Wait for outbox results and synthesize the final answer.
 4. If a worker fails, reassign or fix the subtask.
 
-## Worker Inbox Format (JSONL)
+## Inbox Format (JSONL)
 Each line: {{"id":"uuid","task":"description","acceptance_criteria":["..."]}}
 
 ## State Directory
@@ -163,6 +308,5 @@ Each line: {{"id":"uuid","task":"description","acceptance_criteria":["..."]}}
 }
 
 fn shell_escape(s: &str) -> String {
-    // Simple shell escape: wrap in single quotes, escape existing single quotes
     format!("'{}'", s.replace('\'', "'\"'\"'"))
 }

@@ -88,3 +88,65 @@ pub enum ResultStatus {
     Partial,
     Failed,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_worker_spec_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec = WorkerSpec {
+            name: "worker-0".to_string(),
+            role: "coder".to_string(),
+            inbox: dir.path().join("inbox.jsonl"),
+            outbox: dir.path().join("outbox.jsonl"),
+            heartbeat: dir.path().join("heartbeat.json"),
+        };
+
+        spec.save().await.unwrap();
+        let loaded = WorkerSpec::load(dir.path()).await.unwrap();
+        assert_eq!(loaded.name, "worker-0");
+        assert_eq!(loaded.role, "coder");
+    }
+
+    #[tokio::test]
+    async fn test_send_and_read_task() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec = WorkerSpec {
+            name: "worker-0".to_string(),
+            role: "coder".to_string(),
+            inbox: dir.path().join("inbox.jsonl"),
+            outbox: dir.path().join("outbox.jsonl"),
+            heartbeat: dir.path().join("heartbeat.json"),
+        };
+
+        let task = WorkerTask {
+            id: "task-1".to_string(),
+            task: "fix bug".to_string(),
+            acceptance_criteria: vec!["tests pass".to_string()],
+            context: None,
+        };
+
+        spec.send_task(&task).await.unwrap();
+
+        let results = spec.read_results().await.unwrap();
+        assert!(results.is_empty());
+
+        // Simulate a result written by a worker
+        let result = WorkerResult {
+            task_id: "task-1".to_string(),
+            status: ResultStatus::Success,
+            summary: "done".to_string(),
+            artifacts: vec![],
+            elapsed_secs: 10,
+        };
+        let line = serde_json::to_string(&result).unwrap();
+        tokio::fs::write(&spec.outbox, format!("{}\n", line)).await.unwrap();
+
+        let results = spec.read_results().await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].task_id, "task-1");
+        matches!(results[0].status, ResultStatus::Success);
+    }
+}

@@ -24,6 +24,7 @@ pub enum TeamPhase {
     Fixing,
     Complete,
     Failed,
+    Shutdown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,4 +127,23 @@ pub enum StoryStatus {
     Implemented,
     Verified,
     Failed,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_team_state_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = TeamState::new("test", "task", dir.path(), 3, "coder");
+        state.save().await.unwrap();
+
+        let loaded = TeamState::load(dir.path()).await.unwrap();
+        assert_eq!(loaded.name, "test");
+        assert_eq!(loaded.task, "task");
+        assert_eq!(loaded.worker_count, 3);
+        assert_eq!(loaded.worker_role, "coder");
+        matches!(loaded.phase, TeamPhase::Planning);
+    }
 }
