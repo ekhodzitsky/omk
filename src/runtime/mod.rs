@@ -1,7 +1,9 @@
 pub mod ask;
+pub mod atomic;
 pub mod autopilot;
 pub mod bridge;
 pub mod ralph;
+pub mod retry;
 pub mod shell;
 pub mod state;
 pub mod tmux;

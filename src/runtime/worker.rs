@@ -17,7 +17,7 @@ impl WorkerSpec {
     pub async fn save(&self) -> Result<()> {
         let path = self.inbox.parent().unwrap().join("worker-spec.json");
         let json = serde_json::to_string_pretty(self)?;
-        tokio::fs::write(&path, json).await?;
+        crate::runtime::atomic::atomic_write(&path, json.as_bytes()).await?;
         info!(path = %path.display(), name = %self.name, "Saved worker spec");
         Ok(())
     }
@@ -32,15 +32,7 @@ impl WorkerSpec {
     /// Write a task to the inbox
     pub async fn send_task(&self, task: &WorkerTask) -> Result<()> {
         let line = serde_json::to_string(task)?;
-        let mut file = tokio::fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(&self.inbox)
-            .await?;
-        use tokio::io::AsyncWriteExt;
-        file.write_all(line.as_bytes()).await?;
-        file.write_all(b"\n").await?;
-        file.flush().await?;
+        crate::runtime::atomic::atomic_append_jsonl(&self.inbox, &line).await?;
         Ok(())
     }
 

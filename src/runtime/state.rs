@@ -66,7 +66,7 @@ impl TeamState {
     pub async fn save(&self) -> Result<()> {
         let path = self.state_file();
         let json = serde_json::to_string_pretty(self)?;
-        tokio::fs::write(&path, json).await?;
+        crate::runtime::atomic::atomic_write(&path, json.as_bytes()).await?;
         info!(path = %path.display(), "Saved team state");
         Ok(())
     }
@@ -115,7 +115,7 @@ impl RalphState {
     pub async fn save(&self) -> anyhow::Result<()> {
         let path = self.state_file();
         let json = serde_json::to_string_pretty(self)?;
-        tokio::fs::write(&path, json).await?;
+        crate::runtime::atomic::atomic_write(&path, json.as_bytes()).await?;
         Ok(())
     }
 
