@@ -36,6 +36,10 @@ pub struct OmkConfig {
     /// Telemetry: save metrics to state dir
     #[serde(default = "default_true")]
     pub enable_metrics: bool,
+
+    /// External marketplace registries
+    #[serde(default)]
+    pub registries: Vec<String>,
 }
 
 impl Default for OmkConfig {
@@ -46,6 +50,7 @@ impl Default for OmkConfig {
             kimi_binary: None,
             extra_skill_dirs: vec![],
             enable_metrics: true,
+            registries: vec![],
         }
     }
 }
@@ -189,6 +194,7 @@ mod tests {
         assert_eq!(config.default_team_size, 2);
         assert!(!config.default_yolo);
         assert!(config.enable_metrics);
+        assert!(config.registries.is_empty());
     }
 
     #[test]
