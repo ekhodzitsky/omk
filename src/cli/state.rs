@@ -12,6 +12,8 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum StateCommands {
+    /// List all tracked sessions (teams, autopilots, ralphs)
+    List,
     /// Export all state to a single JSON file
     Export {
         /// Output file path
@@ -28,9 +30,115 @@ pub enum StateCommands {
 
 pub async fn run(args: Args) -> Result<()> {
     match args.command {
+        StateCommands::List => list_state().await,
         StateCommands::Export { output } => export_state(&output).await,
         StateCommands::Import { input } => import_state(&input).await,
     }
+}
+
+async fn list_state() -> Result<()> {
+    let state_dir = crate::runtime::config::state_dir();
+    let mut has_any = false;
+
+    // Teams
+    let teams_dir = state_dir.join("team");
+    if teams_dir.exists() {
+        let mut entries = tokio::fs::read_dir(&teams_dir).await?;
+        let mut teams = Vec::new();
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.is_dir() {
+                let team_state = path.join("team-state.json");
+                if team_state.exists() {
+                    let content = tokio::fs::read_to_string(&team_state).await?;
+                    if let Ok(value) = serde_json::from_str::<Value>(&content) {
+                        teams.push((
+                            entry.file_name().to_string_lossy().to_string(),
+                            value["task"].as_str().unwrap_or("").to_string(),
+                            value["phase"].as_str().unwrap_or("Unknown").to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+        if !teams.is_empty() {
+            println!("Teams:");
+            for (name, task, phase) in teams {
+                println!("  {:<20} [{:<12}] {}", name, phase, task.chars().take(40).collect::<String>());
+            }
+            has_any = true;
+        }
+    }
+
+    // Autopilots
+    let autopilot_dir = state_dir.join("autopilot");
+    if autopilot_dir.exists() {
+        let mut entries = tokio::fs::read_dir(&autopilot_dir).await?;
+        let mut autopilots = Vec::new();
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.is_dir() {
+                let ap_state = path.join("autopilot-state.json");
+                if ap_state.exists() {
+                    let content = tokio::fs::read_to_string(&ap_state).await?;
+                    if let Ok(value) = serde_json::from_str::<Value>(&content) {
+                        autopilots.push((
+                            entry.file_name().to_string_lossy().to_string(),
+                            value["task"].as_str().unwrap_or("").to_string(),
+                            value["phase"].as_str().unwrap_or("Unknown").to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+        if !autopilots.is_empty() {
+            if has_any { println!(); }
+            println!("Autopilots:");
+            for (name, task, phase) in autopilots {
+                println!("  {:<20} [{:<12}] {}", name, phase, task.chars().take(40).collect::<String>());
+            }
+            has_any = true;
+        }
+    }
+
+    // Ralphs
+    let ralph_dir = state_dir.join("ralph");
+    if ralph_dir.exists() {
+        let mut entries = tokio::fs::read_dir(&ralph_dir).await?;
+        let mut ralphs = Vec::new();
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.is_dir() {
+                let ralph_state = path.join("ralph-state.json");
+                if ralph_state.exists() {
+                    let content = tokio::fs::read_to_string(&ralph_state).await?;
+                    if let Ok(value) = serde_json::from_str::<Value>(&content) {
+                        let iteration = value["iteration"].as_u64().unwrap_or(0);
+                        let max_iter = value["max_iterations"].as_u64().unwrap_or(0);
+                        ralphs.push((
+                            entry.file_name().to_string_lossy().to_string(),
+                            value["task"].as_str().unwrap_or("").to_string(),
+                            format!("{}/{}", iteration, max_iter),
+                        ));
+                    }
+                }
+            }
+        }
+        if !ralphs.is_empty() {
+            if has_any { println!(); }
+            println!("Ralph sessions:");
+            for (name, task, progress) in ralphs {
+                println!("  {:<20} [{:<8}] {}", name, progress, task.chars().take(40).collect::<String>());
+            }
+            has_any = true;
+        }
+    }
+
+    if !has_any {
+        println!("No sessions found.");
+    }
+
+    Ok(())
 }
 
 async fn export_state(output: &str) -> Result<()> {

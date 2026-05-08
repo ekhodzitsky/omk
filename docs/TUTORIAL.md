@@ -227,6 +227,12 @@ omk backup list
 omk backup restore 20260508-121530
 ```
 
+### List all sessions
+
+```bash
+omk state list
+```
+
 ### Export state as JSON
 
 ```bash
