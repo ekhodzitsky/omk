@@ -200,6 +200,53 @@ omk completions fish > ~/.config/fish/completions/omk.fish
 omk man > ~/.local/share/man/man1/omk.1
 ```
 
+## 🚀 Getting Started
+
+### 1. Install
+
+```bash
+cargo install omk
+# or
+curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
+```
+
+### 2. Verify
+
+```bash
+omk doctor
+omk setup
+```
+
+### 3. Your first team
+
+```bash
+omk team spawn 3:coder "refactor auth to use JWT"
+omk team status <name-from-output>
+omk team shutdown <name>
+```
+
+### 4. Autopilot a feature
+
+```bash
+omk autopilot "build a REST API for task management"
+# Resume if interrupted:
+omk autopilot --resume --name ap-xxx "build a REST API"
+```
+
+### 5. Cross-consult advisors
+
+```bash
+omk ask all "review my database schema"
+omk ask --providers claude,kimi "architecture for real-time chat"
+```
+
+### 6. Web dashboard
+
+```bash
+omk hud --web --port 8080
+# Open http://localhost:8080
+```
+
 ## 🧪 Development
 
 ```bash
@@ -217,6 +264,16 @@ make install
 ```
 
 We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## 🛠️ Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| `tmux not found` | Install tmux: `brew install tmux` / `apt install tmux` |
+| `kimi not found` | Install [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) |
+| `omk team spawn` hangs | Check `omk doctor` — ensure tmux and kimi are available |
+| State corruption | Use `omk cleanup --all` and re-run setup |
+| Resume after crash | Use `--resume` flag with the run name |
 
 ## 📋 Roadmap
 
@@ -237,10 +294,10 @@ We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [C
 - [x] State backup/restore (`omk backup`)
 - [x] State export/import (`omk state`)
 - [x] Skill management (`omk skill`)
-- [ ] Autopilot 6-phase state machine (scaffolded)
-- [ ] Ralph persistence loop (scaffolded)
-- [ ] Cross-provider `ask` with synthesis (scaffolded)
-- [ ] MCP server for IDE integration (scaffolded)
+- [x] Autopilot 6-phase state machine with resume/yolo
+- [x] Ralph persistence loop with resume/yolo
+- [x] Cross-provider `ask` with synthesis
+- [x] MCP server for IDE integration
 - [x] Web dashboard (`omk hud --web`)
 - [ ] Plugin marketplace
 
