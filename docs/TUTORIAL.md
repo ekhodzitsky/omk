@@ -162,6 +162,13 @@ omk hud --web --port 8080
 
 Navigate to `http://localhost:8080`
 
+The dashboard shows:
+- Active teams with phases and tasks
+- Running autopilots and their current phase
+- Ralph sessions with iteration progress
+- Metrics (spawns, shutdowns, tasks, ask calls)
+- Health status and version
+
 ### Docker Compose
 
 ```bash

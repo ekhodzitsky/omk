@@ -12,6 +12,8 @@ pub async fn run_server(port: u16) -> Result<()> {
     let app = Router::new()
         .route("/", get(dashboard_handler))
         .route("/api/teams", get(teams_handler))
+        .route("/api/autopilots", get(autopilots_handler))
+        .route("/api/ralphs", get(ralphs_handler))
         .route("/api/metrics", get(metrics_handler))
         .route("/api/health", get(health_handler));
 
@@ -184,6 +186,24 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             </div>
 
             <div class="card">
+                <h2>🤖 Autopilots</h2>
+                <ul class="team-list" id="autopilots">
+                    <li class="team-item">
+                        <div class="team-name">No active autopilots</div>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h2>🔄 Ralph Sessions</h2>
+                <ul class="team-list" id="ralphs">
+                    <li class="team-item">
+                        <div class="team-name">No active Ralph sessions</div>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="card">
                 <h2>🩺 Health</h2>
                 <div id="health">
                     <div class="metric"><span>Status</span><span class="metric-value status-ok" id="h-status">Loading...</span></div>
@@ -203,13 +223,17 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
     <script>
         async function loadData() {
             try {
-                const [teamsRes, metricsRes, healthRes] = await Promise.all([
+                const [teamsRes, autopilotsRes, ralphsRes, metricsRes, healthRes] = await Promise.all([
                     fetch('/api/teams'),
+                    fetch('/api/autopilots'),
+                    fetch('/api/ralphs'),
                     fetch('/api/metrics'),
                     fetch('/api/health')
                 ]);
 
                 const teams = await teamsRes.json();
+                const autopilots = await autopilotsRes.json();
+                const ralphs = await ralphsRes.json();
                 const metrics = await metricsRes.json();
                 const health = await healthRes.json();
 
@@ -227,6 +251,40 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                             </div>
                         </li>`;
                     }).join('');
+                }
+
+                // Autopilots
+                const autopilotsList = document.getElementById('autopilots');
+                if (autopilots.autopilots && autopilots.autopilots.length > 0) {
+                    autopilotsList.innerHTML = autopilots.autopilots.map(a => {
+                        const phase = a.phase || 'Unknown';
+                        const phaseClass = 'phase-' + phase.toLowerCase();
+                        return `<li class="team-item">
+                            <div class="team-name">${a.name || 'Unnamed'}</div>
+                            <div class="team-meta">
+                                <span class="phase-badge ${phaseClass}">${phase}</span>
+                                ${a.task ? '• ' + a.task.substring(0, 60) + (a.task.length > 60 ? '...' : '') : ''}
+                            </div>
+                        </li>`;
+                    }).join('');
+                } else {
+                    autopilotsList.innerHTML = '<li class="team-item"><div class="team-name">No active autopilots</div></li>';
+                }
+
+                // Ralphs
+                const ralphsList = document.getElementById('ralphs');
+                if (ralphs.ralphs && ralphs.ralphs.length > 0) {
+                    ralphsList.innerHTML = ralphs.ralphs.map(r => {
+                        const progress = `${r.iteration || 0}/${r.max_iterations || 0}`;
+                        return `<li class="team-item">
+                            <div class="team-name">${r.task ? r.task.substring(0, 40) + (r.task.length > 40 ? '...' : '') : 'Unnamed'}</div>
+                            <div class="team-meta">
+                                <span class="phase-badge">${progress}</span>
+                            </div>
+                        </li>`;
+                    }).join('');
+                } else {
+                    ralphsList.innerHTML = '<li class="team-item"><div class="team-name">No active Ralph sessions</div></li>';
                 }
 
                 // Metrics
@@ -269,6 +327,42 @@ async fn teams_handler() -> Json<Value> {
     }
 
     Json(serde_json::json!({ "teams": teams }))
+}
+
+async fn autopilots_handler() -> Json<Value> {
+    let state_dir = crate::runtime::config::state_dir().join("autopilot");
+    let mut autopilots = Vec::new();
+
+    if let Ok(mut entries) = tokio::fs::read_dir(&state_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let ap_state = entry.path().join("autopilot-state.json");
+            if let Ok(content) = tokio::fs::read_to_string(&ap_state).await {
+                if let Ok(value) = serde_json::from_str::<Value>(&content) {
+                    autopilots.push(value);
+                }
+            }
+        }
+    }
+
+    Json(serde_json::json!({ "autopilots": autopilots }))
+}
+
+async fn ralphs_handler() -> Json<Value> {
+    let state_dir = crate::runtime::config::state_dir().join("ralph");
+    let mut ralphs = Vec::new();
+
+    if let Ok(mut entries) = tokio::fs::read_dir(&state_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let ralph_state = entry.path().join("ralph-state.json");
+            if let Ok(content) = tokio::fs::read_to_string(&ralph_state).await {
+                if let Ok(value) = serde_json::from_str::<Value>(&content) {
+                    ralphs.push(value);
+                }
+            }
+        }
+    }
+
+    Json(serde_json::json!({ "ralphs": ralphs }))
 }
 
 async fn metrics_handler() -> Json<Value> {
