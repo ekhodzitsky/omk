@@ -24,6 +24,8 @@ pub enum TeamCommands {
     Status(StatusArgs),
     /// Attach to a team's tmux session
     Attach(AttachArgs),
+    /// Broadcast a message to all team panes
+    Broadcast(BroadcastArgs),
     /// Shutdown a team
     Shutdown(ShutdownArgs),
 }
@@ -66,6 +68,15 @@ pub struct AttachArgs {
 }
 
 #[derive(Parser, Debug, Clone)]
+pub struct BroadcastArgs {
+    #[arg(value_name = "NAME")]
+    pub name: String,
+
+    #[arg(trailing_var_arg = true, value_name = "MESSAGE")]
+    pub message: Vec<String>,
+}
+
+#[derive(Parser, Debug, Clone)]
 pub struct ShutdownArgs {
     #[arg(value_name = "NAME")]
     pub name: String,
@@ -80,6 +91,7 @@ pub async fn run(args: Args) -> Result<()> {
         TeamCommands::List => list_teams().await,
         TeamCommands::Status(args) => status(args).await,
         TeamCommands::Attach(args) => attach(args).await,
+        TeamCommands::Broadcast(args) => broadcast(args).await,
         TeamCommands::Shutdown(args) => shutdown(args).await,
     }
 }
@@ -368,6 +380,59 @@ async fn attach(args: AttachArgs) -> Result<()> {
         }
         Ok(())
     }
+}
+
+async fn broadcast(args: BroadcastArgs) -> Result<()> {
+    let session_name = format!("omk-team-{}", args.name);
+    let message = args.message.join(" ");
+
+    if message.is_empty() {
+        anyhow::bail!("Message is required");
+    }
+
+    // Check if session exists
+    let output = tokio::process::Command::new("tmux")
+        .args(["has-session", "-t", &session_name])
+        .output()
+        .await
+        .context("Failed to check tmux session")?;
+
+    if !output.status.success() {
+        anyhow::bail!("Team '{}' is not running (tmux session '{}' not found)", args.name, session_name);
+    }
+
+    // Get list of panes
+    let pane_list = tokio::process::Command::new("tmux")
+        .args(["list-panes", "-t", &session_name, "-F", "#{pane_index}"])
+        .output()
+        .await
+        .context("Failed to list tmux panes")?;
+
+    if !pane_list.status.success() {
+        anyhow::bail!("Failed to list tmux panes");
+    }
+
+    let pane_output = String::from_utf8_lossy(&pane_list.stdout);
+    let panes: Vec<&str> = pane_output
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+
+    let escaped = crate::runtime::shell::shell_escape(&message);
+    for pane in &panes {
+        let target = format!("{}.{}", session_name, pane);
+        let result = tokio::process::Command::new("tmux")
+            .args(["send-keys", "-t", &target, &escaped, "C-m"])
+            .output()
+            .await;
+
+        if let Err(e) = result {
+            println!("  ⚠ Failed to send to pane {}: {}", pane, e);
+        }
+    }
+
+    println!("✓ Broadcasted to {} pane(s) in team '{}'", panes.len(), args.name);
+    Ok(())
 }
 
 fn parse_spec(spec: &str) -> Result<(usize, String)> {

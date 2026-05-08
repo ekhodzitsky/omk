@@ -80,6 +80,12 @@ omk team attach coder-a1b2
 tmux attach -t omk-team-coder-a1b2
 ```
 
+### Broadcast a message
+
+```bash
+omk team broadcast coder-a1b2 "New requirement: add OAuth support"
+```
+
 ### Shutdown
 
 ```bash
