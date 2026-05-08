@@ -26,6 +26,8 @@ pub enum TeamCommands {
     Attach(AttachArgs),
     /// Broadcast a message to all team panes
     Broadcast(BroadcastArgs),
+    /// Rename a team
+    Rename(RenameArgs),
     /// Shutdown a team
     Shutdown(ShutdownArgs),
 }
@@ -77,6 +79,15 @@ pub struct BroadcastArgs {
 }
 
 #[derive(Parser, Debug, Clone)]
+pub struct RenameArgs {
+    #[arg(value_name = "OLD_NAME")]
+    pub old_name: String,
+
+    #[arg(value_name = "NEW_NAME")]
+    pub new_name: String,
+}
+
+#[derive(Parser, Debug, Clone)]
 pub struct ShutdownArgs {
     #[arg(value_name = "NAME")]
     pub name: String,
@@ -92,6 +103,7 @@ pub async fn run(args: Args) -> Result<()> {
         TeamCommands::Status(args) => status(args).await,
         TeamCommands::Attach(args) => attach(args).await,
         TeamCommands::Broadcast(args) => broadcast(args).await,
+        TeamCommands::Rename(args) => rename_team(args).await,
         TeamCommands::Shutdown(args) => shutdown(args).await,
     }
 }
@@ -432,6 +444,55 @@ async fn broadcast(args: BroadcastArgs) -> Result<()> {
     }
 
     println!("✓ Broadcasted to {} pane(s) in team '{}'", panes.len(), args.name);
+    Ok(())
+}
+
+async fn rename_team(args: RenameArgs) -> Result<()> {
+    let state_dir = crate::runtime::config::omk_state_dir().join("team");
+    let old_path = state_dir.join(&args.old_name);
+    let new_path = state_dir.join(&args.new_name);
+
+    if !old_path.exists() {
+        anyhow::bail!("Team '{}' not found", args.old_name);
+    }
+
+    if new_path.exists() {
+        anyhow::bail!("Team '{}' already exists", args.new_name);
+    }
+
+    // Check if tmux session is running
+    let old_session = format!("omk-team-{}", args.old_name);
+    let running = crate::runtime::tmux::session_exists(&old_session).unwrap_or(false);
+
+    if running {
+        // Rename tmux session
+        let result = tokio::process::Command::new("tmux")
+            .args(["rename-session", "-t", &old_session, &format!("omk-team-{}", args.new_name)])
+            .output()
+            .await
+            .context("Failed to rename tmux session")?;
+
+        if !result.status.success() {
+            anyhow::bail!("Failed to rename tmux session: {}", String::from_utf8_lossy(&result.stderr));
+        }
+    }
+
+    // Rename state directory
+    tokio::fs::rename(&old_path, &new_path).await?;
+
+    // Update state file
+    let state_file = new_path.join("team-state.json");
+    if let Ok(content) = tokio::fs::read_to_string(&state_file).await {
+        if let Ok(mut state) = serde_json::from_str::<crate::runtime::state::TeamState>(&content) {
+            state.name = args.new_name.clone();
+            state.save().await?;
+        }
+    }
+
+    println!("✓ Renamed team '{}' → '{}'", args.old_name, args.new_name);
+    if !running {
+        println!("  (tmux session was not running, only state was renamed)");
+    }
     Ok(())
 }
 

@@ -86,6 +86,12 @@ tmux attach -t omk-team-coder-a1b2
 omk team broadcast coder-a1b2 "New requirement: add OAuth support"
 ```
 
+### Rename a team
+
+```bash
+omk team rename coder-a1b2 auth-refactor
+```
+
 ### Shutdown
 
 ```bash
