@@ -28,6 +28,11 @@ pub enum MarketplaceCommands {
         /// Search query
         query: String,
     },
+    /// Show detailed info about a skill
+    Info {
+        /// Skill name
+        name: String,
+    },
     /// Add an external registry URL
     AddRegistry {
         /// Registry URL (http/https or local file path)
@@ -87,6 +92,7 @@ pub async fn run(args: Args) -> Result<()> {
         MarketplaceCommands::List { registry } => list_skills(registry).await,
         MarketplaceCommands::Install { name, registry } => install_skill(&name, registry).await,
         MarketplaceCommands::Search { query } => search_skills(&query).await,
+        MarketplaceCommands::Info { name } => info_skill(&name).await,
         MarketplaceCommands::AddRegistry { url } => add_registry(&url).await,
         MarketplaceCommands::RemoveRegistry { url } => remove_registry(&url).await,
         MarketplaceCommands::ListRegistries => list_registries().await,
@@ -246,6 +252,35 @@ async fn search_skills(query: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn info_skill(name: &str) -> Result<()> {
+    // Try built-in first
+    if let Some(skill) = MARKET_SKILLS.iter().find(|s| s.name == name) {
+        println!("Skill: {} [built-in]", skill.name);
+        println!("Description: {}", skill.description);
+        println!("Author: {}", skill.author);
+        println!("URL: {}", skill.url);
+        println!("Tags: {}", skill.tags.join(", "));
+        return Ok(());
+    }
+
+    // Try external registries
+    let config = crate::runtime::config::load_config().await?;
+    if !config.registries.is_empty() {
+        let skills = crate::marketplace::load_all_skills(&config.registries).await?;
+        if let Some((registry, skill)) = skills.into_iter().find(|(_, s)| s.name == name) {
+            println!("Skill: {}", skill.name);
+            println!("Registry: {}", registry);
+            println!("Description: {}", skill.description);
+            println!("Author: {}", skill.author);
+            println!("URL: {}", skill.url);
+            println!("Tags: {}", skill.tags.join(", "));
+            return Ok(());
+        }
+    }
+
+    anyhow::bail!("Skill '{}' not found in marketplace or configured registries", name)
 }
 
 async fn add_registry(url: &str) -> Result<()> {

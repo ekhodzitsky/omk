@@ -178,6 +178,12 @@ omk marketplace list-registries
 omk marketplace list
 ```
 
+### Show skill info
+
+```bash
+omk marketplace info rust-expert
+```
+
 ### Install from marketplace
 
 ```bash
