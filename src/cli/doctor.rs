@@ -91,6 +91,33 @@ pub async fn run(_args: Args) -> Result<()> {
         println!("⚠ not found. Run `omk setup` to initialize.");
     }
 
+    // Check AGENTS.md
+    print!("  AGENTS.md ............. ");
+    let project_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let agents_path = project_dir.join(".omk").join("AGENTS.md");
+    if agents_path.exists() {
+        match tokio::fs::read_to_string(&agents_path).await {
+            Ok(content) => {
+                match crate::agents::parser::parse_agents_md(&content) {
+                    Ok(manifest) => {
+                        let name = manifest.name.as_deref().unwrap_or("(unnamed)");
+                        println!("✓ {} ({} agent(s))", name, manifest.agents.len());
+                    }
+                    Err(e) => {
+                        println!("⚠ Invalid format: {}", e);
+                        issues += 1;
+                    }
+                }
+            }
+            Err(e) => {
+                println!("✗ Cannot read: {}", e);
+                issues += 1;
+            }
+        }
+    } else {
+        println!("⚠ not found. Run `omk setup` to create.");
+    }
+
     // Check registries
     let config = crate::runtime::config::load_config().await.unwrap_or_default();
     if !config.registries.is_empty() {

@@ -40,6 +40,10 @@ pub struct OmkConfig {
     /// External marketplace registries
     #[serde(default)]
     pub registries: Vec<String>,
+
+    /// Notification webhook URLs
+    #[serde(default)]
+    pub webhooks: Option<crate::notifications::WebhookConfig>,
 }
 
 impl Default for OmkConfig {
@@ -51,6 +55,7 @@ impl Default for OmkConfig {
             extra_skill_dirs: vec![],
             enable_metrics: true,
             registries: vec![],
+            webhooks: None,
         }
     }
 }

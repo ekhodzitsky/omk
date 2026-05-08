@@ -3,10 +3,12 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 use tracing::info;
 
+mod agents;
 mod cli;
 mod error;
 mod marketplace;
 mod mcp;
+mod notifications;
 mod runtime;
 mod skills;
 mod vis;
@@ -30,10 +32,13 @@ struct Omk {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Spawn a team of Kimi agents in tmux
+    #[command(visible_alias = "t")]
     Team(team::Args),
     /// Run autonomous execution (single lead agent)
+    #[command(visible_alias = "ap")]
     Autopilot(autopilot::Args),
     /// Persistent mode with verify/fix loops
+    #[command(visible_alias = "r")]
     Ralph(ralph::Args),
     /// Ask a provider advisor
     Ask(ask::Args),
@@ -62,8 +67,10 @@ enum Commands {
     /// Export/import state
     State(state::Args),
     /// Manage skills
+    #[command(visible_alias = "s")]
     Skill(skill::Args),
     /// Browse skill marketplace
+    #[command(visible_alias = "m")]
     Marketplace(cli::marketplace::Args),
     /// Show version information
     Version,
@@ -209,6 +216,15 @@ enable_metrics = true
     let skills_dir = data_dir.join("skills");
     tokio::fs::create_dir_all(&skills_dir).await?;
     // TODO: copy bundled skills from repo to skills_dir
+
+    // Write default AGENTS.md in current project if .omk/ exists or is created
+    let project_omk = std::env::current_dir()?.join(".omk");
+    tokio::fs::create_dir_all(&project_omk).await.ok();
+    let agents_path = project_omk.join("AGENTS.md");
+    if !agents_path.exists() {
+        tokio::fs::write(&agents_path, crate::agents::runtime::default_agents_md()).await?;
+        println!("✓ Created {}", agents_path.display());
+    }
 
     println!("✓ omk setup complete");
     println!("  Config: {}", config_dir.display());

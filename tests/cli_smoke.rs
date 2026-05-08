@@ -7,7 +7,7 @@ fn test_version_flag() {
     cmd.arg("--version");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("0.2.3"));
+        .stdout(predicate::str::contains("0.2.4"));
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn test_version_subcommand() {
     cmd.arg("version");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("omk 0.2.3"));
+        .stdout(predicate::str::contains("omk 0.2.4"));
 }
 
 #[test]
@@ -188,6 +188,27 @@ fn test_team_spawn_missing_task() {
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("Task description is required"));
+}
+
+#[test]
+fn test_magic_keywords() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.arg("t").arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("team"));
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.arg("ap").arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("autopilot"));
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.arg("r").arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("ralph"));
 }
 
 #[test]

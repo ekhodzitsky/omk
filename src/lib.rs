@@ -1,7 +1,9 @@
+pub mod agents;
 pub mod cli;
 pub mod error;
 pub mod marketplace;
 pub mod mcp;
+pub mod notifications;
 pub mod runtime;
 pub mod skills;
 pub mod vis;

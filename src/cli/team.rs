@@ -208,7 +208,15 @@ async fn spawn(args: SpawnArgs) -> Result<()> {
     }
 
     let skill_md = load_bundled_skill(&args.skill).unwrap_or_default();
-    let lead_prompt = build_lead_prompt(&task, count, &role, &state_dir, args.yolo, &skill_md);
+
+    // Load AGENTS.md context if available
+    let agents_context = if let Ok(Some(manifest)) = crate::agents::runtime::load_project_agents(&args.dir).await {
+        Some(crate::agents::runtime::inject_agents_context(&manifest, &task, &role))
+    } else {
+        None
+    };
+
+    let lead_prompt = build_lead_prompt(&task, count, &role, &state_dir, args.yolo, &skill_md, agents_context.as_deref());
     crate::runtime::shell::validate_safe(&lead_prompt)
         .map_err(|e| anyhow::anyhow!("Invalid prompt: {}", e))?;
     tmux::send_keys(&session_name, window_name, &format!("kimi -p {}", crate::runtime::shell::shell_escape(&lead_prompt)))?;
@@ -242,6 +250,20 @@ async fn spawn(args: SpawnArgs) -> Result<()> {
         |m| m.total_spawns += 1,
     )
     .await;
+
+    // Send notification
+    let config = crate::runtime::config::load_config().await.unwrap_or_default();
+    if let Some(webhooks) = config.webhooks {
+        crate::notifications::send_notification(
+            &webhooks,
+            &crate::notifications::NotificationEvent::TeamSpawned {
+                name: team_name.clone(),
+                task: task.clone(),
+                workers: count,
+                role: role.clone(),
+            },
+        ).await;
+    }
 
     println!("✓ Team '{}' started with {} {} worker(s)", team_name, count, role);
     println!("  Session: {}", session_name);
@@ -359,6 +381,19 @@ async fn shutdown(args: ShutdownArgs) -> Result<()> {
         |m| m.total_shutdowns += 1,
     )
     .await;
+
+    // Send notification
+    let config = crate::runtime::config::load_config().await.unwrap_or_default();
+    if let Some(webhooks) = config.webhooks {
+        crate::notifications::send_notification(
+            &webhooks,
+            &crate::notifications::NotificationEvent::TeamShutdown {
+                name: args.name.clone(),
+                duration_secs: 0,
+                status: if args.force { "forced" } else { "graceful" }.to_string(),
+            },
+        ).await;
+    }
 
     println!("✓ Team '{}' shut down", args.name);
     println!("  State:   {}", state_dir.display());
@@ -580,7 +615,15 @@ fn parse_spec(spec: &str) -> Result<(usize, String)> {
     Ok((count, parts[1].to_string()))
 }
 
-fn build_lead_prompt(task: &str, count: usize, role: &str, state_dir: &std::path::Path, yolo: bool, skill_md: &str) -> String {
+fn build_lead_prompt(
+    task: &str,
+    count: usize,
+    role: &str,
+    state_dir: &std::path::Path,
+    yolo: bool,
+    skill_md: &str,
+    agents_context: Option<&str>,
+) -> String {
     let mut prompt = format!(
         r#"You are the Lead Orchestrator of a team of {count} {role} agent(s).
 
@@ -607,6 +650,11 @@ Your task: {task}
         state_dir = state_dir.display(),
         inbox_dir = state_dir.join("workers").display(),
     );
+
+    if let Some(ctx) = agents_context {
+        prompt.push_str("\n## Project Context (from AGENTS.md)\n\n");
+        prompt.push_str(ctx);
+    }
 
     if yolo {
         prompt.push_str("\n\nYOLO mode is enabled. Auto-approve safe operations.\n");
