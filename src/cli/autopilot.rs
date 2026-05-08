@@ -20,10 +20,24 @@ pub struct Args {
     /// Autopilot run name (auto-generated if omitted)
     #[arg(short, long)]
     pub name: Option<String>,
+
+    /// Resume an existing autopilot run
+    #[arg(long)]
+    pub resume: bool,
+
+    /// Skip confirmation prompts (YOLO mode)
+    #[arg(long)]
+    pub yolo: bool,
 }
 
 pub async fn run(args: Args) -> Result<()> {
     let task = args.task.join(" ");
+
+    if args.resume {
+        let name = args.name.ok_or_else(|| anyhow::anyhow!("--name is required for --resume"))?;
+        return crate::runtime::autopilot::resume_autopilot(&name, &args.dir, args.ralph, args.yolo).await;
+    }
+
     if task.is_empty() {
         anyhow::bail!("Task description is required");
     }
@@ -35,5 +49,5 @@ pub async fn run(args: Args) -> Result<()> {
         )
     });
 
-    crate::runtime::autopilot::run_autopilot(&name, &task, &args.dir, args.ralph).await
+    crate::runtime::autopilot::run_autopilot(&name, &task, &args.dir, args.ralph, args.yolo).await
 }

@@ -20,6 +20,16 @@ pub struct AutopilotState {
     pub current_plan: Option<String>,
     pub qa_results: Option<QaResults>,
     pub validation_results: Vec<ValidationResult>,
+    pub execution_log: Vec<PhaseLog>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhaseLog {
+    pub phase: String,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub success: bool,
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +55,7 @@ pub enum AutopilotPhase {
     Validation,
     Cleanup,
     Complete,
+    Failed,
 }
 
 /// Autopilot engine that drives the 6-phase pipeline.
@@ -56,10 +67,11 @@ pub struct Autopilot {
     pub state: AutopilotState,
     pub state_dir: PathBuf,
     pub interactive: bool,
+    pub yolo: bool,
 }
 
 impl Autopilot {
-    pub fn new(name: &str, task: &str, dir: &Path, enable_ralph: bool) -> Self {
+    pub fn new(name: &str, task: &str, dir: &Path, enable_ralph: bool, yolo: bool) -> Self {
         let state_dir = crate::runtime::config::state_dir().join("autopilot").join(name);
         let plans_dir = crate::runtime::config::data_dir().join("plans");
         let state = AutopilotState {
@@ -71,6 +83,7 @@ impl Autopilot {
             current_plan: None,
             qa_results: None,
             validation_results: vec![],
+            execution_log: vec![],
         };
         Self {
             name: name.to_string(),
@@ -80,7 +93,22 @@ impl Autopilot {
             state,
             state_dir,
             interactive: true,
+            yolo,
         }
+    }
+
+    pub async fn from_state(state_dir: &Path, enable_ralph: bool, yolo: bool) -> Result<Self> {
+        let state = Self::load_state(state_dir).await?;
+        Ok(Self {
+            name: state_dir.file_name().unwrap().to_string_lossy().to_string(),
+            task: state.task.clone(),
+            dir: std::env::current_dir()?,
+            enable_ralph,
+            state,
+            state_dir: state_dir.to_path_buf(),
+            interactive: true,
+            yolo,
+        })
     }
 
     pub fn state_file(&self) -> PathBuf {
@@ -91,7 +119,7 @@ impl Autopilot {
         let path = self.state_file();
         tokio::fs::create_dir_all(&self.state_dir).await?;
         let json = serde_json::to_string_pretty(&self.state)?;
-        tokio::fs::write(&path, json).await?;
+        crate::runtime::atomic::atomic_write(&path, json.as_bytes()).await?;
         info!(path = %path.display(), phase = ?self.state.phase, "Saved autopilot state");
         Ok(())
     }
@@ -106,19 +134,99 @@ impl Autopilot {
 
     pub async fn run(&mut self) -> Result<()> {
         info!(name = %self.name, task = %self.task, "Starting autopilot");
+        self.print_progress();
         self.save_state().await?;
 
-        self.run_expansion().await?;
-        self.run_planning().await?;
-        self.run_execution().await?;
-        self.run_qa().await?;
-        self.run_validation().await?;
-        self.run_cleanup().await?;
+        let phases: Vec<(AutopilotPhase, Box<dyn Fn(&mut Self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + '_>>>)> = vec![
+            (AutopilotPhase::Expansion, Box::new(|s| Box::pin(s.run_expansion()))),
+            (AutopilotPhase::Planning, Box::new(|s| Box::pin(s.run_planning()))),
+            (AutopilotPhase::Execution, Box::new(|s| Box::pin(s.run_execution()))),
+            (AutopilotPhase::Qa, Box::new(|s| Box::pin(s.run_qa()))),
+            (AutopilotPhase::Validation, Box::new(|s| Box::pin(s.run_validation()))),
+            (AutopilotPhase::Cleanup, Box::new(|s| Box::pin(s.run_cleanup()))),
+        ];
 
-        self.state.phase = AutopilotPhase::Complete;
+        let start_idx = phases.iter().position(|(p, _)| *p == self.state.phase).unwrap_or(0);
+
+        for (phase, handler) in &phases[start_idx..] {
+            if self.state.phase == AutopilotPhase::Complete || self.state.phase == AutopilotPhase::Failed {
+                break;
+            }
+
+            let log = PhaseLog {
+                phase: format!("{:?}", phase),
+                started_at: Utc::now(),
+                completed_at: None,
+                success: false,
+                note: None,
+            };
+            self.state.execution_log.push(log);
+
+            let result = handler(self).await;
+
+            let idx = self.state.execution_log.len() - 1;
+            self.state.execution_log[idx].completed_at = Some(Utc::now());
+
+            match result {
+                Ok(()) => {
+                    self.state.execution_log[idx].success = true;
+                    info!(phase = ?phase, "Phase completed successfully");
+                }
+                Err(e) => {
+                    self.state.execution_log[idx].success = false;
+                    self.state.execution_log[idx].note = Some(format!("{}", e));
+                    warn!(phase = ?phase, error = %e, "Phase failed");
+                    if !self.yolo {
+                        self.state.phase = AutopilotPhase::Failed;
+                        self.save_state().await?;
+                        anyhow::bail!("Autopilot failed at phase {:?}: {}", phase, e);
+                    }
+                }
+            }
+
+            self.print_progress();
+            self.save_state().await?;
+        }
+
+        if self.state.phase != AutopilotPhase::Failed {
+            self.state.phase = AutopilotPhase::Complete;
+        }
         self.save_state().await?;
+        self.print_progress();
         info!(name = %self.name, "Autopilot complete");
         Ok(())
+    }
+
+    fn print_progress(&self) {
+        let phases = ["Expansion", "Planning", "Execution", "QA", "Validation", "Cleanup"];
+        let current = match self.state.phase {
+            AutopilotPhase::Expansion => 0,
+            AutopilotPhase::Planning => 1,
+            AutopilotPhase::Execution => 2,
+            AutopilotPhase::Qa => 3,
+            AutopilotPhase::Validation => 4,
+            AutopilotPhase::Cleanup => 5,
+            AutopilotPhase::Complete => 6,
+            AutopilotPhase::Failed => 6,
+        };
+
+        println!();
+        println!("🤖 Autopilot: {}", self.name);
+        println!("   Task: {}", self.task);
+        println!();
+        for (i, phase) in phases.iter().enumerate() {
+            let icon = if i < current {
+                "✓"
+            } else if i == current && self.state.phase != AutopilotPhase::Complete && self.state.phase != AutopilotPhase::Failed {
+                "▶"
+            } else if self.state.phase == AutopilotPhase::Failed && i == current {
+                "✗"
+            } else {
+                "○"
+            };
+            println!("   {} {}", icon, phase);
+        }
+        println!();
     }
 
     // ------------------------------------------------------------------
@@ -127,7 +235,6 @@ impl Autopilot {
     async fn run_expansion(&mut self) -> Result<()> {
         info!("Phase: Expansion");
         self.state.phase = AutopilotPhase::Expansion;
-        self.save_state().await?;
 
         let prompt = format!(
             "You are in the Expansion phase of an autopilot pipeline.\n\
@@ -150,7 +257,7 @@ impl Autopilot {
         };
 
         let expansion_path = self.state_dir.join("expansion.md");
-        tokio::fs::write(&expansion_path, expansion_content).await?;
+        crate::runtime::atomic::atomic_write(&expansion_path, expansion_content.as_bytes()).await?;
         info!(path = %expansion_path.display(), "Wrote expansion notes");
 
         if self.interactive {
@@ -166,7 +273,6 @@ impl Autopilot {
     async fn run_planning(&mut self) -> Result<()> {
         info!("Phase: Planning");
         self.state.phase = AutopilotPhase::Planning;
-        self.save_state().await?;
 
         let prompt = format!(
             "You are in the Planning phase of an autopilot pipeline.\n\
@@ -198,7 +304,7 @@ impl Autopilot {
             .state
             .plans_dir
             .join(format!("autopilot-{}-plan.md", self.name));
-        tokio::fs::write(&plan_path, &plan_content).await?;
+        crate::runtime::atomic::atomic_write(&plan_path, plan_content.as_bytes()).await?;
         self.state.current_plan = Some(plan_content);
         info!(path = %plan_path.display(), "Wrote plan");
 
@@ -215,7 +321,6 @@ impl Autopilot {
     async fn run_execution(&mut self) -> Result<()> {
         info!("Phase: Execution");
         self.state.phase = AutopilotPhase::Execution;
-        self.save_state().await?;
 
         let is_complex = self.task.len() > 100 || self.task.contains(" and ");
 
@@ -254,7 +359,10 @@ impl Autopilot {
         }
 
         if self.enable_ralph {
-            info!("Ralph enabled — verify/fix loop would run here");
+            info!("Ralph enabled — running verify/fix loop");
+            if let Err(e) = crate::runtime::ralph::run_ralph(&self.task, &self.dir, 3).await {
+                warn!(error = %e, "Ralph loop failed");
+            }
         }
 
         Ok(())
@@ -266,7 +374,6 @@ impl Autopilot {
     async fn run_qa(&mut self) -> Result<()> {
         info!("Phase: QA");
         self.state.phase = AutopilotPhase::Qa;
-        self.save_state().await?;
 
         let project_type = detect_project_type(&self.dir).await;
         info!(project_type = ?project_type, "Detected project type");
@@ -278,7 +385,7 @@ impl Autopilot {
                 if let Err(e) = run_command(&self.dir, "cargo", &["test"]).await {
                     errors.push(format!("cargo test failed: {e}"));
                 }
-                if let Err(e) = run_command(&self.dir, "cargo", &["clippy"]).await {
+                if let Err(e) = run_command(&self.dir, "cargo", &["clippy", "--", "-D", "warnings"]).await {
                     errors.push(format!("cargo clippy failed: {e}"));
                 }
                 if let Err(e) = run_command(&self.dir, "cargo", &["fmt", "--check"]).await {
@@ -291,6 +398,25 @@ impl Autopilot {
                 }
                 if let Err(e) = run_command(&self.dir, "npm", &["run", "lint"]).await {
                     errors.push(format!("npm run lint failed: {e}"));
+                }
+            }
+            ProjectType::Python => {
+                if let Err(e) = run_command(&self.dir, "python", &["-m", "pytest"]).await {
+                    errors.push(format!("pytest failed: {e}"));
+                }
+                if let Err(e) = run_command(&self.dir, "python", &["-m", "flake8", "."]).await {
+                    errors.push(format!("flake8 failed: {e}"));
+                }
+            }
+            ProjectType::Go => {
+                if let Err(e) = run_command(&self.dir, "go", &["test", "./..."]).await {
+                    errors.push(format!("go test failed: {e}"));
+                }
+                if let Err(e) = run_command(&self.dir, "go", &["vet", "./..."]).await {
+                    errors.push(format!("go vet failed: {e}"));
+                }
+                if let Err(e) = run_command(&self.dir, "gofmt", &["-l", "."]).await {
+                    errors.push(format!("gofmt failed: {e}"));
                 }
             }
             ProjectType::Unknown => {
@@ -308,6 +434,9 @@ impl Autopilot {
             info!("QA passed");
         } else {
             warn!(error_count = errors.len(), "QA found errors");
+            if !self.yolo {
+                anyhow::bail!("QA failed with {} errors", errors.len());
+            }
         }
 
         Ok(())
@@ -319,7 +448,6 @@ impl Autopilot {
     async fn run_validation(&mut self) -> Result<()> {
         info!("Phase: Validation");
         self.state.phase = AutopilotPhase::Validation;
-        self.save_state().await?;
 
         let mut results = Vec::new();
 
@@ -378,10 +506,9 @@ impl Autopilot {
     async fn run_cleanup(&mut self) -> Result<()> {
         info!("Phase: Cleanup");
         self.state.phase = AutopilotPhase::Cleanup;
-        self.save_state().await?;
 
         // Remove temporary artifacts
-        let patterns = ["*.tmp", "*.log"];
+        let patterns = ["*.tmp", "*.log", "*.bak"];
         for pattern in &patterns {
             debug!(pattern, "Would clean temp files");
         }
@@ -416,8 +543,20 @@ impl Autopilot {
 }
 
 /// Convenience entry-point used by the CLI.
-pub async fn run_autopilot(name: &str, task: &str, dir: &Path, enable_ralph: bool) -> Result<()> {
-    let mut autopilot = Autopilot::new(name, task, dir, enable_ralph);
+pub async fn run_autopilot(name: &str, task: &str, dir: &Path, enable_ralph: bool, yolo: bool) -> Result<()> {
+    let mut autopilot = Autopilot::new(name, task, dir, enable_ralph, yolo);
+    autopilot.run().await
+}
+
+/// Resume an existing autopilot run.
+pub async fn resume_autopilot(name: &str, _dir: &Path, enable_ralph: bool, yolo: bool) -> Result<()> {
+    let state_dir = crate::runtime::config::state_dir().join("autopilot").join(name);
+    if !state_dir.exists() {
+        anyhow::bail!("Autopilot run '{}' not found at {}", name, state_dir.display());
+    }
+
+    let mut autopilot = Autopilot::from_state(&state_dir, enable_ralph, yolo).await?;
+    info!(name = %name, phase = ?autopilot.state.phase, "Resuming autopilot");
     autopilot.run().await
 }
 
@@ -427,7 +566,7 @@ pub async fn run_autopilot(name: &str, task: &str, dir: &Path, enable_ralph: boo
 
 async fn run_kimi_prompt(prompt: &str) -> Result<String> {
     let output = tokio::time::timeout(
-        std::time::Duration::from_secs(60),
+        std::time::Duration::from_secs(120),
         Command::new("kimi")
             .arg("--print")
             .arg("-p")
@@ -464,6 +603,8 @@ async fn run_command(dir: &Path, cmd: &str, args: &[&str]) -> Result<()> {
 enum ProjectType {
     Rust,
     Node,
+    Python,
+    Go,
     Unknown,
 }
 
@@ -472,6 +613,13 @@ async fn detect_project_type(dir: &Path) -> ProjectType {
         ProjectType::Rust
     } else if dir.join("package.json").exists() {
         ProjectType::Node
+    } else if dir.join("go.mod").exists() {
+        ProjectType::Go
+    } else if dir.join("pyproject.toml").exists()
+        || dir.join("setup.py").exists()
+        || dir.join("requirements.txt").exists()
+    {
+        ProjectType::Python
     } else {
         ProjectType::Unknown
     }
