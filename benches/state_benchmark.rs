@@ -42,10 +42,32 @@ fn bench_atomic_write(c: &mut Criterion) {
     });
 }
 
+fn bench_shell_escape(c: &mut Criterion) {
+    c.bench_function("shell_escape_simple", |b| {
+        b.iter(|| omk::runtime::shell::shell_escape("hello world"))
+    });
+
+    c.bench_function("shell_escape_complex", |b| {
+        b.iter(|| omk::runtime::shell::shell_escape("it's a $test `command`"))
+    });
+}
+
+fn bench_validate_safe(c: &mut Criterion) {
+    c.bench_function("validate_safe_ok", |b| {
+        b.iter(|| omk::runtime::shell::validate_safe("hello world 123"))
+    });
+
+    c.bench_function("validate_safe_null", |b| {
+        b.iter(|| omk::runtime::shell::validate_safe("hello\0world"))
+    });
+}
+
 criterion_group!(
     benches,
     bench_team_state_save,
     bench_team_state_load,
-    bench_atomic_write
+    bench_atomic_write,
+    bench_shell_escape,
+    bench_validate_safe
 );
 criterion_main!(benches);

@@ -23,6 +23,7 @@ pub enum MarketplaceCommands {
     },
 }
 
+#[allow(dead_code)]
 struct MarketSkill {
     name: &'static str,
     description: &'static str,

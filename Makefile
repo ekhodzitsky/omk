@@ -1,6 +1,6 @@
 .PHONY: build test install release lint fmt check clean doc \
         completions man docker smoke doctor setup \
-        install-completions install-man
+        install-completions install-man bench profile
 
 BINARY_NAME = omk
 CARGO = cargo
@@ -80,3 +80,12 @@ doctor: build
 
 setup: build
 	./target/release/$(BINARY_NAME) setup
+
+# Benchmarks
+bench:
+	$(CARGO) bench
+
+# Profiling (requires cargo-flamegraph: cargo install cargo-flamegraph)
+profile:
+	@which cargo-flamegraph > /dev/null 2>&1 || { echo "cargo-flamegraph not installed. Run: cargo install cargo-flamegraph"; exit 1; }
+	$(CARGO) flamegraph --bin $(BINARY_NAME) -- team spawn 1:coder "benchmark test"
