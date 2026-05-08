@@ -190,6 +190,11 @@ omk state import --input my-state.json
 omk skill install https://github.com/user/omk-skill-repo
 omk skill list
 omk skill remove omk-skill-repo
+
+# Browse marketplace
+omk marketplace list
+omk marketplace install rust-expert
+omk marketplace search security
 ```
 
 ### Shell Integration
@@ -303,7 +308,7 @@ We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [C
 - [x] Cross-provider `ask` with synthesis
 - [x] MCP server for IDE integration
 - [x] Web dashboard (`omk hud --web`)
-- [ ] Plugin marketplace
+- [x] Plugin marketplace (`omk marketplace`)
 
 ## 📄 License
 
