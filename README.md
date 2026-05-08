@@ -1,10 +1,14 @@
 <div align="center">
 
-# 🌙 oh-my-kimi (omk)
+<img src="assets/omk-kimi-mascot.png" alt="oh-my-kimi blue Kimi coding mascot" width="360">
 
-**Multi-agent orchestration for [Kimi CLI](https://github.com/MoonshotAI/kimi-cli)**
+# oh-my-kimi (omk)
 
-*Inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode) — reimagined for the Kimi ecosystem.*
+**Kimi-only orchestration runtime for reproducible AI coding teams**
+
+Keep [Kimi CLI](https://github.com/MoonshotAI/kimi-cli). Add visible teams, crash recovery, durable state, and proof.
+
+*Inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode), but not a line-for-line port. OMK is designed as a Kimi-native runtime that owns scheduling, state, verification evidence, and observability while Kimi remains the execution engine.*
 
 [![CI](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml/badge.svg)](https://github.com/ekhodzitsky/oh-my-kimi/actions)
 [![Release](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/release.yml/badge.svg)](https://github.com/ekhodzitsky/oh-my-kimi/releases)
@@ -12,307 +16,235 @@
 [![Crates.io](https://img.shields.io/crates/v/omk.svg)](https://crates.io/crates/omk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
+[![Kimi-first](https://img.shields.io/badge/Kimi--first-runtime-0ea5e9.svg)](#positioning)
+[![Proof-driven](https://img.shields.io/badge/proof--driven-roadmap-2563eb.svg)](#north-star-demo)
+[![Status](https://img.shields.io/badge/status-current%20MVP%20%2B%20next%20runtime-0f172a.svg)](#maturity)
+
+[Quick Start](#quick-start) - [Features](#features) - [North Star](#north-star-demo) - [Roadmap](#roadmap) - [Spec](SPEC.md) - [TODO](TODO.md)
 
 </div>
 
 ---
 
-> **Zero learning curve.** Don't learn Kimi CLI. Just use OMK.
+OMK is a Kimi-only-first orchestration layer. Today it coordinates real `kimi` processes through tmux panes and durable state. The near-term roadmap turns that into **Kimi Pro Mode**: sync Kimi assets, run a Kimi team, watch it live, recover stuck workers, and produce a proof that explains whether the work is actually done.
 
-`omk` turns Kimi CLI into a **multi-agent powerhouse**. Spawn teams of agents, run persistent execution loops, consult multiple AI providers, and manage everything from a single CLI — all through tmux panes and file-based IPC.
+OMK is independent of Moonshot AI, Kimi CLI, and oh-my-claudecode.
 
-## ✨ Features
+## Why OMK?
 
-| Mode | What it does | Status |
-|------|--------------|--------|
-| 🚀 **Team** | Spawn N Kimi agents in tmux panes with shared task lists | ✅ Ready |
-| 🤖 **Autopilot** | 6-phase autonomous execution (plan → execute → qa → validate) | ✅ Ready |
-| 🔄 **Ralph** | Persistent verify/fix loops until every task is complete | ✅ Ready |
-| 🧠 **Ask** | Cross-provider consultation (Claude, Codex, Gemini, Kimi) | ✅ Ready |
-| 📊 **HUD** | Real-time tmux statusline + web dashboard | ✅ Ready |
-| 🔌 **MCP** | Model Context Protocol server for Cursor/Claude Desktop | ✅ Ready |
-| 🛒 **Marketplace** | Curated skill index with install/remove commands | ✅ Ready |
+Kimi CLI is the engine. OMK is the runtime around a serious coding session.
 
-## 🎬 Quick Start
+- Visible parallelism: every worker is a real `kimi` process you can inspect.
+- Durable coordination: runs leave state files, logs, and soon event timelines.
+- Recovery-first execution: stuck workers should become scheduler events, not silent mystery failures.
+- Proof over vibes: the final output should name changed files, gates, retries, known gaps, and readiness.
+- Kimi-only focus first: no provider soup until the Kimi loop is reliable enough to deserve it.
 
-> 📚 **New to OMK?** Follow the [step-by-step tutorial](docs/TUTORIAL.md).
+## Positioning
+
+OMK borrows useful workflow vocabulary from OMC, then moves it toward a Kimi-first runtime:
+
+- Kimi remains the primary execution engine.
+- Rust owns process control, state, retries, verification, and observability.
+- Current commands are documented separately from roadmap commands.
+- Provider-neutral workers are deferred until the Kimi-only loop is reliable and polished.
+
+Prior art exists and validates demand. The detailed competitor scan lives in [SPEC.md](SPEC.md); the public README stays focused on what OMK is and how to try it.
+
+## Maturity
+
+| Label | Meaning |
+| --- | --- |
+| Current | Implemented in the CLI today. |
+| MVP | Usable, but still needs hardening and real-world validation. |
+| Scaffold | Command or module exists, but deeper integration is incomplete. |
+| Next | Planned for the Kimi-only killer demo. |
+| Later | Deferred until the Kimi-only runtime is excellent. |
+
+## Features
+
+| Surface | What it does | Status |
+| --- | --- | --- |
+| Team spawn | Spawn N Kimi agents in tmux panes with JSONL inbox/outbox files. | Current MVP |
+| Kimi sync | Sync OMK Kimi assets into `.kimi/` and user-level Kimi locations, with a project manifest. | Current Scaffold |
+| Kimi doctor | Validate Kimi-native project assets and suggest fixes. | Current Scaffold |
+| Autopilot | Six-phase autonomous execution with resume/yolo. | Current MVP |
+| Ralph | Persistent verify/fix loop with resume/yolo. | Current MVP |
+| Ultrawork | Parallel burst execution without tmux team. | Current MVP |
+| Skills | Bundled and user-installable skill definitions. | Current MVP |
+| Marketplace | Curated skill registry support. | Current |
+| Cost tracking | Heuristic cost estimation across modes. | Current MVP |
+| Notifications | Discord, Slack, and Telegram event formatting. | Current MVP |
+| HUD | Tmux statusline, TUI, and web dashboard scaffold. | Current Scaffold |
+| MCP server | Basic Model Context Protocol server. | Current Scaffold |
+| Kimi rollback | Expose manifest-backed rollback and backup restore in the CLI. | Next |
+| Team run | Polished Kimi-only entrypoint with scheduler-owned claims and watchdogs. | Next |
+| Proof | Final readiness report from event logs and verification gates. | Next |
+| Run show | Timeline inspection for a recorded run. | Next |
+| Cross-provider workers | Codex, Gemini, Claude, and OpenCode workers/advisors. | Later |
+
+## Quick Start
 
 ```bash
 # Install
- cargo install omk
+cargo install omk
 # or
- curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
 
-# Setup
+# Create OMK config/state directories
 omk setup
 
-# Spawn a team of 3 coder agents
+# Validate the local environment
+omk doctor
+
+# Sync current Kimi-native OMK assets
+omk kimi sync
+omk kimi doctor
+
+# Spawn a current MVP team
 omk team spawn 3:coder "refactor authentication to use JWT"
-
-# Check progress
-omk team status coder-a1b2
-
-# Done
-omk team shutdown coder-a1b2
-
-# Shell completions
-omk completions bash > ~/.local/share/bash-completion/completions/omk
-omk completions zsh > ~/.zsh/completions/_omk
-omk completions fish > ~/.config/fish/completions/omk.fish
-
-# Man page
-omk man > ~/.local/share/man/man1/omk.1
+omk team status <name-from-output>
+omk team shutdown <name-from-output>
 ```
 
-## 🏗️ Architecture
+## North Star Demo
 
-```
-┌─────────┐     ┌─────────┐     ┌─────────┐
-│  User   │────▶│   omk   │────▶│  tmux   │
-└─────────┘     │  (Rust) │     └────┬────┘
-                └─────────┘          │
-                                     │
-        ┌────────────────────────────┼────────────────────────────┐
-        ▼                            ▼                            ▼
- ┌──────────────┐            ┌──────────────┐            ┌──────────────┐
- │  Lead Kimi   │            │ Worker Kimi  │            │ Worker Kimi  │
- │   (pane 0)   │            │   (pane 1)   │            │   (pane N)   │
- └──────┬───────┘            └──────┬───────┘            └──────┬───────┘
-        │                           │                           │
-        ▼                           ▼                           ▼
- ┌──────────────┐            ┌──────────────┐            ┌──────────────┐
- │ inbox.jsonl  │            │ inbox.jsonl  │            │ inbox.jsonl  │
- │ outbox.jsonl │            │ outbox.jsonl │            │ outbox.jsonl │
- │heartbeat.json│            │heartbeat.json│            │heartbeat.json│
- └──────────────┘            └──────────────┘            └──────────────┘
+These commands are the near-term target, not the fully available CLI surface today:
+
+```bash
+omk kimi sync
+omk team run "fix all failing tests and produce a proof"
+omk hud
+omk proof latest
 ```
 
-OMK is an **external orchestrator** — it does not fork or patch Kimi CLI. It spawns real `kimi` processes, coordinates them via JSONL files, and lets you attach to any session with standard tmux commands.
+The demo is successful when a user can see Kimi workers progressing in parallel, watch a stuck worker recover or fail cleanly, and inspect a final proof with changed files, gates run, failures, retries, known gaps, and final readiness.
 
-Read more in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/REGISTRY.md](docs/REGISTRY.md) for hosting your own skill registry.
+## Architecture
 
-## 📚 Commands
+```text
+User -> omk (Rust) -> tmux -> Lead Kimi
+                         |-> Worker Kimi
+                         |-> Worker Kimi
+                         |-> Worker Kimi
+
+Runtime state:
+- team-state.json
+- worker-spec.json
+- inbox.jsonl / outbox.jsonl
+- heartbeat.json
+- future event-log.jsonl and proof.json
+```
+
+OMK is an external orchestrator. It does not fork or patch Kimi CLI. It spawns real `kimi` processes, coordinates them through state files, and lets you attach to any session with standard tmux commands.
+
+Read more in [SPEC.md](SPEC.md), [ROADMAP.md](ROADMAP.md), [TODO.md](TODO.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [docs/REGISTRY.md](docs/REGISTRY.md).
+
+## Commands
+
+### Kimi Native
+
+```bash
+omk kimi sync
+omk kimi doctor
+omk kimi install
+omk kimi agents
+omk kimi hooks
+omk kimi skills
+```
+
+`omk kimi rollback` is planned, but not current.
 
 ### Team Mode
 
 ```bash
-# Spawn a team
 omk team spawn 3:coder "fix all TypeScript errors"
-
-# Check status (reads state + heartbeats + inbox/outbox counts)
+omk team list
 omk team status <name>
-
-# Graceful shutdown
+omk team attach <name>
+omk team broadcast <name> "status?"
 omk team shutdown <name>
-# Force kill
-omk team shutdown <name> --force
 ```
 
-### Autopilot
+`omk team run` is the planned polished replacement/wrapper for the Kimi-only killer path.
+
+### Autopilot And Ralph
 
 ```bash
-# Full autonomous pipeline
 omk autopilot "build a REST API for task management"
+omk autopilot --resume --name ap-xxx "build a REST API"
 
-# With persistence
-omk autopilot --ralph "refactor the database layer"
-```
-
-### Ralph
-
-```bash
-# Persistent verify/fix loop
 omk ralph "migrate from Express to Fastify"
-
-# Limit iterations
 omk ralph --max-iterations 5 "update all dependencies"
-```
-
-### Ask (Cross-Provider)
-
-```bash
-# Single advisor
-omk ask claude "review my API design"
-
-# Multi-advisor synthesis
-omk ask all "architecture for real-time chat"
 ```
 
 ### HUD
 
 ```bash
-# Tmux status bar
 omk hud --tmux
-
-# Interactive TUI
 omk hud --tui
-
-# Web dashboard
 omk hud --web --port 8080
-
-# Docker Compose
-docker-compose up -d
-# Open http://localhost:8080
-```
-
-### Diagnostics
-
-```bash
-# Check environment and dependencies
-omk doctor
-
-# Validate configuration
-omk config validate
-
-# Show current config
-omk config show
 ```
 
 ### Maintenance
 
 ```bash
-# Update omk to the latest release
-omk update
-
-# Clean up old state files
+omk config validate
+omk config show
 omk cleanup --older-than 7
-
-# Remove all state (with confirmation)
-omk cleanup --all
-
-# Backup state
 omk backup create
 omk backup list
 omk backup restore 20260507-121530
-
-# Export/import state as JSON
 omk state export --output my-state.json
 omk state import --input my-state.json
+```
 
-# Manage skills
-omk skill install https://github.com/user/omk-skill-repo
-omk skill list
-omk skill remove omk-skill-repo
+### Secondary Surfaces
 
-# Browse marketplace
+These are useful, but not the current product wedge:
+
+```bash
+omk ask kimi "review my API design"
+omk ask all "architecture for real-time chat"
 omk marketplace list
 omk marketplace install rust-expert
-omk marketplace search security
+omk ultrawork --help
 ```
 
-### Shell Integration
-
-```bash
-# Generate completions
-omk completions bash > ~/.local/share/bash-completion/completions/omk
-omk completions zsh > ~/.zsh/completions/_omk
-omk completions fish > ~/.config/fish/completions/omk.fish
-
-# Generate man page
-omk man > ~/.local/share/man/man1/omk.1
-```
-
-## 🚀 Getting Started
-
-### 1. Install
-
-```bash
-cargo install omk
-# or
-curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
-```
-
-### 2. Verify
-
-```bash
-omk doctor
-omk setup
-```
-
-### 3. Your first team
-
-```bash
-omk team spawn 3:coder "refactor auth to use JWT"
-omk team status <name-from-output>
-omk team shutdown <name>
-```
-
-### 4. Autopilot a feature
-
-```bash
-omk autopilot "build a REST API for task management"
-# Resume if interrupted:
-omk autopilot --resume --name ap-xxx "build a REST API"
-```
-
-### 5. Cross-consult advisors
-
-```bash
-omk ask all "review my database schema"
-omk ask --providers claude,kimi "architecture for real-time chat"
-```
-
-### 6. Web dashboard
-
-```bash
-omk hud --web --port 8080
-# Open http://localhost:8080
-```
-
-## 🧪 Development
+## Development
 
 ```bash
 git clone https://github.com/ekhodzitsky/oh-my-kimi
 cd oh-my-kimi
 
-# Run checks (fmt + clippy + test)
 make check
-
-# Build release binary
 make release
-
-# Install locally
 make install
 ```
 
-We follow **spec-driven development** and **TDD**. See [SPEC.md](SPEC.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+We follow spec-driven development and TDD. See [SPEC.md](SPEC.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 | Issue | Solution |
-|-------|----------|
-| `tmux not found` | Install tmux: `brew install tmux` / `apt install tmux` |
-| `kimi not found` | Install [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) |
-| `omk team spawn` hangs | Check `omk doctor` — ensure tmux and kimi are available |
-| State corruption | Use `omk cleanup --all` and re-run setup |
-| Resume after crash | Use `--resume` flag with the run name |
+| --- | --- |
+| `kimi not found` | Install and authenticate [Kimi CLI](https://github.com/MoonshotAI/kimi-cli). |
+| `tmux not found` | Install tmux with `brew install tmux` or `apt install tmux`. |
+| `omk team spawn` hangs | Run `omk doctor`, then check Kimi auth, tmux availability, and worker heartbeats. |
+| Kimi-native assets look stale | Run `omk kimi doctor`, then `omk kimi sync`. |
+| State corruption | Use `omk backup create` before destructive cleanup, then `omk cleanup --all` if needed. |
+| Resume after crash | Use mode-specific `--resume` flags where available. |
 
-## 📋 Roadmap
+## Roadmap
 
-- [x] Team mode with tmux + JSONL IPC
-- [x] Status & shutdown lifecycle
-- [x] Skill injection system
-- [x] TUI scaffold
-- [x] XDG-compliant config paths
-- [x] Atomic file writes + retry logic
-- [x] State schema versioning + migration
-- [x] Metrics collection
-- [x] Multi-platform release CI
-- [x] Shell completions + man page
-- [x] Self-update
-- [x] Environment diagnostics (`omk doctor`)
-- [x] State cleanup (`omk cleanup`)
-- [x] Config validation (`omk config`)
-- [x] State backup/restore (`omk backup`)
-- [x] State export/import (`omk state`)
-- [x] Skill management (`omk skill`)
-- [x] Autopilot 6-phase state machine with resume/yolo
-- [x] Ralph persistence loop with resume/yolo
-- [x] Cross-provider `ask` with synthesis
-- [x] MCP server for IDE integration
-- [x] Web dashboard (`omk hud --web`)
-- [x] Plugin marketplace (`omk marketplace`)
+The near-term roadmap is intentionally Kimi-only:
 
-## 📄 License
+- Current: stabilize existing CLI, Kimi asset sync, team spawn, HUD scaffold, and diagnostics.
+- Next: Kimi rollback CLI, backup restore, manifest checksums, `omk team run`, event logs, `omk run show`, `omk proof`, watchdog recovery, and demo fixtures.
+- Later: provider-neutral workers after the Kimi-only runtime proves itself.
+
+See [ROADMAP.md](ROADMAP.md) for the detailed plan.
+
+## License
 
 MIT © oh-my-kimi contributors
