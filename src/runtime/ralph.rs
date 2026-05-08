@@ -115,28 +115,41 @@ pub fn state_dir_for(_dir: &Path, task: &str) -> PathBuf {
 }
 
 /// Run the Ralph persistent loop.
-pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize) -> Result<()> {
-    info!(task = %task, dir = %dir.display(), max_iterations, "Starting Ralph persistent loop");
+pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bool, yolo: bool) -> Result<()> {
+    info!(task = %task, dir = %dir.display(), max_iterations, resume, yolo, "Starting Ralph persistent loop");
 
     let state_dir = state_dir_for(dir, task);
     tokio::fs::create_dir_all(&state_dir).await?;
 
-    let mut state = match RalphState::load(&state_dir).await {
-        Ok(mut existing) => {
-            info!(iteration = existing.iteration, "Resumed existing Ralph state");
-            existing.max_iterations = max_iterations;
-            existing
+    let mut state = if resume {
+        match RalphState::load(&state_dir).await {
+            Ok(mut existing) => {
+                info!(iteration = existing.iteration, "Resumed existing Ralph state");
+                existing.max_iterations = max_iterations;
+                existing
+            }
+            Err(_) => {
+                anyhow::bail!("No existing Ralph state found for '{}' at {}", task, state_dir.display());
+            }
         }
-        Err(_) => {
-            let prd = generate_prd(task);
-            info!(stories = prd.user_stories.len(), "Generated PRD");
-            RalphState {
-                version: 1,
-                task: task.to_string(),
-                prd,
-                iteration: 0,
-                max_iterations,
-                state_dir: state_dir.clone(),
+    } else {
+        match RalphState::load(&state_dir).await {
+            Ok(mut existing) => {
+                info!(iteration = existing.iteration, "Resumed existing Ralph state");
+                existing.max_iterations = max_iterations;
+                existing
+            }
+            Err(_) => {
+                let prd = generate_prd(task);
+                info!(stories = prd.user_stories.len(), "Generated PRD");
+                RalphState {
+                    version: 1,
+                    task: task.to_string(),
+                    prd,
+                    iteration: 0,
+                    max_iterations,
+                    state_dir: state_dir.clone(),
+                }
             }
         }
     };
@@ -151,6 +164,8 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize) -> Result<
     println!("  State dir: {}", state_dir.display());
 
     let mut consecutive_failures: HashMap<String, usize> = HashMap::new();
+
+    print_progress(&state);
 
     while state.iteration < state.max_iterations {
         state.iteration += 1;
@@ -257,9 +272,15 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize) -> Result<
             let new_failures = failures + 1;
             consecutive_failures.insert(story_id.clone(), new_failures);
             println!("  ✗ {} failed (attempt {}/3)", story_id, new_failures);
+            if !yolo && new_failures >= 3 {
+                println!("  ⚠ Max failures reached. Use --yolo to continue.");
+                state.save().await?;
+                anyhow::bail!("Story {} failed too many times", story_id);
+            }
         }
 
         state.save().await?;
+        print_progress(&state);
         info!(
             iteration = state.iteration,
             story_id = %story_id,
@@ -272,4 +293,25 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize) -> Result<
     info!("Ralph reached max iterations");
     state.save().await?;
     Ok(())
+}
+
+fn print_progress(state: &RalphState) {
+    let verified = state.prd.user_stories.iter().filter(|s| matches!(s.status, StoryStatus::Verified)).count();
+    let failed = state.prd.user_stories.iter().filter(|s| matches!(s.status, StoryStatus::Failed)).count();
+    let total = state.prd.user_stories.len();
+
+    println!();
+    println!("🔄 Ralph: {}/{} stories verified, {} failed (iteration {}/{})",
+        verified, total, failed, state.iteration, state.max_iterations);
+    for story in &state.prd.user_stories {
+        let icon = match story.status {
+            StoryStatus::Verified => "✓",
+            StoryStatus::Failed => "✗",
+            StoryStatus::InProgress => "▶",
+            StoryStatus::Implemented => "◐",
+            StoryStatus::NotStarted => "○",
+        };
+        println!("   {} {}", icon, story.id);
+    }
+    println!();
 }

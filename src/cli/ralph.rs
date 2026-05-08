@@ -16,6 +16,14 @@ pub struct Args {
     /// Max Ralph iterations
     #[arg(short, long, default_value = "10")]
     pub max_iterations: usize,
+
+    /// Resume existing Ralph run for this task
+    #[arg(long)]
+    pub resume: bool,
+
+    /// Skip confirmation prompts (YOLO mode)
+    #[arg(long)]
+    pub yolo: bool,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -24,5 +32,5 @@ pub async fn run(args: Args) -> Result<()> {
         anyhow::bail!("Task description is required");
     }
 
-    crate::runtime::ralph::run_ralph(&task, &args.dir, args.max_iterations).await
+    crate::runtime::ralph::run_ralph(&task, &args.dir, args.max_iterations, args.resume, args.yolo).await
 }

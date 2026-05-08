@@ -360,7 +360,7 @@ impl Autopilot {
 
         if self.enable_ralph {
             info!("Ralph enabled — running verify/fix loop");
-            if let Err(e) = crate::runtime::ralph::run_ralph(&self.task, &self.dir, 3).await {
+            if let Err(e) = crate::runtime::ralph::run_ralph(&self.task, &self.dir, 3, false, self.yolo).await {
                 warn!(error = %e, "Ralph loop failed");
             }
         }
