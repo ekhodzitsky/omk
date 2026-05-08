@@ -2,7 +2,7 @@
 FROM rust:1.85-slim-bookworm AS builder
 WORKDIR /usr/src/omk
 COPY . .
-RUN cargo build --release
+RUN cargo build --release --features server
 
 # Runtime stage
 FROM debian:bookworm-slim

@@ -146,6 +146,10 @@ omk hud --tui
 
 # Web dashboard
 omk hud --web --port 8080
+
+# Docker Compose
+docker-compose up -d
+# Open http://localhost:8080
 ```
 
 ### Diagnostics
