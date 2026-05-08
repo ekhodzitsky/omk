@@ -18,6 +18,8 @@ pub struct Args {
 pub enum TeamCommands {
     /// Spawn a team of Kimi agents in tmux
     Spawn(SpawnArgs),
+    /// List all active teams
+    List,
     /// Check team status
     Status(StatusArgs),
     /// Attach to a team's tmux session
@@ -75,10 +77,59 @@ pub struct ShutdownArgs {
 pub async fn run(args: Args) -> Result<()> {
     match args.command {
         TeamCommands::Spawn(args) => spawn(args).await,
+        TeamCommands::List => list_teams().await,
         TeamCommands::Status(args) => status(args).await,
         TeamCommands::Attach(args) => attach(args).await,
         TeamCommands::Shutdown(args) => shutdown(args).await,
     }
+}
+
+async fn list_teams() -> Result<()> {
+    let teams_dir = crate::runtime::config::omk_state_dir().join("team");
+
+    if !teams_dir.exists() {
+        println!("No teams found.");
+        return Ok(());
+    }
+
+    let mut entries = tokio::fs::read_dir(&teams_dir).await?;
+    let mut teams = Vec::new();
+
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if path.is_dir() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let session_name = format!("omk-team-{}", name);
+            let running = crate::runtime::tmux::session_exists(&session_name).unwrap_or(false);
+
+            if let Ok(state) = TeamState::load(&path).await {
+                teams.push((name, state, running));
+            }
+        }
+    }
+
+    if teams.is_empty() {
+        println!("No teams found.");
+        return Ok(());
+    }
+
+    println!("Active teams:\n");
+    println!("{:<20} {:<8} {:<20} Task", "Name", "Running", "Phase");
+    println!("{}", "─".repeat(90));
+
+    for (name, state, running) in teams {
+        let status = if running { "●" } else { "○" };
+        println!(
+            "{:<20} {:<8} {:<20} {}",
+            name,
+            status,
+            format!("{:?}", state.phase),
+            state.task.chars().take(40).collect::<String>()
+        );
+    }
+
+    println!("\nUse `omk team status <name>` for details.");
+    Ok(())
 }
 
 async fn spawn(args: SpawnArgs) -> Result<()> {

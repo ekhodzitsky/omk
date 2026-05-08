@@ -50,7 +50,13 @@ Commands:
   omk team status coder-a1b2
   omk team shutdown coder-a1b2
 
-Attach with: tmux attach -t omk-team-coder-a1b2
+Attach with: omk team attach coder-a1b2
+```
+
+### List all teams
+
+```bash
+omk team list
 ```
 
 ### Check status
