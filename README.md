@@ -6,9 +6,7 @@
 
 **Kimi-only orchestration runtime for reproducible AI coding teams**
 
-Turn [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) into visible tmux teams with durable state, recovery, and proof.
-
-**Tags:** `kimi-cli` `rust` `multi-agent` `tmux` `agent-orchestration` `proof-driven` `developer-tools`
+Turn [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) into visible agent swarms with durable state, recovery, and proof.
 
 *Inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode), but not a line-for-line port. OMK is designed as a Kimi-native runtime that owns scheduling, state, verification evidence, and observability while Kimi remains the execution engine.*
 
@@ -28,19 +26,44 @@ Turn [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) into visible tmux teams 
 
 ---
 
-OMK is a Kimi-only-first orchestration layer. Today it coordinates real `kimi` processes through tmux panes and durable state. The near-term roadmap turns that into **Kimi Pro Mode**: sync Kimi assets, run a Kimi team, watch it live, recover stuck workers, and produce a proof that explains whether the work is actually done.
+## Agent Swarm For Kimi CLI
+
+OMK is a Kimi-first runtime for developers who want multiple AI workers without losing control of the run. It coordinates real `kimi` processes through tmux panes, durable state files, and explicit lifecycle commands.
+
+The product wedge is **Agent Swarm for Kimi CLI**:
+
+- start a visible team of Kimi workers from one command;
+- inspect the run instead of trusting a black-box chat transcript;
+- recover or fail stuck workers cleanly;
+- build toward proof-based completion instead of "looks done" vibes.
+
+The near-term roadmap turns the current team runtime into **Kimi Pro Mode**: sync Kimi assets, run a Kimi swarm, watch it live, recover stuck workers, and produce a proof that explains whether the work is actually done.
 
 OMK is independent of Moonshot AI, Kimi CLI, and oh-my-claudecode.
 
-## Why OMK?
+## Quick Start
 
-Kimi CLI is the engine. OMK is the runtime around a serious coding session.
+```bash
+# Install
+cargo install omk
+# or
+curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
 
-- Visible parallelism: every worker is a real `kimi` process you can inspect.
-- Durable coordination: runs leave state files, logs, and soon event timelines.
-- Recovery-first execution: stuck workers should become scheduler events, not silent mystery failures.
-- Proof over vibes: the final output should name changed files, gates, retries, known gaps, and readiness.
-- Kimi-only focus first: no provider soup until the Kimi loop is reliable enough to deserve it.
+# Create OMK config/state directories
+omk setup
+
+# Validate the local environment
+omk doctor
+
+# Sync current Kimi-native OMK assets
+omk kimi sync
+omk kimi doctor
+
+# Spawn a current MVP team
+omk team spawn 3:coder "refactor authentication to use JWT"
+omk team status <name-from-output>
+omk team shutdown <name-from-output>
+```
 
 ## Positioning
 
@@ -83,31 +106,7 @@ Prior art exists and validates demand. The detailed competitor scan lives in [SP
 | Team run | Polished Kimi-only entrypoint with scheduler-owned claims and watchdogs. | Next |
 | Proof | Final readiness report from event logs and verification gates. | Next |
 | Run show | Timeline inspection for a recorded run. | Next |
-| Cross-provider workers | Codex, Gemini, Claude, and OpenCode workers/advisors. | Later |
-
-## Quick Start
-
-```bash
-# Install
-cargo install omk
-# or
-curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
-
-# Create OMK config/state directories
-omk setup
-
-# Validate the local environment
-omk doctor
-
-# Sync current Kimi-native OMK assets
-omk kimi sync
-omk kimi doctor
-
-# Spawn a current MVP team
-omk team spawn 3:coder "refactor authentication to use JWT"
-omk team status <name-from-output>
-omk team shutdown <name-from-output>
-```
+| Cross-provider workers | Other provider workers/advisors after the Kimi-only runtime is excellent. | Later |
 
 ## North Star Demo
 
