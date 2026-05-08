@@ -1,12 +1,14 @@
 <div align="center">
 
-<img src="assets/omk-kimi-mascot.png" alt="oh-my-kimi blue Kimi coding mascot" width="360">
+<img src="assets/omk-kimi-mascot.png" alt="oh-my-kimi blue flame Kimi giant mascot with glowing square eyes" width="360">
 
 # oh-my-kimi (omk)
 
 **Kimi-only orchestration runtime for reproducible AI coding teams**
 
-Keep [Kimi CLI](https://github.com/MoonshotAI/kimi-cli). Add visible teams, crash recovery, durable state, and proof.
+Turn [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) into visible tmux teams with durable state, recovery, and proof.
+
+**Tags:** `kimi-cli` `rust` `multi-agent` `tmux` `agent-orchestration` `proof-driven` `developer-tools`
 
 *Inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode), but not a line-for-line port. OMK is designed as a Kimi-native runtime that owns scheduling, state, verification evidence, and observability while Kimi remains the execution engine.*
 
