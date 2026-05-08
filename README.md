@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/omk-kimi-mascot.png" alt="oh-my-kimi blue flame Kimi giant mascot with glowing square eyes" width="360">
+<img src="assets/omk-kimi-mascot.png" alt="oh-my-kimi wide banner with a blue Kimi mascot reaching out of the screen" width="920">
 
 # oh-my-kimi (omk)
 
