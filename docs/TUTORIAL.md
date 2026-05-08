@@ -316,7 +316,9 @@ omk config set default_team_size 3
 ### View logs
 
 ```bash
-cat ~/.local/state/omk/logs/omk.log
+omk logs              # Last 50 lines
+omk logs -n 100       # Last 100 lines
+omk logs -f           # Follow (tail -f)
 ```
 
 ### Reset everything

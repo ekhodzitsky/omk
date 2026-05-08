@@ -5,6 +5,7 @@ pub mod cleanup;
 pub mod config_cmd;
 pub mod doctor;
 pub mod hud;
+pub mod logs;
 pub mod marketplace;
 pub mod ralph;
 pub mod skill;
