@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::runtime::ask::{self, is_known_provider};
 
@@ -22,6 +22,18 @@ pub struct Args {
     /// Save artifact to .omk/artifacts/
     #[arg(short, long)]
     pub save: bool,
+
+    /// Disable synthesis (print individual outputs)
+    #[arg(long)]
+    pub no_synthesis: bool,
+
+    /// Specific providers to ask (comma-separated)
+    #[arg(short, long, value_delimiter = ',')]
+    pub providers: Vec<String>,
+
+    /// Timeout per provider in seconds
+    #[arg(short, long, default_value = "60")]
+    pub timeout: u64,
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -41,23 +53,35 @@ pub async fn run(args: Args) -> Result<()> {
 
     let all = args.all || provider.is_empty();
 
-    if all {
-        info!("Asking all available providers");
-        let outputs = ask::ask_all(&prompt, args.save).await?;
+    if all || !args.providers.is_empty() {
+        let providers = if args.providers.is_empty() {
+            ask::available_providers()
+        } else {
+            args.providers.iter().map(|s| s.as_str()).collect()
+        };
 
-        if ask::is_provider_installed("kimi") {
+        if providers.is_empty() {
+            anyhow::bail!("No provider CLIs are installed");
+        }
+
+        info!(providers = ?providers, "Asking providers");
+        let outputs = ask::ask_providers(&providers, &prompt, args.save, args.timeout).await?;
+
+        if !args.no_synthesis && ask::is_provider_installed("kimi") && outputs.len() > 1 {
             info!("Synthesizing with Kimi");
             let synthesis = ask::synthesize(&prompt, &outputs, args.save).await?;
             println!("{}", synthesis);
         } else {
-            warn!("Kimi CLI not found; printing individual advisor outputs");
+            if args.no_synthesis {
+                info!("Synthesis disabled");
+            }
             for (provider_name, output) in &outputs {
                 println!("## {}\n\n{}\n", provider_name, output);
             }
         }
     } else {
         info!(provider = %provider, "Asking single provider");
-        let output = ask::ask_single(&provider, &prompt, args.save).await?;
+        let output = ask::ask_single(&provider, &prompt, args.save, args.timeout).await?;
         println!("{}", output);
     }
 

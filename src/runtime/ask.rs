@@ -73,7 +73,7 @@ pub async fn save_artifact(name: &str, content: &str, timestamp: &str) -> Result
 
 /// Run a provider directly (not inside tmux) and capture its stdout+stderr.
 /// Used for the MVP direct-execution path and for synthesis.
-pub async fn run_advisor_direct(provider: &str, prompt: &str) -> Result<String> {
+pub async fn run_advisor_direct(provider: &str, prompt: &str, timeout_secs: u64) -> Result<String> {
     if !is_provider_installed(provider) {
         anyhow::bail!("Provider '{}' is not installed", provider);
     }
@@ -81,12 +81,16 @@ pub async fn run_advisor_direct(provider: &str, prompt: &str) -> Result<String> 
     let cmd = provider_command(provider, prompt)?;
     debug!(provider = provider, cmd = %cmd, "Running advisor directly");
 
-    let output = tokio::process::Command::new("bash")
-        .arg("-c")
-        .arg(&cmd)
-        .output()
-        .await
-        .with_context(|| format!("Failed to run {}", provider))?;
+    let output = tokio::time::timeout(
+        Duration::from_secs(timeout_secs),
+        tokio::process::Command::new("bash")
+            .arg("-c")
+            .arg(&cmd)
+            .output(),
+    )
+    .await
+    .with_context(|| format!("{} timed out after {}s", provider, timeout_secs))?
+    .with_context(|| format!("Failed to run {}", provider))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -161,8 +165,8 @@ pub async fn poll_outbox(outbox: &Path, timeout_secs: u64) -> Result<String> {
 }
 
 /// Query a single provider and optionally persist the artifact.
-pub async fn ask_single(provider: &str, prompt: &str, save: bool) -> Result<String> {
-    let output = run_advisor_direct(provider, prompt).await?;
+pub async fn ask_single(provider: &str, prompt: &str, save: bool, timeout_secs: u64) -> Result<String> {
+    let output = run_advisor_direct(provider, prompt, timeout_secs).await?;
 
     if save {
         let ts = chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string();
@@ -175,24 +179,25 @@ pub async fn ask_single(provider: &str, prompt: &str, save: bool) -> Result<Stri
     Ok(output)
 }
 
-/// Query every available provider in parallel.
+/// Query specific providers in parallel.
 /// Returns a vec of `(provider, output)` pairs.
-pub async fn ask_all(prompt: &str, save: bool) -> Result<Vec<(String, String)>> {
-    let providers = available_providers();
+pub async fn ask_providers(providers: &[&str], prompt: &str, save: bool, timeout_secs: u64) -> Result<Vec<(String, String)>> {
     if providers.is_empty() {
-        anyhow::bail!("No provider CLIs are installed");
+        anyhow::bail!("No providers specified");
     }
 
-    info!(providers = ?providers, "Querying all advisors");
+    info!(providers = ?providers, "Querying advisors");
     let ts = chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string();
 
     let mut tasks = tokio::task::JoinSet::new();
-    for provider in providers {
+    for &provider in providers {
         let p = prompt.to_string();
+        let t = timeout_secs;
+        let provider_owned = provider.to_string();
         tasks.spawn(async move {
-            match run_advisor_direct(provider, &p).await {
-                Ok(output) => Ok((provider.to_string(), output)),
-                Err(e) => Err((provider.to_string(), e)),
+            match run_advisor_direct(&provider_owned, &p, t).await {
+                Ok(output) => Ok((provider_owned, output)),
+                Err(e) => Err((provider_owned, e)),
             }
         });
     }
@@ -225,6 +230,13 @@ pub async fn ask_all(prompt: &str, save: bool) -> Result<Vec<(String, String)>> 
     Ok(results)
 }
 
+/// Query every available provider in parallel.
+/// Returns a vec of `(provider, output)` pairs.
+pub async fn ask_all(prompt: &str, save: bool) -> Result<Vec<(String, String)>> {
+    let providers = available_providers();
+    ask_providers(&providers, prompt, save, 60).await
+}
+
 /// Build the synthesis prompt fed to Kimi.
 pub fn build_synthesis_prompt(prompt: &str, outputs: &[(String, String)]) -> String {
     let mut synthesis = format!(
@@ -252,7 +264,7 @@ pub async fn synthesize(
     }
 
     let synthesis_prompt = build_synthesis_prompt(prompt, outputs);
-    let result = run_advisor_direct("kimi", &synthesis_prompt).await?;
+    let result = run_advisor_direct("kimi", &synthesis_prompt, 120).await?;
 
     if save {
         let ts = chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string();
@@ -339,7 +351,7 @@ mod tests {
         new_path.push(original_path.clone().unwrap_or_default());
         std::env::set_var("PATH", &new_path);
 
-        let result = run_advisor_direct("kimi", "test prompt").await;
+        let result = run_advisor_direct("kimi", "test prompt", 30).await;
 
         if let Some(path) = original_path {
             std::env::set_var("PATH", path);
