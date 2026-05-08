@@ -137,6 +137,7 @@ impl Autopilot {
         self.print_progress();
         self.save_state().await?;
 
+        #[allow(clippy::type_complexity)]
         let phases: Vec<(AutopilotPhase, Box<dyn Fn(&mut Self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + '_>>>)> = vec![
             (AutopilotPhase::Expansion, Box::new(|s| Box::pin(s.run_expansion()))),
             (AutopilotPhase::Planning, Box::new(|s| Box::pin(s.run_planning()))),

@@ -27,7 +27,7 @@ fn slugify_task(task: &str) -> String {
 /// Generate a PRD by breaking a task into 3–5 user stories.
 pub fn generate_prd(task: &str) -> Prd {
     let sentences: Vec<&str> = task
-        .split(|c| c == '.' || c == '?' || c == '!')
+        .split(['.', '?', '!'])
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();

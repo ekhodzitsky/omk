@@ -42,7 +42,7 @@ async fn install_skill(url: &str, name_override: Option<String>) -> Result<()> {
     let skill_name = name_override.unwrap_or_else(|| {
         url.trim_end_matches('/')
             .split('/')
-            .last()
+            .next_back()
             .unwrap_or("unknown")
             .to_string()
     });

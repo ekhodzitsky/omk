@@ -74,7 +74,7 @@ pub async fn run(args: Args) -> Result<()> {
 async fn list_skills() -> Result<()> {
     println!("🛒 omk Marketplace");
     println!();
-    println!("{:<4} {:<20} {:<50} {}", "#", "Name", "Description", "Tags");
+    println!("{:<4} {:<20} {:<50} Tags", "#", "Name", "Description");
     println!("{}", "─".repeat(100));
 
     for (i, skill) in MARKET_SKILLS.iter().enumerate() {
