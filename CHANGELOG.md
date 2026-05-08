@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-08
+
+### Added
+
+- **External marketplace registries**: `omk marketplace add-registry/list-registries/remove-registry` with JSON registry format support (HTTP/HTTPS and local file paths).
+- **Team management**: `omk team list`, `omk team attach`, `omk team broadcast`, `omk team rename`.
+- **State visibility**: `omk state list` shows all teams, autopilots, and Ralph sessions.
+- **Skill inspection**: `omk skill show` and `omk skill search` for installed skills.
+- **Configuration**: `omk config set` for modifying config values at runtime.
+- **Backup pruning**: `omk backup prune --keep N` removes old backups.
+- **Artifact cleanup**: `omk cleanup --artifacts` removes old ask artifacts and log files.
+- **Logging**: `omk logs` with `-n` (lines) and `-f` (follow) flags.
+- **Version info**: `omk version` shows version, repository, and Rust compiler version.
+- **Update check**: `omk update --check` verifies latest release without installing.
+- **Marketplace info**: `omk marketplace info <skill>` shows detailed skill metadata.
+- **Web dashboard**: Added `/api/autopilots` and `/api/ralphs` endpoints with dashboard cards.
+- **Doctor registry check**: `omk doctor` validates all configured marketplace registries.
+- **Documentation**: `docs/TUTORIAL.md`, `docs/API.md`, `docs/TROUBLESHOOTING.md`, `docs/REGISTRY.md`, and `examples/registry.json`.
+- **Community**: Issue template chooser, stale issue bot, CODEOWNERS, FUNDING.yml.
+
+### Changed
+
+- Zero clippy warnings across all targets (lib, bin, tests).
+- Updated feature status in README from "scaffolded" to "ready" for all modes.
+
 ## [0.2.0] - 2026-05-08
 
 ### Added

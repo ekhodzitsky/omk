@@ -158,7 +158,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
     <div class="container">
         <header>
             <h1>🌙 omk dashboard</h1>
-            <span class="version">v0.2.0</span>
+            <span class="version">v0.2.1</span>
             <span style="margin-left:auto;color:#666;font-size:0.875rem;">
                 <span class="live-indicator"></span>Live
             </span>
