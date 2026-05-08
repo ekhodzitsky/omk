@@ -28,6 +28,10 @@ pub enum TeamCommands {
     Broadcast(BroadcastArgs),
     /// Rename a team
     Rename(RenameArgs),
+    /// Export a team state to JSON
+    Export(ExportArgs),
+    /// Import a team state from JSON
+    Import(ImportArgs),
     /// Shutdown a team
     Shutdown(ShutdownArgs),
 }
@@ -88,6 +92,21 @@ pub struct RenameArgs {
 }
 
 #[derive(Parser, Debug, Clone)]
+pub struct ExportArgs {
+    #[arg(value_name = "NAME")]
+    pub name: String,
+
+    #[arg(short, long, default_value = "team-export.json")]
+    pub output: String,
+}
+
+#[derive(Parser, Debug, Clone)]
+pub struct ImportArgs {
+    #[arg(value_name = "FILE")]
+    pub file: String,
+}
+
+#[derive(Parser, Debug, Clone)]
 pub struct ShutdownArgs {
     #[arg(value_name = "NAME")]
     pub name: String,
@@ -104,6 +123,8 @@ pub async fn run(args: Args) -> Result<()> {
         TeamCommands::Attach(args) => attach(args).await,
         TeamCommands::Broadcast(args) => broadcast(args).await,
         TeamCommands::Rename(args) => rename_team(args).await,
+        TeamCommands::Export(args) => export_team(args).await,
+        TeamCommands::Import(args) => import_team(args).await,
         TeamCommands::Shutdown(args) => shutdown(args).await,
     }
 }
@@ -493,6 +514,55 @@ async fn rename_team(args: RenameArgs) -> Result<()> {
     if !running {
         println!("  (tmux session was not running, only state was renamed)");
     }
+    Ok(())
+}
+
+async fn export_team(args: ExportArgs) -> Result<()> {
+    let state_dir = crate::runtime::config::omk_state_dir().join("team").join(&args.name);
+    let state_file = state_dir.join("team-state.json");
+
+    if !state_file.exists() {
+        anyhow::bail!("Team '{}' not found", args.name);
+    }
+
+    let content = tokio::fs::read_to_string(&state_file).await?;
+    let state: crate::runtime::state::TeamState = serde_json::from_str(&content)
+        .with_context(|| format!("Failed to parse team state for '{}'", args.name))?;
+
+    let export = serde_json::json!({
+        "version": "1.0",
+        "exported_at": chrono::Utc::now().to_rfc3339(),
+        "team": state,
+    });
+
+    let json = serde_json::to_string_pretty(&export)?;
+    crate::runtime::atomic::atomic_write(std::path::Path::new(&args.output), json.as_bytes()).await?;
+
+    println!("✓ Exported team '{}' to {}", args.name, args.output);
+    Ok(())
+}
+
+async fn import_team(args: ImportArgs) -> Result<()> {
+    let content = tokio::fs::read_to_string(&args.file).await
+        .with_context(|| format!("Failed to read file '{}'", args.file))?;
+    let export: serde_json::Value = serde_json::from_str(&content)
+        .with_context(|| format!("Failed to parse JSON from '{}'", args.file))?;
+
+    let team_value = export.get("team")
+        .ok_or_else(|| anyhow::anyhow!("Invalid export file: missing 'team' field"))?;
+    let state: crate::runtime::state::TeamState = serde_json::from_value(team_value.clone())
+        .with_context(|| "Failed to deserialize team state")?;
+
+    let state_dir = crate::runtime::config::omk_state_dir()
+        .join("team")
+        .join(&state.name);
+    tokio::fs::create_dir_all(&state_dir).await?;
+
+    state.save().await?;
+
+    println!("✓ Imported team '{}' from {}", state.name, args.file);
+    println!("  State dir: {}", state_dir.display());
+    println!("  Run `omk team attach {}` to connect", state.name);
     Ok(())
 }
 

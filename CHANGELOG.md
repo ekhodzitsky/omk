@@ -95,3 +95,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tmux-native multi-agent orchestration with JSONL file-based IPC.
 - Skill injection system compatible with Claude Code `SKILL.md` format.
 - 23 unit and integration tests.
+
+## [0.2.3] - 2026-05-08
+
+### Added
+
+- **Team export/import**: `omk team export <name>` and `omk team import <file>` for JSON-based team state migration.
+- Additional integration tests for team spawn validation and export/import roundtrip.
+
+### Changed
+
+- Version bumped to 0.2.3 across Cargo.toml, dashboard, and tests.

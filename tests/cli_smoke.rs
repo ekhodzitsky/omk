@@ -7,7 +7,7 @@ fn test_version_flag() {
     cmd.arg("--version");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("0.2.2"));
+        .stdout(predicate::str::contains("0.2.3"));
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn test_version_subcommand() {
     cmd.arg("version");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("omk 0.2.2"));
+        .stdout(predicate::str::contains("omk 0.2.3"));
 }
 
 #[test]
@@ -188,6 +188,20 @@ fn test_team_spawn_missing_task() {
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("Task description is required"));
+}
+
+#[test]
+fn test_team_export_import_roundtrip() {
+    let bin = Command::cargo_bin("omk").unwrap();
+    let tmp = tempfile::tempdir().unwrap();
+    let export_path = tmp.path().join("test-team.json");
+
+    // Export should fail if team doesn't exist
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.arg("team").arg("export").arg("nonexistent-team").arg("-o").arg(&export_path);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("not found"));
 }
 
 #[test]
