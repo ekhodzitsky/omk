@@ -13,6 +13,10 @@ pub struct Args {
     #[arg(long, value_name = "DAYS")]
     older_than: Option<u64>,
 
+    /// Remove old artifacts (ask outputs, logs)
+    #[arg(long)]
+    artifacts: bool,
+
     /// Dry run: show what would be removed
     #[arg(long)]
     dry_run: bool,
@@ -20,6 +24,59 @@ pub struct Args {
 
 pub async fn run(args: Args) -> Result<()> {
     let state_dir = crate::runtime::config::state_dir();
+
+    if args.artifacts {
+        let mut removed = 0;
+        let mut freed: u64 = 0;
+
+        let artifacts_dir = crate::runtime::config::data_dir().join("artifacts");
+        if artifacts_dir.exists() {
+            let mut entries = tokio::fs::read_dir(&artifacts_dir).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                if should_remove(&path, args.older_than).await? {
+                    let size = dir_size(&path).await?;
+                    if args.dry_run {
+                        println!("Would remove: {} ({:.1} MB)", path.display(), size as f64 / 1_048_576.0);
+                    } else {
+                        tokio::fs::remove_dir_all(&path).await?;
+                        info!(path = %path.display(), "Removed artifacts");
+                        println!("✓ Removed: {} ({:.1} MB)", path.display(), size as f64 / 1_048_576.0);
+                    }
+                    removed += 1;
+                    freed += size;
+                }
+            }
+        }
+
+        let logs_dir = crate::runtime::config::state_dir().join("logs");
+        if logs_dir.exists() {
+            let mut entries = tokio::fs::read_dir(&logs_dir).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                if should_remove(&path, args.older_than).await? {
+                    let size = entry.metadata().await?.len();
+                    if args.dry_run {
+                        println!("Would remove: {} ({:.1} MB)", path.display(), size as f64 / 1_048_576.0);
+                    } else {
+                        tokio::fs::remove_file(&path).await?;
+                        info!(path = %path.display(), "Removed log file");
+                        println!("✓ Removed: {} ({:.1} MB)", path.display(), size as f64 / 1_048_576.0);
+                    }
+                    removed += 1;
+                    freed += size;
+                }
+            }
+        }
+
+        println!();
+        if args.dry_run {
+            println!("Would remove {removed} artifact directories/log files ({:.1} MB)", freed as f64 / 1_048_576.0);
+        } else {
+            println!("Removed {removed} artifact directories/log files ({:.1} MB freed)", freed as f64 / 1_048_576.0);
+        }
+        return Ok(());
+    }
 
     if args.all {
         println!("This will remove ALL omk state.");

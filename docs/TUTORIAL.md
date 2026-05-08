@@ -293,6 +293,7 @@ omk state import --input my-project-state.json
 
 ```bash
 omk cleanup --older-than 7
+omk cleanup --artifacts --older-than 30
 ```
 
 ## Troubleshooting
