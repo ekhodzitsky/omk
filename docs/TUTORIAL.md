@@ -19,6 +19,13 @@
 cargo install omk
 ```
 
+### Self-update
+
+```bash
+omk update --check   # Check for updates
+omk update           # Install latest release
+```
+
 ### Via install script
 
 ```bash

@@ -41,7 +41,7 @@ enum Commands {
     /// Setup OMK (install hooks, skills, config)
     Setup,
     /// Update OMK
-    Update,
+    Update(UpdateArgs),
     /// Run MCP server
     McpServer,
     /// Generate shell completions
@@ -62,6 +62,13 @@ enum Commands {
     Skill(skill::Args),
     /// Browse skill marketplace
     Marketplace(cli::marketplace::Args),
+}
+
+#[derive(Parser, Debug)]
+struct UpdateArgs {
+    /// Check for updates without installing
+    #[arg(long)]
+    check: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -123,7 +130,7 @@ async fn main() -> Result<()> {
         Commands::Ask(args) => ask::run(args).await,
         Commands::Hud(args) => hud::run(args).await,
         Commands::Setup => run_setup().await,
-        Commands::Update => run_update().await,
+        Commands::Update(args) => run_update(args).await,
         Commands::McpServer => mcp::run_mcp_server().await,
         Commands::Completions(args) => {
             let shell = match args.shell {
@@ -203,7 +210,7 @@ enable_metrics = true
     Ok(())
 }
 
-async fn run_update() -> Result<()> {
+async fn run_update(args: UpdateArgs) -> Result<()> {
     use std::process::Command;
 
     let current = env!("CARGO_PKG_VERSION");
@@ -248,7 +255,13 @@ async fn run_update() -> Result<()> {
     println!("Latest version: {latest_version}");
 
     if latest_version == current {
-        println!("✓ You are already on the latest version.");
+        println!("✓ You are already on the latest version ({current}).");
+        return Ok(());
+    }
+
+    if args.check {
+        println!("Update available: {current} → {latest_version}");
+        println!("Run `omk update` to install.");
         return Ok(());
     }
 
