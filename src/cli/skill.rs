@@ -25,6 +25,11 @@ pub enum SkillCommands {
         /// Skill name
         name: String,
     },
+    /// Search installed skills
+    Search {
+        /// Search query
+        query: String,
+    },
     /// Remove an installed skill
     Remove {
         /// Skill name
@@ -37,6 +42,7 @@ pub async fn run(args: Args) -> Result<()> {
         SkillCommands::Install { url, name } => install_skill(&url, name).await,
         SkillCommands::List => list_skills().await,
         SkillCommands::Show { name } => show_skill(&name).await,
+        SkillCommands::Search { query } => search_skills(&query).await,
         SkillCommands::Remove { name } => remove_skill(&name).await,
     }
 }
@@ -136,6 +142,49 @@ async fn show_skill(name: &str) -> Result<()> {
     } else {
         println!("Skill '{}' (no SKILL.md found)", name);
         println!("Path: {}", target.display());
+    }
+
+    Ok(())
+}
+
+async fn search_skills(query: &str) -> Result<()> {
+    let skills_dir = crate::runtime::config::data_dir().join("skills");
+
+    if !skills_dir.exists() {
+        println!("No skills installed.");
+        return Ok(());
+    }
+
+    let query_lower = query.to_lowercase();
+    let mut matches = Vec::new();
+    let mut entries = tokio::fs::read_dir(&skills_dir).await?;
+
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if path.is_dir() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let skill_md = path.join("SKILL.md");
+            let mut content = String::new();
+            if skill_md.exists() {
+                content = tokio::fs::read_to_string(&skill_md).await.unwrap_or_default();
+            }
+            if name.to_lowercase().contains(&query_lower)
+                || content.to_lowercase().contains(&query_lower)
+            {
+                matches.push((name, path, !content.is_empty()));
+            }
+        }
+    }
+
+    if matches.is_empty() {
+        println!("No skills found for '{}'", query);
+        return Ok(());
+    }
+
+    println!("Found {} skill(s) for '{}':\n", matches.len(), query);
+    for (name, path, has_md) in matches {
+        let indicator = if has_md { "✓" } else { "⚠" };
+        println!("  {} {} ({})", indicator, name, path.display());
     }
 
     Ok(())

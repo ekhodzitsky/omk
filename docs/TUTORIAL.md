@@ -220,6 +220,12 @@ omk skill list
 omk skill show rust-expert
 ```
 
+### Search installed skills
+
+```bash
+omk skill search rust
+```
+
 ### Remove a skill
 
 ```bash
