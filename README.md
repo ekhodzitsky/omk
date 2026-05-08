@@ -26,13 +26,16 @@
 | Mode | What it does | Status |
 |------|--------------|--------|
 | 🚀 **Team** | Spawn N Kimi agents in tmux panes with shared task lists | ✅ Ready |
-| 🤖 **Autopilot** | 6-phase autonomous execution (plan → execute → qa → validate) | 🚧 Active dev |
-| 🔄 **Ralph** | Persistent verify/fix loops until every task is complete | 🚧 Active dev |
-| 🧠 **Ask** | Cross-provider consultation (Claude, Codex, Gemini, Kimi) | 🚧 Active dev |
-| 📊 **HUD** | Real-time tmux statusline + interactive TUI | ✅ Scaffold |
-| 🔌 **MCP** | Model Context Protocol server for Cursor/Claude Desktop | 🚧 Scaffold |
+| 🤖 **Autopilot** | 6-phase autonomous execution (plan → execute → qa → validate) | ✅ Ready |
+| 🔄 **Ralph** | Persistent verify/fix loops until every task is complete | ✅ Ready |
+| 🧠 **Ask** | Cross-provider consultation (Claude, Codex, Gemini, Kimi) | ✅ Ready |
+| 📊 **HUD** | Real-time tmux statusline + web dashboard | ✅ Ready |
+| 🔌 **MCP** | Model Context Protocol server for Cursor/Claude Desktop | ✅ Ready |
+| 🛒 **Marketplace** | Curated skill index with install/remove commands | ✅ Ready |
 
 ## 🎬 Quick Start
+
+> 📚 **New to OMK?** Follow the [step-by-step tutorial](docs/TUTORIAL.md).
 
 ```bash
 # Install
