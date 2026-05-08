@@ -13,12 +13,20 @@ pub enum ConfigCommands {
     Validate,
     /// Show current config paths and values
     Show,
+    /// Set a configuration value
+    Set {
+        /// Key to set (e.g. default_team_size, default_yolo)
+        key: String,
+        /// Value to set
+        value: String,
+    },
 }
 
 pub async fn run(args: Args) -> Result<()> {
     match args.command {
         ConfigCommands::Validate => validate().await,
         ConfigCommands::Show => show().await,
+        ConfigCommands::Set { key, value } => set(&key, &value).await,
     }
 }
 
@@ -125,7 +133,46 @@ async fn show() -> Result<()> {
             println!("    - {}", dir.display());
         }
     }
+    if !config.registries.is_empty() {
+        println!("  registries:");
+        for url in &config.registries {
+            println!("    - {}", url);
+        }
+    }
 
+    Ok(())
+}
+
+async fn set(key: &str, value: &str) -> Result<()> {
+    let mut config = crate::runtime::config::load_config().await.unwrap_or_default();
+
+    match key {
+        "default_team_size" => {
+            let size: usize = value.parse().map_err(|e| anyhow::anyhow!("Invalid number for default_team_size: {}", e))?;
+            if size == 0 || size > 16 {
+                anyhow::bail!("default_team_size must be between 1 and 16");
+            }
+            config.default_team_size = size;
+        }
+        "default_yolo" => {
+            config.default_yolo = value.parse::<bool>().map_err(|e| anyhow::anyhow!("Invalid boolean for default_yolo: {}", e))?;
+        }
+        "enable_metrics" => {
+            config.enable_metrics = value.parse::<bool>().map_err(|e| anyhow::anyhow!("Invalid boolean for enable_metrics: {}", e))?;
+        }
+        "kimi_binary" => {
+            config.kimi_binary = Some(value.to_string());
+        }
+        _ => {
+            anyhow::bail!("Unknown config key: {}. Known keys: default_team_size, default_yolo, enable_metrics, kimi_binary", key);
+        }
+    }
+
+    let config_path = crate::runtime::config::config_dir().join("config.toml");
+    let content = toml::to_string_pretty(&config).map_err(|e| anyhow::anyhow!("Failed to serialize config: {}", e))?;
+    crate::runtime::atomic::atomic_write(&config_path, content.as_bytes()).await?;
+
+    println!("✓ Set {} = {}", key, value);
     Ok(())
 }
 

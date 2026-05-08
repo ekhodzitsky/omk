@@ -264,6 +264,8 @@ omk cleanup --older-than 7
 ```bash
 omk doctor
 omk config validate
+omk config show
+omk config set default_team_size 3
 ```
 
 ### View logs
