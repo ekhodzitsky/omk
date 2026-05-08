@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-08
+
+### Added
+
+- **Autopilot**: Full 6-phase implementation with resume (`--resume`), YOLO mode (`--yolo`), visual progress reporting, multi-language QA (Rust, Node, Python, Go), and phase execution logging.
+- **Ralph**: Full persistent loop with resume, YOLO mode, visual progress reporting, and escalation after 3 failures.
+- **Ask**: Provider selection (`--providers`), timeout control (`--timeout`), synthesis disable (`--no-synthesis`).
+- **Web dashboard**: `omk hud --web` serves axum HTTP API for teams/metrics/health.
+- **Skill management**: `omk skill install/list/remove` for git-based skill installation.
+- **State export/import**: `omk state export/import` for JSON-based state migration.
+- **Backup/restore**: `omk backup create/list/restore` with tar.gz compression.
+- **MCP tools**: Real CLI delegation for `omk_team_spawn`, `omk_team_status`, `omk_team_shutdown`, `omk_doctor`.
+- **Code coverage**: `cargo-tarpaulin` + Codecov integration.
+
+### Changed
+
+- All runtime modules now use `#[allow(dead_code)]` to suppress scaffold warnings.
+- CI builds with `--features server`.
+
 ## [0.1.1] - 2026-05-07
 
 ### Added
