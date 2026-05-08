@@ -62,6 +62,8 @@ omk team status coder-a1b2
 ### Attach to tmux session
 
 ```bash
+omk team attach coder-a1b2
+# or directly with tmux:
 tmux attach -t omk-team-coder-a1b2
 ```
 
@@ -155,10 +157,24 @@ docker-compose up -d
 omk marketplace list
 ```
 
+### Use an external registry
+
+```bash
+omk marketplace add-registry https://example.com/registry.json
+omk marketplace list-registries
+omk marketplace list
+```
+
 ### Install from marketplace
 
 ```bash
 omk marketplace install rust-expert
+```
+
+### Install from a specific registry
+
+```bash
+omk marketplace install my-skill --registry https://example.com/registry.json
 ```
 
 ### Install from git
@@ -177,6 +193,12 @@ omk skill list
 
 ```bash
 omk skill remove rust-expert
+```
+
+### Remove a registry
+
+```bash
+omk marketplace remove-registry https://example.com/registry.json
 ```
 
 ## State Management

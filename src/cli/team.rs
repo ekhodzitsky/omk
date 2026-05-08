@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use tracing::info;
 
 use crate::runtime::{bridge::TeamBridge, state::TeamState, tmux, worker::WorkerSpec};
@@ -18,6 +20,8 @@ pub enum TeamCommands {
     Spawn(SpawnArgs),
     /// Check team status
     Status(StatusArgs),
+    /// Attach to a team's tmux session
+    Attach(AttachArgs),
     /// Shutdown a team
     Shutdown(ShutdownArgs),
 }
@@ -54,6 +58,12 @@ pub struct StatusArgs {
 }
 
 #[derive(Parser, Debug, Clone)]
+pub struct AttachArgs {
+    #[arg(value_name = "NAME")]
+    pub name: String,
+}
+
+#[derive(Parser, Debug, Clone)]
 pub struct ShutdownArgs {
     #[arg(value_name = "NAME")]
     pub name: String,
@@ -66,6 +76,7 @@ pub async fn run(args: Args) -> Result<()> {
     match args.command {
         TeamCommands::Spawn(args) => spawn(args).await,
         TeamCommands::Status(args) => status(args).await,
+        TeamCommands::Attach(args) => attach(args).await,
         TeamCommands::Shutdown(args) => shutdown(args).await,
     }
 }
@@ -266,6 +277,45 @@ async fn count_jsonl_lines(path: &PathBuf) -> usize {
     match tokio::fs::read_to_string(path).await {
         Ok(content) => content.lines().filter(|l| !l.trim().is_empty()).count(),
         Err(_) => 0,
+    }
+}
+
+async fn attach(args: AttachArgs) -> Result<()> {
+    let session_name = format!("omk-team-{}", args.name);
+
+    // Check if session exists
+    let output = tokio::process::Command::new("tmux")
+        .args(["has-session", "-t", &session_name])
+        .output()
+        .await
+        .context("Failed to check tmux session")?;
+
+    if !output.status.success() {
+        anyhow::bail!("Team '{}' is not running (tmux session '{}' not found)", args.name, session_name);
+    }
+
+    println!("Attaching to team '{}'...", args.name);
+    println!("(Press Ctrl+B then D to detach)");
+
+    // Replace current process with tmux attach on Unix
+    #[cfg(unix)]
+    {
+        let err = std::process::Command::new("tmux")
+            .args(["attach-session", "-t", &session_name])
+            .exec();
+        anyhow::bail!("Failed to attach to tmux session: {}", err)
+    }
+
+    #[cfg(not(unix))]
+    {
+        let status = std::process::Command::new("tmux")
+            .args(["attach-session", "-t", &session_name])
+            .status()
+            .context("Failed to attach to tmux session")?;
+        if !status.success() {
+            anyhow::bail!("tmux attach exited with code {:?}", status.code());
+        }
+        Ok(())
     }
 }
 
