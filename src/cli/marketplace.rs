@@ -284,6 +284,18 @@ async fn info_skill(name: &str) -> Result<()> {
 }
 
 async fn add_registry(url: &str) -> Result<()> {
+    // Validate URL format
+    if !url.starts_with("http://")
+        && !url.starts_with("https://")
+        && !url.starts_with('/')
+        && !url.starts_with("./")
+    {
+        anyhow::bail!(
+            "Invalid registry URL '{}'. Must start with http://, https://, or be an absolute/relative file path",
+            url
+        );
+    }
+
     let mut config = crate::runtime::config::load_config().await?;
 
     if config.registries.contains(&url.to_string()) {

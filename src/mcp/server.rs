@@ -190,10 +190,11 @@ async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> Result<J
                 "content": [
                     {
                         "type": "text",
-                        "text": format!("Error: {}", e)
+                        "text": serde_json::to_string_pretty(&e).unwrap_or_else(|_| e.to_string())
                     }
                 ],
-                "isError": true
+                "isError": true,
+                "error": e
             })),
             error: None,
         }),

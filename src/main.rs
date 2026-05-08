@@ -4,6 +4,7 @@ use clap_complete::{generate, Shell};
 use tracing::info;
 
 mod cli;
+mod error;
 mod marketplace;
 mod mcp;
 mod runtime;

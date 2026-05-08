@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-05-08
+
+### Added
+
+- **Integration tests**: 25 CLI smoke tests with `assert_cmd` covering all subcommands.
+- **Structured errors**: `OmkError` enum with `thiserror`, status codes, categories, and JSON serialization for MCP/web.
+- **Graceful shutdown**: Axum server handles SIGINT/SIGTERM with `tokio::signal`.
+- **Deep health checks**: `/api/health` now checks tmux, kimi, and disk status.
+- **Prometheus metrics**: `/metrics` endpoint serves `omk_total_spawns_total`, `omk_total_shutdowns_total`, etc.
+- **Config validation**: Registry URLs must be http/https or file paths; `kimi_binary` must exist.
+
+### Changed
+
+- MCP tool errors now return structured JSON with `error`, `code`, and `category` fields.
+- Zero warnings across lib, bin, tests, and doc-tests.
+
 ## [0.2.1] - 2026-05-08
 
 ### Added

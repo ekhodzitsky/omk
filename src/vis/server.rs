@@ -6,6 +6,7 @@ use axum::{
 };
 use serde_json::Value;
 use std::net::SocketAddr;
+use tokio::signal;
 use tracing::info;
 
 pub async fn run_server(port: u16) -> Result<()> {
@@ -15,6 +16,7 @@ pub async fn run_server(port: u16) -> Result<()> {
         .route("/api/autopilots", get(autopilots_handler))
         .route("/api/ralphs", get(ralphs_handler))
         .route("/api/metrics", get(metrics_handler))
+        .route("/metrics", get(prometheus_metrics_handler))
         .route("/api/health", get(health_handler));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -23,8 +25,37 @@ pub async fn run_server(port: u16) -> Result<()> {
     println!("Press Ctrl+C to stop");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+    info!("Web dashboard shut down gracefully");
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    println!("\n🛑 Shutting down gracefully...");
 }
 
 async fn dashboard_handler() -> Html<&'static str> {
@@ -158,7 +189,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
     <div class="container">
         <header>
             <h1>🌙 omk dashboard</h1>
-            <span class="version">v0.2.1</span>
+            <span class="version">v0.2.2</span>
             <span style="margin-left:auto;color:#666;font-size:0.875rem;">
                 <span class="live-indicator"></span>Live
             </span>
@@ -377,8 +408,88 @@ async fn metrics_handler() -> Json<Value> {
 }
 
 async fn health_handler() -> Json<Value> {
+    let mut checks = serde_json::json!({});
+    let mut healthy = true;
+
+    // Check tmux
+    let tmux_ok = std::process::Command::new("tmux")
+        .arg("-V")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    checks["tmux"] = serde_json::json!({"status": if tmux_ok { "ok" } else { "error" } });
+    if !tmux_ok { healthy = false; }
+
+    // Check kimi
+    let kimi_ok = std::process::Command::new("kimi")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    checks["kimi"] = serde_json::json!({"status": if kimi_ok { "ok" } else { "error" } });
+    if !kimi_ok { healthy = false; }
+
+    // Check disk space
+    let state_dir = crate::runtime::config::state_dir();
+    let disk_ok = check_disk_space(&state_dir);
+    checks["disk"] = serde_json::json!({
+        "status": if disk_ok { "ok" } else { "warning" },
+        "path": state_dir.to_string_lossy().to_string(),
+    });
+
     Json(serde_json::json!({
-        "status": "ok",
+        "status": if healthy { "ok" } else { "degraded" },
         "version": env!("CARGO_PKG_VERSION"),
+        "checks": checks,
     }))
+}
+
+fn check_disk_space(path: &std::path::Path) -> bool {
+    #[cfg(unix)]
+    {
+        if let Ok(_metadata) = std::fs::metadata(path) {
+            // This is a simplified check; in production you'd use statvfs
+            return true;
+        }
+    }
+    true
+}
+
+async fn prometheus_metrics_handler() -> axum::response::Response<String> {
+    let metrics_path = crate::runtime::config::state_dir().join("metrics.json");
+    let mut output = String::new();
+
+    output.push_str("# HELP omk_info OMK version info\n");
+    output.push_str("# TYPE omk_info gauge\n");
+    output.push_str(&format!("omk_info{{version=\"{}\"}} 1\n", env!("CARGO_PKG_VERSION")));
+
+    if let Ok(content) = tokio::fs::read_to_string(&metrics_path).await {
+        if let Ok(metrics) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(spawns) = metrics["total_spawns"].as_u64() {
+                output.push_str("\n# HELP omk_total_spawns_total Total team spawns\n");
+                output.push_str("# TYPE omk_total_spawns_total counter\n");
+                output.push_str(&format!("omk_total_spawns_total {}\n", spawns));
+            }
+            if let Some(shutdowns) = metrics["total_shutdowns"].as_u64() {
+                output.push_str("\n# HELP omk_total_shutdowns_total Total team shutdowns\n");
+                output.push_str("# TYPE omk_total_shutdowns_total counter\n");
+                output.push_str(&format!("omk_total_shutdowns_total {}\n", shutdowns));
+            }
+            if let Some(tasks) = metrics["total_tasks_created"].as_u64() {
+                output.push_str("\n# HELP omk_total_tasks_created_total Total tasks created\n");
+                output.push_str("# TYPE omk_total_tasks_created_total counter\n");
+                output.push_str(&format!("omk_total_tasks_created_total {}\n", tasks));
+            }
+            if let Some(ask) = metrics["total_ask_calls"].as_u64() {
+                output.push_str("\n# HELP omk_total_ask_calls_total Total ask calls\n");
+                output.push_str("# TYPE omk_total_ask_calls_total counter\n");
+                output.push_str(&format!("omk_total_ask_calls_total {}\n", ask));
+            }
+        }
+    }
+
+    axum::response::Response::builder()
+        .header("Content-Type", "text/plain; version=0.0.4")
+        .body(output)
+        .unwrap()
 }

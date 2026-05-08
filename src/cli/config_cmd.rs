@@ -161,6 +161,10 @@ async fn set(key: &str, value: &str) -> Result<()> {
             config.enable_metrics = value.parse::<bool>().map_err(|e| anyhow::anyhow!("Invalid boolean for enable_metrics: {}", e))?;
         }
         "kimi_binary" => {
+            let path = std::path::PathBuf::from(value);
+            if !path.exists() {
+                anyhow::bail!("kimi_binary path does not exist: {}", path.display());
+            }
             config.kimi_binary = Some(value.to_string());
         }
         _ => {

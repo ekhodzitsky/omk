@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use crate::error::OmkError;
 use serde_json::Value;
 use std::process::Command;
 
@@ -51,7 +51,7 @@ pub fn list_tools() -> Vec<Value> {
     ]
 }
 
-pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value> {
+pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value, OmkError> {
     let omk_bin = std::env::current_exe().unwrap_or_else(|_| "omk".into());
 
     match name {
@@ -66,7 +66,9 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value> {
                 cmd.args(["--name", n]);
             }
 
-            let output = cmd.output().context("failed to spawn omk team")?;
+            let output = cmd.output().map_err(|_e| OmkError::ShellFailed {
+                command: format!("omk team spawn {}", spec),
+            })?;
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -85,7 +87,9 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value> {
             let output = Command::new(&omk_bin)
                 .args(["team", "status", team_name])
                 .output()
-                .context("failed to run omk team status")?;
+                .map_err(|_e| OmkError::ShellFailed {
+                    command: format!("omk team status {}", team_name),
+                })?;
 
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -108,7 +112,9 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value> {
                 cmd.arg("--force");
             }
 
-            let output = cmd.output().context("failed to run omk team shutdown")?;
+            let output = cmd.output().map_err(|_e| OmkError::ShellFailed {
+                command: format!("omk team shutdown {}", team_name),
+            })?;
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -125,7 +131,9 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value> {
             let output = Command::new(&omk_bin)
                 .arg("doctor")
                 .output()
-                .context("failed to run omk doctor")?;
+                .map_err(|_e| OmkError::ShellFailed {
+                    command: "omk doctor".to_string(),
+                })?;
 
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -140,6 +148,8 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value> {
             }))
         }
 
-        _ => anyhow::bail!("Unknown tool: {}", name),
+        _ => Err(OmkError::InvalidInput {
+            reason: format!("Unknown MCP tool: {}", name),
+        }),
     }
 }

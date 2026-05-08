@@ -1,6 +1,6 @@
 [package]
 name = "omk"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = ["oh-my-kimi contributors"]
 description = "Multi-agent orchestration for Kimi CLI"
@@ -75,3 +75,5 @@ server = ["dep:axum", "dep:tower"]
 [dev-dependencies]
 tempfile = "3.19"
 criterion = { version = "0.5", features = ["async_tokio"] }
+assert_cmd = "2.0"
+predicates = "3.1"
