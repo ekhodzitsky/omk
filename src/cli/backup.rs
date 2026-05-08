@@ -25,6 +25,12 @@ pub enum BackupCommands {
         /// Backup name or path
         name: String,
     },
+    /// Remove old backups, keeping only the N most recent
+    Prune {
+        /// Number of backups to keep
+        #[arg(short, long, default_value = "5")]
+        keep: usize,
+    },
 }
 
 pub async fn run(args: Args) -> Result<()> {
@@ -32,6 +38,7 @@ pub async fn run(args: Args) -> Result<()> {
         BackupCommands::Create { name } => create_backup(name).await,
         BackupCommands::List => list_backups().await,
         BackupCommands::Restore { name } => restore_backup(&name).await,
+        BackupCommands::Prune { keep } => prune_backups(keep).await,
     }
 }
 
@@ -160,5 +167,57 @@ async fn restore_backup(name: &str) -> Result<()> {
     }
 
     println!("✓ State restored from {}", backup_path.display());
+    Ok(())
+}
+
+async fn prune_backups(keep: usize) -> Result<()> {
+    let backup_dir = crate::runtime::config::data_dir().join("backups");
+
+    if !backup_dir.exists() {
+        println!("No backups found.");
+        return Ok(());
+    }
+
+    let mut backups: Vec<(std::path::PathBuf, std::time::SystemTime)> = Vec::new();
+    let mut entries = tokio::fs::read_dir(&backup_dir).await?;
+
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("gz") {
+            let metadata = entry.metadata().await?;
+            if let Ok(modified) = metadata.modified() {
+                backups.push((path, modified));
+            }
+        }
+    }
+
+    if backups.len() <= keep {
+        println!("Found {} backup(s), keeping all (limit: {})", backups.len(), keep);
+        return Ok(());
+    }
+
+    // Sort by modification time, newest first
+    backups.sort_by_key(|b| std::cmp::Reverse(b.1));
+
+    let to_remove = &backups[keep..];
+    let mut removed = 0;
+    let mut freed: u64 = 0;
+
+    for (path, _) in to_remove {
+        let metadata = tokio::fs::metadata(path).await?;
+        let size = metadata.len();
+        tokio::fs::remove_file(path).await?;
+        info!(path = %path.display(), "Removed old backup");
+        removed += 1;
+        freed += size;
+    }
+
+    println!(
+        "✓ Pruned {} old backup(s) ({:.1} MB freed), keeping {} most recent",
+        removed,
+        freed as f64 / 1_048_576.0,
+        keep
+    );
+
     Ok(())
 }

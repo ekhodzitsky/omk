@@ -265,6 +265,12 @@ omk backup list
 omk backup restore 20260508-121530
 ```
 
+### Prune old backups
+
+```bash
+omk backup prune --keep 5
+```
+
 ### List all sessions
 
 ```bash
