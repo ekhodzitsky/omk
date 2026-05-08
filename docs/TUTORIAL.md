@@ -195,6 +195,12 @@ omk skill install https://github.com/user/omk-skill-repo
 omk skill list
 ```
 
+### Show a skill's contents
+
+```bash
+omk skill show rust-expert
+```
+
 ### Remove a skill
 
 ```bash

@@ -20,6 +20,11 @@ pub enum SkillCommands {
     },
     /// List installed skills
     List,
+    /// Show a skill's contents
+    Show {
+        /// Skill name
+        name: String,
+    },
     /// Remove an installed skill
     Remove {
         /// Skill name
@@ -31,6 +36,7 @@ pub async fn run(args: Args) -> Result<()> {
     match args.command {
         SkillCommands::Install { url, name } => install_skill(&url, name).await,
         SkillCommands::List => list_skills().await,
+        SkillCommands::Show { name } => show_skill(&name).await,
         SkillCommands::Remove { name } => remove_skill(&name).await,
     }
 }
@@ -109,6 +115,27 @@ async fn list_skills() -> Result<()> {
 
     if !found {
         println!("  No skills installed.");
+    }
+
+    Ok(())
+}
+
+async fn show_skill(name: &str) -> Result<()> {
+    let skills_dir = crate::runtime::config::data_dir().join("skills");
+    let target = skills_dir.join(name);
+
+    if !target.exists() {
+        anyhow::bail!("Skill '{}' not found.", name);
+    }
+
+    let skill_md = target.join("SKILL.md");
+    if skill_md.exists() {
+        let content = tokio::fs::read_to_string(&skill_md).await?;
+        println!("=== {} ===\n", skill_md.display());
+        println!("{}", content);
+    } else {
+        println!("Skill '{}' (no SKILL.md found)", name);
+        println!("Path: {}", target.display());
     }
 
     Ok(())
