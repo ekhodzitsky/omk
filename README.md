@@ -89,7 +89,7 @@ omk man > ~/.local/share/man/man1/omk.1
 
 OMK is an **external orchestrator** — it does not fork or patch Kimi CLI. It spawns real `kimi` processes, coordinates them via JSONL files, and lets you attach to any session with standard tmux commands.
 
-Read more in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Read more in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/REGISTRY.md](docs/REGISTRY.md) for hosting your own skill registry.
 
 ## 📚 Commands
 
