@@ -64,6 +64,8 @@ enum Commands {
     Skill(skill::Args),
     /// Browse skill marketplace
     Marketplace(cli::marketplace::Args),
+    /// Show version information
+    Version,
 }
 
 #[derive(Parser, Debug)]
@@ -160,6 +162,12 @@ async fn main() -> Result<()> {
         Commands::State(args) => state::run(args).await,
         Commands::Skill(args) => skill::run(args).await,
         Commands::Marketplace(args) => cli::marketplace::run(args).await,
+        Commands::Version => {
+            println!("omk {}", env!("CARGO_PKG_VERSION"));
+            println!("  Repository: {}", env!("CARGO_PKG_REPOSITORY"));
+            println!("  Rust: {}", rustc_version_runtime::version());
+            Ok(())
+        }
     }
 }
 

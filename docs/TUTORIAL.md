@@ -37,6 +37,7 @@ curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/insta
 ```bash
 omk doctor
 omk setup
+omk version
 ```
 
 ## Your First Team
