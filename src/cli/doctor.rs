@@ -91,6 +91,27 @@ pub async fn run(_args: Args) -> Result<()> {
         println!("⚠ not found. Run `omk setup` to initialize.");
     }
 
+    // Check registries
+    let config = crate::runtime::config::load_config().await.unwrap_or_default();
+    if !config.registries.is_empty() {
+        println!("  Registries:");
+        for url in &config.registries {
+            print!("    {} ... ", url);
+            let result = if url.starts_with("http://") || url.starts_with("https://") {
+                crate::marketplace::MarketplaceRegistry::fetch(url).await
+            } else {
+                crate::marketplace::MarketplaceRegistry::fetch_file(std::path::Path::new(url)).await
+            };
+            match result {
+                Ok(r) => println!("✓ {} ({} skill(s))", r.name, r.skills.len()),
+                Err(e) => {
+                    println!("✗ {}", e);
+                    issues += 1;
+                }
+            }
+        }
+    }
+
     println!();
     if issues == 0 {
         println!("✅ All checks passed. omk is ready to use.");
