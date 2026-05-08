@@ -5,7 +5,7 @@ use tracing::info;
 #[derive(Parser, Debug)]
 pub struct Args {
     #[command(subcommand)]
-    command: SkillCommands,
+    pub command: SkillCommands,
 }
 
 #[derive(Subcommand, Debug)]

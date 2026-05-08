@@ -9,7 +9,7 @@ mod runtime;
 mod skills;
 mod vis;
 
-use cli::{ask, autopilot, backup, cleanup, config_cmd, doctor, hud, ralph, skill, state, team};
+use cli::{ask, autopilot, backup, cleanup, config_cmd, doctor, hud, marketplace, ralph, skill, state, team};
 
 /// Oh My Kimi — Multi-agent orchestration for Kimi CLI
 #[derive(Parser, Debug)]
@@ -59,6 +59,8 @@ enum Commands {
     State(state::Args),
     /// Manage skills
     Skill(skill::Args),
+    /// Browse skill marketplace
+    Marketplace(marketplace::Args),
 }
 
 #[derive(Parser, Debug)]
@@ -146,6 +148,7 @@ async fn main() -> Result<()> {
         Commands::Backup(args) => backup::run(args).await,
         Commands::State(args) => state::run(args).await,
         Commands::Skill(args) => skill::run(args).await,
+        Commands::Marketplace(args) => marketplace::run(args).await,
     }
 }
 
