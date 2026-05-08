@@ -1,0 +1,9 @@
+# Global code owners
+* @ekhodzitsky
+
+# CI/CD
+.github/workflows/ @ekhodzitsky
+
+# Documentation
+docs/ @ekhodzitsky
+*.md @ekhodzitsky
