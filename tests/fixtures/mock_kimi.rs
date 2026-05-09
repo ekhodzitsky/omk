@@ -10,13 +10,14 @@ fn main() {
 
     if args.len() == 1 {
         eprintln!(
-            "Usage: mock-kimi [--version | --help | --wire | -p <prompt_file>] [--stall] [--slow]"
+            "Usage: mock-kimi [--version | --help | --wire | -p <prompt_file>] [--stall] [--slow] [--malformed]"
         );
         process::exit(1);
     }
 
     let stall = args.iter().any(|a| a == "--stall");
     let slow = args.iter().any(|a| a == "--slow");
+    let malformed = args.iter().any(|a| a == "--malformed");
 
     match args[1].as_str() {
         "--version" => {
@@ -33,10 +34,11 @@ fn main() {
             println!("  mock-kimi -p <prompt_file>   Run with a prompt file");
             println!("  mock-kimi --stall            Enable stall mode");
             println!("  mock-kimi --slow             Enable slow streaming mode");
+            println!("  mock-kimi --malformed        Emit malformed output");
             process::exit(0);
         }
-        "--wire" => run_wire_mode(stall, slow),
-        "-p" => run_prompt_mode(&args, stall, slow),
+        "--wire" => run_wire_mode(stall, slow, malformed),
+        "-p" => run_prompt_mode(&args, stall, slow, malformed),
         _ => {
             eprintln!("Unknown argument: {}", args[1]);
             process::exit(1);
@@ -44,7 +46,7 @@ fn main() {
     }
 }
 
-fn run_prompt_mode(args: &[String], stall: bool, slow: bool) {
+fn run_prompt_mode(args: &[String], stall: bool, slow: bool, malformed: bool) {
     if args.len() < 3 {
         eprintln!("Error: -p requires a prompt file argument");
         process::exit(1);
@@ -70,6 +72,11 @@ fn run_prompt_mode(args: &[String], stall: bool, slow: bool) {
     thread::sleep(delay);
 
     let preview: String = prompt.chars().take(80).collect();
+
+    if malformed {
+        println!("{{ this is not valid json");
+        process::exit(0);
+    }
 
     let lower = prompt.to_lowercase();
     if lower.contains("error") || lower.contains("fail") {
@@ -118,7 +125,7 @@ fn run_prompt_mode(args: &[String], stall: bool, slow: bool) {
     process::exit(0);
 }
 
-fn run_wire_mode(stall: bool, slow: bool) {
+fn run_wire_mode(stall: bool, slow: bool, malformed: bool) {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
 
@@ -138,6 +145,12 @@ fn run_wire_mode(stall: bool, slow: bool) {
 
         let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
         let id = req.get("id").and_then(|i| i.as_str()).unwrap_or("");
+
+        if malformed {
+            writeln!(stdout, "{{ this is not valid json").ok();
+            stdout.flush().ok();
+            break;
+        }
 
         match method {
             "initialize" => {

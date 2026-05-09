@@ -2,6 +2,7 @@ use assert_cmd::Command;
 use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use std::fs;
+use std::time::Duration;
 
 fn write_run_events(run_dir: &std::path::Path, run_id: &str) {
     let events = format!(
@@ -17,8 +18,7 @@ fn write_run_events(run_dir: &std::path::Path, run_id: &str) {
     fs::write(run_dir.join("events.jsonl"), events).unwrap();
 }
 
-fn setup_run_dir(run_id: &str) -> (tempfile::TempDir, Vec<(&'static str, std::path::PathBuf)>) {
-    let (tmp, envs) = omk::test_helpers::isolated_xdg_env();
+fn create_run_dir(envs: &[(&'static str, std::path::PathBuf)], run_id: &str) -> std::path::PathBuf {
     let xdg_state = envs
         .iter()
         .find(|(key, _)| *key == "XDG_STATE_HOME")
@@ -28,6 +28,12 @@ fn setup_run_dir(run_id: &str) -> (tempfile::TempDir, Vec<(&'static str, std::pa
     let run_dir = runs_dir.join(run_id);
     fs::create_dir_all(&run_dir).unwrap();
     write_run_events(&run_dir, run_id);
+    run_dir
+}
+
+fn setup_run_dir(run_id: &str) -> (tempfile::TempDir, Vec<(&'static str, std::path::PathBuf)>) {
+    let (tmp, envs) = omk::test_helpers::isolated_xdg_env();
+    create_run_dir(&envs, run_id);
     (tmp, envs)
 }
 
@@ -81,4 +87,29 @@ fn test_run_show_json_shortcut() {
         .stdout(contains("\"kind\": \"worker_started\""))
         .stdout(contains("\"actor\": \"worker-1\""))
         .stdout(predicates::str::contains("📋 Run timeline").not());
+}
+
+#[test]
+fn test_run_show_latest_resolves_most_recent_scheduler_run() {
+    let (_tmp, envs) = omk::test_helpers::isolated_xdg_env();
+    create_run_dir(&envs, "older-run");
+    std::thread::sleep(Duration::from_millis(30));
+    create_run_dir(&envs, "newer-run");
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+
+    cmd.arg("run")
+        .arg("show")
+        .arg("latest")
+        .arg("--kind")
+        .arg("run_completed");
+
+    cmd.assert()
+        .success()
+        .stdout(contains("📋 Run timeline — newer-run (1 events)"))
+        .stdout(contains("run_completed"))
+        .stdout(predicates::str::contains("older-run").not());
 }

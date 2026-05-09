@@ -802,7 +802,7 @@ Can run in parallel with: L3 after L2 event schema. Blocks launch demo.
 - [x] L4-017 Add filtering by worker/task/kind.
 - [x] L4-018 Add concise timeline output.
 - [x] L4-019 Add JSON output option.
-- [ ] L4-020 Add tests for latest run resolution.
+- [x] L4-020 Add tests for latest run resolution.
 
 ### L4 Verification Gates
 
@@ -917,8 +917,8 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 - [x] L6-004 Mock Kimi supports success mode.
 - [x] L6-005 Mock Kimi supports failure mode.
 - [x] L6-006 Mock Kimi supports stall mode.
-- [ ] L6-007 Mock Kimi supports slow streaming mode.
-- [ ] L6-008 Mock Kimi supports malformed output mode.
+- [x] L6-007 Mock Kimi supports slow streaming mode.
+- [x] L6-008 Mock Kimi supports malformed output mode.
 - [x] L6-009 Mock Kimi can run under CI without network.
 - [x] L6-010 Mock Kimi can be selected via config/env without touching real Kimi.
 

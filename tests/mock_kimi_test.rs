@@ -22,7 +22,8 @@ fn test_help() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(contains("mock-kimi"));
+        .stdout(contains("mock-kimi"))
+        .stdout(contains("--malformed"));
 }
 
 #[test]
@@ -217,6 +218,92 @@ fn test_wire_stall_mode_with_flag() {
         !status.success(),
         "Expected process to be killed, not exit cleanly"
     );
+}
+
+#[test]
+fn test_wire_slow_mode_emits_delayed_event() {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command as StdCommand, Stdio};
+    use std::time::{Duration, Instant};
+
+    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
+    let mut child = StdCommand::new(&bin)
+        .arg("--wire")
+        .arg("--slow")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("Failed to spawn mock-kimi");
+
+    let mut stdin = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let mut reader = BufReader::new(stdout);
+
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","method":"initialize","id":"init-1","params":{{}}}}"#
+    )
+    .unwrap();
+    stdin.flush().unwrap();
+
+    let mut line = String::new();
+    reader.read_line(&mut line).unwrap();
+    assert!(line.contains("\"protocol_version\":\"1.9\""));
+
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","method":"prompt","id":"prompt-1","params":{{"user_input":"hello world"}}}}"#
+    )
+    .unwrap();
+    stdin.flush().unwrap();
+
+    line.clear();
+    reader.read_line(&mut line).unwrap();
+    assert!(line.contains("\"status\":\"ok\""));
+
+    let started = Instant::now();
+    line.clear();
+    reader.read_line(&mut line).unwrap();
+    assert!(line.contains("turn_begin"));
+    assert!(started.elapsed() >= Duration::from_millis(800));
+
+    child.kill().expect("Failed to kill child");
+    let _ = child.wait();
+}
+
+#[test]
+fn test_wire_malformed_mode_emits_invalid_json() {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command as StdCommand, Stdio};
+
+    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
+    let mut child = StdCommand::new(&bin)
+        .arg("--wire")
+        .arg("--malformed")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("Failed to spawn mock-kimi");
+
+    let mut stdin = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let mut reader = BufReader::new(stdout);
+
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","method":"initialize","id":"init-1","params":{{}}}}"#
+    )
+    .unwrap();
+    stdin.flush().unwrap();
+
+    let mut line = String::new();
+    reader.read_line(&mut line).unwrap();
+    assert_eq!(line.trim(), "{ this is not valid json");
+
+    let status = child.wait().expect("Failed to wait on child");
+    assert!(status.success());
 }
 
 #[tokio::test]
