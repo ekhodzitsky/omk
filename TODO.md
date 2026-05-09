@@ -245,7 +245,7 @@ Tasks:
 - [x] L2-002 Add append-only JSONL writer with atomic-ish flush behavior.
 - [x] L2-003 Add event reader that tolerates partial/corrupt trailing lines.
 - [ ] L2-025 Decide run directory layout for event logs.
-- [ ] L2-026 Add public event-log naming convention (`events.jsonl` is current; decide whether `event-log.jsonl` becomes an alias).
+- [x] L2-026 Add public event-log naming convention (`events.jsonl` is current; `event-log.jsonl` is a read fallback alias).
 - [ ] L2-033 Add tests for partial trailing line.
 - [ ] L2-035 Add tests for malformed event payloads.
 
@@ -663,7 +663,7 @@ Can run in parallel with: L1 Kimi Pro Mode, L8 docs. Blocks large parts of L3/L4
 ### L2 Storage And Compatibility
 
 - [ ] L2-025 Decide run directory layout for event logs.
-- [ ] L2-026 Add public event-log naming convention (`events.jsonl` is current; decide whether `event-log.jsonl` becomes an alias).
+- [x] L2-026 Add public event-log naming convention (`events.jsonl` is current; `event-log.jsonl` is a read fallback alias).
 - [x] L2-027 Add event schema version to every event.
 - [ ] L2-028 Decide event log rotation policy; default to no rotation until a measured fixture produces oversized logs.
 - [x] L2-029 Add event reader filters by event kind, worker, task, gate, and time.
@@ -704,7 +704,7 @@ Can run in parallel with: L1, L5 after L2 schema. Coordinate heavily with L2 and
 - [x] L3-007 Emit `task_started` when worker consumes inbox task.
 - [x] L3-008 Emit `task_completed` when worker writes success to outbox.
 - [x] L3-009 Emit `task_failed` when worker writes failure to outbox.
-- [ ] L3-010 Emit `run_failed` when spawn setup fails after state dir creation.
+- [x] L3-010 Emit `run_failed` when spawn setup fails after state dir creation.
 - [x] L3-011 Emit `manual_interrupt` or shutdown event from `team shutdown`.
 - [x] L3-012 Add tests using mock worker output.
 
@@ -809,7 +809,7 @@ Can run in parallel with: L3 after L2 event schema. Blocks launch demo.
 - [x] L4-021 Define `VerificationGate` config model.
 - [x] L4-022 Support fmt gate.
 - [x] L4-023 Support lint/clippy gate.
-- [ ] L4-024 Support typecheck/check gate.
+- [x] L4-024 Support typecheck/check gate.
 - [x] L4-025 Support test gate.
 - [ ] L4-026 Support security gate placeholder.
 - [ ] L4-027 Support docs gate.
@@ -825,9 +825,9 @@ Can run in parallel with: L3 after L2 event schema. Blocks launch demo.
 
 ### L4 Completion Contract
 
-- [ ] L4-037 Make no team/autopilot/ralph run report success without a proof artifact or explicit failure artifact.
+- [x] L4-037 Make no team/autopilot/ralph run report success without a proof artifact or explicit failure artifact.
 - [x] L4-038 Add final "done contract" fields: changed files, gates run, evidence, known gaps.
-- [ ] L4-039 Add failure artifact for interrupted runs.
+- [x] L4-039 Add failure artifact for interrupted runs.
 - [x] L4-040 Add proof generation from recorded event logs without rerunning Kimi.
 - [x] L4-041 Add proof generation for partial/corrupt logs with warnings.
 
@@ -835,7 +835,7 @@ Can run in parallel with: L3 after L2 event schema. Blocks launch demo.
 
 - [x] L4-DOD-001 A proof contains changed files, gates run, command evidence, failures, retries, known gaps, and final readiness.
 - [x] L4-DOD-002 A proof can be generated from a recorded event log without rerunning Kimi.
-- [ ] L4-DOD-003 Failed and partial runs produce useful proof/failure artifacts.
+- [x] L4-DOD-003 Failed and partial runs produce useful proof/failure artifacts.
 
 ---
 
@@ -935,7 +935,7 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 
 ### L6 QA Matrix
 
-- [ ] L6-019 Test no Kimi installed.
+- [x] L6-019 Test no Kimi installed.
 - [ ] L6-020 Test Kimi installed but unauthenticated.
 - [ ] L6-021 Test no tmux installed.
 - [ ] L6-022 Test tmux session already exists.
@@ -943,7 +943,7 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 - [ ] L6-024 Test read-only project directory.
 - [ ] L6-025 Test worker dies mid-task.
 - [x] L6-026 Test gate command times out.
-- [ ] L6-027 Test proof generation after interrupted run.
+- [x] L6-027 Test proof generation after interrupted run.
 - [ ] L6-028 Test rollback after partial sync failure.
 
 ### L6 Definition Of Done

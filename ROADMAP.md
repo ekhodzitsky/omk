@@ -24,7 +24,7 @@ omk proof show latest
 
 `omk kimi sync` is Current Scaffold. `omk team run`, `omk run show`, and `omk proof show` exist today, with the remaining work focused on hardening and demo polish.
 
-The demo should show a real or mock Kimi team working in parallel, a live HUD, a stuck or failed worker being handled, verification gates running, and a final proof artifact that explains what happened.
+The demo should show a real or mock Kimi team working in parallel, a live HUD, a stuck or failed worker being handled, verification gates running, and a final proof or failure artifact that explains what happened.
 
 ## Demo Acceptance Criteria
 
@@ -38,7 +38,7 @@ The first launch demo must be reproducible.
   - one stalled worker detected by the watchdog.
 - HUD shows worker status, task status, heartbeat age, retry count, and verification status.
 - Watchdog records a recovery or terminal failure event for the stalled worker.
-- The final proof includes changed files, gates run, failures, retries, known gaps, and readiness.
+- The final proof or failure artifact includes changed files, gates run, failures, retries, known gaps, and readiness.
 - The demo script exits non-zero when proof status is `failed`.
 
 ## Milestone 0 - Stabilize Current v0

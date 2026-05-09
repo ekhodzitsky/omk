@@ -20,6 +20,10 @@ async fn test_detect_gates_rust() {
         "Rust preset should include lint gate"
     );
     assert!(
+        names.contains(&"check"),
+        "Rust preset should include check gate"
+    );
+    assert!(
         names.contains(&"tests"),
         "Rust preset should include tests gate"
     );

@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Proof-backed team run evidence**: verification gates now emit command start/finish events, capture stdout/stderr summaries and full output artifacts, feed command evidence into proofs, surface latest gate/proof status in HUD output, time out stalled Wire turns with `worker_stalled` evidence, and make the `MOCK_KIMI=1` North Star demo finish with a ready proof.
+- **Completion artifacts by default**: `omk team run` now writes `proof.json`, emits `ProofWritten`, writes `failure.json` for failed/not-ready outcomes, includes a `cargo check --all-targets` gate, and `omk team shutdown` leaves an interrupted-run failure artifact. `run show` and `proof show` also read the `event-log.jsonl` compatibility alias when the canonical `events.jsonl` file is absent.
+- **North Star smoke hardening**: the demo script tests now cover missing Kimi hints plus custom executable and non-executable `MOCK_KIMI` paths.
 - **Proof/run Wire evidence**: `omk run show` now renders compact Wire-derived method/event/request/output fields in text timelines, and `omk proof show` includes a Wire evidence summary plus explicit readiness text and malformed `events.jsonl` warnings.
 - **Kimi backup index and scoped sync output**: Kimi asset manifests now record backup metadata that links managed files to backup artifacts, rollback consults that index first, `doctor` reports backup-index drift with repair commands, and `kimi sync` output separates project-level and user-level writes.
 - **CI-safe killer demo fixture**: added `examples/killer-demo/run.sh` and deterministic fixture output covering success, failed verification, and stalled-worker outcomes without mutating real Kimi config.

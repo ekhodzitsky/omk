@@ -133,7 +133,7 @@ omk hud
 omk proof show latest
 ```
 
-The demo is successful when a user can see Kimi workers progressing in parallel, watch a stuck worker recover or fail cleanly, and inspect a final proof with changed files, gates run, failures, retries, known gaps, and final readiness.
+The demo is successful when a user can see Kimi workers progressing in parallel, watch a stuck worker recover or fail cleanly, and inspect a final proof or failure artifact with changed files, gates run, failures, retries, known gaps, and final readiness.
 
 ## Architecture
 
@@ -148,7 +148,7 @@ Runtime state:
 - worker-spec.json
 - inbox.jsonl / outbox.jsonl
 - heartbeat.json
-- events.jsonl and proof.json
+- events.jsonl (`event-log.jsonl` read alias), proof.json, and failure.json
 ```
 
 OMK is an external orchestrator. It does not fork or patch Kimi CLI. It spawns real `kimi` processes, coordinates them through state files, and lets you attach to any session with standard tmux commands.

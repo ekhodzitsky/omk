@@ -41,7 +41,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
 
 async fn cmd_show(run_id: &str, format: OutputFormat, regenerate: bool) -> Result<()> {
     let (state_dir, resolved_run_id) = crate::runtime::state::resolve_run(run_id).await?;
-    let event_log = state_dir.join(crate::runtime::config::EVENTS_FILE);
+    let event_log = crate::runtime::config::resolve_event_log_for_read(&state_dir);
 
     let proof = if regenerate || !crate::runtime::proof::Proof::proof_path(&state_dir).exists() {
         if !event_log.exists() {

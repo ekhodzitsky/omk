@@ -147,3 +147,38 @@ fn test_run_show_text_displays_wire_evidence_fields_without_raw_dump() {
         .stdout(contains("reason=stream"))
         .stdout(predicates::str::contains("request_payload").not());
 }
+
+#[test]
+fn test_run_show_reads_legacy_event_log_alias_when_canonical_absent() {
+    let (_tmp, envs) = omk::test_helpers::isolated_xdg_env();
+    let xdg_state = envs
+        .iter()
+        .find(|(key, _)| *key == "XDG_STATE_HOME")
+        .map(|(_, value)| value.clone())
+        .unwrap();
+    let run_dir = xdg_state.join("omk").join("runs").join("legacy-alias-run");
+    fs::create_dir_all(&run_dir).unwrap();
+
+    let events = r#"{"id":"e1","run_id":"legacy-alias-run","ts":"2024-01-01T00:00:00Z","schema_version":1,"kind":"run_started"}
+{"id":"e2","run_id":"legacy-alias-run","ts":"2024-01-01T00:00:01Z","schema_version":1,"kind":"run_completed"}
+"#;
+    fs::write(run_dir.join("event-log.jsonl"), events).unwrap();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+
+    cmd.arg("run")
+        .arg("show")
+        .arg("legacy-alias-run")
+        .arg("--kind")
+        .arg("run_completed");
+
+    cmd.assert()
+        .success()
+        .stdout(contains("📋 Run timeline — legacy-alias-run (1 events)"))
+        .stdout(contains("Source:"))
+        .stdout(contains("event-log.jsonl"))
+        .stdout(contains("run_completed"));
+}

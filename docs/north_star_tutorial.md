@@ -13,7 +13,7 @@ omk hud
 omk proof show latest
 ```
 
-The demo is successful when you can see Kimi workers progressing in parallel, watch a stuck worker recover or fail cleanly, and inspect a final proof with changed files, gates run, failures, retries, known gaps, and final readiness.
+The demo is successful when you can see Kimi workers progressing in parallel, watch a stuck worker recover or fail cleanly, and inspect a final proof or failure artifact with changed files, gates run, failures, retries, known gaps, and final readiness.
 
 ---
 
@@ -90,7 +90,7 @@ What happens under the hood in the target design:
 2. **Worker dispatch** — each subtask is claimed by a wire worker and written to the worker's `inbox.jsonl`.
 3. **Execution** — each worker spawns a `kimi --wire` process, sends the task, and collects results.
 4. **Polling & synthesis** — the scheduler polls worker `outbox.jsonl` files, marks tasks complete, and runs a synthesis agent to produce a final summary.
-5. **Verification gates** — `cargo fmt`, `cargo clippy`, and `cargo test` are run automatically. With `MOCK_KIMI=1`, the script first proves the fixture fails, then applies a deterministic fixture repair so the offline proof path can finish green.
+5. **Verification gates** — `cargo fmt`, `cargo check`, `cargo clippy`, and `cargo test` are run automatically. With `MOCK_KIMI=1`, the script first proves the fixture fails, then applies a deterministic fixture repair so the offline proof path can finish green.
 
 ### Step 4 — `omk hud`
 
@@ -113,13 +113,13 @@ Prints a one-shot JSON snapshot of the team:
 
 ### Step 5 — `omk proof show latest`
 
-Generates a proof report from the run's `events.jsonl`:
+Reads the run's cached `proof.json` when present, or regenerates a proof report from `events.jsonl`:
 
 > **Status:** `omk proof show` exists in the CLI today. The hardening work is in richer gate reporting, replay, and demo polish.
 
 - **Status** — `Ready`, `NotReady`, or `Failed`
 - **Changed files** — list of files modified during the run
-- **Gates** — verification results (fmt, clippy, test)
+- **Gates** — verification results (fmt, check, clippy, test)
 - **Failures** — any worker or gate failures
 - **Retries** — tasks that were retried after stale-lease recovery
 - **Known gaps** — explicitly acknowledged incomplete work
@@ -199,9 +199,11 @@ The script creates a fixture with `assert_eq!(add(2, 2), 5)`. If your Rust versi
 |------|---------|
 | `scripts/north_star_demo.sh` | The demo script (this tutorial's companion) |
 | `~/.local/state/omk/team/<name>/events.jsonl` | Event log driving HUD and proof |
+| `~/.local/state/omk/team/<name>/event-log.jsonl` | Compatibility read alias when the canonical event log is absent |
 | `~/.local/state/omk/team/<name>/workers/*/inbox.jsonl` | Tasks dispatched to each worker |
 | `~/.local/state/omk/team/<name>/workers/*/outbox.jsonl` | Results returned by each worker |
 | `~/.local/state/omk/team/<name>/proof.json` | Cached proof report |
+| `~/.local/state/omk/team/<name>/failure.json` | Failure summary emitted for failed, not-ready, or interrupted runs |
 
 ---
 

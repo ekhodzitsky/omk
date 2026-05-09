@@ -221,6 +221,7 @@ impl Autopilot {
                     if !self.yolo {
                         self.state.phase = AutopilotPhase::Failed;
                         self.save_state().await?;
+                        self.save_done_contract().await?;
                         anyhow::bail!("Autopilot failed at phase {:?}: {}", phase, e);
                     }
                 }

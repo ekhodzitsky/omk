@@ -122,7 +122,7 @@ async fn cmd_show(
     task_filter: Option<&str>,
 ) -> Result<()> {
     let (state_dir, resolved_run_id) = crate::runtime::state::resolve_run(run_id).await?;
-    let event_log = state_dir.join(crate::runtime::config::EVENTS_FILE);
+    let event_log = crate::runtime::config::resolve_event_log_for_read(&state_dir);
     let mut used_worker_reader = false;
     let mut used_task_reader = false;
     let events = if let Some(worker) = worker_filter {

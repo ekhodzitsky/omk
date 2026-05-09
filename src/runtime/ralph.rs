@@ -259,7 +259,7 @@ pub async fn run_ralph(
                 contract.gates = state.gate_results.clone();
                 contract.passed = true;
                 contract.changed_files = detect_changed_files(dir).await;
-                let _ = contract.save(&state_dir.join("done-contract.json")).await;
+                contract.save(&state_dir.join("done-contract.json")).await?;
 
                 return Ok(());
             }
@@ -412,7 +412,8 @@ pub async fn run_ralph(
                 );
                 contract.gates = gate_results;
                 contract.passed = false;
-                let _ = contract.save(&state_dir.join("done-contract.json")).await;
+                contract.changed_files = detect_changed_files(dir).await;
+                contract.save(&state_dir.join("done-contract.json")).await?;
                 anyhow::bail!("Story {} failed too many times", story_id);
             }
         }
@@ -451,7 +452,7 @@ pub async fn run_ralph(
     contract.gates = state.gate_results.clone();
     contract.passed = verified == state.prd.user_stories.len();
     contract.changed_files = detect_changed_files(dir).await;
-    let _ = contract.save(&state_dir.join("done-contract.json")).await;
+    contract.save(&state_dir.join("done-contract.json")).await?;
 
     // Record cost
     let cost = crate::cost::estimator::estimate_ralph_cost(

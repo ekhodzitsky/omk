@@ -265,6 +265,42 @@ fn test_proof_path_naming() {
 }
 
 #[test]
+fn test_proof_show_reads_legacy_event_log_alias_when_canonical_absent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (home, xdg_state) = setup_env(&tmp);
+
+    let runs_dir = xdg_state.join("omk").join("runs");
+    fs::create_dir_all(&runs_dir).unwrap();
+
+    let run_dir = runs_dir.join("legacy-proof-run");
+    fs::create_dir(&run_dir).unwrap();
+
+    let events = r#"{"id":"e1","run_id":"legacy-proof-run","ts":"2024-01-01T00:00:00Z","schema_version":1,"kind":"run_started"}
+{"id":"e2","run_id":"legacy-proof-run","ts":"2024-01-01T00:01:00Z","schema_version":1,"kind":"run_completed"}
+"#;
+    fs::write(run_dir.join("event-log.jsonl"), events).unwrap();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.env("HOME", &home)
+        .env("XDG_STATE_HOME", &xdg_state)
+        .arg("proof")
+        .arg("show")
+        .arg("--format")
+        .arg("text")
+        .arg("legacy-proof-run");
+
+    cmd.assert()
+        .success()
+        .stdout(contains("Proof Report for legacy-proof-run"))
+        .stdout(contains("Status:      not_ready"));
+
+    assert!(
+        run_dir.join("proof.json").exists(),
+        "proof.json should be generated from legacy event-log alias"
+    );
+}
+
+#[test]
 fn test_proof_show_json_includes_wire_evidence_summary() {
     let tmp = tempfile::tempdir().unwrap();
     let (home, xdg_state) = setup_env(&tmp);

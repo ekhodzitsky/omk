@@ -70,6 +70,7 @@ impl VerificationConfig {
         Self {
             gates: vec![
                 GateDef::new("format", "cargo", &["fmt", "--check"]),
+                GateDef::new("check", "cargo", &["check", "--all-targets"]),
                 GateDef::new("lint", "cargo", &["clippy", "--", "-D", "warnings"]),
                 GateDef::new("tests", "cargo", &["test"]),
             ],

@@ -10,7 +10,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::warn;
 
 /// Directory name for team state.
@@ -19,6 +19,8 @@ pub const TEAM_DIR: &str = "team";
 pub const WORKERS_DIR: &str = "workers";
 /// File name for the append-only event log.
 pub const EVENTS_FILE: &str = "events.jsonl";
+/// Legacy alias for the append-only event log (read-only fallback).
+pub const EVENTS_FILE_ALIAS: &str = "event-log.jsonl";
 /// File name for worker heartbeat JSON.
 pub const HEARTBEAT_FILE: &str = "heartbeat.json";
 /// File name for worker inbox JSONL.
@@ -134,6 +136,24 @@ pub fn legacy_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("/tmp/.omk"))
 }
 
+/// Resolve the event log path for readers.
+///
+/// Prefers the canonical `events.jsonl` and falls back to the legacy
+/// `event-log.jsonl` alias when the canonical file is absent.
+pub fn resolve_event_log_for_read(state_dir: &Path) -> PathBuf {
+    let canonical = state_dir.join(EVENTS_FILE);
+    if canonical.exists() {
+        return canonical;
+    }
+
+    let legacy_alias = state_dir.join(EVENTS_FILE_ALIAS);
+    if legacy_alias.exists() {
+        return legacy_alias;
+    }
+
+    canonical
+}
+
 /// Return the active state directory.
 /// Prefers legacy ~/.omk/ if it exists, otherwise uses XDG state dir.
 pub fn omk_state_dir() -> PathBuf {
@@ -226,5 +246,29 @@ kimi_binary = "/opt/kimi"
         assert!(config.default_yolo);
         assert!(!config.enable_metrics);
         assert_eq!(config.kimi_binary, Some("/opt/kimi".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_event_log_for_read_prefers_canonical_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path();
+        let canonical = state_dir.join(EVENTS_FILE);
+        let alias = state_dir.join(EVENTS_FILE_ALIAS);
+
+        std::fs::write(&canonical, "{}\n").unwrap();
+        std::fs::write(&alias, "{}\n").unwrap();
+
+        assert_eq!(resolve_event_log_for_read(state_dir), canonical);
+    }
+
+    #[test]
+    fn test_resolve_event_log_for_read_falls_back_to_alias() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path();
+        let alias = state_dir.join(EVENTS_FILE_ALIAS);
+
+        std::fs::write(&alias, "{}\n").unwrap();
+
+        assert_eq!(resolve_event_log_for_read(state_dir), alias);
     }
 }
