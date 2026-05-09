@@ -1,9 +1,7 @@
-#![allow(dead_code)]
-
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,7 +52,13 @@ pub enum TaskStatus {
 }
 
 impl TeamState {
-    pub fn new(name: &str, task: &str, state_dir: &Path, worker_count: usize, worker_role: &str) -> Self {
+    pub fn new(
+        name: &str,
+        task: &str,
+        state_dir: &Path,
+        worker_count: usize,
+        worker_role: &str,
+    ) -> Self {
         Self {
             version: 1,
             name: name.to_string(),
@@ -119,6 +123,8 @@ pub struct RalphState {
     pub iteration: usize,
     pub max_iterations: usize,
     pub state_dir: std::path::PathBuf,
+    #[serde(default)]
+    pub gate_results: Vec<crate::runtime::gates::GateResult>,
 }
 
 impl RalphState {
@@ -162,6 +168,97 @@ pub enum StoryStatus {
     Implemented,
     Verified,
     Failed,
+}
+
+/// Resolve a run ID (or "latest") to a state directory path and the resolved run ID.
+pub async fn resolve_run(run_id: &str) -> Result<(PathBuf, String)> {
+    if run_id == "latest" {
+        // Try team runs first
+        let team_runs_dir =
+            crate::runtime::config::omk_state_dir().join(crate::runtime::config::TEAM_DIR);
+        if team_runs_dir.exists() {
+            let mut entries = tokio::fs::read_dir(&team_runs_dir).await?;
+            let mut runs = vec![];
+            while let Some(entry) = entries.next_entry().await? {
+                if entry.file_type().await?.is_dir() {
+                    runs.push(entry.path());
+                }
+            }
+            sort_runs_by_mtime_desc(&mut runs).await;
+            if let Some(latest) = runs.first() {
+                return Ok((
+                    latest.clone(),
+                    latest
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                ));
+            }
+        }
+
+        // Try scheduler runs
+        let runs_dir = crate::runtime::config::state_dir().join("runs");
+        if runs_dir.exists() {
+            let mut entries = tokio::fs::read_dir(&runs_dir).await?;
+            let mut runs = vec![];
+            while let Some(entry) = entries.next_entry().await? {
+                if entry.file_type().await?.is_dir() {
+                    runs.push(entry.path());
+                }
+            }
+            sort_runs_by_mtime_desc(&mut runs).await;
+            if let Some(latest) = runs.first() {
+                return Ok((
+                    latest.clone(),
+                    latest
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                ));
+            }
+        }
+
+        anyhow::bail!("No runs found");
+    }
+
+    // Direct run ID lookup
+    let team_dir = crate::runtime::config::omk_state_dir()
+        .join(crate::runtime::config::TEAM_DIR)
+        .join(run_id);
+    if team_dir.exists() {
+        return Ok((team_dir, run_id.to_string()));
+    }
+
+    let scheduler_dir = crate::runtime::config::state_dir()
+        .join("runs")
+        .join(run_id);
+    if scheduler_dir.exists() {
+        return Ok((scheduler_dir, run_id.to_string()));
+    }
+
+    anyhow::bail!("Run '{}' not found", run_id);
+}
+
+async fn sort_runs_by_mtime_desc(runs: &mut Vec<PathBuf>) {
+    let mut with_mtime = Vec::with_capacity(runs.len());
+    for path in runs.drain(..) {
+        let mtime = tokio::fs::metadata(&path)
+            .await
+            .ok()
+            .and_then(|m| m.modified().ok());
+        with_mtime.push((path, mtime));
+    }
+
+    with_mtime.sort_by(|a, b| match (a.1, b.1) {
+        (Some(ta), Some(tb)) => tb.cmp(&ta).then_with(|| b.0.cmp(&a.0)),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => b.0.cmp(&a.0),
+    });
+
+    runs.extend(with_mtime.into_iter().map(|(path, _)| path));
 }
 
 #[cfg(test)]

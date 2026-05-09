@@ -12,12 +12,10 @@ pub async fn migrate_if_needed(path: &Path) -> Result<()> {
         return Ok(());
     }
     let raw = tokio::fs::read_to_string(path).await?;
-    let mut value: Value = serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))?;
+    let mut value: Value =
+        serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))?;
 
-    let version = value
-        .get("version")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
+    let version = value.get("version").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
 
     if version > CURRENT_VERSION {
         bail!(

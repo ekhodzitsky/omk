@@ -1,5 +1,5 @@
 .PHONY: build test install release lint fmt check clean doc \
-        completions man docker smoke doctor setup \
+        completions man docker smoke doctor setup repo-map wire-smoke \
         install-completions install-man bench profile
 
 BINARY_NAME = omk
@@ -80,6 +80,12 @@ doctor: build
 
 setup: build
 	./target/release/$(BINARY_NAME) setup
+
+repo-map:
+	./scripts/repo-map.sh
+
+wire-smoke:
+	./scripts/kimi-wire-smoke.sh
 
 # Benchmarks
 bench:

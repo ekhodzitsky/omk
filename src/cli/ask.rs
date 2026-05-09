@@ -6,7 +6,7 @@ use crate::runtime::ask::{self, is_known_provider};
 
 /// Ask a provider advisor (cross-consultation)
 #[derive(Parser, Debug, Clone)]
-pub struct Args {
+pub(crate) struct Args {
     /// Provider: claude, codex, gemini, kimi
     #[arg(value_name = "PROVIDER", default_value = "")]
     pub provider: String,
@@ -36,7 +36,7 @@ pub struct Args {
     pub timeout: u64,
 }
 
-pub async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args) -> Result<()> {
     let mut provider = args.provider;
     let mut prompt_parts = args.prompt;
 
@@ -55,7 +55,7 @@ pub async fn run(args: Args) -> Result<()> {
 
     if all || !args.providers.is_empty() {
         let providers = if args.providers.is_empty() {
-            ask::available_providers()
+            ask::available_providers().await
         } else {
             args.providers.iter().map(|s| s.as_str()).collect()
         };
@@ -67,7 +67,7 @@ pub async fn run(args: Args) -> Result<()> {
         info!(providers = ?providers, "Asking providers");
         let outputs = ask::ask_providers(&providers, &prompt, args.save, args.timeout).await?;
 
-        if !args.no_synthesis && ask::is_provider_installed("kimi") && outputs.len() > 1 {
+        if !args.no_synthesis && ask::is_provider_installed("kimi").await && outputs.len() > 1 {
             info!("Synthesizing with Kimi");
             let synthesis = ask::synthesize(&prompt, &outputs, args.save).await?;
             println!("{}", synthesis);

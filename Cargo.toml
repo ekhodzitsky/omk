@@ -1,6 +1,7 @@
 [package]
 name = "omk"
 version = "0.2.4"
+default-run = "omk"
 edition = "2021"
 authors = ["oh-my-kimi contributors"]
 description = "Multi-agent orchestration for Kimi CLI"
@@ -17,6 +18,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "omk"
 path = "src/main.rs"
+
+[[bin]]
+name = "mock-kimi"
+path = "tests/fixtures/mock_kimi.rs"
 
 [dependencies]
 # Async runtime
@@ -52,6 +57,7 @@ uuid = { version = "1.16", features = ["v4", "serde"] }
 # Filesystem & paths
 dirs = "6.0"
 walkdir = "2.5"
+which = "7.0"
 
 # TUI (optional for now, enabled by default)
 ratatui = { version = "0.29", optional = true }
@@ -66,6 +72,7 @@ shlex = "1.3.0"
 clap_complete = "4.5"
 clap_mangen = "0.2"
 tempfile = "3.19"
+glob = "0.3.3"
 
 [features]
 default = ["tui"]

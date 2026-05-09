@@ -1,0 +1,362 @@
+use anyhow::Result;
+use serde::Serialize;
+use std::path::Path;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    Ok,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DiagResult {
+    pub severity: Severity,
+    pub message: String,
+    pub fix_hint: Option<String>,
+}
+
+pub async fn diagnose_project(dir: &Path) -> Result<Vec<DiagResult>> {
+    let mut results = Vec::new();
+    let kimi_dir = dir.join(".kimi");
+    let agents_dir = kimi_dir.join("agents");
+    let hooks_dir = kimi_dir.join("hooks");
+
+    // Check .kimi/ directory exists
+    if kimi_dir.exists() {
+        results.push(DiagResult {
+            severity: Severity::Ok,
+            message: format!(".kimi/ directory found at {}", kimi_dir.display()),
+            fix_hint: None,
+        });
+    } else {
+        results.push(DiagResult {
+            severity: Severity::Warning,
+            message: format!(".kimi/ directory not found at {}", kimi_dir.display()),
+            fix_hint: Some("Run `omk kimi install` to create it".to_string()),
+        });
+    }
+
+    // Check agents
+    let expected_agents = [
+        "architect",
+        "executor",
+        "verifier",
+        "reviewer",
+        "security",
+        "explore",
+    ];
+    let mut missing_agents = vec![];
+    for agent in &expected_agents {
+        let agent_dir = agents_dir.join(agent);
+        let spec = agent_dir.join("agent.yaml");
+        let prompt = agent_dir.join("system.md");
+        if spec.exists() && prompt.exists() {
+            // Structural validation (L1-032)
+            match tokio::fs::read_to_string(&spec).await {
+                Ok(content) => {
+                    match serde_yaml::from_str::<crate::kimi_native::agent_spec::AgentSpec>(
+                        &content,
+                    ) {
+                        Ok(spec) => {
+                            let mut issues = vec![];
+                            if spec.version == 0 {
+                                issues.push("missing or zero version");
+                            }
+                            if spec.agent.name.is_empty() {
+                                issues.push("missing agent.name");
+                            }
+                            if spec.agent.system_prompt_path.is_empty() {
+                                issues.push("missing agent.system_prompt_path");
+                            }
+                            if issues.is_empty() {
+                                results.push(DiagResult {
+                                    severity: Severity::Ok,
+                                    message: format!("Agent '{}' spec is valid", agent),
+                                    fix_hint: None,
+                                });
+                            } else {
+                                results.push(DiagResult {
+                                    severity: Severity::Warning,
+                                    message: format!(
+                                        "Agent '{}' spec invalid: {}",
+                                        agent,
+                                        issues.join(", ")
+                                    ),
+                                    fix_hint: Some(format!(
+                                        "Run `omk kimi sync` to regenerate {}",
+                                        agent
+                                    )),
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            results.push(DiagResult {
+                                severity: Severity::Warning,
+                                message: format!("Agent '{}' spec is invalid YAML: {}", agent, e),
+                                fix_hint: Some(format!(
+                                    "Run `omk kimi sync` to regenerate {}",
+                                    agent
+                                )),
+                            });
+                        }
+                    }
+                }
+                Err(e) => {
+                    results.push(DiagResult {
+                        severity: Severity::Error,
+                        message: format!("Cannot read agent '{}' spec: {}", agent, e),
+                        fix_hint: None,
+                    });
+                }
+            }
+        } else {
+            missing_agents.push(*agent);
+        }
+    }
+
+    if !missing_agents.is_empty() {
+        results.push(DiagResult {
+            severity: Severity::Warning,
+            message: format!("Missing agents: {}", missing_agents.join(", ")),
+            fix_hint: Some("Run `omk kimi install` or `omk kimi sync`".to_string()),
+        });
+    }
+
+    // Check hooks (L1-033)
+    let expected_hooks = ["safety-check.sh", "completion-check.sh", "notify.sh"];
+    let mut missing_hooks = vec![];
+    for hook in &expected_hooks {
+        let path = hooks_dir.join(hook);
+        if path.exists() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(meta) = tokio::fs::metadata(&path).await {
+                    let mode = meta.permissions().mode();
+                    if mode & 0o111 != 0 {
+                        results.push(DiagResult {
+                            severity: Severity::Ok,
+                            message: format!("Hook '{}' is executable", hook),
+                            fix_hint: None,
+                        });
+                    } else {
+                        results.push(DiagResult {
+                            severity: Severity::Warning,
+                            message: format!("Hook '{}' is not executable", hook),
+                            fix_hint: Some(format!("chmod +x {}", path.display())),
+                        });
+                    }
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                results.push(DiagResult {
+                    severity: Severity::Ok,
+                    message: format!("Hook '{}' exists", hook),
+                    fix_hint: None,
+                });
+            }
+        } else {
+            missing_hooks.push(*hook);
+        }
+    }
+
+    if !missing_hooks.is_empty() {
+        results.push(DiagResult {
+            severity: Severity::Warning,
+            message: format!("Missing hooks: {}", missing_hooks.join(", ")),
+            fix_hint: Some("Run `omk kimi install` or `omk kimi sync`".to_string()),
+        });
+    }
+
+    // Check hook configs reference existing scripts (L1-033)
+    let hook_configs_to_check = ["hooks.toml.example", "config.toml"];
+    for config_name in &hook_configs_to_check {
+        let config_path = kimi_dir.join(config_name);
+        if config_path.exists() {
+            match tokio::fs::read_to_string(&config_path).await {
+                Ok(content) => match toml::from_str::<HookConfigWrapper>(&content) {
+                    Ok(wrapper) => {
+                        let mut dangling = vec![];
+                        for hook in &wrapper.hooks {
+                            let cmd_path = dir.join(&hook.command);
+                            if !cmd_path.exists() {
+                                dangling.push(hook.command.clone());
+                            }
+                        }
+                        if dangling.is_empty() {
+                            results.push(DiagResult {
+                                severity: Severity::Ok,
+                                message: format!(
+                                    "Hook config '{}' references valid scripts",
+                                    config_name
+                                ),
+                                fix_hint: None,
+                            });
+                        } else {
+                            results.push(DiagResult {
+                                severity: Severity::Warning,
+                                message: format!(
+                                    "Hook config '{}' references missing scripts: {}",
+                                    config_name,
+                                    dangling.join(", ")
+                                ),
+                                fix_hint: Some(
+                                    "Run `omk kimi sync` to restore missing hook scripts"
+                                        .to_string(),
+                                ),
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        results.push(DiagResult {
+                            severity: Severity::Warning,
+                            message: format!(
+                                "Hook config '{}' is invalid TOML: {}",
+                                config_name, e
+                            ),
+                            fix_hint: Some(format!("Review and fix {}", config_path.display())),
+                        });
+                    }
+                },
+                Err(e) => {
+                    results.push(DiagResult {
+                        severity: Severity::Warning,
+                        message: format!("Cannot read hook config '{}': {}", config_name, e),
+                        fix_hint: None,
+                    });
+                }
+            }
+        }
+    }
+
+    // Check for AGENTS.md
+    let agents_md = dir.join("AGENTS.md");
+    if agents_md.exists() {
+        results.push(DiagResult {
+            severity: Severity::Ok,
+            message: "AGENTS.md found".to_string(),
+            fix_hint: None,
+        });
+    } else {
+        results.push(DiagResult {
+            severity: Severity::Warning,
+            message: "AGENTS.md not found".to_string(),
+            fix_hint: Some("Create AGENTS.md with project conventions".to_string()),
+        });
+    }
+
+    // Check for asset manifest
+    let manifest_path = dir.join(".kimi").join("omk-manifest.json");
+    if manifest_path.exists() {
+        match crate::kimi_native::manifest::AssetManifest::load(dir).await {
+            Ok(Some(manifest)) => {
+                results.push(DiagResult {
+                    severity: Severity::Ok,
+                    message: format!(
+                        "Asset manifest found (OMK v{}, {} files)",
+                        manifest.omk_version,
+                        manifest.files.len()
+                    ),
+                    fix_hint: None,
+                });
+                let drifted = manifest.drifted_files(dir).await;
+                for (path, expected) in drifted {
+                    match expected {
+                        None => {
+                            results.push(DiagResult {
+                                severity: Severity::Warning,
+                                message: format!("Missing manifest file: {}", path.display()),
+                                fix_hint: Some(
+                                    "Run `omk kimi sync` to restore missing files".to_string(),
+                                ),
+                            });
+                        }
+                        Some(checksum) => {
+                            results.push(DiagResult {
+                                severity: Severity::Warning,
+                                message: format!(
+                                    "File content drift detected: {} (expected: {})",
+                                    path.display(),
+                                    checksum
+                                ),
+                                fix_hint: Some(
+                                    "Run `omk kimi sync` to restore drifted files".to_string(),
+                                ),
+                            });
+                        }
+                    }
+                }
+            }
+            Ok(None) => {
+                results.push(DiagResult {
+                    severity: Severity::Warning,
+                    message: "Asset manifest not found".to_string(),
+                    fix_hint: Some("Run `omk kimi sync` to generate a manifest".to_string()),
+                });
+            }
+            Err(e) => {
+                results.push(DiagResult {
+                    severity: Severity::Warning,
+                    message: format!("Cannot read asset manifest: {}", e),
+                    fix_hint: None,
+                });
+            }
+        }
+    } else {
+        results.push(DiagResult {
+            severity: Severity::Warning,
+            message: "Asset manifest not found".to_string(),
+            fix_hint: Some("Run `omk kimi sync` to generate a manifest".to_string()),
+        });
+    }
+
+    // Check for Kimi CLI (L1-031)
+    match which::which("kimi") {
+        Ok(path) => {
+            match tokio::process::Command::new("kimi")
+                .arg("--version")
+                .output()
+                .await
+            {
+                Ok(output) if output.status.success() => {
+                    let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    results.push(DiagResult {
+                        severity: Severity::Ok,
+                        message: format!("Kimi CLI {} at {}", version, path.display()),
+                        fix_hint: None,
+                    });
+                }
+                _ => {
+                    results.push(DiagResult {
+                        severity: Severity::Warning,
+                        message: format!(
+                            "Kimi CLI found at {} but could not determine version",
+                            path.display()
+                        ),
+                        fix_hint: Some("Ensure `kimi --version` works".to_string()),
+                    });
+                }
+            }
+        }
+        Err(_) => {
+            results.push(DiagResult {
+                severity: Severity::Error,
+                message: "Kimi CLI not found in PATH".to_string(),
+                fix_hint: Some(
+                    "Install Kimi CLI: https://github.com/moonshotai/Kimi-Chat".to_string(),
+                ),
+            });
+        }
+    }
+
+    Ok(results)
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct HookConfigWrapper {
+    #[serde(default)]
+    hooks: Vec<crate::kimi_native::hook_spec::HookConfig>,
+}

@@ -1,6 +1,5 @@
-#![allow(dead_code)]
-
 // Ralph persistent loop — prd.json + verify/fix
+#![allow(dead_code)] // API surface for future features (verify_story, story escalation)
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -10,6 +9,10 @@ use regex::Regex;
 use tokio::process::Command;
 use tracing::{error, info, warn};
 
+use crate::runtime::gates::{
+    detect_changed_files, format_gate_summary, gates_passed, load_or_detect_gates, run_gates,
+    DoneContract,
+};
 use crate::runtime::state::{Prd, RalphState, StoryStatus, UserStory};
 
 static WORD_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b\w+\b").unwrap());
@@ -69,7 +72,9 @@ pub fn generate_prd(task: &str) -> Prd {
             }],
         }
     } else {
-        Prd { user_stories: stories }
+        Prd {
+            user_stories: stories,
+        }
     }
 }
 
@@ -115,27 +120,49 @@ pub fn state_dir_for(_dir: &Path, task: &str) -> PathBuf {
 }
 
 /// Run the Ralph persistent loop.
-pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bool, yolo: bool) -> Result<()> {
+pub async fn run_ralph(
+    task: &str,
+    dir: &Path,
+    max_iterations: usize,
+    resume: bool,
+    yolo: bool,
+) -> Result<()> {
     info!(task = %task, dir = %dir.display(), max_iterations, resume, yolo, "Starting Ralph persistent loop");
 
+    let started_at = chrono::Utc::now();
+    let agents_md = match crate::agents::load_project_agents(dir).await {
+        Ok(Some(m)) => Some(m),
+        _ => None,
+    };
+    let gate_config = load_or_detect_gates(dir).await;
     let state_dir = state_dir_for(dir, task);
     tokio::fs::create_dir_all(&state_dir).await?;
 
     let mut state = if resume {
         match RalphState::load(&state_dir).await {
             Ok(mut existing) => {
-                info!(iteration = existing.iteration, "Resumed existing Ralph state");
+                info!(
+                    iteration = existing.iteration,
+                    "Resumed existing Ralph state"
+                );
                 existing.max_iterations = max_iterations;
                 existing
             }
             Err(_) => {
-                anyhow::bail!("No existing Ralph state found for '{}' at {}", task, state_dir.display());
+                anyhow::bail!(
+                    "No existing Ralph state found for '{}' at {}",
+                    task,
+                    state_dir.display()
+                );
             }
         }
     } else {
         match RalphState::load(&state_dir).await {
             Ok(mut existing) => {
-                info!(iteration = existing.iteration, "Resumed existing Ralph state");
+                info!(
+                    iteration = existing.iteration,
+                    "Resumed existing Ralph state"
+                );
                 existing.max_iterations = max_iterations;
                 existing
             }
@@ -149,6 +176,7 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bo
                     iteration: 0,
                     max_iterations,
                     state_dir: state_dir.clone(),
+                    gate_results: vec![],
                 }
             }
         }
@@ -162,6 +190,14 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bo
     println!("  Stories: {}", state.prd.user_stories.len());
     println!("  Max iterations: {}", max_iterations);
     println!("  State dir: {}", state_dir.display());
+
+    // Show rough cost estimate
+    let rough_estimate = crate::cost::estimator::estimate_ralph_cost(
+        300,
+        max_iterations,
+        state.prd.user_stories.len(),
+    );
+    println!("  Estimated cost: {}", rough_estimate.formatted());
 
     let mut consecutive_failures: HashMap<String, usize> = HashMap::new();
 
@@ -182,6 +218,49 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bo
                 info!("All stories verified — Ralph loop complete");
                 println!("✓ All user stories verified. Ralph complete.");
                 state.save().await?;
+
+                // Record cost
+                let duration = chrono::Utc::now()
+                    .signed_duration_since(started_at)
+                    .num_seconds()
+                    .max(0) as u64;
+                let verified = state
+                    .prd
+                    .user_stories
+                    .iter()
+                    .filter(|s| matches!(s.status, StoryStatus::Verified))
+                    .count();
+                let cost = crate::cost::estimator::estimate_ralph_cost(
+                    duration,
+                    state.iteration,
+                    state.prd.user_stories.len(),
+                );
+                let _ = crate::runtime::session::record_session_end(
+                    "ralph",
+                    task,
+                    started_at,
+                    cost,
+                    crate::notifications::NotificationEvent::RalphComplete {
+                        name: task.to_string(),
+                        duration_secs: duration,
+                        iterations: state.iteration,
+                        verified,
+                        total: state.prd.user_stories.len(),
+                    },
+                )
+                .await;
+
+                // Save done contract
+                let mut contract = DoneContract::new(
+                    &format!("ralph-{}", slugify_task(task)),
+                    "ralph",
+                    started_at,
+                );
+                contract.gates = state.gate_results.clone();
+                contract.passed = true;
+                contract.changed_files = detect_changed_files(dir).await;
+                let _ = contract.save(&state_dir.join("done-contract.json")).await;
+
                 return Ok(());
             }
         };
@@ -197,18 +276,33 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bo
 
         if failures >= 3 {
             warn!(story_id = %story_id, "Escalating to architect after 3 failures");
-            println!("  ⚠ Escalating {} to architect (3 failed attempts)", story_id);
+            println!(
+                "  ⚠ Escalating {} to architect (3 failed attempts)",
+                story_id
+            );
 
-            let escalation_prompt = format!(
+            let base_escalation = format!(
                 "Architect review needed for story {}: {}. \
                 Previous implementation attempts failed {} times. \
                 Provide a detailed implementation plan.",
                 story_id, story_desc, failures
             );
+            let escalation_prompt = if let Some(ref manifest) = agents_md {
+                format!(
+                    "{}\n\n{}",
+                    base_escalation,
+                    crate::agents::inject_agents_context(manifest, task, "architect")
+                )
+            } else {
+                base_escalation
+            };
 
             match run_kimi(&escalation_prompt, dir).await {
                 Ok(output) => {
-                    info!(output_len = output.len(), "Architect escalation response received");
+                    info!(
+                        output_len = output.len(),
+                        "Architect escalation response received"
+                    );
                     println!("  Architect provided guidance ({} bytes)", output.len());
                 }
                 Err(e) => {
@@ -223,7 +317,7 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bo
         state.prd.user_stories[story_idx].status = StoryStatus::InProgress;
         state.save().await?;
 
-        let impl_prompt = format!(
+        let base_impl = format!(
             "Implement the following user story precisely. \
             Make minimal, focused changes. Run tests after implementing.\n\n\
             Story ID: {}\nDescription: {}\nAcceptance Criteria:\n- {}\n\n\
@@ -234,10 +328,22 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bo
                 .acceptance_criteria
                 .join("\n- ")
         );
+        let impl_prompt = if let Some(ref manifest) = agents_md {
+            format!(
+                "{}\n\n{}",
+                base_impl,
+                crate::agents::inject_agents_context(manifest, task, "implementer")
+            )
+        } else {
+            base_impl
+        };
 
-        let kimi_output = match run_kimi(&impl_prompt, dir).await {
+        let _kimi_output = match run_kimi(&impl_prompt, dir).await {
             Ok(output) => {
-                info!(output_len = output.len(), "Implementation response received");
+                info!(
+                    output_len = output.len(),
+                    "Implementation response received"
+                );
                 output
             }
             Err(e) => {
@@ -250,18 +356,34 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bo
         state.save().await?;
 
         println!("  Verifying {}...", story_id);
-        let tests_pass = match run_tests(dir).await {
-            Ok(pass) => {
-                info!(tests_pass = pass, "Test verification complete");
-                pass
+
+        let gate_results = if gate_config.gates.is_empty() {
+            // No gates configured — fall back to old behavior (just tests)
+            match run_tests(dir).await {
+                Ok(true) => vec![],
+                _ => {
+                    vec![crate::runtime::gates::GateResult {
+                        name: "tests".to_string(),
+                        passed: false,
+                        stdout: String::new(),
+                        stderr: "No gates configured and tests failed".to_string(),
+                        duration_ms: 0,
+                        required: true,
+                    }]
+                }
             }
-            Err(e) => {
-                warn!(error = %e, "Test command failed");
-                false
-            }
+        } else {
+            let results = run_gates(&gate_config, dir).await;
+            state.gate_results = results.clone();
+            println!("{}", format_gate_summary(&results));
+            results
         };
 
-        let passed = verify_story(&state.prd.user_stories[story_idx], &kimi_output, tests_pass);
+        let passed = if gate_config.gates.is_empty() {
+            matches!(run_tests(dir).await, Ok(true))
+        } else {
+            gates_passed(&gate_results)
+        };
 
         if passed {
             state.prd.user_stories[story_idx].status = StoryStatus::Verified;
@@ -275,6 +397,15 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bo
             if !yolo && new_failures >= 3 {
                 println!("  ⚠ Max failures reached. Use --yolo to continue.");
                 state.save().await?;
+                // Save done contract before bail
+                let mut contract = DoneContract::new(
+                    &format!("ralph-{}", slugify_task(task)),
+                    "ralph",
+                    started_at,
+                );
+                contract.gates = gate_results;
+                contract.passed = false;
+                let _ = contract.save(&state_dir.join("done-contract.json")).await;
                 anyhow::bail!("Story {} failed too many times", story_id);
             }
         }
@@ -292,17 +423,73 @@ pub async fn run_ralph(task: &str, dir: &Path, max_iterations: usize, resume: bo
     println!("Ralph: reached max iterations ({})", max_iterations);
     info!("Ralph reached max iterations");
     state.save().await?;
+
+    let duration = chrono::Utc::now()
+        .signed_duration_since(started_at)
+        .num_seconds()
+        .max(0) as u64;
+    let verified = state
+        .prd
+        .user_stories
+        .iter()
+        .filter(|s| matches!(s.status, StoryStatus::Verified))
+        .count();
+
+    // Save done contract
+    let mut contract = DoneContract::new(
+        &format!("ralph-{}", slugify_task(task)),
+        "ralph",
+        started_at,
+    );
+    contract.gates = state.gate_results.clone();
+    contract.passed = verified == state.prd.user_stories.len();
+    contract.changed_files = detect_changed_files(dir).await;
+    let _ = contract.save(&state_dir.join("done-contract.json")).await;
+
+    // Record cost
+    let cost = crate::cost::estimator::estimate_ralph_cost(
+        duration,
+        state.iteration,
+        state.prd.user_stories.len(),
+    );
+    let _ = crate::runtime::session::record_session_end(
+        "ralph",
+        task,
+        started_at,
+        cost,
+        crate::notifications::NotificationEvent::RalphComplete {
+            name: task.to_string(),
+            duration_secs: duration,
+            iterations: state.iteration,
+            verified,
+            total: state.prd.user_stories.len(),
+        },
+    )
+    .await;
+
     Ok(())
 }
 
 fn print_progress(state: &RalphState) {
-    let verified = state.prd.user_stories.iter().filter(|s| matches!(s.status, StoryStatus::Verified)).count();
-    let failed = state.prd.user_stories.iter().filter(|s| matches!(s.status, StoryStatus::Failed)).count();
+    let verified = state
+        .prd
+        .user_stories
+        .iter()
+        .filter(|s| matches!(s.status, StoryStatus::Verified))
+        .count();
+    let failed = state
+        .prd
+        .user_stories
+        .iter()
+        .filter(|s| matches!(s.status, StoryStatus::Failed))
+        .count();
     let total = state.prd.user_stories.len();
 
     println!();
-    println!("🔄 Ralph: {}/{} stories verified, {} failed (iteration {}/{})",
-        verified, total, failed, state.iteration, state.max_iterations);
+    println!(
+        "🔄 Ralph: {}/{} stories verified, {} failed (iteration {}/{})",
+        verified, total, failed, state.iteration, state.max_iterations
+    );
     for story in &state.prd.user_stories {
         let icon = match story.status {
             StoryStatus::Verified => "✓",

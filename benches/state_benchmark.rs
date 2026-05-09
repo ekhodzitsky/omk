@@ -37,7 +37,9 @@ fn bench_atomic_write(c: &mut Criterion) {
 
     c.bench_function("atomic_write_1mb", |b| {
         b.to_async(&rt).iter(|| async {
-            omk::runtime::atomic::atomic_write(&path, &content).await.unwrap();
+            omk::runtime::atomic::atomic_write(&path, &content)
+                .await
+                .unwrap();
         });
     });
 }

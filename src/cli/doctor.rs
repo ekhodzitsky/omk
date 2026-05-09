@@ -1,11 +1,11 @@
 use anyhow::Result;
 use clap::Parser;
-use std::process::Command;
+use tokio::process::Command;
 
 #[derive(Parser, Debug)]
-pub struct Args {}
+pub(crate) struct Args {}
 
-pub async fn run(_args: Args) -> Result<()> {
+pub(crate) async fn run(_args: Args) -> Result<()> {
     println!("🔍 omk doctor");
     println!();
 
@@ -13,7 +13,7 @@ pub async fn run(_args: Args) -> Result<()> {
 
     // Check tmux
     print!("  tmux .................. ");
-    match check_cmd("tmux", &["-V"]) {
+    match check_cmd("tmux", &["-V"]).await {
         Ok(out) => println!("✓ {}", out.trim()),
         Err(e) => {
             println!("✗ {}", e);
@@ -23,7 +23,7 @@ pub async fn run(_args: Args) -> Result<()> {
 
     // Check kimi
     print!("  kimi CLI .............. ");
-    match check_cmd("kimi", &["--version"]) {
+    match check_cmd("kimi", &["--version"]).await {
         Ok(out) => println!("✓ {}", out.trim()),
         Err(e) => {
             println!("✗ {}", e);
@@ -33,7 +33,7 @@ pub async fn run(_args: Args) -> Result<()> {
 
     // Check Rust (optional, for dev)
     print!("  Rust .................. ");
-    match check_cmd("rustc", &["--version"]) {
+    match check_cmd("rustc", &["--version"]).await {
         Ok(out) => println!("✓ {}", out.trim()),
         Err(_) => println!("⚠ not installed (optional for dev)"),
     }
@@ -83,9 +83,23 @@ pub async fn run(_args: Args) -> Result<()> {
     print!("  Bundled skills ........ ");
     let skills_dir = data_dir.join("skills");
     if skills_dir.exists() {
-        let count = std::fs::read_dir(&skills_dir)
-            .map(|d| d.filter(|e| e.as_ref().map(|e| e.path().is_dir()).unwrap_or(false)).count())
-            .unwrap_or(0);
+        let count = match tokio::fs::read_dir(&skills_dir).await {
+            Ok(mut d) => {
+                let mut count = 0;
+                while let Ok(Some(entry)) = d.next_entry().await {
+                    if entry
+                        .file_type()
+                        .await
+                        .map(|ft| ft.is_dir())
+                        .unwrap_or(false)
+                    {
+                        count += 1;
+                    }
+                }
+                count
+            }
+            Err(_) => 0,
+        };
         println!("✓ {} skill(s) in {}", count, skills_dir.display());
     } else {
         println!("⚠ not found. Run `omk setup` to initialize.");
@@ -97,18 +111,16 @@ pub async fn run(_args: Args) -> Result<()> {
     let agents_path = project_dir.join(".omk").join("AGENTS.md");
     if agents_path.exists() {
         match tokio::fs::read_to_string(&agents_path).await {
-            Ok(content) => {
-                match crate::agents::parser::parse_agents_md(&content) {
-                    Ok(manifest) => {
-                        let name = manifest.name.as_deref().unwrap_or("(unnamed)");
-                        println!("✓ {} ({} agent(s))", name, manifest.agents.len());
-                    }
-                    Err(e) => {
-                        println!("⚠ Invalid format: {}", e);
-                        issues += 1;
-                    }
+            Ok(content) => match crate::agents::parser::parse_agents_md(&content) {
+                Ok(manifest) => {
+                    let name = manifest.name.as_deref().unwrap_or("(unnamed)");
+                    println!("✓ {} ({} agent(s))", name, manifest.agents.len());
                 }
-            }
+                Err(e) => {
+                    println!("⚠ Invalid format: {}", e);
+                    issues += 1;
+                }
+            },
             Err(e) => {
                 println!("✗ Cannot read: {}", e);
                 issues += 1;
@@ -118,8 +130,20 @@ pub async fn run(_args: Args) -> Result<()> {
         println!("⚠ not found. Run `omk setup` to create.");
     }
 
+    // Check gates
+    print!("  Verification gates .... ");
+    let gate_config = crate::runtime::gates::load_or_detect_gates(&project_dir).await;
+    if gate_config.gates.is_empty() {
+        println!("⚠ no gates configured (unknown project type)");
+    } else {
+        let names: Vec<String> = gate_config.gates.iter().map(|g| g.name.clone()).collect();
+        println!("✓ {} gate(s): {}", names.len(), names.join(", "));
+    }
+
     // Check registries
-    let config = crate::runtime::config::load_config().await.unwrap_or_default();
+    let config = crate::runtime::config::load_config()
+        .await
+        .unwrap_or_default();
     if !config.registries.is_empty() {
         println!("  Registries:");
         for url in &config.registries {
@@ -143,16 +167,20 @@ pub async fn run(_args: Args) -> Result<()> {
     if issues == 0 {
         println!("✅ All checks passed. omk is ready to use.");
     } else {
-        println!("⚠️  Found {} issue(s). Please fix them before using omk.", issues);
+        println!(
+            "⚠️  Found {} issue(s). Please fix them before using omk.",
+            issues
+        );
     }
 
     Ok(())
 }
 
-fn check_cmd(cmd: &str, args: &[&str]) -> Result<String> {
+async fn check_cmd(cmd: &str, args: &[&str]) -> Result<String> {
     let output = Command::new(cmd)
         .args(args)
         .output()
+        .await
         .map_err(|e| anyhow::anyhow!("{} not found ({e})", cmd))?;
 
     if !output.status.success() {

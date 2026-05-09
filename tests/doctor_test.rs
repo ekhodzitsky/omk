@@ -1,8 +1,17 @@
 use std::process::Command;
 
+fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, std::path::PathBuf)>) {
+    omk::test_helpers::isolated_xdg_env()
+}
+
 #[test]
 fn test_doctor_cli_help() {
-    let output = Command::new("cargo")
+    let (_tmp, envs) = isolated_env();
+    let mut cmd = Command::new("cargo");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .args(["run", "--", "doctor", "--help"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -21,7 +30,12 @@ fn test_doctor_cli_help() {
 
 #[test]
 fn test_doctor_runs() {
-    let output = Command::new("cargo")
+    let (_tmp, envs) = isolated_env();
+    let mut cmd = Command::new("cargo");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .args(["run", "--", "doctor"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()

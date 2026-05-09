@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
@@ -5,15 +7,22 @@ use tracing::info;
 
 mod agents;
 mod cli;
+mod cost;
 mod error;
+mod kimi_native;
 mod marketplace;
 mod mcp;
 mod notifications;
 mod runtime;
 mod skills;
 mod vis;
+mod wire;
 
-use cli::{ask, autopilot, backup, cleanup, config_cmd, doctor, hud, logs, ralph, skill, state, team};
+use cli::kimi_native_cmd;
+use cli::{
+    ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, hud, logs, proof_cmd, ralph,
+    run_cmd, skill, state, team, ultrawork,
+};
 
 /// Oh My Kimi — Multi-agent orchestration for Kimi CLI
 #[derive(Parser, Debug)]
@@ -72,6 +81,18 @@ enum Commands {
     /// Browse skill marketplace
     #[command(visible_alias = "m")]
     Marketplace(cli::marketplace::Args),
+    /// Cost tracking and estimation
+    Cost(cost_cmd::Args),
+    /// Parallel burst execution without a team
+    #[command(visible_alias = "uw")]
+    Ultrawork(ultrawork::Args),
+    /// Kimi-native integration (sync, doctor, install)
+    #[command(name = "kimi", visible_alias = "k")]
+    KimiNative(kimi_native_cmd::KimiNativeArgs),
+    /// Inspect run event timelines
+    Run(run_cmd::Args),
+    /// Generate and view proof reports
+    Proof(proof_cmd::Args),
     /// Show version information
     Version,
 }
@@ -102,26 +123,24 @@ enum ShellArg {
 async fn main() -> Result<()> {
     let omk = Omk::parse();
 
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            if omk.verbose {
-                tracing_subscriber::EnvFilter::new("debug")
-            } else {
-                tracing_subscriber::EnvFilter::new("info")
-            }
-        });
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        if omk.verbose {
+            tracing_subscriber::EnvFilter::new("debug")
+        } else {
+            tracing_subscriber::EnvFilter::new("info")
+        }
+    });
 
     // File logging with daily rotation
     let log_dir = crate::runtime::config::state_dir().join("logs");
-    std::fs::create_dir_all(&log_dir)?;
+    tokio::fs::create_dir_all(&log_dir).await?;
     let file_appender = tracing_appender::rolling::daily(&log_dir, "omk.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
 
-    let stderr_layer = tracing_subscriber::fmt::layer()
-        .with_writer(std::io::stderr);
+    let stderr_layer = tracing_subscriber::fmt::layer().with_writer(std::io::stderr);
 
     let file_layer = tracing_subscriber::fmt::layer()
         .with_writer(non_blocking)
@@ -165,11 +184,16 @@ async fn main() -> Result<()> {
         Commands::Doctor(args) => doctor::run(args).await,
         Commands::Cleanup(args) => cleanup::run(args).await,
         Commands::Logs(args) => logs::run(args).await,
+        Commands::Cost(args) => cost_cmd::run(args).await,
         Commands::Config(args) => config_cmd::run(args).await,
         Commands::Backup(args) => backup::run(args).await,
         Commands::State(args) => state::run(args).await,
         Commands::Skill(args) => skill::run(args).await,
         Commands::Marketplace(args) => cli::marketplace::run(args).await,
+        Commands::Ultrawork(args) => ultrawork::run(args).await,
+        Commands::KimiNative(args) => kimi_native_cmd::run(args).await,
+        Commands::Run(args) => run_cmd::run(args).await,
+        Commands::Proof(args) => proof_cmd::run(args).await,
         Commands::Version => {
             println!("omk {}", env!("CARGO_PKG_VERSION"));
             println!("  Repository: {}", env!("CARGO_PKG_REPOSITORY"));
@@ -239,7 +263,7 @@ enable_metrics = true
 }
 
 async fn run_update(args: UpdateArgs) -> Result<()> {
-    use std::process::Command;
+    use tokio::process::Command;
 
     let current = env!("CARGO_PKG_VERSION");
     println!("Current version: {current}");
@@ -261,10 +285,12 @@ async fn run_update(args: UpdateArgs) -> Result<()> {
     let latest = match Command::new("curl")
         .args([
             "-fsSL",
-            "-H", "Accept: application/vnd.github+json",
+            "-H",
+            "Accept: application/vnd.github+json",
             "https://api.github.com/repos/ekhodzitsky/oh-my-kimi/releases/latest",
         ])
         .output()
+        .await
     {
         Ok(out) if out.status.success() => {
             let json: serde_json::Value = serde_json::from_slice(&out.stdout)?;
@@ -303,8 +329,11 @@ async fn run_update(args: UpdateArgs) -> Result<()> {
     let tar_path = tmp_dir.path().join("omk.tar.gz");
 
     let download = Command::new("curl")
-        .args(["-fsSL", "-o", tar_path.to_str().unwrap(), &url])
-        .status()?;
+        .args(["-fsSL", "-o"])
+        .arg(&tar_path)
+        .arg(&url)
+        .status()
+        .await?;
 
     if !download.success() {
         anyhow::bail!("Download failed. Prebuilt binary may not be available for {target}.");
@@ -312,20 +341,27 @@ async fn run_update(args: UpdateArgs) -> Result<()> {
 
     println!("Extracting...");
     let extract = Command::new("tar")
-        .args(["-xzf", tar_path.to_str().unwrap(), "-C", tmp_dir.path().to_str().unwrap()])
-        .status()?;
+        .args(["-xzf"])
+        .arg(&tar_path)
+        .arg("-C")
+        .arg(tmp_dir.path())
+        .status()
+        .await?;
 
     if !extract.success() {
         anyhow::bail!("Failed to extract archive");
     }
 
     // Find the binary
-    let new_binary = tmp_dir.path().join(format!("omk-{latest_version}-{target}")).join("omk");
+    let new_binary = tmp_dir
+        .path()
+        .join(format!("omk-{latest_version}-{target}"))
+        .join("omk");
     if !new_binary.exists() {
         // Fallback: binary might be at top level
         let fallback = tmp_dir.path().join("omk");
         if fallback.exists() {
-            std::fs::copy(&fallback, &new_binary)?;
+            tokio::fs::copy(&fallback, &new_binary).await?;
         } else {
             anyhow::bail!("Could not find omk binary in downloaded archive");
         }
@@ -339,21 +375,30 @@ async fn run_update(args: UpdateArgs) -> Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&new_binary)?.permissions();
+        let mut perms = tokio::fs::metadata(&new_binary).await?.permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&new_binary, perms)?;
+        tokio::fs::set_permissions(&new_binary, perms).await?;
     }
 
-    std::fs::copy(&new_binary, &current_exe)?;
+    tokio::fs::copy(&new_binary, &current_exe).await?;
 
     println!("✓ Updated to {latest_version}");
     println!("  Binary: {}", current_exe.display());
 
     // Update completions
     println!("Updating shell completions...");
-    let _ = Command::new(&current_exe).args(["completions", "bash"]).output();
-    let _ = Command::new(&current_exe).args(["completions", "zsh"]).output();
-    let _ = Command::new(&current_exe).args(["completions", "fish"]).output();
+    let _ = Command::new(&current_exe)
+        .args(["completions", "bash"])
+        .output()
+        .await;
+    let _ = Command::new(&current_exe)
+        .args(["completions", "zsh"])
+        .output()
+        .await;
+    let _ = Command::new(&current_exe)
+        .args(["completions", "fish"])
+        .output()
+        .await;
 
     println!("Run `omk doctor` to verify the installation.");
     Ok(())

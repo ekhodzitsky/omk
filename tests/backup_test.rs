@@ -1,8 +1,17 @@
 use std::process::Command;
 
+fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, std::path::PathBuf)>) {
+    omk::test_helpers::isolated_xdg_env()
+}
+
 #[test]
 fn test_backup_cli_help() {
-    let output = Command::new("cargo")
+    let (_tmp, envs) = isolated_env();
+    let mut cmd = Command::new("cargo");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .args(["run", "--", "backup", "--help"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -21,8 +30,15 @@ fn test_backup_cli_help() {
 
 #[test]
 fn test_backup_create_list() {
+    // Use the same isolated environment for both create and list.
+    let (_tmp, envs) = isolated_env();
+
     // Create a backup
-    let output = Command::new("cargo")
+    let mut cmd = Command::new("cargo");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .args(["run", "--", "backup", "create", "--name", "test-backup"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -39,7 +55,11 @@ fn test_backup_create_list() {
     );
 
     // List backups
-    let output = Command::new("cargo")
+    let mut cmd = Command::new("cargo");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .args(["run", "--", "backup", "list"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -49,11 +69,7 @@ fn test_backup_create_list() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = format!("{}{}", stdout, stderr);
 
-    assert!(
-        output.status.success(),
-        "backup list failed: {}",
-        combined
-    );
+    assert!(output.status.success(), "backup list failed: {}", combined);
     assert!(
         combined.contains("omk-backup-test-backup.tar.gz"),
         "backup list missing test backup: {}",

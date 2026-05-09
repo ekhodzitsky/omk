@@ -163,10 +163,7 @@ fn handle_tools_list(id: Option<Value>) -> JsonRpcResponse {
 
 async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> Result<JsonRpcResponse> {
     let params = params.unwrap_or(Value::Null);
-    let name = params
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
     let arguments = params.get("arguments").cloned().unwrap_or(Value::Null);
 
     match handle_tool_call(name, arguments).await {

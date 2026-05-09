@@ -1,8 +1,17 @@
 use std::process::Command;
 
+fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, std::path::PathBuf)>) {
+    omk::test_helpers::isolated_xdg_env()
+}
+
 #[test]
 fn test_config_validate_cli_help() {
-    let output = Command::new("cargo")
+    let (_tmp, envs) = isolated_env();
+    let mut cmd = Command::new("cargo");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .args(["run", "--", "config", "--help"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -21,7 +30,12 @@ fn test_config_validate_cli_help() {
 
 #[test]
 fn test_config_show_runs() {
-    let output = Command::new("cargo")
+    let (_tmp, envs) = isolated_env();
+    let mut cmd = Command::new("cargo");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .args(["run", "--", "config", "show"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -40,7 +54,12 @@ fn test_config_show_runs() {
 
 #[test]
 fn test_config_validate_runs() {
-    let output = Command::new("cargo")
+    let (_tmp, envs) = isolated_env();
+    let mut cmd = Command::new("cargo");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .args(["run", "--", "config", "validate"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()

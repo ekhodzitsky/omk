@@ -2,13 +2,13 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-pub struct Args {
+pub(crate) struct Args {
     #[command(subcommand)]
     command: MarketplaceCommands,
 }
 
 #[derive(Subcommand, Debug)]
-pub enum MarketplaceCommands {
+pub(crate) enum MarketplaceCommands {
     /// List available skills in the marketplace
     List {
         /// Use a specific registry URL instead of configured ones
@@ -87,7 +87,7 @@ const MARKET_SKILLS: &[MarketSkill] = &[
     },
 ];
 
-pub async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args) -> Result<()> {
     match args.command {
         MarketplaceCommands::List { registry } => list_skills(registry).await,
         MarketplaceCommands::Install { name, registry } => install_skill(&name, registry).await,
@@ -196,7 +196,10 @@ async fn install_skill(name: &str, registry_override: Option<String>) -> Result<
         }
     }
 
-    anyhow::bail!("Skill '{}' not found in marketplace or configured registries", name)
+    anyhow::bail!(
+        "Skill '{}' not found in marketplace or configured registries",
+        name
+    )
 }
 
 async fn search_skills(query: &str) -> Result<()> {
@@ -208,7 +211,9 @@ async fn search_skills(query: &str) -> Result<()> {
         .filter(|s| {
             s.name.to_lowercase().contains(&query_lower)
                 || s.description.to_lowercase().contains(&query_lower)
-                || s.tags.iter().any(|t| t.to_lowercase().contains(&query_lower))
+                || s.tags
+                    .iter()
+                    .any(|t| t.to_lowercase().contains(&query_lower))
         })
         .collect();
 
@@ -221,7 +226,9 @@ async fn search_skills(query: &str) -> Result<()> {
                 .filter(|(_, s)| {
                     s.name.to_lowercase().contains(&query_lower)
                         || s.description.to_lowercase().contains(&query_lower)
-                        || s.tags.iter().any(|t| t.to_lowercase().contains(&query_lower))
+                        || s.tags
+                            .iter()
+                            .any(|t| t.to_lowercase().contains(&query_lower))
                 })
                 .collect(),
             Err(_) => vec![],
@@ -239,7 +246,12 @@ async fn search_skills(query: &str) -> Result<()> {
     println!("Found {} skill(s) for '{}':\n", total, query);
 
     for (i, skill) in builtin_matches.iter().enumerate() {
-        println!("  {}. {} — {} [built-in]", i + 1, skill.name, skill.description);
+        println!(
+            "  {}. {} — {} [built-in]",
+            i + 1,
+            skill.name,
+            skill.description
+        );
     }
     for (i, (registry, skill)) in external_matches.iter().enumerate() {
         println!(
@@ -280,7 +292,10 @@ async fn info_skill(name: &str) -> Result<()> {
         }
     }
 
-    anyhow::bail!("Skill '{}' not found in marketplace or configured registries", name)
+    anyhow::bail!(
+        "Skill '{}' not found in marketplace or configured registries",
+        name
+    )
 }
 
 async fn add_registry(url: &str) -> Result<()> {
@@ -310,7 +325,9 @@ async fn add_registry(url: &str) -> Result<()> {
     } else {
         crate::marketplace::MarketplaceRegistry::fetch_file(std::path::Path::new(url)).await
     }
-    .context("Failed to validate registry. Make sure the URL is accessible and returns valid JSON.")?;
+    .context(
+        "Failed to validate registry. Make sure the URL is accessible and returns valid JSON.",
+    )?;
 
     config.registries.push(url.to_string());
 

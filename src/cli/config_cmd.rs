@@ -2,13 +2,13 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-pub struct Args {
+pub(crate) struct Args {
     #[command(subcommand)]
     command: ConfigCommands,
 }
 
 #[derive(Subcommand, Debug)]
-pub enum ConfigCommands {
+pub(crate) enum ConfigCommands {
     /// Validate config.toml and environment
     Validate,
     /// Show current config paths and values
@@ -22,7 +22,7 @@ pub enum ConfigCommands {
     },
 }
 
-pub async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args) -> Result<()> {
     match args.command {
         ConfigCommands::Validate => validate().await,
         ConfigCommands::Show => show().await,
@@ -91,7 +91,10 @@ async fn validate() -> Result<()> {
     let legacy = dirs::home_dir().map(|h| h.join(".omk"));
     if let Some(ref l) = legacy {
         if l.exists() {
-            println!("  Legacy dir ............ ⚠ {} still exists. Consider migrating to XDG dirs.", l.display());
+            println!(
+                "  Legacy dir ............ ⚠ {} still exists. Consider migrating to XDG dirs.",
+                l.display()
+            );
         }
     }
 
@@ -106,16 +109,27 @@ async fn validate() -> Result<()> {
 }
 
 async fn show() -> Result<()> {
-    let config = crate::runtime::config::load_config().await.unwrap_or_default();
+    let config = crate::runtime::config::load_config()
+        .await
+        .unwrap_or_default();
 
     println!("omk Configuration");
     println!("=================\n");
 
     println!("Paths:");
-    println!("  Config: {}", crate::runtime::config::config_dir().display());
-    println!("  State:  {}", crate::runtime::config::state_dir().display());
+    println!(
+        "  Config: {}",
+        crate::runtime::config::config_dir().display()
+    );
+    println!(
+        "  State:  {}",
+        crate::runtime::config::state_dir().display()
+    );
     println!("  Data:   {}", crate::runtime::config::data_dir().display());
-    println!("  Cache:  {}", crate::runtime::config::cache_dir().display());
+    println!(
+        "  Cache:  {}",
+        crate::runtime::config::cache_dir().display()
+    );
     println!();
 
     println!("Settings:");
@@ -144,21 +158,29 @@ async fn show() -> Result<()> {
 }
 
 async fn set(key: &str, value: &str) -> Result<()> {
-    let mut config = crate::runtime::config::load_config().await.unwrap_or_default();
+    let mut config = crate::runtime::config::load_config()
+        .await
+        .unwrap_or_default();
 
     match key {
         "default_team_size" => {
-            let size: usize = value.parse().map_err(|e| anyhow::anyhow!("Invalid number for default_team_size: {}", e))?;
+            let size: usize = value
+                .parse()
+                .map_err(|e| anyhow::anyhow!("Invalid number for default_team_size: {}", e))?;
             if size == 0 || size > 16 {
                 anyhow::bail!("default_team_size must be between 1 and 16");
             }
             config.default_team_size = size;
         }
         "default_yolo" => {
-            config.default_yolo = value.parse::<bool>().map_err(|e| anyhow::anyhow!("Invalid boolean for default_yolo: {}", e))?;
+            config.default_yolo = value
+                .parse::<bool>()
+                .map_err(|e| anyhow::anyhow!("Invalid boolean for default_yolo: {}", e))?;
         }
         "enable_metrics" => {
-            config.enable_metrics = value.parse::<bool>().map_err(|e| anyhow::anyhow!("Invalid boolean for enable_metrics: {}", e))?;
+            config.enable_metrics = value
+                .parse::<bool>()
+                .map_err(|e| anyhow::anyhow!("Invalid boolean for enable_metrics: {}", e))?;
         }
         "kimi_binary" => {
             let path = std::path::PathBuf::from(value);
@@ -172,8 +194,11 @@ async fn set(key: &str, value: &str) -> Result<()> {
         }
     }
 
-    let config_path = crate::runtime::config::config_dir().join("config.toml");
-    let content = toml::to_string_pretty(&config).map_err(|e| anyhow::anyhow!("Failed to serialize config: {}", e))?;
+    let config_dir = crate::runtime::config::config_dir();
+    tokio::fs::create_dir_all(&config_dir).await?;
+    let config_path = config_dir.join("config.toml");
+    let content = toml::to_string_pretty(&config)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize config: {}", e))?;
     crate::runtime::atomic::atomic_write(&config_path, content.as_bytes()).await?;
 
     println!("✓ Set {} = {}", key, value);

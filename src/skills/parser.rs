@@ -17,8 +17,9 @@ pub struct Skill {
 }
 
 /// Parse a SKILL.md file with YAML frontmatter
-pub fn parse_skill(path: &Path) -> Result<Skill> {
-    let content = std::fs::read_to_string(path)
+pub async fn parse_skill(path: &Path) -> Result<Skill> {
+    let content = tokio::fs::read_to_string(path)
+        .await
         .with_context(|| format!("Failed to read skill file: {}", path.display()))?;
 
     let (frontmatter, body) = extract_frontmatter(&content)?;
@@ -83,7 +84,15 @@ mod tests {
         let (fm, body) = extract_frontmatter(input).unwrap();
         eprintln!("FM: {:?}", fm);
         eprintln!("BODY: {:?}", body);
-        assert!(fm.contains("name: team"), "frontmatter missing name: {:?}", fm);
-        assert!(body.contains("# Team Mode"), "body missing header: {:?}", body);
+        assert!(
+            fm.contains("name: team"),
+            "frontmatter missing name: {:?}",
+            fm
+        );
+        assert!(
+            body.contains("# Team Mode"),
+            "body missing header: {:?}",
+            body
+        );
     }
 }

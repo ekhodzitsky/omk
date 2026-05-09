@@ -63,11 +63,7 @@ async fn setup_mock_team(name: &str) -> TempDir {
 #[tokio::test]
 async fn test_team_state_load_save() {
     let dir = setup_mock_team("test-state").await;
-    let state_dir = dir
-        .path()
-        .join("state")
-        .join("team")
-        .join("test-state");
+    let state_dir = dir.path().join("state").join("team").join("test-state");
 
     let json = tokio::fs::read_to_string(state_dir.join("team-state.json"))
         .await
@@ -122,14 +118,12 @@ async fn test_heartbeat_alive() {
 #[tokio::test]
 async fn test_status_reads_all_workers() {
     let dir = setup_mock_team("test-status").await;
-    let state_dir = dir
-        .path()
-        .join("state")
-        .join("team")
-        .join("test-status");
+    let state_dir = dir.path().join("state").join("team").join("test-status");
 
     // Simulate status logic: count workers and check heartbeats
-    let mut entries = tokio::fs::read_dir(state_dir.join("workers")).await.unwrap();
+    let mut entries = tokio::fs::read_dir(state_dir.join("workers"))
+        .await
+        .unwrap();
     let mut worker_count = 0;
     let mut alive_count = 0;
 

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 /// Autonomous execution with single lead agent
 #[derive(Parser, Debug, Clone)]
-pub struct Args {
+pub(crate) struct Args {
     /// Task description
     #[arg(trailing_var_arg = true, value_name = "TASK")]
     pub task: Vec<String>,
@@ -30,12 +30,17 @@ pub struct Args {
     pub yolo: bool,
 }
 
-pub async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args) -> Result<()> {
     let task = args.task.join(" ");
 
     if args.resume {
-        let name = args.name.ok_or_else(|| anyhow::anyhow!("--name is required for --resume"))?;
-        return crate::runtime::autopilot::resume_autopilot(&name, &args.dir, args.ralph, args.yolo).await;
+        let name = args
+            .name
+            .ok_or_else(|| anyhow::anyhow!("--name is required for --resume"))?;
+        return crate::runtime::autopilot::resume_autopilot(
+            &name, &args.dir, args.ralph, args.yolo,
+        )
+        .await;
     }
 
     if task.is_empty() {

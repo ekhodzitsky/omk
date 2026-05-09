@@ -1,6 +1,6 @@
 use crate::error::OmkError;
 use serde_json::Value;
-use std::process::Command;
+use tokio::process::Command;
 
 pub fn list_tools() -> Vec<Value> {
     vec![
@@ -66,7 +66,7 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value, Omk
                 cmd.args(["--name", n]);
             }
 
-            let output = cmd.output().map_err(|_e| OmkError::ShellFailed {
+            let output = cmd.output().await.map_err(|_e| OmkError::ShellFailed {
                 command: format!("omk team spawn {}", spec),
             })?;
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -87,6 +87,7 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value, Omk
             let output = Command::new(&omk_bin)
                 .args(["team", "status", team_name])
                 .output()
+                .await
                 .map_err(|_e| OmkError::ShellFailed {
                     command: format!("omk team status {}", team_name),
                 })?;
@@ -112,7 +113,7 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value, Omk
                 cmd.arg("--force");
             }
 
-            let output = cmd.output().map_err(|_e| OmkError::ShellFailed {
+            let output = cmd.output().await.map_err(|_e| OmkError::ShellFailed {
                 command: format!("omk team shutdown {}", team_name),
             })?;
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -131,6 +132,7 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value, Omk
             let output = Command::new(&omk_bin)
                 .arg("doctor")
                 .output()
+                .await
                 .map_err(|_e| OmkError::ShellFailed {
                     command: "omk doctor".to_string(),
                 })?;

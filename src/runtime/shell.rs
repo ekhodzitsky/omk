@@ -26,10 +26,22 @@ pub fn validate_safe(s: &str) -> Result<(), &'static str> {
     if s.contains('\0') {
         return Err("input contains null bytes");
     }
-    if s.bytes().any(|b| b.is_ascii_control() && b != b'\n' && b != b'\t') {
+    if s.bytes()
+        .any(|b| b.is_ascii_control() && b != b'\n' && b != b'\t')
+    {
         return Err("input contains control characters");
     }
     Ok(())
+}
+
+/// Run an external command with retry and rate-limit backoff.
+///
+/// Uses [`crate::runtime::retry::RetryConfig::default`] and forwards
+/// stderr to the retry logic so that HTTP 429 / rate-limit responses
+/// trigger a longer fixed delay instead of exponential backoff.
+#[allow(dead_code)]
+pub async fn run_command_with_retry(cmd: &mut tokio::process::Command) -> anyhow::Result<String> {
+    crate::runtime::retry::retry_command(crate::runtime::retry::RetryConfig::default(), cmd).await
 }
 
 #[cfg(test)]
@@ -65,7 +77,10 @@ mod tests {
 
     #[test]
     fn test_shell_escape_pipe() {
-        assert_eq!(shell_escape("foo | cat /etc/passwd"), "'foo | cat /etc/passwd'");
+        assert_eq!(
+            shell_escape("foo | cat /etc/passwd"),
+            "'foo | cat /etc/passwd'"
+        );
     }
 
     #[test]
@@ -93,5 +108,14 @@ mod tests {
     #[test]
     fn test_validate_safe_ok() {
         assert!(validate_safe("hello world 123").is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_command_with_retry_success() {
+        let mut cmd = tokio::process::Command::new("echo");
+        cmd.arg("hello");
+        let result = run_command_with_retry(&mut cmd).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().trim(), "hello");
     }
 }

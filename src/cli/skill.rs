@@ -2,14 +2,16 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use tracing::info;
 
+use crate::runtime::sanitize::sanitize_name;
+
 #[derive(Parser, Debug)]
-pub struct Args {
+pub(crate) struct Args {
     #[command(subcommand)]
     pub command: SkillCommands,
 }
 
 #[derive(Subcommand, Debug)]
-pub enum SkillCommands {
+pub(crate) enum SkillCommands {
     /// Install a skill from a git repository
     Install {
         /// Git URL or local path
@@ -37,7 +39,7 @@ pub enum SkillCommands {
     },
 }
 
-pub async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args) -> Result<()> {
     match args.command {
         SkillCommands::Install { url, name } => install_skill(&url, name).await,
         SkillCommands::List => list_skills().await,
@@ -58,6 +60,7 @@ async fn install_skill(url: &str, name_override: Option<String>) -> Result<()> {
             .unwrap_or("unknown")
             .to_string()
     });
+    let skill_name = sanitize_name(&skill_name)?;
 
     let target_dir = skills_dir.join(&skill_name);
 
@@ -69,9 +72,11 @@ async fn install_skill(url: &str, name_override: Option<String>) -> Result<()> {
         info!(url = %url, name = %skill_name, "Cloning skill from git");
         println!("Installing skill '{}' from {}...", skill_name, url);
 
-        let output = std::process::Command::new("git")
-            .args(["clone", "--depth", "1", url, target_dir.to_str().unwrap()])
+        let output = tokio::process::Command::new("git")
+            .args(["clone", "--depth", "1", url])
+            .arg(&target_dir)
             .output()
+            .await
             .context("git is required to install skills from URLs")?;
 
         if !output.status.success() {
@@ -85,12 +90,20 @@ async fn install_skill(url: &str, name_override: Option<String>) -> Result<()> {
         }
 
         info!(source = %source.display(), target = %target_dir.display(), "Copying skill");
-        println!("Installing skill '{}' from {}...", skill_name, source.display());
+        println!(
+            "Installing skill '{}' from {}...",
+            skill_name,
+            source.display()
+        );
 
         copy_dir(&source, &target_dir).await?;
     }
 
-    println!("✓ Installed skill '{}' to {}", skill_name, target_dir.display());
+    println!(
+        "✓ Installed skill '{}' to {}",
+        skill_name,
+        target_dir.display()
+    );
     Ok(())
 }
 
@@ -112,7 +125,10 @@ async fn list_skills() -> Result<()> {
         let path = entry.path();
         if path.is_dir() {
             found = true;
-            let name = path.file_name().unwrap().to_string_lossy();
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_else(|| std::borrow::Cow::from("unknown"));
             let has_skill_md = path.join("SKILL.md").exists();
             let indicator = if has_skill_md { "✓" } else { "⚠" };
             println!("  {} {} ({})", indicator, name, path.display());
@@ -128,7 +144,8 @@ async fn list_skills() -> Result<()> {
 
 async fn show_skill(name: &str) -> Result<()> {
     let skills_dir = crate::runtime::config::data_dir().join("skills");
-    let target = skills_dir.join(name);
+    let name = sanitize_name(name)?;
+    let target = skills_dir.join(&name);
 
     if !target.exists() {
         anyhow::bail!("Skill '{}' not found.", name);
@@ -166,7 +183,9 @@ async fn search_skills(query: &str) -> Result<()> {
             let skill_md = path.join("SKILL.md");
             let mut content = String::new();
             if skill_md.exists() {
-                content = tokio::fs::read_to_string(&skill_md).await.unwrap_or_default();
+                content = tokio::fs::read_to_string(&skill_md)
+                    .await
+                    .unwrap_or_default();
             }
             if name.to_lowercase().contains(&query_lower)
                 || content.to_lowercase().contains(&query_lower)
@@ -192,7 +211,8 @@ async fn search_skills(query: &str) -> Result<()> {
 
 async fn remove_skill(name: &str) -> Result<()> {
     let skills_dir = crate::runtime::config::data_dir().join("skills");
-    let target = skills_dir.join(name);
+    let name = sanitize_name(name)?;
+    let target = skills_dir.join(&name);
 
     if !target.exists() {
         anyhow::bail!("Skill '{}' not found.", name);

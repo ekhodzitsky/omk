@@ -62,9 +62,7 @@ impl MarketplaceRegistry {
 }
 
 /// Load all skills from configured registries plus the built-in list.
-pub async fn load_all_skills(
-    registries: &[String],
-) -> Result<Vec<(String, RegistrySkill)>> {
+pub async fn load_all_skills(registries: &[String]) -> Result<Vec<(String, RegistrySkill)>> {
     let mut all = Vec::new();
 
     for url in registries {

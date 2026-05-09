@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -13,6 +11,8 @@ pub struct WorkerSpec {
     pub inbox: PathBuf,
     pub outbox: PathBuf,
     pub heartbeat: PathBuf,
+    #[serde(default)]
+    pub project_dir: Option<PathBuf>,
 }
 
 impl WorkerSpec {
@@ -35,6 +35,13 @@ impl WorkerSpec {
     pub async fn send_task(&self, task: &WorkerTask) -> Result<()> {
         let line = serde_json::to_string(task)?;
         crate::runtime::atomic::atomic_append_jsonl(&self.inbox, &line).await?;
+        Ok(())
+    }
+
+    /// Write a result to the outbox
+    pub async fn send_result(&self, result: &WorkerResult) -> Result<()> {
+        let line = format!("{}\n", serde_json::to_string(result)?);
+        crate::runtime::atomic::atomic_append(&self.outbox, line.as_bytes()).await?;
         Ok(())
     }
 
@@ -62,7 +69,9 @@ impl WorkerSpec {
 pub struct WorkerTask {
     pub id: String,
     pub task: String,
+    #[serde(default)]
     pub acceptance_criteria: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
 }
 
@@ -70,12 +79,16 @@ pub struct WorkerTask {
 pub struct WorkerResult {
     pub task_id: String,
     pub status: ResultStatus,
+    #[serde(default)]
     pub summary: String,
+    #[serde(default)]
     pub artifacts: Vec<String>,
+    #[serde(default)]
     pub elapsed_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ResultStatus {
     Success,
     Partial,
@@ -95,6 +108,7 @@ mod tests {
             inbox: dir.path().join("inbox.jsonl"),
             outbox: dir.path().join("outbox.jsonl"),
             heartbeat: dir.path().join("heartbeat.json"),
+            project_dir: None,
         };
 
         spec.save().await.unwrap();
@@ -112,6 +126,7 @@ mod tests {
             inbox: dir.path().join("inbox.jsonl"),
             outbox: dir.path().join("outbox.jsonl"),
             heartbeat: dir.path().join("heartbeat.json"),
+            project_dir: None,
         };
 
         let task = WorkerTask {
@@ -135,11 +150,82 @@ mod tests {
             elapsed_secs: 10,
         };
         let line = serde_json::to_string(&result).unwrap();
-        tokio::fs::write(&spec.outbox, format!("{}\n", line)).await.unwrap();
+        tokio::fs::write(&spec.outbox, format!("{}\n", line))
+            .await
+            .unwrap();
 
         let results = spec.read_results().await.unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].task_id, "task-1");
         matches!(results[0].status, ResultStatus::Success);
+    }
+
+    #[tokio::test]
+    async fn test_send_result_writes_valid_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec = WorkerSpec {
+            name: "worker-0".to_string(),
+            role: "coder".to_string(),
+            inbox: dir.path().join("inbox.jsonl"),
+            outbox: dir.path().join("outbox.jsonl"),
+            heartbeat: dir.path().join("heartbeat.json"),
+            project_dir: None,
+        };
+
+        let result = WorkerResult {
+            task_id: "task-1".to_string(),
+            status: ResultStatus::Success,
+            summary: "done".to_string(),
+            artifacts: vec!["file.rs".to_string()],
+            elapsed_secs: 42,
+        };
+
+        spec.send_result(&result).await.unwrap();
+
+        let content = tokio::fs::read_to_string(&spec.outbox).await.unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(content.trim()).unwrap();
+        assert_eq!(parsed["task_id"], "task-1");
+        assert_eq!(parsed["status"], "success");
+        assert_eq!(parsed["summary"], "done");
+        assert_eq!(parsed["elapsed_secs"], 42);
+    }
+
+    #[tokio::test]
+    async fn test_send_result_appends_multiple_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec = WorkerSpec {
+            name: "worker-0".to_string(),
+            role: "coder".to_string(),
+            inbox: dir.path().join("inbox.jsonl"),
+            outbox: dir.path().join("outbox.jsonl"),
+            heartbeat: dir.path().join("heartbeat.json"),
+            project_dir: None,
+        };
+
+        spec.send_result(&WorkerResult {
+            task_id: "task-1".to_string(),
+            status: ResultStatus::Success,
+            summary: "first".to_string(),
+            artifacts: vec![],
+            elapsed_secs: 1,
+        })
+        .await
+        .unwrap();
+
+        spec.send_result(&WorkerResult {
+            task_id: "task-2".to_string(),
+            status: ResultStatus::Failed,
+            summary: "second".to_string(),
+            artifacts: vec![],
+            elapsed_secs: 2,
+        })
+        .await
+        .unwrap();
+
+        let content = tokio::fs::read_to_string(&spec.outbox).await.unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("task-1"));
+        assert!(lines[1].contains("task-2"));
     }
 }

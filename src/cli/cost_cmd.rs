@@ -1,0 +1,37 @@
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+
+#[derive(Parser, Debug)]
+pub(crate) struct Args {
+    #[command(subcommand)]
+    pub command: CostCommands,
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum CostCommands {
+    /// Show cost report
+    Report,
+    /// Reset cost tracking data
+    Reset,
+}
+
+pub(crate) async fn run(args: Args) -> Result<()> {
+    match args.command {
+        CostCommands::Report => show_report().await,
+        CostCommands::Reset => reset_costs().await,
+    }
+}
+
+async fn show_report() -> Result<()> {
+    let tracker = crate::cost::tracker::CostTracker::new(&crate::runtime::config::state_dir());
+    let report = tracker.report().await?;
+    println!("{}", report);
+    Ok(())
+}
+
+async fn reset_costs() -> Result<()> {
+    let tracker = crate::cost::tracker::CostTracker::new(&crate::runtime::config::state_dir());
+    tracker.save(&[]).await?;
+    println!("✓ Cost tracking data reset");
+    Ok(())
+}

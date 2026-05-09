@@ -2,26 +2,28 @@
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
 pub const ALL_PROVIDERS: &[&str] = &["claude", "codex", "gemini", "kimi"];
 
 /// Return the list of providers whose CLI binary is found on PATH.
-pub fn available_providers() -> Vec<&'static str> {
-    ALL_PROVIDERS
-        .iter()
-        .copied()
-        .filter(|p| is_provider_installed(p))
-        .collect()
+pub async fn available_providers() -> Vec<&'static str> {
+    let mut providers = Vec::new();
+    for &p in ALL_PROVIDERS {
+        if is_provider_installed(p).await {
+            providers.push(p);
+        }
+    }
+    providers
 }
 
 /// Check whether a provider CLI is installed.
-pub fn is_provider_installed(provider: &str) -> bool {
-    Command::new("which")
+pub async fn is_provider_installed(provider: &str) -> bool {
+    tokio::process::Command::new("which")
         .arg(provider)
         .output()
+        .await
         .map(|out| out.status.success())
         .unwrap_or(false)
 }
@@ -40,7 +42,9 @@ pub fn provider_command(provider: &str, prompt: &str) -> Result<String> {
 
 /// Directory where ask artifacts are persisted.
 pub fn artifact_dir() -> Result<PathBuf> {
-    Ok(crate::runtime::config::omk_data_dir().join("artifacts").join("ask"))
+    Ok(crate::runtime::config::omk_data_dir()
+        .join("artifacts")
+        .join("ask"))
 }
 
 /// Full path for a named artifact at a given timestamp.
@@ -74,23 +78,46 @@ pub async fn save_artifact(name: &str, content: &str, timestamp: &str) -> Result
 /// Run a provider directly (not inside tmux) and capture its stdout+stderr.
 /// Used for the MVP direct-execution path and for synthesis.
 pub async fn run_advisor_direct(provider: &str, prompt: &str, timeout_secs: u64) -> Result<String> {
-    if !is_provider_installed(provider) {
+    if !is_provider_installed(provider).await {
         anyhow::bail!("Provider '{}' is not installed", provider);
     }
 
     let cmd = provider_command(provider, prompt)?;
     debug!(provider = provider, cmd = %cmd, "Running advisor directly");
 
-    let output = tokio::time::timeout(
-        Duration::from_secs(timeout_secs),
-        tokio::process::Command::new("bash")
-            .arg("-c")
-            .arg(&cmd)
-            .output(),
-    )
-    .await
-    .with_context(|| format!("{} timed out after {}s", provider, timeout_secs))?
-    .with_context(|| format!("Failed to run {}", provider))?;
+    let mut child = tokio::process::Command::new("bash")
+        .arg("-c")
+        .arg(&cmd)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .with_context(|| format!("Failed to spawn {}", provider))?;
+
+    let output = match tokio::time::timeout(Duration::from_secs(timeout_secs), child.wait()).await {
+        Ok(Ok(status)) => {
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            if let Some(mut out) = child.stdout.take() {
+                let _ = tokio::io::AsyncReadExt::read_to_end(&mut out, &mut stdout).await;
+            }
+            if let Some(mut err) = child.stderr.take() {
+                let _ = tokio::io::AsyncReadExt::read_to_end(&mut err, &mut stderr).await;
+            }
+            std::process::Output {
+                status,
+                stdout,
+                stderr,
+            }
+        }
+        Ok(Err(e)) => {
+            return Err(anyhow::anyhow!("Failed to run {}: {}", provider, e));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            anyhow::bail!("{} timed out after {}s", provider, timeout_secs);
+        }
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -117,13 +144,16 @@ pub async fn spawn_advisor_tmux(
     prompt: &str,
     outbox: &Path,
 ) -> Result<()> {
-    if !is_provider_installed(provider) {
+    if !is_provider_installed(provider).await {
         anyhow::bail!("Provider '{}' is not installed", provider);
     }
 
     let cmd = provider_command(provider, prompt)?;
     let outbox_str = outbox.to_string_lossy();
-    let parent_str = outbox.parent().unwrap_or_else(|| Path::new(".")).to_string_lossy();
+    let parent_str = outbox
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_string_lossy();
 
     let wrapper = format!(
         "mkdir -p {} && {} > {} 2>&1 && echo '___OMK_ASK_DONE___' >> {}",
@@ -165,14 +195,17 @@ pub async fn poll_outbox(outbox: &Path, timeout_secs: u64) -> Result<String> {
 }
 
 /// Query a single provider and optionally persist the artifact.
-pub async fn ask_single(provider: &str, prompt: &str, save: bool, timeout_secs: u64) -> Result<String> {
+pub async fn ask_single(
+    provider: &str,
+    prompt: &str,
+    save: bool,
+    timeout_secs: u64,
+) -> Result<String> {
     let output = run_advisor_direct(provider, prompt, timeout_secs).await?;
 
     if save {
         let ts = chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string();
-        let content = format!(
-            "# {provider} answer\n\nPrompt: {prompt}\n\n---\n\n{output}\n"
-        );
+        let content = format!("# {provider} answer\n\nPrompt: {prompt}\n\n---\n\n{output}\n");
         save_artifact(provider, &content, &ts).await?;
     }
 
@@ -181,7 +214,12 @@ pub async fn ask_single(provider: &str, prompt: &str, save: bool, timeout_secs: 
 
 /// Query specific providers in parallel.
 /// Returns a vec of `(provider, output)` pairs.
-pub async fn ask_providers(providers: &[&str], prompt: &str, save: bool, timeout_secs: u64) -> Result<Vec<(String, String)>> {
+pub async fn ask_providers(
+    providers: &[&str],
+    prompt: &str,
+    save: bool,
+    timeout_secs: u64,
+) -> Result<Vec<(String, String)>> {
     if providers.is_empty() {
         anyhow::bail!("No providers specified");
     }
@@ -207,9 +245,8 @@ pub async fn ask_providers(providers: &[&str], prompt: &str, save: bool, timeout
         match res {
             Ok(Ok((provider, output))) => {
                 if save {
-                    let content = format!(
-                        "# {provider} answer\n\nPrompt: {prompt}\n\n---\n\n{output}\n"
-                    );
+                    let content =
+                        format!("# {provider} answer\n\nPrompt: {prompt}\n\n---\n\n{output}\n");
                     let _ = save_artifact(&provider, &content, &ts).await;
                 }
                 results.push((provider, output));
@@ -233,7 +270,7 @@ pub async fn ask_providers(providers: &[&str], prompt: &str, save: bool, timeout
 /// Query every available provider in parallel.
 /// Returns a vec of `(provider, output)` pairs.
 pub async fn ask_all(prompt: &str, save: bool) -> Result<Vec<(String, String)>> {
-    let providers = available_providers();
+    let providers = available_providers().await;
     ask_providers(&providers, prompt, save, 60).await
 }
 
@@ -254,12 +291,8 @@ pub fn build_synthesis_prompt(prompt: &str, outputs: &[(String, String)]) -> Str
 }
 
 /// Synthesize multiple advisor outputs into a unified answer using Kimi.
-pub async fn synthesize(
-    prompt: &str,
-    outputs: &[(String, String)],
-    save: bool,
-) -> Result<String> {
-    if !is_provider_installed("kimi") {
+pub async fn synthesize(prompt: &str, outputs: &[(String, String)], save: bool) -> Result<String> {
+    if !is_provider_installed("kimi").await {
         anyhow::bail!("Kimi CLI is required for synthesis but is not installed");
     }
 
@@ -268,9 +301,7 @@ pub async fn synthesize(
 
     if save {
         let ts = chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string();
-        let content = format!(
-            "# Synthesis\n\nOriginal prompt: {prompt}\n\n---\n\n{result}\n"
-        );
+        let content = format!("# Synthesis\n\nOriginal prompt: {prompt}\n\n---\n\n{result}\n");
         save_artifact("synthesis", &content, &ts).await?;
     }
 
@@ -293,12 +324,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_provider_detection() {
-        assert!(is_provider_installed("bash"));
-        assert!(!is_provider_installed("definitely_not_a_real_binary_12345"));
+        assert!(is_provider_installed("bash").await);
+        assert!(!is_provider_installed("definitely_not_a_real_binary_12345").await);
     }
 
-    #[tokio::test]
-    async fn test_artifact_path_generation() {
+    #[test]
+    fn test_artifact_path_generation() {
         let path = artifact_path("claude", "20260507-121530").unwrap();
         let name = path.file_name().unwrap().to_str().unwrap();
         assert!(name.starts_with("20260507-121530"));
@@ -306,8 +337,8 @@ mod tests {
         assert!(name.ends_with(".md"));
     }
 
-    #[tokio::test]
-    async fn test_synthesis_prompt_building() {
+    #[test]
+    fn test_synthesis_prompt_building() {
         let outputs = vec![
             ("claude".to_string(), "Claude answer".to_string()),
             ("kimi".to_string(), "Kimi answer".to_string()),
@@ -336,13 +367,20 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         // Use a known provider name so provider_command accepts it.
         let script_path = dir.path().join("kimi");
-        std::fs::write(&script_path, "#!/bin/bash\necho 'mock output'\n").unwrap();
+        tokio::fs::write(&script_path, "#!/bin/bash\necho 'mock output'\n")
+            .await
+            .unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = std::fs::metadata(&script_path).unwrap().permissions();
+            let mut perms = tokio::fs::metadata(&script_path)
+                .await
+                .unwrap()
+                .permissions();
             perms.set_mode(0o755);
-            std::fs::set_permissions(&script_path, perms).unwrap();
+            tokio::fs::set_permissions(&script_path, perms)
+                .await
+                .unwrap();
         }
 
         let original_path = std::env::var_os("PATH");
@@ -363,20 +401,17 @@ mod tests {
         assert_eq!(result.unwrap(), "mock output");
     }
 
-    #[tokio::test]
-    async fn test_provider_command_generation() {
-        assert_eq!(
-            provider_command("kimi", "hello").unwrap(),
-            "kimi -p hello"
-        );
+    #[test]
+    fn test_provider_command_generation() {
+        assert_eq!(provider_command("kimi", "hello").unwrap(), "kimi -p hello");
         assert_eq!(
             provider_command("claude", "it's working").unwrap(),
             "claude -p \"it's working\""
         );
     }
 
-    #[tokio::test]
-    async fn test_is_known_provider() {
+    #[test]
+    fn test_is_known_provider() {
         assert!(is_known_provider("kimi"));
         assert!(is_known_provider("claude"));
         assert!(!is_known_provider("gpt4"));

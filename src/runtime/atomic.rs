@@ -45,11 +45,32 @@ pub async fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
     std_file.sync_data()?;
     drop(std_file);
 
-    fs::rename(&tmp_path, path)
-        .await
-        .with_context(|| format!("Failed to rename {} to {}", tmp_path.display(), path.display()))?;
+    fs::rename(&tmp_path, path).await.with_context(|| {
+        format!(
+            "Failed to rename {} to {}",
+            tmp_path.display(),
+            path.display()
+        )
+    })?;
 
     debug!(target = %path.display(), "Atomic write complete");
+    Ok(())
+}
+
+/// Append raw bytes to a file.
+///
+/// Opens the file in append mode (creating if necessary) and writes
+/// the content. This is not atomic across processes, but it is
+/// sufficient for append-only logs when a single writer is guaranteed.
+pub async fn atomic_append(path: &Path, content: &[u8]) -> Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .await
+        .with_context(|| format!("Failed to open file for append: {}", path.display()))?;
+    file.write_all(content).await?;
+    file.flush().await?;
     Ok(())
 }
 

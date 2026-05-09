@@ -1,8 +1,17 @@
 use std::process::Command;
 
+fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, std::path::PathBuf)>) {
+    omk::test_helpers::isolated_xdg_env()
+}
+
 #[test]
 fn test_state_cli_help() {
-    let output = Command::new("cargo")
+    let (_tmp, envs) = isolated_env();
+    let mut cmd = Command::new("cargo");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .args(["run", "--", "state", "--help"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -21,8 +30,20 @@ fn test_state_cli_help() {
 
 #[test]
 fn test_state_export_runs() {
-    let output = Command::new("cargo")
-        .args(["run", "--", "state", "export", "--output", "/tmp/omk-test-export.json"])
+    let (_tmp, envs) = isolated_env();
+    let mut cmd = Command::new("cargo");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
+        .args([
+            "run",
+            "--",
+            "state",
+            "export",
+            "--output",
+            "/tmp/omk-test-export.json",
+        ])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .expect("cargo run failed");
@@ -31,11 +52,7 @@ fn test_state_export_runs() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = format!("{}{}", stdout, stderr);
 
-    assert!(
-        output.status.success(),
-        "state export failed: {}",
-        combined
-    );
+    assert!(output.status.success(), "state export failed: {}", combined);
     assert!(
         combined.contains("State exported"),
         "state export did not complete: {}",

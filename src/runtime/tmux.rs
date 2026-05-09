@@ -27,15 +27,8 @@ pub fn session_exists(name: &str) -> Result<bool> {
 
 pub fn create_session(name: &str, window_name: &str, cwd: &std::path::Path) -> Result<()> {
     let mut cmd = Command::new("tmux");
-    cmd.args([
-        "new-session",
-        "-d",
-        "-s",
-        name,
-        "-n",
-        window_name,
-    ]);
-    
+    cmd.args(["new-session", "-d", "-s", name, "-n", window_name]);
+
     if cwd != std::path::Path::new(".") && cwd.exists() {
         cmd.arg("-c").arg(cwd);
     }
@@ -72,7 +65,7 @@ pub fn rename_pane(session: &str, window: &str, pane_index: usize, name: &str) -
     let output = Command::new("tmux")
         .args(["select-pane", "-t", &target, "-T", name])
         .output()?;
-    
+
     if !output.status.success() {
         debug!(target = %target, name = name, "Pane rename may not be supported by this tmux version");
     }
@@ -125,7 +118,13 @@ pub fn kill_session(name: &str) -> Result<()> {
 pub fn list_panes(session: &str, window: &str) -> Result<Vec<String>> {
     let target = format!("{}:{}", session, window);
     let output = Command::new("tmux")
-        .args(["list-panes", "-t", &target, "-F", "#{pane_index}:#{pane_title}"])
+        .args([
+            "list-panes",
+            "-t",
+            &target,
+            "-F",
+            "#{pane_index}:#{pane_title}",
+        ])
         .output()?;
 
     if !output.status.success() {
@@ -134,4 +133,17 @@ pub fn list_panes(session: &str, window: &str) -> Result<Vec<String>> {
 
     let lines = String::from_utf8_lossy(&output.stdout);
     Ok(lines.lines().map(|s| s.to_string()).collect())
+}
+
+/// Check whether a specific pane index exists in the given session:window.
+pub fn pane_exists(session: &str, window: &str, pane_index: usize) -> Result<bool> {
+    let panes = list_panes(session, window)?;
+    for pane in &panes {
+        if let Some(idx_str) = pane.split(':').next() {
+            if idx_str == pane_index.to_string() {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
 }

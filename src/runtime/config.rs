@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 //! Configuration and XDG-compliant path resolution.
 //!
 //! Follows the XDG Base Directory Specification:
@@ -14,6 +12,19 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::warn;
+
+/// Directory name for team state.
+pub const TEAM_DIR: &str = "team";
+/// Directory name for worker state within a team/run.
+pub const WORKERS_DIR: &str = "workers";
+/// File name for the append-only event log.
+pub const EVENTS_FILE: &str = "events.jsonl";
+/// File name for worker heartbeat JSON.
+pub const HEARTBEAT_FILE: &str = "heartbeat.json";
+/// File name for worker inbox JSONL.
+pub const INBOX_FILE: &str = "inbox.jsonl";
+/// File name for worker outbox JSONL.
+pub const OUTBOX_FILE: &str = "outbox.jsonl";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OmkConfig {
@@ -68,15 +79,18 @@ fn default_true() -> bool {
     true
 }
 
+fn home_dir() -> anyhow::Result<PathBuf> {
+    dirs::home_dir().ok_or_else(|| anyhow::anyhow!("HOME directory not found"))
+}
+
 /// Resolve the XDG config directory for omk.
 pub fn config_dir() -> PathBuf {
     if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
         PathBuf::from(xdg).join("omk")
     } else {
-        dirs::home_dir()
-            .expect("No home directory")
-            .join(".config")
-            .join("omk")
+        home_dir()
+            .map(|h| h.join(".config").join("omk"))
+            .unwrap_or_else(|_| PathBuf::from("/tmp/.config/omk"))
     }
 }
 
@@ -85,11 +99,9 @@ pub fn state_dir() -> PathBuf {
     if let Some(xdg) = std::env::var_os("XDG_STATE_HOME") {
         PathBuf::from(xdg).join("omk")
     } else {
-        dirs::home_dir()
-            .expect("No home directory")
-            .join(".local")
-            .join("state")
-            .join("omk")
+        home_dir()
+            .map(|h| h.join(".local").join("state").join("omk"))
+            .unwrap_or_else(|_| PathBuf::from("/tmp/.local/state/omk"))
     }
 }
 
@@ -98,11 +110,9 @@ pub fn data_dir() -> PathBuf {
     if let Some(xdg) = std::env::var_os("XDG_DATA_HOME") {
         PathBuf::from(xdg).join("omk")
     } else {
-        dirs::home_dir()
-            .expect("No home directory")
-            .join(".local")
-            .join("share")
-            .join("omk")
+        home_dir()
+            .map(|h| h.join(".local").join("share").join("omk"))
+            .unwrap_or_else(|_| PathBuf::from("/tmp/.local/share/omk"))
     }
 }
 
@@ -111,18 +121,17 @@ pub fn cache_dir() -> PathBuf {
     if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME") {
         PathBuf::from(xdg).join("omk")
     } else {
-        dirs::home_dir()
-            .expect("No home directory")
-            .join(".cache")
-            .join("omk")
+        home_dir()
+            .map(|h| h.join(".cache").join("omk"))
+            .unwrap_or_else(|_| PathBuf::from("/tmp/.cache/omk"))
     }
 }
 
 /// Legacy fallback: ~/.omk/
 pub fn legacy_dir() -> PathBuf {
-    dirs::home_dir()
-        .expect("No home directory")
-        .join(".omk")
+    home_dir()
+        .map(|h| h.join(".omk"))
+        .unwrap_or_else(|_| PathBuf::from("/tmp/.omk"))
 }
 
 /// Return the active state directory.

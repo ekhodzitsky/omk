@@ -1,6 +1,10 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, std::path::PathBuf)>) {
+    omk::test_helpers::isolated_xdg_env()
+}
+
 #[test]
 fn test_version_flag() {
     let mut cmd = Command::cargo_bin("omk").unwrap();
@@ -30,7 +34,11 @@ fn test_version_subcommand() {
 
 #[test]
 fn test_doctor_runs() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
     cmd.arg("doctor");
     cmd.assert()
         .success()
@@ -39,7 +47,11 @@ fn test_doctor_runs() {
 
 #[test]
 fn test_config_show_runs() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
     cmd.arg("config").arg("show");
     cmd.assert()
         .success()
@@ -48,7 +60,11 @@ fn test_config_show_runs() {
 
 #[test]
 fn test_config_validate_runs() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
     cmd.arg("config").arg("validate");
     cmd.assert()
         .success()
@@ -75,26 +91,35 @@ fn test_man_runs() {
 
 #[test]
 fn test_state_list_runs() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
     cmd.arg("state").arg("list");
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 }
 
 #[test]
 fn test_team_list_runs() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
     cmd.arg("team").arg("list");
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 }
 
 #[test]
 fn test_skill_list_runs() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
     cmd.arg("skill").arg("list");
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 }
 
 #[test]
@@ -108,23 +133,33 @@ fn test_marketplace_list_runs() {
 
 #[test]
 fn test_backup_list_runs() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
     cmd.arg("backup").arg("list");
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 }
 
 #[test]
 fn test_cleanup_dry_run_runs() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
     cmd.arg("cleanup").arg("--dry-run");
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 }
 
 #[test]
 fn test_logs_runs() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
     cmd.arg("logs").arg("--lines").arg("10");
     // May fail if no log file exists, so we just check it doesn't panic
     let output = cmd.output().unwrap();
@@ -146,6 +181,7 @@ fn test_marketplace_info_builtin_skill() {
 }
 
 #[test]
+#[ignore = "network-dependent: requires GitHub API access"]
 fn test_update_check_runs() {
     let mut cmd = Command::cargo_bin("omk").unwrap();
     cmd.arg("update").arg("--check");
@@ -156,8 +192,15 @@ fn test_update_check_runs() {
 
 #[test]
 fn test_config_set_team_size() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
-    cmd.arg("config").arg("set").arg("default_team_size").arg("3");
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    cmd.arg("config")
+        .arg("set")
+        .arg("default_team_size")
+        .arg("3");
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Set default_team_size = 3"));
@@ -165,7 +208,11 @@ fn test_config_set_team_size() {
 
 #[test]
 fn test_config_set_invalid_key() {
+    let (_tmp, envs) = isolated_env();
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
     cmd.arg("config").arg("set").arg("invalid_key").arg("value");
     cmd.assert()
         .failure()
@@ -213,13 +260,17 @@ fn test_magic_keywords() {
 
 #[test]
 fn test_team_export_import_roundtrip() {
-    let bin = Command::cargo_bin("omk").unwrap();
+    let _bin = Command::cargo_bin("omk").unwrap();
     let tmp = tempfile::tempdir().unwrap();
     let export_path = tmp.path().join("test-team.json");
 
     // Export should fail if team doesn't exist
     let mut cmd = Command::cargo_bin("omk").unwrap();
-    cmd.arg("team").arg("export").arg("nonexistent-team").arg("-o").arg(&export_path);
+    cmd.arg("team")
+        .arg("export")
+        .arg("nonexistent-team")
+        .arg("-o")
+        .arg(&export_path);
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("not found"));
@@ -259,4 +310,20 @@ fn test_ralph_help() {
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("yolo"));
+}
+
+// L0-011: CI-friendly smoke tests that do not require real Kimi or tmux.
+#[test]
+fn test_help_smoke() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.arg("--help");
+    cmd.assert().success();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.arg("doctor").arg("--help");
+    cmd.assert().success();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.arg("config").arg("--help");
+    cmd.assert().success();
 }

@@ -1,9 +1,5 @@
 use anyhow::Result;
-use axum::{
-    response::Html,
-    routing::get,
-    Json, Router,
-};
+use axum::{response::Html, routing::get, Json, Router};
 use serde_json::Value;
 use std::net::SocketAddr;
 use tokio::signal;
@@ -412,26 +408,32 @@ async fn health_handler() -> Json<Value> {
     let mut healthy = true;
 
     // Check tmux
-    let tmux_ok = std::process::Command::new("tmux")
+    let tmux_ok = tokio::process::Command::new("tmux")
         .arg("-V")
         .output()
+        .await
         .map(|o| o.status.success())
         .unwrap_or(false);
     checks["tmux"] = serde_json::json!({"status": if tmux_ok { "ok" } else { "error" } });
-    if !tmux_ok { healthy = false; }
+    if !tmux_ok {
+        healthy = false;
+    }
 
     // Check kimi
-    let kimi_ok = std::process::Command::new("kimi")
+    let kimi_ok = tokio::process::Command::new("kimi")
         .arg("--version")
         .output()
+        .await
         .map(|o| o.status.success())
         .unwrap_or(false);
     checks["kimi"] = serde_json::json!({"status": if kimi_ok { "ok" } else { "error" } });
-    if !kimi_ok { healthy = false; }
+    if !kimi_ok {
+        healthy = false;
+    }
 
     // Check disk space
     let state_dir = crate::runtime::config::state_dir();
-    let disk_ok = check_disk_space(&state_dir);
+    let disk_ok = check_disk_space(&state_dir).await;
     checks["disk"] = serde_json::json!({
         "status": if disk_ok { "ok" } else { "warning" },
         "path": state_dir.to_string_lossy().to_string(),
@@ -444,10 +446,10 @@ async fn health_handler() -> Json<Value> {
     }))
 }
 
-fn check_disk_space(path: &std::path::Path) -> bool {
+async fn check_disk_space(path: &std::path::Path) -> bool {
     #[cfg(unix)]
     {
-        if let Ok(_metadata) = std::fs::metadata(path) {
+        if tokio::fs::metadata(path).await.is_ok() {
             // This is a simplified check; in production you'd use statvfs
             return true;
         }
@@ -461,7 +463,10 @@ async fn prometheus_metrics_handler() -> axum::response::Response<String> {
 
     output.push_str("# HELP omk_info OMK version info\n");
     output.push_str("# TYPE omk_info gauge\n");
-    output.push_str(&format!("omk_info{{version=\"{}\"}} 1\n", env!("CARGO_PKG_VERSION")));
+    output.push_str(&format!(
+        "omk_info{{version=\"{}\"}} 1\n",
+        env!("CARGO_PKG_VERSION")
+    ));
 
     if let Ok(content) = tokio::fs::read_to_string(&metrics_path).await {
         if let Ok(metrics) = serde_json::from_str::<serde_json::Value>(&content) {

@@ -1,52 +1,456 @@
 use anyhow::Result;
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+use std::collections::HashSet;
+use std::path::Path;
 
-/// Run the TUI HUD (requires --features tui)
-#[cfg(feature = "tui")]
-pub async fn run_tui() -> Result<()> {
-    use ratatui::{
-        backend::CrosstermBackend,
-        crossterm::{
-            event::{self, Event, KeyCode},
-            terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-            ExecutableCommand,
-        },
-        Terminal,
-    };
-    use std::io::stdout;
+use crate::runtime::events::{Event, EventKind, EventReader, RunId};
+use crate::runtime::state::{TaskStatus, TeamState};
+use crate::runtime::watchdog::{HealthStatus, Watchdog, WorkerHealth};
+use crate::vis::event_stream::EventStream;
 
-    stdout().execute(EnterAlternateScreen)?;
-    enable_raw_mode()?;
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct TaskSummary {
+    pub total: usize,
+    pub completed: usize,
+    pub running: usize,
+    pub pending: usize,
+    pub failed: usize,
+}
 
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-    let mut should_quit = false;
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkerDisplay {
+    pub name: String,
+    pub status: String,
+    pub heartbeat_age_secs: i64,
+    pub current_task_id: Option<String>,
+    pub retry_count: usize,
+    pub gate_status: String,
+}
 
-    while !should_quit {
-        terminal.draw(|frame| {
-            let area = frame.area();
-            let text = ratatui::widgets::Paragraph::new("omk HUD\n\nPress 'q' to quit")
-                .block(
-                    ratatui::widgets::Block::default()
-                        .title("Oh My Kimi")
-                        .borders(ratatui::widgets::Borders::ALL),
-                );
-            frame.render_widget(text, area);
-        })?;
+#[derive(Debug, Clone, Serialize)]
+pub struct HudState {
+    pub run_id: String,
+    pub team_name: String,
+    pub events: Vec<Event>,
+    pub workers: Vec<WorkerHealth>,
+    pub task_summary: TaskSummary,
+    pub start_time: DateTime<Utc>,
+    pub last_update: DateTime<Utc>,
+    #[serde(skip)]
+    pub team_state: Option<TeamState>,
+}
 
-        if event::poll(std::time::Duration::from_millis(250))? {
-            if let Event::Key(key) = event::read()? {
-                if key.code == KeyCode::Char('q') {
-                    should_quit = true;
-                }
-            }
+impl HudState {
+    pub fn new(team_name: &str, run_id: &str) -> Self {
+        Self {
+            run_id: run_id.to_string(),
+            team_name: team_name.to_string(),
+            events: Vec::new(),
+            workers: Vec::new(),
+            task_summary: TaskSummary::default(),
+            start_time: Utc::now(),
+            last_update: Utc::now(),
+            team_state: None,
         }
     }
 
-    stdout().execute(LeaveAlternateScreen)?;
-    disable_raw_mode()?;
-    Ok(())
+    /// Update state from event stream and health check
+    pub async fn refresh(
+        &mut self,
+        event_stream: &mut EventStream,
+        watchdog: &Watchdog,
+        state_dir: &Path,
+    ) -> Result<()> {
+        let new_events = event_stream.poll().await?;
+        self.events.extend(new_events);
+
+        // L5-001: Also read the full events.jsonl to ensure completeness
+        let events_path = state_dir.join("events.jsonl");
+        if let Ok(all_events) = EventReader::read_all(&events_path).await {
+            let existing_ids: HashSet<_> = self.events.iter().map(|e| e.id.clone()).collect();
+            for event in all_events {
+                if !existing_ids.contains(&event.id) {
+                    self.events.push(event);
+                }
+            }
+            self.events.sort_by_key(|a| a.ts);
+        }
+
+        // Determine start time from RunStarted event or fall back to team state
+        if let Some(start_event) = self
+            .events
+            .iter()
+            .find(|e| matches!(e.kind, EventKind::RunStarted))
+        {
+            self.start_time = start_event.ts;
+        } else if let Ok(team_state) = TeamState::load(state_dir).await {
+            self.start_time = team_state.created_at;
+        }
+
+        // Load team state for task summary and store it
+        self.team_state = TeamState::load(state_dir).await.ok();
+        let mut summary = TaskSummary::default();
+
+        if let Some(ref state) = self.team_state {
+            summary.total = state.tasks.len();
+            for task in &state.tasks {
+                match task.status {
+                    TaskStatus::Done => summary.completed += 1,
+                    TaskStatus::InProgress => summary.running += 1,
+                    TaskStatus::Pending => summary.pending += 1,
+                    TaskStatus::Failed => summary.failed += 1,
+                }
+            }
+        }
+
+        // If no tasks in state, try events as fallback
+        if summary.total == 0 {
+            let mut running_set = HashSet::new();
+            let mut completed_set = HashSet::new();
+            let mut failed_set = HashSet::new();
+
+            for event in &self.events {
+                if let Some(ref payload) = event.payload {
+                    if let Some(tid) = payload.get("task_id").and_then(|v| v.as_str()) {
+                        match event.kind {
+                            EventKind::TaskClaimed | EventKind::TaskStarted
+                                if !completed_set.contains(tid) && !failed_set.contains(tid) =>
+                            {
+                                running_set.insert(tid.to_string());
+                            }
+                            EventKind::TaskCompleted => {
+                                running_set.remove(tid);
+                                completed_set.insert(tid.to_string());
+                            }
+                            EventKind::TaskFailed => {
+                                running_set.remove(tid);
+                                failed_set.insert(tid.to_string());
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            summary.running = running_set.len();
+            summary.completed = completed_set.len();
+            summary.failed = failed_set.len();
+            summary.total = summary.running + summary.completed + summary.failed;
+        }
+
+        self.task_summary = summary;
+
+        // Run health check (read-only)
+        let run_id = RunId(self.run_id.clone());
+        let report = watchdog.check_team_read_only(&run_id, state_dir).await?;
+        self.workers = report.workers;
+
+        self.last_update = Utc::now();
+        Ok(())
+    }
+
+    /// Build per-worker display records combining health, events, and state.
+    pub fn worker_displays(&self) -> Vec<WorkerDisplay> {
+        self.workers
+            .iter()
+            .map(|w| {
+                let current_task = self.find_worker_task(&w.worker_id);
+                let retry_count = current_task
+                    .as_ref()
+                    .map(|t| self.count_retries_for_task(t))
+                    .unwrap_or(0);
+
+                let status = match w.status {
+                    HealthStatus::Healthy => {
+                        if current_task.is_some() {
+                            "Busy"
+                        } else {
+                            "Ready"
+                        }
+                    }
+                    HealthStatus::Stalled => "Stalled",
+                    HealthStatus::Dead => "Dead",
+                    HealthStatus::Unknown => "Unknown",
+                }
+                .to_string();
+
+                let heartbeat_age_secs = if let Some(hb) = w.last_heartbeat {
+                    self.last_update.signed_duration_since(hb).num_seconds()
+                } else {
+                    self.events
+                        .iter()
+                        .rev()
+                        .find(|e| {
+                            e.kind == EventKind::WorkerHeartbeat
+                                && e.actor.as_deref() == Some(&w.worker_id)
+                        })
+                        .map(|e| self.last_update.signed_duration_since(e.ts).num_seconds())
+                        .unwrap_or(-1)
+                };
+
+                WorkerDisplay {
+                    name: w.worker_id.clone(),
+                    status,
+                    heartbeat_age_secs,
+                    current_task_id: current_task,
+                    retry_count,
+                    gate_status: self.latest_gate_status(),
+                }
+            })
+            .collect()
+    }
+
+    fn find_worker_task(&self, worker_id: &str) -> Option<String> {
+        let mut task_id = None;
+        for event in &self.events {
+            if event.actor.as_deref() != Some(worker_id) {
+                continue;
+            }
+            if let Some(ref payload) = event.payload {
+                if let Some(tid) = payload.get("task_id").and_then(|v| v.as_str()) {
+                    match event.kind {
+                        EventKind::TaskClaimed | EventKind::TaskStarted => {
+                            task_id = Some(tid.to_string());
+                        }
+                        EventKind::TaskCompleted | EventKind::TaskFailed => {
+                            task_id = None;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        task_id
+    }
+
+    fn count_retries_for_task(&self, task_id: &str) -> usize {
+        self.events
+            .iter()
+            .filter(|e| {
+                e.kind == EventKind::RetryScheduled
+                    && e.payload
+                        .as_ref()
+                        .and_then(|p| p.get("task_id").and_then(|v| v.as_str()))
+                        == Some(task_id)
+            })
+            .count()
+    }
+
+    fn latest_gate_status(&self) -> String {
+        for event in self.events.iter().rev() {
+            match event.kind {
+                EventKind::GatePassed => return "passed".to_string(),
+                EventKind::GateFailed => return "failed".to_string(),
+                _ => {}
+            }
+        }
+        "-".to_string()
+    }
+
+    /// Render as formatted text (for terminal or tmux status)
+    pub fn render_text(&self) -> String {
+        let runtime = self.last_update.signed_duration_since(self.start_time);
+        let runtime_str = format!(
+            "{}:{:02}:{:02}",
+            runtime.num_hours(),
+            runtime.num_minutes().rem_euclid(60),
+            runtime.num_seconds().rem_euclid(60)
+        );
+
+        let healthy_count = self
+            .workers
+            .iter()
+            .filter(|w| w.status == HealthStatus::Healthy)
+            .count();
+        let stalled_count = self
+            .workers
+            .iter()
+            .filter(|w| w.status == HealthStatus::Stalled)
+            .count();
+        let dead_count = self
+            .workers
+            .iter()
+            .filter(|w| w.status == HealthStatus::Dead)
+            .count();
+
+        let mut lines = Vec::new();
+        lines.push(format!(
+            "OMK HUD — team: {} | run: {}",
+            self.team_name, self.run_id
+        ));
+        lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".to_string());
+        lines.push(format!(
+            "Workers: {} total | {} healthy | {} stalled | {} dead",
+            self.workers.len(),
+            healthy_count,
+            stalled_count,
+            dead_count
+        ));
+        lines.push(format!(
+            "Tasks:   {} total | {} completed | {} running | {} pending",
+            self.task_summary.total,
+            self.task_summary.completed,
+            self.task_summary.running,
+            self.task_summary.pending
+        ));
+        lines.push(format!("Runtime: {}", runtime_str));
+        lines.push(format!("Events:  {}", self.events.len()));
+        lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".to_string());
+
+        for display in self.worker_displays() {
+            let (icon, _) = match display.status.as_str() {
+                "Healthy" | "Ready" | "Busy" => ("✅", "healthy"),
+                "Stalled" => ("⚠️", "stalled"),
+                "Dead" => ("❌", "dead"),
+                _ => ("❓", "unknown"),
+            };
+
+            let age_str = if display.heartbeat_age_secs >= 0 {
+                format!("{}s", display.heartbeat_age_secs)
+            } else {
+                "N/A".to_string()
+            };
+
+            let task_str = display.current_task_id.unwrap_or_else(|| "-".to_string());
+
+            lines.push(format!(
+                "[{}] {} {} | age: {} | task: {} | retries: {} | gates: {}",
+                display.name,
+                icon,
+                display.status,
+                age_str,
+                task_str,
+                display.retry_count,
+                display.gate_status,
+            ));
+        }
+
+        lines.join("\n")
+    }
+
+    /// Render as JSON (for API consumption)
+    pub fn render_json(&self) -> Result<String> {
+        let json = serde_json::to_string_pretty(self)?;
+        Ok(json)
+    }
+
+    /// Render compact tmux statusline string (max ~80 chars).
+    pub fn to_tmux_status(&self) -> String {
+        let total = self.workers.len();
+        let running = self
+            .workers
+            .iter()
+            .filter(|w| w.status == HealthStatus::Healthy)
+            .count();
+        let stalled = self
+            .workers
+            .iter()
+            .filter(|w| w.status == HealthStatus::Stalled)
+            .count();
+        let dead = self
+            .workers
+            .iter()
+            .filter(|w| w.status == HealthStatus::Dead)
+            .count();
+
+        let core = format!(
+            "OMK:{} workers | {} running | {} stalled | {} dead",
+            total, running, stalled, dead
+        );
+
+        const MAX_LEN: usize = 80;
+        let mut result = core;
+
+        if let Some(gate_name) = self.latest_failed_gate() {
+            let gate_part = format!("gate:{}-FAILED", gate_name);
+            let candidate = format!("{} | {}", result, gate_part);
+            if candidate.len() <= MAX_LEN {
+                result = candidate;
+            }
+        }
+
+        if let Some(proof_status) = self.latest_proof_status() {
+            let proof_part = format!("proof:{}", proof_status);
+            let candidate = format!("{} | {}", result, proof_part);
+            if candidate.len() <= MAX_LEN {
+                result = candidate;
+            }
+        }
+
+        result
+    }
+
+    fn latest_failed_gate(&self) -> Option<String> {
+        for event in self.events.iter().rev() {
+            if event.kind == EventKind::GateFailed {
+                if let Some(ref payload) = event.payload {
+                    if let Some(name) = payload.get("name").and_then(|v| v.as_str()) {
+                        return Some(name.to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn latest_proof_status(&self) -> Option<String> {
+        for event in self.events.iter().rev() {
+            if event.kind == EventKind::ProofWritten {
+                if let Some(ref payload) = event.payload {
+                    if let Some(status) = payload.get("status").and_then(|v| v.as_str()) {
+                        return Some(status.to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
-#[cfg(not(feature = "tui"))]
-pub async fn run_tui() -> Result<()> {
-    anyhow::bail!("TUI feature not enabled")
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::events::{Event, EventKind, RunId};
+
+    #[test]
+    fn hud_state_render_text_expected_output() {
+        let mut hud = HudState::new("my-team", "abc123");
+        hud.start_time = Utc::now() - chrono::Duration::seconds(154);
+        hud.last_update = Utc::now();
+        hud.events.push(Event::new(
+            RunId("abc123".to_string()),
+            EventKind::RunStarted,
+        ));
+        hud.events.push(
+            Event::new(RunId("abc123".to_string()), EventKind::WorkerStarted)
+                .with_actor("worker-0"),
+        );
+        hud.workers.push(WorkerHealth {
+            worker_id: "worker-0".to_string(),
+            status: HealthStatus::Healthy,
+            last_heartbeat: Some(Utc::now()),
+            heartbeat_content: None,
+            tmux_pane_alive: true,
+            inbox_count: 0,
+            outbox_count: 0,
+            message: "Heartbeat fresh (5s ago)".to_string(),
+        });
+        hud.task_summary = TaskSummary {
+            total: 5,
+            completed: 2,
+            running: 1,
+            pending: 2,
+            failed: 0,
+        };
+
+        let text = hud.render_text();
+        assert!(text.contains("team: my-team"));
+        assert!(text.contains("run: abc123"));
+        assert!(text.contains("Workers: 1 total | 1 healthy | 0 stalled | 0 dead"));
+        assert!(text.contains("Tasks:   5 total | 2 completed | 1 running | 2 pending"));
+        assert!(text.contains("Runtime: 0:02:34"));
+        assert!(text.contains("Events:  2"));
+        assert!(text.contains("[worker-0] ✅ Ready"));
+    }
 }

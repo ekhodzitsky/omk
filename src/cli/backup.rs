@@ -1,17 +1,17 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use std::process::Command;
+use tokio::process::Command;
 use tracing::info;
 
 #[derive(Parser, Debug)]
-pub struct Args {
+pub(crate) struct Args {
     #[command(subcommand)]
     command: BackupCommands,
 }
 
 #[derive(Subcommand, Debug)]
-pub enum BackupCommands {
+pub(crate) enum BackupCommands {
     /// Create a backup of all state
     Create {
         /// Optional backup name (defaults to timestamp)
@@ -33,7 +33,7 @@ pub enum BackupCommands {
     },
 }
 
-pub async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args) -> Result<()> {
     match args.command {
         BackupCommands::Create { name } => create_backup(name).await,
         BackupCommands::List => list_backups().await,
@@ -47,23 +47,21 @@ async fn create_backup(name: Option<String>) -> Result<()> {
     let backup_dir = crate::runtime::config::data_dir().join("backups");
     tokio::fs::create_dir_all(&backup_dir).await?;
 
-    let backup_name = name.unwrap_or_else(|| {
-        chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string()
-    });
+    let backup_name =
+        name.unwrap_or_else(|| chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string());
     let backup_path = backup_dir.join(format!("omk-backup-{}.tar.gz", backup_name));
 
     info!(source = %state_dir.display(), target = %backup_path.display(), "Creating backup");
     println!("Creating backup: {}", backup_path.display());
 
     let status = Command::new("tar")
-        .args([
-            "-czf",
-            backup_path.to_str().unwrap(),
-            "-C",
-            state_dir.parent().unwrap().to_str().unwrap(),
-            state_dir.file_name().unwrap().to_str().unwrap(),
-        ])
+        .args(["-czf"])
+        .arg(&backup_path)
+        .arg("-C")
+        .arg(state_dir.parent().unwrap_or(std::path::Path::new(".")))
+        .arg(state_dir.file_name().unwrap_or_default())
         .status()
+        .await
         .context("Failed to run tar command")?;
 
     if !status.success() {
@@ -99,7 +97,7 @@ async fn list_backups() -> Result<()> {
         if path.extension().and_then(|e| e.to_str()) == Some("gz") {
             found = true;
             let metadata = entry.metadata().await?;
-            let name = path.file_name().unwrap().to_string_lossy();
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
             let modified = metadata.modified()?;
             let age = modified.elapsed().unwrap_or_default();
             let size = metadata.len() as f64 / 1_048_576.0;
@@ -153,13 +151,12 @@ async fn restore_backup(name: &str) -> Result<()> {
 
     // Extract backup
     let status = Command::new("tar")
-        .args([
-            "-xzf",
-            backup_path.to_str().unwrap(),
-            "-C",
-            state_dir.parent().unwrap().to_str().unwrap(),
-        ])
+        .args(["-xzf"])
+        .arg(&backup_path)
+        .arg("-C")
+        .arg(state_dir.parent().unwrap_or(std::path::Path::new(".")))
         .status()
+        .await
         .context("Failed to run tar command")?;
 
     if !status.success() {
@@ -192,7 +189,11 @@ async fn prune_backups(keep: usize) -> Result<()> {
     }
 
     if backups.len() <= keep {
-        println!("Found {} backup(s), keeping all (limit: {})", backups.len(), keep);
+        println!(
+            "Found {} backup(s), keeping all (limit: {})",
+            backups.len(),
+            keep
+        );
         return Ok(());
     }
 

@@ -4,14 +4,16 @@ use serde_json::Value;
 use std::path::Path;
 use tracing::info;
 
+use crate::runtime::sanitize::sanitize_name;
+
 #[derive(Parser, Debug)]
-pub struct Args {
+pub(crate) struct Args {
     #[command(subcommand)]
     command: StateCommands,
 }
 
 #[derive(Subcommand, Debug)]
-pub enum StateCommands {
+pub(crate) enum StateCommands {
     /// List all tracked sessions (teams, autopilots, ralphs)
     List,
     /// Export all state to a single JSON file
@@ -28,7 +30,7 @@ pub enum StateCommands {
     },
 }
 
-pub async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args) -> Result<()> {
     match args.command {
         StateCommands::List => list_state().await,
         StateCommands::Export { output } => export_state(&output).await,
@@ -64,7 +66,12 @@ async fn list_state() -> Result<()> {
         if !teams.is_empty() {
             println!("Teams:");
             for (name, task, phase) in teams {
-                println!("  {:<20} [{:<12}] {}", name, phase, task.chars().take(40).collect::<String>());
+                println!(
+                    "  {:<20} [{:<12}] {}",
+                    name,
+                    phase,
+                    task.chars().take(40).collect::<String>()
+                );
             }
             has_any = true;
         }
@@ -92,10 +99,17 @@ async fn list_state() -> Result<()> {
             }
         }
         if !autopilots.is_empty() {
-            if has_any { println!(); }
+            if has_any {
+                println!();
+            }
             println!("Autopilots:");
             for (name, task, phase) in autopilots {
-                println!("  {:<20} [{:<12}] {}", name, phase, task.chars().take(40).collect::<String>());
+                println!(
+                    "  {:<20} [{:<12}] {}",
+                    name,
+                    phase,
+                    task.chars().take(40).collect::<String>()
+                );
             }
             has_any = true;
         }
@@ -125,10 +139,17 @@ async fn list_state() -> Result<()> {
             }
         }
         if !ralphs.is_empty() {
-            if has_any { println!(); }
+            if has_any {
+                println!();
+            }
             println!("Ralph sessions:");
             for (name, task, progress) in ralphs {
-                println!("  {:<20} [{:<8}] {}", name, progress, task.chars().take(40).collect::<String>());
+                println!(
+                    "  {:<20} [{:<8}] {}",
+                    name,
+                    progress,
+                    task.chars().take(40).collect::<String>()
+                );
             }
             has_any = true;
         }
@@ -217,17 +238,29 @@ async fn export_state(output: &str) -> Result<()> {
 
     info!(path = %output, "Exported state");
     println!("✓ State exported to {}", output);
-    println!("  Teams:      {}", export["teams"].as_array().map(|a| a.len()).unwrap_or(0));
-    println!("  Autopilots: {}", export["autopilots"].as_array().map(|a| a.len()).unwrap_or(0));
-    println!("  Ralphs:     {}", export["ralphs"].as_array().map(|a| a.len()).unwrap_or(0));
+    println!(
+        "  Teams:      {}",
+        export["teams"].as_array().map(|a| a.len()).unwrap_or(0)
+    );
+    println!(
+        "  Autopilots: {}",
+        export["autopilots"]
+            .as_array()
+            .map(|a| a.len())
+            .unwrap_or(0)
+    );
+    println!(
+        "  Ralphs:     {}",
+        export["ralphs"].as_array().map(|a| a.len()).unwrap_or(0)
+    );
 
     Ok(())
 }
 
 async fn import_state(input: &str) -> Result<()> {
     let content = tokio::fs::read_to_string(input).await?;
-    let export: Value = serde_json::from_str(&content)
-        .with_context(|| format!("parse {}", input))?;
+    let export: Value =
+        serde_json::from_str(&content).with_context(|| format!("parse {}", input))?;
 
     println!("Importing state from {}...", input);
 
@@ -237,7 +270,14 @@ async fn import_state(input: &str) -> Result<()> {
     if let Some(teams) = export["teams"].as_array() {
         for team in teams {
             if let Some(name) = team["name"].as_str() {
-                let team_dir = state_dir.join("team").join(name);
+                let name = match sanitize_name(name) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        println!("  ⚠ Skipped invalid team name '{}': {}", name, e);
+                        continue;
+                    }
+                };
+                let team_dir = state_dir.join("team").join(&name);
                 tokio::fs::create_dir_all(&team_dir).await?;
                 let path = team_dir.join("team-state.json");
                 let json = serde_json::to_vec_pretty(team)?;
@@ -251,7 +291,14 @@ async fn import_state(input: &str) -> Result<()> {
     if let Some(autopilots) = export["autopilots"].as_array() {
         for ap in autopilots {
             if let Some(name) = ap["name"].as_str().or_else(|| ap["task"].as_str()) {
-                let ap_dir = state_dir.join("autopilot").join(name);
+                let name = match sanitize_name(name) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        println!("  ⚠ Skipped invalid autopilot name '{}': {}", name, e);
+                        continue;
+                    }
+                };
+                let ap_dir = state_dir.join("autopilot").join(&name);
                 tokio::fs::create_dir_all(&ap_dir).await?;
                 let path = ap_dir.join("autopilot-state.json");
                 let json = serde_json::to_vec_pretty(ap)?;
@@ -265,7 +312,19 @@ async fn import_state(input: &str) -> Result<()> {
     if let Some(ralphs) = export["ralphs"].as_array() {
         for ralph in ralphs {
             if let Some(task) = ralph["task"].as_str() {
-                let slug = task.split_whitespace().take(5).collect::<Vec<_>>().join("-").to_lowercase();
+                let slug = task
+                    .split_whitespace()
+                    .take(5)
+                    .collect::<Vec<_>>()
+                    .join("-")
+                    .to_lowercase();
+                let slug = match sanitize_name(&slug) {
+                    Ok(n) => n,
+                    Err(e) => {
+                        println!("  ⚠ Skipped invalid ralph slug '{}': {}", slug, e);
+                        continue;
+                    }
+                };
                 let ralph_dir = state_dir.join("ralph").join(&slug);
                 tokio::fs::create_dir_all(&ralph_dir).await?;
                 let path = ralph_dir.join("ralph-state.json");
