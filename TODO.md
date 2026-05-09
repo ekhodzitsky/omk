@@ -440,7 +440,7 @@ Can run in parallel with: L8 docs, L9 research. Coordinate with L1/L2/L3 before 
 
 ### L0 Build And Test Cleanup
 
-- [ ] L0-004 Record the exact verification commands in `README.md` or `CONTRIBUTING.md`.
+- [x] L0-004 Record the exact verification commands in `README.md` or `CONTRIBUTING.md`.
 - [ ] L0-005 Move network-dependent smoke coverage such as `update --check` behind an ignored/integration test or mock the release lookup.
 - [x] L0-006 Ensure `config set` creates the config directory before atomic writes.
 - [ ] L0-007 Confirm `cargo check --all-targets` agrees with default `cargo check`.
@@ -508,10 +508,10 @@ Can run in parallel with: L2 event core, L5 HUD, L8 docs. Coordinate with L7 rol
 - [x] L1-019 Implement rollback report with removed files, restored files, skipped files, and errors.
 - [x] L1-020 Ensure rollback never deletes unrelated user files.
 - [x] L1-021 Ensure rollback handles missing manifest cleanly.
-- [ ] L1-022 Ensure rollback handles partial/corrupt backups cleanly.
+- [x] L1-022 Ensure rollback handles partial/corrupt backups cleanly.
 - [x] L1-023 Add tests for clean install rollback.
 - [x] L1-024 Add tests for overwrite rollback.
-- [ ] L1-025 Add tests for partial failure rollback.
+- [x] L1-025 Add tests for partial failure rollback.
 - [x] L1-026 Add tests for user-modified managed file rollback.
 
 ### L1 Sync And Doctor
@@ -591,7 +591,7 @@ As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports `kimi --wire` protocol 
 - [x] LW-016 Implement streaming `event` notification ingestion.
 - [x] LW-017 Map Wire `event` notifications into OMK `event-log.jsonl` records.
 - [x] LW-018 Implement Wire `request` handling for approvals, questions, tool calls, or future upstream request kinds.
-- [ ] LW-019 Add explicit unknown-method and unknown-event handling.
+- [x] LW-019 Add explicit unknown-method and unknown-event handling.
 - [x] LW-020 Implement `cancel` support.
 - [x] LW-021 Implement `steer` support for active turns if it fits OMK safety rules.
 - [ ] LW-022 Implement `set_plan_mode` only after the UX/safety implications are documented.
@@ -799,9 +799,9 @@ Can run in parallel with: L3 after L2 event schema. Blocks launch demo.
 - [x] L4-014 Add `omk run list`.
 - [x] L4-015 Add `omk run show <id>`.
 - [x] L4-016 Add `omk run show latest`.
-- [ ] L4-017 Add filtering by worker/task/kind.
-- [ ] L4-018 Add concise timeline output.
-- [ ] L4-019 Add JSON output option.
+- [x] L4-017 Add filtering by worker/task/kind.
+- [x] L4-018 Add concise timeline output.
+- [x] L4-019 Add JSON output option.
 - [ ] L4-020 Add tests for latest run resolution.
 
 ### L4 Verification Gates

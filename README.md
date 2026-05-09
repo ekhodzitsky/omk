@@ -233,7 +233,6 @@ omk ultrawork --help
 git clone https://github.com/ekhodzitsky/oh-my-kimi
 cd oh-my-kimi
 
-make check
 make repo-map
 make wire-smoke # optional: requires local authenticated Kimi CLI
 make release
@@ -241,6 +240,19 @@ make install
 ```
 
 We follow spec-driven development and TDD. Start with [docs/PROJECT_MAP.md](docs/PROJECT_MAP.md) when navigating the repository, then use the area README for the module you are changing. See [SPEC.md](SPEC.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Verification
+
+Use these exact commands when checking changes locally:
+
+```bash
+cargo fmt --check
+cargo check
+cargo check --all-targets
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+git diff --check
+```
 
 ## Troubleshooting
 

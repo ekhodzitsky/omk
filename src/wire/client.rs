@@ -313,8 +313,20 @@ where
                         warn!(method = %req.method, "Unknown wire request method, skipping");
                         continue;
                     }
+                    WireMessage::Request(req) if req.params.to_request().is_err() => {
+                        warn!(
+                            request_id = %req.id,
+                            request_type = %req.params.request_type,
+                            "Unknown wire request type, replying with error"
+                        );
+                        client
+                            .send_error(&req.id, -32601, "Unknown request type")
+                            .await?;
+                        continue;
+                    }
                     WireMessage::Event(ev) if ev.params.to_event().is_err() => {
                         warn!(event_type = %ev.params.event_type, "Unknown wire event kind");
+                        continue;
                     }
                     _ => {}
                 }
@@ -482,7 +494,7 @@ read -r line
         let tmp = tempfile::tempdir().unwrap();
         let script = tmp.path().join("mock-wire-events");
         let script_content = r#"#!/bin/bash
-echo '{"jsonrpc":"2.0","method":"event","params":{"type":"done","payload":{}}}'
+echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":{"user_input":"hello"}}}'
 "#;
         tokio::fs::write(&script, script_content).await.unwrap();
         #[cfg(unix)]
@@ -501,7 +513,7 @@ echo '{"jsonrpc":"2.0","method":"event","params":{"type":"done","payload":{}}}'
             let seen = seen_clone.clone();
             async move {
                 if let WireMessage::Event(ev) = msg {
-                    if ev.params.event_type == "done" {
+                    if ev.params.event_type == "turn_begin" {
                         seen.store(true, std::sync::atomic::Ordering::SeqCst);
                     }
                 }

@@ -67,6 +67,7 @@ pub async fn rollback(project_dir: &Path, dry_run: bool) -> Result<RollbackRepor
                             backup_path.display(),
                             e
                         ));
+                        report.skipped.push(entry.path.clone());
                     }
                 }
             }
@@ -318,5 +319,56 @@ mod tests {
         let report = rollback(dir.path(), true).await.unwrap();
         assert_eq!(report.removed.len(), 1);
         assert!(file_path.exists()); // file still there
+    }
+
+    #[tokio::test]
+    async fn test_rollback_partial_failure_with_corrupt_backup_keeps_other_files_safe() {
+        let dir = TempDir::new().unwrap();
+        tokio::fs::create_dir_all(dir.path().join(".kimi"))
+            .await
+            .unwrap();
+        let mut manifest = AssetManifest::new(dir.path());
+
+        let removable_path = dir.path().join("remove-me.txt");
+        tokio::fs::write(&removable_path, "omk-owned")
+            .await
+            .unwrap();
+        manifest
+            .add_file(
+                std::path::Path::new("remove-me.txt"),
+                super::super::manifest::EntryKind::Other,
+            )
+            .await;
+
+        let restore_path = dir.path().join("restore-me.txt");
+        tokio::fs::write(&restore_path, "omk-content")
+            .await
+            .unwrap();
+        manifest
+            .add_file(
+                std::path::Path::new("restore-me.txt"),
+                super::super::manifest::EntryKind::Other,
+            )
+            .await;
+
+        manifest.save(dir.path()).await.unwrap();
+
+        // Corrupt backup artifact: directory instead of a backup file.
+        let corrupt_backup = format!("{}.omk-backup-9999999999", restore_path.display());
+        tokio::fs::create_dir_all(&corrupt_backup).await.unwrap();
+
+        let report = rollback(dir.path(), false).await.unwrap();
+
+        assert!(!removable_path.exists());
+        assert!(report.removed.contains(&PathBuf::from("remove-me.txt")));
+
+        let restore_content = tokio::fs::read_to_string(&restore_path).await.unwrap();
+        assert_eq!(restore_content, "omk-content");
+        assert!(std::path::Path::new(&corrupt_backup).exists());
+
+        assert!(report.skipped.contains(&PathBuf::from("restore-me.txt")));
+        assert_eq!(report.errors.len(), 1);
+        assert!(report.errors[0].contains("restore"));
+        assert!(report.errors[0].contains("restore-me.txt"));
     }
 }

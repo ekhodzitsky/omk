@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Upstream Kimi docs tracking**: added `docs/KIMI_UPSTREAM.md` to record the official Kimi docs URLs we re-check before Kimi integration releases, plus the last checked date and protocol note.
+- **Run timeline filtering and hardening**: `omk run show` now supports worker/task/kind filters plus JSON output, Wire message loops explicitly skip unknown methods/events and error unknown request types, rollback reports corrupt backup restore failures without stopping unrelated cleanup, and README records the exact local verification commands.
 - **Verification-First Completion**: `VerificationGate` config model with presets for Rust, Node, Python, and Go. Autopilot QA phase and Ralph verify loops now run structured gates (format, lint, tests, etc.) and block completion until all required gates pass. `DoneContract` persists run evidence (gates, changed files, known gaps) as JSON.
 - **Ultrawork mode**: `omk ultrawork` (alias `uw`) runs multiple kimi prompts in parallel with configurable concurrency. Supports task args, `--file` (one per line), `--files` glob with `--prompt` template, and `--output` JSON. Includes cost tracking, AGENTS.md injection, and webhook notifications.
 - **Cost tracking wired across all modes**: `team`, `autopilot`, and `ralph` now record session costs to `costs.json` with heuristic estimates shown at start and actual duration-based estimates at completion.

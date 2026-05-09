@@ -1,8 +1,9 @@
-use omk::wire::client::WireClient;
+use omk::wire::client::{process_messages, WireClient, WireMessage as ClientWireMessage};
 use omk::wire::protocol::*;
 use serde_json::json;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 
 #[test]
@@ -342,6 +343,93 @@ cat > /dev/null
     assert_eq!(replay.status, "finished");
     assert_eq!(replay.events.as_ref().unwrap().len(), 1);
     assert_eq!(replay.requests.as_ref().unwrap().len(), 1);
+
+    client.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_process_messages_skips_unknown_method_and_unknown_event_kind() {
+    let tmp = TempDir::new().unwrap();
+    let script_path = tmp.path().join("mock_unknown_method_event.sh");
+
+    let script = r#"#!/bin/bash
+echo '{"jsonrpc":"2.0","method":"tool_call","id":"req-unknown-method","params":{"type":"ApprovalRequest","payload":{"id":"app-1","tool_call_id":"tc-1","sender":"Shell","action":"run","description":"ls"}}}'
+echo '{"jsonrpc":"2.0","method":"event","params":{"type":"UnknownEventKind","payload":{"foo":"bar"}}}'
+echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":{"user_input":"Hello"}}}'
+"#;
+
+    fs::write(&script_path, script).unwrap();
+    let mut perms = fs::metadata(&script_path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&script_path, perms).unwrap();
+
+    let mut client = WireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let seen_events = Arc::new(Mutex::new(Vec::<String>::new()));
+    let seen_events_for_handler = seen_events.clone();
+
+    process_messages(&mut client, move |msg| {
+        let seen_events = seen_events_for_handler.clone();
+        async move {
+            if let ClientWireMessage::Event(ev) = msg {
+                seen_events.lock().unwrap().push(ev.params.event_type);
+            }
+            Ok(None)
+        }
+    })
+    .await
+    .unwrap();
+
+    let seen = seen_events.lock().unwrap().clone();
+    assert_eq!(seen, vec!["turn_begin".to_string()]);
+
+    client.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_process_messages_unknown_request_type_sends_error_and_continues() {
+    let tmp = TempDir::new().unwrap();
+    let script_path = tmp.path().join("mock_unknown_request_type.sh");
+    let capture_path = tmp.path().join("stdin_capture.jsonl");
+    let script = format!(
+        r#"#!/bin/bash
+capture="{capture}"
+echo '{{"jsonrpc":"2.0","method":"request","id":"req-unknown-type","params":{{"type":"AlienRequest","payload":{{"x":1}}}}}}'
+read -r line
+echo "$line" > "$capture"
+echo '{{"jsonrpc":"2.0","method":"event","params":{{"type":"turn_begin","payload":{{"user_input":"Hello"}}}}}}'
+"#,
+        capture = capture_path.display()
+    );
+
+    fs::write(&script_path, script).unwrap();
+    let mut perms = fs::metadata(&script_path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&script_path, perms).unwrap();
+
+    let mut client = WireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let seen_events = Arc::new(Mutex::new(Vec::<String>::new()));
+    let seen_events_for_handler = seen_events.clone();
+
+    process_messages(&mut client, move |msg| {
+        let seen_events = seen_events_for_handler.clone();
+        async move {
+            if let ClientWireMessage::Event(ev) = msg {
+                seen_events.lock().unwrap().push(ev.params.event_type);
+            }
+            Ok(None)
+        }
+    })
+    .await
+    .unwrap();
+
+    let seen = seen_events.lock().unwrap().clone();
+    assert_eq!(seen, vec!["turn_begin".to_string()]);
+
+    let raw = fs::read_to_string(&capture_path).unwrap();
+    let response: JsonRpcErrorResponse = serde_json::from_str(raw.trim()).unwrap();
+    assert_eq!(response.id, "req-unknown-type");
+    assert_eq!(response.error.code, -32601);
+    assert_eq!(response.error.message, "Unknown request type");
 
     client.shutdown().await.unwrap();
 }

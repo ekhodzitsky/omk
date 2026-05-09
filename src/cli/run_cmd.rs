@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use serde_json::Value;
 
 #[derive(Parser, Debug)]
 pub(crate) struct Args {
@@ -18,13 +19,22 @@ pub(crate) enum RunCommands {
         /// Output format
         #[arg(short, long, value_enum, default_value = "text")]
         format: OutputFormat,
+        /// Output JSON (shortcut for --format json)
+        #[arg(long)]
+        json: bool,
         /// Filter by event kind
         #[arg(short, long)]
         kind: Option<String>,
+        /// Filter by worker id
+        #[arg(long)]
+        worker: Option<String>,
+        /// Filter by task id
+        #[arg(long)]
+        task: Option<String>,
     },
 }
 
-#[derive(Clone, Debug, clap::ValueEnum)]
+#[derive(Copy, Clone, Debug, clap::ValueEnum)]
 pub(crate) enum OutputFormat {
     Text,
     Json,
@@ -36,8 +46,21 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         RunCommands::Show {
             run_id,
             format,
+            json,
             kind,
-        } => cmd_show(&run_id, format, kind.as_deref()).await,
+            worker,
+            task,
+        } => {
+            cmd_show(
+                &run_id,
+                format,
+                json,
+                kind.as_deref(),
+                worker.as_deref(),
+                task.as_deref(),
+            )
+            .await
+        }
     }
 }
 
@@ -90,25 +113,58 @@ async fn cmd_list() -> Result<()> {
     Ok(())
 }
 
-async fn cmd_show(run_id: &str, format: OutputFormat, kind_filter: Option<&str>) -> Result<()> {
+async fn cmd_show(
+    run_id: &str,
+    format: OutputFormat,
+    json: bool,
+    kind_filter: Option<&str>,
+    worker_filter: Option<&str>,
+    task_filter: Option<&str>,
+) -> Result<()> {
     let (state_dir, resolved_run_id) = crate::runtime::state::resolve_run(run_id).await?;
     let event_log = state_dir.join(crate::runtime::config::EVENTS_FILE);
-    let events = crate::runtime::events::EventReader::read_all(&event_log).await?;
-
-    let filtered: Vec<_> = if let Some(kind) = kind_filter {
-        events
-            .into_iter()
-            .filter(|e| {
-                format!("{:?}", e.kind)
-                    .to_lowercase()
-                    .contains(&kind.to_lowercase())
-            })
-            .collect()
+    let mut used_worker_reader = false;
+    let mut used_task_reader = false;
+    let events = if let Some(worker) = worker_filter {
+        used_worker_reader = true;
+        crate::runtime::events::EventReader::read_for_worker(&event_log, worker).await?
+    } else if let Some(task_id) = task_filter {
+        used_task_reader = true;
+        crate::runtime::events::EventReader::read_for_task(&event_log, task_id).await?
     } else {
-        events
+        crate::runtime::events::EventReader::read_all(&event_log).await?
     };
 
-    match format {
+    let kind_filter_lc = kind_filter.map(str::to_lowercase);
+    let filtered: Vec<_> = events
+        .into_iter()
+        .filter(|event| {
+            if !used_worker_reader {
+                if let Some(worker) = worker_filter {
+                    if event.actor.as_deref() != Some(worker) {
+                        return false;
+                    }
+                }
+            }
+            if !used_task_reader {
+                if let Some(task_id) = task_filter {
+                    if payload_string(event, "task_id").as_deref() != Some(task_id) {
+                        return false;
+                    }
+                }
+            }
+            if let Some(kind) = &kind_filter_lc {
+                if !event_kind_name(event).to_lowercase().contains(kind) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+
+    let output_format = if json { OutputFormat::Json } else { format };
+
+    match output_format {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(&filtered)?);
         }
@@ -123,15 +179,41 @@ async fn cmd_show(run_id: &str, format: OutputFormat, kind_filter: Option<&str>)
 
             for event in &filtered {
                 let actor_str = event.actor.as_deref().unwrap_or("—");
+                let task_col = payload_string(event, "task_id")
+                    .map(|task_id| format!("  task={task_id}"))
+                    .unwrap_or_default();
                 println!(
-                    "  {}  {:22}  actor={}",
+                    "  {}  {:22}  actor={}{}",
                     event.ts.format("%H:%M:%S"),
-                    format!("{:?}", event.kind),
-                    actor_str
+                    event_kind_name(event),
+                    actor_str,
+                    task_col
                 );
             }
         }
     }
 
     Ok(())
+}
+
+fn event_kind_name(event: &crate::runtime::events::Event) -> String {
+    serde_json::to_value(&event.kind)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| format!("{:?}", event.kind))
+}
+
+fn payload_string(event: &crate::runtime::events::Event, key: &str) -> Option<String> {
+    event
+        .payload
+        .as_ref()
+        .and_then(|payload| payload.get(key))
+        .and_then(value_as_string)
+}
+
+fn value_as_string(value: &Value) -> Option<String> {
+    if let Some(text) = value.as_str() {
+        return Some(text.to_string());
+    }
+    value.get("0")?.as_str().map(str::to_string)
 }
