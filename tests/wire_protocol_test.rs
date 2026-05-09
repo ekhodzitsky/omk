@@ -90,6 +90,20 @@ fn test_prompt_result_finished() {
 }
 
 #[test]
+fn test_prompt_result_accepts_step_count_and_legacy_trace() {
+    let counted: PromptResult =
+        serde_json::from_value(json!({"status":"max_steps","steps":3})).unwrap();
+    assert_eq!(counted.steps, Some(PromptSteps::Count(3)));
+
+    let legacy: PromptResult =
+        serde_json::from_value(json!({"status":"ok","steps":[{"n":1}]})).unwrap();
+    assert_eq!(
+        legacy.steps,
+        Some(PromptSteps::LegacyTrace(vec![json!({"n":1})]))
+    );
+}
+
+#[test]
 fn test_event_params_turn_begin() {
     let event = EventParams {
         event_type: "TurnBegin".to_string(),
@@ -223,6 +237,28 @@ fn test_wire_message_parsing_response() {
     assert!(msg.result.is_some());
 }
 
+#[test]
+fn test_redact_wire_secrets_for_nested_payloads() {
+    let raw = json!({
+        "authorization": "Bearer secret",
+        "nested": {
+            "api_key": "abc123",
+            "safe": "ok"
+        },
+        "items": [
+            {"password": "pass"},
+            {"name": "visible"}
+        ]
+    });
+
+    let redacted = redact_wire_secrets(&raw);
+    assert_eq!(redacted["authorization"], "[REDACTED]");
+    assert_eq!(redacted["nested"]["api_key"], "[REDACTED]");
+    assert_eq!(redacted["nested"]["safe"], "ok");
+    assert_eq!(redacted["items"][0]["password"], "[REDACTED]");
+    assert_eq!(redacted["items"][1]["name"], "visible");
+}
+
 #[tokio::test]
 async fn test_mock_wire_session() {
     let tmp = TempDir::new().unwrap();
@@ -267,6 +303,162 @@ cat > /dev/null
     // Send prompt and read result
     let prompt_result = client.prompt("Hello").await.unwrap();
     assert_eq!(prompt_result.status, "finished");
+
+    client.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_replay_roundtrip() {
+    let tmp = TempDir::new().unwrap();
+    let script_path = tmp.path().join("mock_replay.sh");
+
+    let script = r#"#!/bin/bash
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-1","result":{"protocol_version":"1.9"}}'
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-2","result":{"status":"finished","events":[{"type":"text","payload":{"text":"hello"}}],"requests":[{"type":"ToolCallRequest","payload":{"name":"Shell"}}]}}'
+cat > /dev/null
+"#;
+
+    fs::write(&script_path, script).unwrap();
+    let mut perms = fs::metadata(&script_path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&script_path, perms).unwrap();
+
+    let mut client = WireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+
+    let _ = client
+        .initialize(InitializeParams {
+            protocol_version: "1.9".to_string(),
+            client: None,
+            external_tools: None,
+            capabilities: None,
+            hooks: None,
+        })
+        .await
+        .unwrap();
+
+    let replay = client.replay().await.unwrap();
+    assert_eq!(replay.status, "finished");
+    assert_eq!(replay.events.as_ref().unwrap().len(), 1);
+    assert_eq!(replay.requests.as_ref().unwrap().len(), 1);
+
+    client.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_steer_and_set_plan_mode_roundtrip() {
+    let tmp = TempDir::new().unwrap();
+    let script_path = tmp.path().join("mock_control.sh");
+
+    let script = r#"#!/bin/bash
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-1","result":{"protocol_version":"1.9"}}'
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-2","result":{"status":"steered"}}'
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-3","result":{"status":"ok","plan_mode":true}}'
+cat > /dev/null
+"#;
+
+    fs::write(&script_path, script).unwrap();
+    let mut perms = fs::metadata(&script_path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&script_path, perms).unwrap();
+
+    let mut client = WireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+
+    let _ = client
+        .initialize(InitializeParams {
+            protocol_version: "1.9".to_string(),
+            client: None,
+            external_tools: None,
+            capabilities: None,
+            hooks: None,
+        })
+        .await
+        .unwrap();
+
+    let steer = client.steer("prefer smaller diffs").await.unwrap();
+    assert_eq!(steer.status, "steered");
+
+    let plan = client.set_plan_mode(true).await.unwrap();
+    assert_eq!(plan.status, "ok");
+    assert_eq!(plan.plan_mode, Some(true));
+
+    client.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_cancel_roundtrip() {
+    let tmp = TempDir::new().unwrap();
+    let script_path = tmp.path().join("mock_cancel.sh");
+
+    let script = r#"#!/bin/bash
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-1","result":{"protocol_version":"1.9"}}'
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-2","result":{}}'
+cat > /dev/null
+"#;
+
+    fs::write(&script_path, script).unwrap();
+    let mut perms = fs::metadata(&script_path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&script_path, perms).unwrap();
+
+    let mut client = WireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+
+    let _ = client
+        .initialize(InitializeParams {
+            protocol_version: "1.9".to_string(),
+            client: None,
+            external_tools: None,
+            capabilities: None,
+            hooks: None,
+        })
+        .await
+        .unwrap();
+
+    client.cancel().await.unwrap();
+    client.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_wire_error_response_is_actionable() {
+    let tmp = TempDir::new().unwrap();
+    let script_path = tmp.path().join("mock_error.sh");
+
+    let script = r#"#!/bin/bash
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-1","result":{"protocol_version":"1.9"}}'
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-2","error":{"code":-32601,"message":"Method not found"}}'
+cat > /dev/null
+"#;
+
+    fs::write(&script_path, script).unwrap();
+    let mut perms = fs::metadata(&script_path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&script_path, perms).unwrap();
+
+    let mut client = WireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+
+    let _ = client
+        .initialize(InitializeParams {
+            protocol_version: "1.9".to_string(),
+            client: None,
+            external_tools: None,
+            capabilities: None,
+            hooks: None,
+        })
+        .await
+        .unwrap();
+
+    let err = client.prompt("hello").await.unwrap_err().to_string();
+    assert!(err.contains("Wire request failed"));
+    assert!(err.contains("Method not found"));
+    assert!(err.contains("-32601"));
 
     client.shutdown().await.unwrap();
 }

@@ -76,6 +76,7 @@ omk config set default_team_size 3
 ## Syncing Kimi Assets
 
 `omk kimi sync` copies OMK Kimi-native assets (agents, hooks, skills) into your project so Kimi CLI can use them. It also writes a project manifest that tracks what was installed.
+If you are changing Kimi integration behavior, re-check [KIMI_UPSTREAM.md](KIMI_UPSTREAM.md) before relying on upstream assumptions.
 
 ### Run a sync
 

@@ -88,7 +88,7 @@ OMK borrows useful workflow vocabulary from OMC, then moves it toward a Kimi-fir
 - Current commands are documented separately from roadmap commands.
 - Provider-neutral workers are deferred until the Kimi-only loop is reliable and polished.
 
-Prior art exists and validates demand. The detailed competitor scan lives in [SPEC.md](SPEC.md); the public README stays focused on what OMK is and how to try it.
+Prior art exists and validates demand. The detailed competitor scan lives in [SPEC.md](SPEC.md); the public README stays focused on what OMK is and how to try it. The upstream Kimi docs we track for integration work live in [docs/KIMI_UPSTREAM.md](docs/KIMI_UPSTREAM.md).
 
 ## Maturity
 

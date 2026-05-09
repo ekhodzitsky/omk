@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 pub const MANIFEST_SCHEMA_VERSION: u32 = 1;
 
@@ -158,6 +158,7 @@ impl AssetManifest {
                 MANIFEST_SCHEMA_VERSION
             );
         }
+        validate_manifest_paths(&manifest, project_dir)?;
         Ok(Some(manifest))
     }
 
@@ -284,6 +285,75 @@ impl AssetManifest {
         }
         drifted
     }
+}
+
+fn absolute_root(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    std::env::current_dir()
+        .map(|cwd| cwd.join(path))
+        .unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn has_parent_traversal(path: &Path) -> bool {
+    path.components()
+        .any(|component| component == Component::ParentDir)
+}
+
+fn has_normal_component(path: &Path) -> bool {
+    path.components()
+        .any(|component| matches!(component, Component::Normal(_)))
+}
+
+fn validate_manifest_entry_path(path: &Path, label: &str, project_root: &Path) -> Result<()> {
+    if path.as_os_str().is_empty() || !has_normal_component(path) {
+        return Err(anyhow!(
+            "Invalid manifest {} path: '{}'",
+            label,
+            path.display()
+        ));
+    }
+    if has_parent_traversal(path) {
+        return Err(anyhow!(
+            "Manifest {} path escapes allowed roots: '{}'",
+            label,
+            path.display()
+        ));
+    }
+
+    if path.is_absolute() {
+        return Err(anyhow!(
+            "Manifest {} path must be relative to the project root: '{}'",
+            label,
+            path.display()
+        ));
+    }
+
+    let candidate = project_root.join(path);
+    if candidate.starts_with(project_root) {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "Manifest {} path resolves outside project root: '{}'",
+        label,
+        path.display()
+    ))
+}
+
+fn validate_manifest_paths(manifest: &AssetManifest, project_dir: &Path) -> Result<()> {
+    let project_root = absolute_root(project_dir);
+
+    for (index, entry) in manifest.files.iter().enumerate() {
+        validate_manifest_entry_path(&entry.path, &format!("files[{}]", index), &project_root)?;
+    }
+
+    for (index, dir) in manifest.directories.iter().enumerate() {
+        validate_manifest_entry_path(dir, &format!("directories[{}]", index), &project_root)?;
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default)]
@@ -438,5 +508,75 @@ mod tests {
         assert!(result.is_ok());
         let loaded = result.unwrap();
         assert!(loaded.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_manifest_rejects_parent_traversal_paths() {
+        let dir = TempDir::new().unwrap();
+        tokio::fs::create_dir_all(dir.path().join(".kimi"))
+            .await
+            .unwrap();
+        let manifest_path = AssetManifest::manifest_path(dir.path());
+
+        let payload = serde_json::json!({
+            "version": MANIFEST_SCHEMA_VERSION,
+            "created_at": chrono::Utc::now(),
+            "omk_version": env!("CARGO_PKG_VERSION"),
+            "project_dir": dir.path(),
+            "files": [{
+                "path": "../../etc/passwd",
+                "kind": "other",
+                "checksum": null
+            }],
+            "directories": []
+        });
+        tokio::fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&payload).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let result = AssetManifest::load(dir.path()).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("escapes allowed roots"));
+    }
+
+    #[tokio::test]
+    async fn test_manifest_rejects_absolute_paths() {
+        let dir = TempDir::new().unwrap();
+        tokio::fs::create_dir_all(dir.path().join(".kimi"))
+            .await
+            .unwrap();
+        let manifest_path = AssetManifest::manifest_path(dir.path());
+
+        let payload = serde_json::json!({
+            "version": MANIFEST_SCHEMA_VERSION,
+            "created_at": chrono::Utc::now(),
+            "omk_version": env!("CARGO_PKG_VERSION"),
+            "project_dir": dir.path(),
+            "files": [{
+                "path": dir.path().join(".kimi/agents/architect/agent.yaml"),
+                "kind": "agent_spec",
+                "checksum": null
+            }],
+            "directories": []
+        });
+        tokio::fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&payload).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let result = AssetManifest::load(dir.path()).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must be relative to the project root"));
     }
 }

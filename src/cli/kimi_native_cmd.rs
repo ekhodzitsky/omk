@@ -11,7 +11,7 @@ pub(crate) struct KimiNativeArgs {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum KimiNativeCommands {
-    /// Sync OMK assets into .kimi/ (agents, hooks, skills)
+    /// Sync OMK assets for current Kimi surfaces (project + user scope)
     Sync {
         #[arg(short, long, default_value = ".")]
         dir: PathBuf,
@@ -27,18 +27,18 @@ pub(crate) enum KimiNativeCommands {
         #[arg(long, help = "Output results as JSON")]
         json: bool,
     },
-    /// Install OMK role agents, hooks, and skills for this project
+    /// Install OMK role assets into the current project's Kimi workspace
     Install {
         #[arg(short, long, default_value = ".")]
         dir: PathBuf,
         #[arg(long, help = "Show what would be installed without making changes")]
         dry_run: bool,
     },
-    /// List installed agents
+    /// List bundled OMK role agent templates
     Agents,
-    /// List configured hooks
+    /// List bundled OMK project hook templates
     Hooks,
-    /// List linked skills
+    /// List discovered OMK skills in the local data directory
     Skills,
     /// Rollback OMK-installed Kimi assets from .kimi/
     Rollback {
@@ -198,7 +198,10 @@ async fn cmd_doctor(dir: &std::path::Path, json_output: bool) -> Result<()> {
     if issues == 0 {
         println!("🎉 All checks passed!");
     } else {
-        println!("⚠️  {} issue(s) found. Run `omk kimi sync` to fix.", issues);
+        println!(
+            "⚠️  {} issue(s) found. Follow the repair commands above.",
+            issues
+        );
     }
 
     Ok(())

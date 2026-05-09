@@ -18,9 +18,65 @@ fn test_version_flag() {
 fn test_help_flag() {
     let mut cmd = Command::cargo_bin("omk").unwrap();
     cmd.arg("--help");
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Scheduler-backed team orchestration and Kimi asset tooling",
+    ));
+}
+
+#[test]
+fn test_help_honesty_top_level_team_and_kimi() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.arg("--help");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Multi-agent orchestration"));
+        .stdout(predicate::str::contains(
+            "team         Team orchestration (scheduler run + tmux-compatible spawn surface)",
+        ))
+        .stdout(predicate::str::contains(
+            "kimi         Kimi asset commands (sync/install/doctor + listing/rollback surfaces)",
+        ));
+}
+
+#[test]
+fn test_help_honesty_team_surfaces() {
+    let mut team_cmd = Command::cargo_bin("omk").unwrap();
+    team_cmd.arg("team").arg("--help");
+    team_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Team orchestration (scheduler run + tmux-compatible spawn surface)",
+        ))
+        .stdout(predicate::str::contains(
+            "spawn      Spawn workers in tmux compatibility mode",
+        ))
+        .stdout(predicate::str::contains(
+            "run        Run a scheduler-backed team workflow (no tmux required)",
+        ));
+}
+
+#[test]
+fn test_help_honesty_kimi_surfaces() {
+    let mut kimi_cmd = Command::cargo_bin("omk").unwrap();
+    kimi_cmd.arg("kimi").arg("--help");
+    kimi_cmd
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Kimi asset commands (sync/install/doctor + listing/rollback surfaces)",
+        ))
+        .stdout(predicate::str::contains(
+            "sync      Sync OMK assets for current Kimi surfaces (project + user scope)",
+        ))
+        .stdout(predicate::str::contains(
+            "agents    List bundled OMK role agent templates",
+        ))
+        .stdout(predicate::str::contains(
+            "hooks     List bundled OMK project hook templates",
+        ))
+        .stdout(predicate::str::contains(
+            "skills    List discovered OMK skills in the local data directory",
+        ));
 }
 
 #[test]

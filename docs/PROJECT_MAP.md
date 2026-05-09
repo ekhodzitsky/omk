@@ -41,6 +41,7 @@ Use official Kimi Code docs as the source of truth before changing Kimi integrat
 
 Default rule: new Kimi process-control work is Wire-first. Prefer `kimi --wire` events and requests over prompt scraping.
 The current observed Wire protocol version is `1.9`, and legacy/no-handshake fallback remains valid when upstream does not support `initialize`.
+Upstream tracking notes live in [KIMI_UPSTREAM.md](KIMI_UPSTREAM.md).
 
 ## Repository Areas
 

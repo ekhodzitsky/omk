@@ -337,6 +337,45 @@ fn test_kimi_doctor_json_output() {
 }
 
 #[test]
+fn test_kimi_doctor_missing_kimi_prints_repair_command() {
+    let tmp = TempDir::new().unwrap();
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.current_dir(&tmp);
+    cmd.env("PATH", "");
+    cmd.arg("kimi").arg("doctor");
+    cmd.assert()
+        .success()
+        .stdout(contains("Kimi CLI not found in PATH"))
+        .stdout(contains("command -v kimi && kimi --version"));
+}
+
+#[test]
+fn test_kimi_doctor_rejects_manifest_path_escape() {
+    let tmp = TempDir::new().unwrap();
+
+    // Sync first to create a valid manifest.
+    let mut sync_cmd = Command::cargo_bin("omk").unwrap();
+    sync_cmd.current_dir(&tmp);
+    sync_cmd.arg("kimi").arg("sync");
+    sync_cmd.assert().success();
+
+    // Corrupt one manifest entry with parent traversal.
+    let manifest = tmp.path().join(".kimi/omk-manifest.json");
+    let content = fs::read_to_string(&manifest).unwrap();
+    let corrupted = content.replacen(".kimi/agents/architect/agent.yaml", "../../escape.txt", 1);
+    fs::write(&manifest, corrupted).unwrap();
+
+    // Doctor should reject unsafe manifest paths.
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.current_dir(&tmp);
+    cmd.arg("kimi").arg("doctor");
+    cmd.assert()
+        .success()
+        .stdout(contains("Cannot read asset manifest"))
+        .stdout(contains("escapes allowed roots"));
+}
+
+#[test]
 fn test_kimi_sync_skips_identical_files() {
     let tmp = TempDir::new().unwrap();
 

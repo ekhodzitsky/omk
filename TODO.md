@@ -21,7 +21,7 @@ Use this file as an execution map. It is intentionally detailed and split into p
 - The worktree contains active in-progress changes for cost tracking, notifications, ultrawork, Kimi-native assets, and CLI expansion.
 - `src/kimi_native/manifest.rs` already exists and records OMK-owned assets; it still needs checksums, backup integration, CLI rollback, and stronger doctor support.
 - GitHub scan on 2026-05-08 found active Kimi orchestration prior art: `dmae97/oh-my-kimi`, `whatevertogo/oh-my-kimicli`, `mikehenken/kimable`, `geoyws/atmux`, `wang-h/oh-my-kimi-python`, and usage tooling such as `mm7894215/TokenTracker`.
-- Official Kimi Code docs are an upstream contract to track before Kimi integration work: <https://www.kimi.com/code/docs>. The Wire Protocol page is first-class for OMK runtime work: <https://www.kimi.com/code/docs/en/kimi-code-cli/customization/wire-protocol.html>. As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports Wire protocol `1.9`.
+- Official Kimi Code docs are an upstream contract to track before Kimi integration work: <https://www.kimi.com/code/docs>. The Wire Protocol page is first-class for OMK runtime work: <https://www.kimi.com/code/docs/en/kimi-code-cli/customization/wire-protocol.html>. See [docs/KIMI_UPSTREAM.md](docs/KIMI_UPSTREAM.md) for the tracked URLs and last checked note. As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports Wire protocol `1.9`.
 
 ## North Star
 
@@ -124,7 +124,7 @@ Purpose: make the repository easier to change.
 Tasks:
 
 - [x] L0-001 Run `cargo fmt` and make `cargo fmt --check` green.
-- [ ] L0-007 Confirm `cargo check --all-targets` agrees with default `cargo check`.
+- [x] L0-007 Confirm `cargo check --all-targets` agrees with default `cargo check`.
 - [ ] L0-014 Verify `Makefile` targets match documented development commands.
 
 Expected files:
@@ -167,11 +167,11 @@ Purpose: make `kimi --wire` the default structured worker contract before expand
 Tasks:
 
 - [x] LW-001 Re-read the official Kimi Code docs root and Wire Protocol page before starting implementation.
-- [ ] LW-002 Record the observed Kimi CLI version and Wire protocol version in a local fixture or test note.
+- [x] LW-002 Record the observed Kimi CLI version and Wire protocol version in a local fixture or test note.
 - [x] LW-003 Add a Rust Wire adapter skeleton for launching `kimi --wire`.
-- [ ] LW-004 Define JSON-RPC 2.0 request, response, notification, and error envelopes.
-- [ ] LW-005 Implement `initialize` handshake and fallback for method-not-found no-handshake mode.
-- [ ] LW-006 Implement a minimal `prompt` request roundtrip with fake-process tests.
+- [x] LW-004 Define JSON-RPC 2.0 request, response, notification, and error envelopes.
+- [x] LW-005 Implement `initialize` handshake and fallback for method-not-found no-handshake mode.
+- [x] LW-006 Implement a minimal `prompt` request roundtrip with fake-process tests.
 - [x] LW-007 Map Wire `event` messages into OMK event log records.
 - [x] LW-008 Map Wire `request` messages into explicit OMK approval/question/tool-handling events.
 - [x] LW-009 Add cancellation support through Wire `cancel`.
@@ -199,8 +199,8 @@ Tasks:
 
 - [x] L1-003 Add `omk kimi rollback` CLI using the existing ownership manifest.
 - [x] L1-017 Implement rollback dry-run.
-- [ ] L1-019 Implement rollback report with removed files, restored files, skipped files, and errors.
-- [ ] L1-021 Ensure rollback handles missing manifest cleanly.
+- [x] L1-019 Implement rollback report with removed files, restored files, skipped files, and errors.
+- [x] L1-021 Ensure rollback handles missing manifest cleanly.
 
 Expected files:
 
@@ -297,7 +297,7 @@ Tasks:
 
 - [x] L4-001 Define the typed proof schema.
 - [x] L4-004 Define proof status: ready, not_ready, failed.
-- [ ] L4-011 Define proof JSON path and naming.
+- [x] L4-011 Define proof JSON path and naming.
 - [x] L4-012 Add proof schema golden tests.
 
 Expected files:
@@ -442,7 +442,7 @@ Can run in parallel with: L8 docs, L9 research. Coordinate with L1/L2/L3 before 
 
 - [ ] L0-004 Record the exact verification commands in `README.md` or `CONTRIBUTING.md`.
 - [ ] L0-005 Move network-dependent smoke coverage such as `update --check` behind an ignored/integration test or mock the release lookup.
-- [ ] L0-006 Ensure `config set` creates the config directory before atomic writes.
+- [x] L0-006 Ensure `config set` creates the config directory before atomic writes.
 - [ ] L0-007 Confirm `cargo check --all-targets` agrees with default `cargo check`.
 - [ ] L0-008 Confirm `cargo test --all-targets` does not depend on the user's real home directory.
 - [ ] L0-009 Add test helpers for isolated XDG/HOME setup if duplicated across tests.
@@ -456,15 +456,15 @@ Can run in parallel with: L8 docs, L9 research. Coordinate with L1/L2/L3 before 
 ### L0 Current Surface Honesty
 
 - [x] L0-016 Keep README feature status aligned with actual CLI commands.
-- [ ] L0-017 Ensure `omk --help` descriptions do not overclaim readiness.
-- [ ] L0-018 Ensure `omk team --help` names `spawn` as the tmux compatibility path and `run` as the scheduler-backed path.
-- [ ] L0-019 Ensure `omk kimi --help` mentions Current Kimi commands only.
+- [x] L0-017 Ensure `omk --help` descriptions do not overclaim readiness.
+- [x] L0-018 Ensure `omk team --help` names `spawn` as the tmux compatibility path and `run` as the scheduler-backed path.
+- [x] L0-019 Ensure `omk kimi --help` mentions Current Kimi commands only.
 - [ ] L0-020 Add a command snapshot test, or document why clap output is too unstable for snapshots.
 - [ ] L0-021 Update docs when a CLI command is renamed or promoted from Next to Current.
 
 ### L0 Definition Of Done
 
-- [ ] L0-DOD-001 Formatting, clippy, and tests are green.
+- [x] L0-DOD-001 Formatting, clippy, and tests are green.
 - [ ] L0-DOD-002 README documents only current commands as current.
 - [ ] L0-DOD-003 `SPEC.md`, `TODO.md`, and `ROADMAP.md` use the same Current/Next/Later vocabulary.
 - [ ] L0-DOD-004 Known verification gaps are documented.
@@ -483,7 +483,7 @@ Can run in parallel with: L2 event core, L5 HUD, L8 docs. Coordinate with L7 rol
 
 - [x] L1-001 Add manifest checksums for files written by `omk kimi sync`.
 - [x] L1-002 Add backups for overwritten Kimi project/user assets.
-- [ ] L1-003 Add `omk kimi rollback` CLI using the existing ownership manifest and new backups.
+- [x] L1-003 Add `omk kimi rollback` CLI using the existing ownership manifest and new backups.
 
 ### L1 Manifest And Ownership
 
@@ -497,22 +497,22 @@ Can run in parallel with: L2 event core, L5 HUD, L8 docs. Coordinate with L7 rol
 - [x] L1-011 Add drift detection for changed, missing, extra, and user-modified managed files.
 - [ ] L1-012 Make drift output human-readable and machine-readable.
 - [x] L1-013 Add tests for manifest save/load, drift detection, and path normalization.
-- [ ] L1-014 Ensure manifest paths are relative and cannot escape project/user roots.
+- [x] L1-014 Ensure manifest paths are relative and cannot escape project/user roots.
 
 ### L1 Backup And Rollback
 
 - [x] L1-015 Create backup files before overwriting any existing non-identical Kimi asset.
 - [ ] L1-016 Store backup metadata in the manifest or a companion backup index.
-- [ ] L1-017 Implement rollback dry-run.
-- [ ] L1-018 Implement rollback apply.
-- [ ] L1-019 Implement rollback report with removed files, restored files, skipped files, and errors.
-- [ ] L1-020 Ensure rollback never deletes unrelated user files.
-- [ ] L1-021 Ensure rollback handles missing manifest cleanly.
+- [x] L1-017 Implement rollback dry-run.
+- [x] L1-018 Implement rollback apply.
+- [x] L1-019 Implement rollback report with removed files, restored files, skipped files, and errors.
+- [x] L1-020 Ensure rollback never deletes unrelated user files.
+- [x] L1-021 Ensure rollback handles missing manifest cleanly.
 - [ ] L1-022 Ensure rollback handles partial/corrupt backups cleanly.
-- [ ] L1-023 Add tests for clean install rollback.
-- [ ] L1-024 Add tests for overwrite rollback.
+- [x] L1-023 Add tests for clean install rollback.
+- [x] L1-024 Add tests for overwrite rollback.
 - [ ] L1-025 Add tests for partial failure rollback.
-- [ ] L1-026 Add tests for user-modified managed file rollback.
+- [x] L1-026 Add tests for user-modified managed file rollback.
 
 ### L1 Sync And Doctor
 
@@ -520,13 +520,13 @@ Can run in parallel with: L2 event core, L5 HUD, L8 docs. Coordinate with L7 rol
 - [ ] L1-028 Make user-level sync explicit in output so users know project vs user writes.
 - [x] L1-029 Add `--dry-run` to `omk kimi sync`.
 - [ ] L1-030 Decide and document whether `--project-only` and `--user-only` are required; add them only if sync output shows project/user writes are confusing.
-- [ ] L1-031 Make `omk kimi doctor` validate Kimi CLI presence and version.
+- [x] L1-031 Make `omk kimi doctor` validate Kimi CLI presence and version.
 - [ ] L1-032 Make `omk kimi doctor` validate agent files.
 - [ ] L1-033 Make `omk kimi doctor` validate hook scripts and executable bits.
 - [ ] L1-034 Make `omk kimi doctor` validate skills paths.
 - [ ] L1-035 Make `omk kimi doctor` validate MCP config snippets or references.
 - [ ] L1-036 Make `omk kimi doctor` validate manifest drift.
-- [ ] L1-037 Make `omk kimi doctor` print exact repair commands.
+- [x] L1-037 Make `omk kimi doctor` print exact repair commands.
 - [x] L1-038 Add JSON output mode for doctor when CI or tests need machine-readable diagnostics.
 
 ### L1 Kimi Config Integration
@@ -564,15 +564,15 @@ As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports `kimi --wire` protocol 
 
 ### LW Next 3
 
-- [ ] LW-001 Re-read official Kimi docs and record observed Wire protocol version.
+- [x] LW-001 Re-read official Kimi docs and record observed Wire protocol version.
 - [x] LW-002 Add Wire adapter module skeleton and fake-process fixture harness.
-- [ ] LW-003 Define JSON-RPC 2.0 envelope types and ID handling.
+- [x] LW-003 Define JSON-RPC 2.0 envelope types and ID handling.
 
 ### LW Docs Watch
 
-- [ ] LW-004 Add a short `docs/KIMI_UPSTREAM.md` or equivalent section that records tracked Kimi docs URLs and last checked date.
-- [ ] LW-005 Record Kimi CLI version and Wire protocol version in test fixtures or snapshot notes.
-- [ ] LW-006 Add a release checklist item to re-check Kimi docs before publishing OMK releases.
+- [x] LW-004 Add a short `docs/KIMI_UPSTREAM.md` or equivalent section that records tracked Kimi docs URLs and last checked date.
+- [x] LW-005 Record Kimi CLI version and Wire protocol version in test fixtures or snapshot notes.
+- [x] LW-006 Add a release checklist item to re-check Kimi docs before publishing OMK releases.
 - [ ] LW-007 Track upstream changes to agents, hooks, skills, MCP, config files, and Wire Protocol behavior.
 
 ### LW Process And Handshake
@@ -580,10 +580,10 @@ As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports `kimi --wire` protocol 
 - [x] LW-008 Launch `kimi --wire` with piped stdin/stdout and stderr capture.
 - [x] LW-009 Implement JSONL framing: one JSON-RPC message per line.
 - [x] LW-010 Implement `initialize` with client name/version and expected protocol negotiation.
-- [ ] LW-011 Implement fallback when `initialize` returns method-not-found and upstream no-handshake mode is required.
-- [ ] LW-012 Record Kimi binary path, CLI version if available, and Wire protocol version in run metadata.
+- [x] LW-011 Implement fallback when `initialize` returns method-not-found and upstream no-handshake mode is required.
+- [x] LW-012 Record Kimi binary path, CLI version if available, and Wire protocol version in run metadata.
 - [x] LW-013 Add process shutdown and child cleanup behavior.
-- [ ] LW-014 Add tests for startup failure, malformed output, and EOF handling.
+- [x] LW-014 Add tests for startup failure, malformed output, and EOF handling.
 
 ### LW Requests, Events, And Control
 
@@ -592,16 +592,16 @@ As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports `kimi --wire` protocol 
 - [x] LW-017 Map Wire `event` notifications into OMK `event-log.jsonl` records.
 - [x] LW-018 Implement Wire `request` handling for approvals, questions, tool calls, or future upstream request kinds.
 - [ ] LW-019 Add explicit unknown-method and unknown-event handling.
-- [ ] LW-020 Implement `cancel` support.
-- [ ] LW-021 Implement `steer` support for active turns if it fits OMK safety rules.
+- [x] LW-020 Implement `cancel` support.
+- [x] LW-021 Implement `steer` support for active turns if it fits OMK safety rules.
 - [ ] LW-022 Implement `set_plan_mode` only after the UX/safety implications are documented.
 - [ ] LW-023 Add timeout behavior for stuck Wire turns.
 
 ### LW Replay And Proof Integration
 
-- [ ] LW-024 Implement `replay` support against `wire.jsonl` or upstream-compatible transcript fixtures.
+- [x] LW-024 Implement `replay` support against `wire.jsonl` or upstream-compatible transcript fixtures.
 - [ ] LW-025 Decide whether OMK stores raw Wire logs, normalized OMK events, or both.
-- [ ] LW-026 Redact sensitive Wire payload fields before writing durable logs.
+- [x] LW-026 Redact sensitive Wire payload fields before writing durable logs.
 - [ ] LW-027 Make `omk run show` able to reference Wire-derived events.
 - [ ] LW-028 Make `omk proof` include Wire-derived task/output/request evidence.
 
@@ -617,7 +617,7 @@ As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports `kimi --wire` protocol 
 
 - [ ] LW-DOD-001 Fake Wire tests cover initialize, prompt, event, request, cancel, replay, malformed output, and EOF.
 - [ ] LW-DOD-002 `team run` design no longer depends on prompt-shaped result blocks for normal worker output.
-- [ ] LW-DOD-003 Run metadata records Kimi binary path, Kimi CLI version when available, and Wire protocol version.
+- [x] LW-DOD-003 Run metadata records Kimi binary path, Kimi CLI version when available, and Wire protocol version.
 - [ ] LW-DOD-004 Docs clearly state Wire-first behavior and the tmux/text fallback boundary.
 
 ---
@@ -632,14 +632,14 @@ Can run in parallel with: L1 Kimi Pro Mode, L8 docs. Blocks large parts of L3/L4
 
 ### L2 Next 3
 
-- [ ] L2-001 Define the typed event envelope.
-- [ ] L2-002 Add append-only JSONL writer with atomic-ish flush behavior.
-- [ ] L2-003 Add event reader that tolerates partial/corrupt trailing lines.
+- [x] L2-001 Define the typed event envelope.
+- [x] L2-002 Add append-only JSONL writer with atomic-ish flush behavior.
+- [x] L2-003 Add event reader that tolerates partial/corrupt trailing lines.
 
 ### L2 Event Model
 
-- [ ] L2-004 Define `RunId`, `EventId`, `WorkerId`, `TaskId`, and `GateId` newtypes.
-- [ ] L2-005 Define event timestamp format and clock source.
+- [x] L2-004 Define `RunId`, `EventId`, `WorkerId`, `TaskId`, and `GateId` newtypes.
+- [x] L2-005 Define event timestamp format and clock source.
 - [ ] L2-006 Define `run_started` and `run_completed`.
 - [ ] L2-007 Define `run_failed`.
 - [ ] L2-008 Define `worker_started`.
@@ -664,15 +664,15 @@ Can run in parallel with: L1 Kimi Pro Mode, L8 docs. Blocks large parts of L3/L4
 
 - [ ] L2-025 Decide run directory layout for event logs.
 - [ ] L2-026 Add `event-log.jsonl` naming convention.
-- [ ] L2-027 Add event schema version to every event.
+- [x] L2-027 Add event schema version to every event.
 - [ ] L2-028 Decide event log rotation policy; default to no rotation until a measured fixture produces oversized logs.
-- [ ] L2-029 Add event reader filters by event kind, worker, task, gate, and time.
-- [ ] L2-030 Add event summary builder.
+- [x] L2-029 Add event reader filters by event kind, worker, task, gate, and time.
+- [x] L2-030 Add event summary builder.
 - [ ] L2-031 Add event redaction hook for sensitive command output.
-- [ ] L2-032 Add tests for append/read roundtrip.
-- [ ] L2-033 Add tests for partial trailing line.
+- [x] L2-032 Add tests for append/read roundtrip.
+- [x] L2-033 Add tests for partial trailing line.
 - [ ] L2-034 Add tests for unknown future event kinds.
-- [ ] L2-035 Add tests for malformed event payloads.
+- [x] L2-035 Add tests for malformed event payloads.
 
 ### L2 Definition Of Done
 
@@ -760,7 +760,7 @@ Can run in parallel with: L1, L5 after L2 schema. Coordinate heavily with L2 and
 
 ### L3 Definition Of Done
 
-- [ ] L3-DOD-001 A mock team run can complete with multiple workers and deterministic state.
+- [x] L3-DOD-001 A mock team run can complete with multiple workers and deterministic state.
 - [ ] L3-DOD-002 A stalled worker is detected and recorded.
 - [ ] L3-DOD-003 A failed worker produces evidence, not silent success.
 - [ ] L3-DOD-004 Parallel workers cannot claim conflicting file ownership scopes without a warning or block.
@@ -777,22 +777,22 @@ Can run in parallel with: L3 after L2 event schema. Blocks launch demo.
 
 ### L4 Next 3
 
-- [ ] L4-001 Define the typed proof schema.
+- [x] L4-001 Define the typed proof schema.
 - [x] L4-002 Add `omk run show <id|latest>` for event timeline inspection.
 - [x] L4-003 Add `omk proof show <id|latest>` for readiness reports from event logs.
 
 ### L4 Proof Model
 
-- [ ] L4-004 Define proof status: ready, not_ready, failed.
+- [x] L4-004 Define proof status: ready, not_ready, failed.
 - [x] L4-005 Define changed file summary.
 - [x] L4-006 Define gate result summary.
 - [x] L4-007 Define failure summary.
 - [x] L4-008 Define retry summary.
 - [x] L4-009 Define known gap summary.
 - [ ] L4-010 Define final readiness text.
-- [ ] L4-011 Define proof JSON path and naming.
+- [x] L4-011 Define proof JSON path and naming.
 - [x] L4-012 Add proof schema golden tests.
-- [ ] L4-013 Add proof markdown/text renderer after JSON proof is stable and README/demo needs human-readable output.
+- [x] L4-013 Add proof markdown/text renderer after JSON proof is stable and README/demo needs human-readable output.
 
 ### L4 Run Show
 
@@ -916,11 +916,11 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 
 - [x] L6-004 Mock Kimi supports success mode.
 - [x] L6-005 Mock Kimi supports failure mode.
-- [ ] L6-006 Mock Kimi supports stall mode.
+- [x] L6-006 Mock Kimi supports stall mode.
 - [ ] L6-007 Mock Kimi supports slow streaming mode.
 - [ ] L6-008 Mock Kimi supports malformed output mode.
 - [x] L6-009 Mock Kimi can run under CI without network.
-- [ ] L6-010 Mock Kimi can be selected via config/env without touching real Kimi.
+- [x] L6-010 Mock Kimi can be selected via config/env without touching real Kimi.
 
 ### L6 Demo Script
 
@@ -929,7 +929,7 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 - [ ] L6-013 Add demo run script.
 - [ ] L6-014 Add demo cleanup script.
 - [ ] L6-015 Add demo expected outputs.
-- [ ] L6-016 Ensure demo exits non-zero when proof status is failed.
+- [x] L6-016 Ensure demo exits non-zero when proof status is failed.
 - [ ] L6-017 Ensure demo can run in temporary directory.
 - [ ] L6-018 Ensure demo does not mutate user Kimi config unless explicitly requested.
 
@@ -948,7 +948,7 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 
 ### L6 Definition Of Done
 
-- [ ] L6-DOD-001 Demo can run against mock Kimi in CI.
+- [x] L6-DOD-001 Demo can run against mock Kimi in CI.
 - [ ] L6-DOD-002 Demo can run against real Kimi manually.
 - [ ] L6-DOD-003 Demo proof output is stable enough for docs/screenshots.
 

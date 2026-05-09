@@ -223,6 +223,42 @@ fn run_wire_mode(stall: bool, slow: bool) {
                 writeln!(stdout, "{}", resp).ok();
                 stdout.flush().ok();
             }
+            "replay" => {
+                let resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "status": "finished",
+                        "events": [],
+                        "requests": []
+                    }
+                });
+                writeln!(stdout, "{}", resp).ok();
+                stdout.flush().ok();
+            }
+            "steer" => {
+                let resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {"status": "steered"}
+                });
+                writeln!(stdout, "{}", resp).ok();
+                stdout.flush().ok();
+            }
+            "set_plan_mode" => {
+                let enabled = req
+                    .get("params")
+                    .and_then(|p| p.get("enabled"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {"status": "ok", "plan_mode": enabled}
+                });
+                writeln!(stdout, "{}", resp).ok();
+                stdout.flush().ok();
+            }
             _ => {
                 let resp = serde_json::json!({
                     "jsonrpc": "2.0",

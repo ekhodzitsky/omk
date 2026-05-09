@@ -3,6 +3,7 @@
 This roadmap captures the current product decision: **Kimi-only first**.
 
 OMK should become the best power layer for Kimi CLI before it expands into a generic control plane for every AI coding agent. The goal is not to copy OMC command names. The goal is to make Kimi teams observable, recoverable, and provable.
+Official Kimi docs and local upstream notes are tracked in [docs/KIMI_UPSTREAM.md](docs/KIMI_UPSTREAM.md).
 
 ## Status Labels
 

@@ -52,6 +52,7 @@ Implications for OMK:
 - If `initialize` returns method-not-found, OMK should fall back to legacy/no-handshake Wire mode as documented upstream.
 - Tmux remains useful for visible sessions and current `team spawn` compatibility, but target `team run` should treat Wire events/requests as the structured worker contract.
 - Any task touching Kimi assets, hooks, agents, MCP, process launch, event capture, replay, or worker control must re-check the official docs before implementation.
+- Upstream tracking notes live in [docs/KIMI_UPSTREAM.md](docs/KIMI_UPSTREAM.md).
 
 ## Current v0 Surface
 

@@ -127,6 +127,47 @@ impl WireClient {
         self.read_response::<PromptResult>().await
     }
 
+    /// Replay events and requests from the current session.
+    pub async fn replay(&mut self) -> Result<ReplayResult> {
+        let id = self.next_id();
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            method: "replay".to_string(),
+            id,
+            params: ReplayParams::default(),
+        };
+        self.send_request(&req).await?;
+        self.read_response::<ReplayResult>().await
+    }
+
+    /// Steer the current turn with additional user input.
+    pub async fn steer(&mut self, user_input: &str) -> Result<SteerResult> {
+        let id = self.next_id();
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            method: "steer".to_string(),
+            id,
+            params: SteerParams {
+                user_input: UserInput::Text(user_input.to_string()),
+            },
+        };
+        self.send_request(&req).await?;
+        self.read_response::<SteerResult>().await
+    }
+
+    /// Enable or disable plan mode for the current wire session.
+    pub async fn set_plan_mode(&mut self, enabled: bool) -> Result<SetPlanModeResult> {
+        let id = self.next_id();
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            method: "set_plan_mode".to_string(),
+            id,
+            params: SetPlanModeParams { enabled },
+        };
+        self.send_request(&req).await?;
+        self.read_response::<SetPlanModeResult>().await
+    }
+
     /// Cancel current turn.
     pub async fn cancel(&mut self) -> Result<()> {
         let id = self.next_id();
@@ -226,9 +267,19 @@ impl WireClient {
         if line.is_empty() {
             anyhow::bail!("kimi stdout closed while waiting for response");
         }
-        let resp: JsonRpcSuccessResponse<ResultType> =
-            serde_json::from_str(&line).context("Failed to parse response")?;
-        Ok(resp.result)
+        match serde_json::from_str::<WireMessage>(&line).context("Failed to parse response")? {
+            WireMessage::SuccessResponse(resp) => {
+                serde_json::from_value(resp.result).context("Failed to decode response result")
+            }
+            WireMessage::ErrorResponse(resp) => {
+                anyhow::bail!(
+                    "Wire request failed: {} (code: {})",
+                    resp.error.message,
+                    resp.error.code
+                )
+            }
+            other => anyhow::bail!("Expected wire response, got {:?}", other),
+        }
     }
 }
 
@@ -383,8 +434,13 @@ echo '{"jsonrpc":"2.0","id":"req-1","result":{"status":"ok","steps":[{"n":1}]}}'
 
         let result = client.prompt("hello").await.unwrap();
         assert_eq!(result.status, "ok");
-        assert_eq!(result.steps.as_ref().unwrap().len(), 1);
-        assert_eq!(result.steps.unwrap()[0]["n"], 1);
+        match result.steps.unwrap() {
+            PromptSteps::LegacyTrace(steps) => {
+                assert_eq!(steps.len(), 1);
+                assert_eq!(steps[0]["n"], 1);
+            }
+            other => panic!("expected legacy prompt trace, got {:?}", other),
+        }
 
         client.shutdown().await.unwrap();
     }

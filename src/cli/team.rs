@@ -23,9 +23,9 @@ pub(crate) struct Args {
 
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum TeamCommands {
-    /// Spawn a team of Kimi agents in tmux
+    /// Spawn workers in tmux compatibility mode
     Spawn(SpawnArgs),
-    /// Run a team with scheduler orchestration
+    /// Run a scheduler-backed team workflow (no tmux required)
     Run(RunArgs),
     /// List all active teams
     List,

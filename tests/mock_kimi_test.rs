@@ -218,3 +218,38 @@ fn test_wire_stall_mode_with_flag() {
         "Expected process to be killed, not exit cleanly"
     );
 }
+
+#[tokio::test]
+async fn test_wire_control_methods() {
+    use omk::wire::client::WireClient;
+    use omk::wire::protocol::InitializeParams;
+
+    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
+    let mut client = WireClient::spawn(&bin, None, None, None).unwrap();
+
+    let init = client
+        .initialize(InitializeParams {
+            protocol_version: "1.9".to_string(),
+            client: None,
+            external_tools: None,
+            capabilities: None,
+            hooks: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(init.protocol_version, "1.9");
+
+    let replay = client.replay().await.unwrap();
+    assert_eq!(replay.status, "finished");
+    assert_eq!(replay.events.unwrap().len(), 0);
+    assert_eq!(replay.requests.unwrap().len(), 0);
+
+    let steer = client.steer("keep it concise").await.unwrap();
+    assert_eq!(steer.status, "steered");
+
+    let plan = client.set_plan_mode(true).await.unwrap();
+    assert_eq!(plan.plan_mode, Some(true));
+
+    client.cancel().await.unwrap();
+    client.shutdown().await.unwrap();
+}

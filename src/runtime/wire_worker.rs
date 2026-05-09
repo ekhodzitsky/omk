@@ -3,7 +3,7 @@ use crate::runtime::events::{
 };
 use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerSpec, WorkerTask};
 use crate::wire::client::{WireClient, WireMessage};
-use crate::wire::protocol::{Request, RequestParams};
+use crate::wire::protocol::{redact_wire_secrets, Request, RequestParams};
 use anyhow::Result;
 use std::io::SeekFrom;
 use std::path::PathBuf;
@@ -239,7 +239,8 @@ impl WireWorkerAdapter {
             match client.read_message().await {
                 Ok(WireMessage::Event(ev)) => {
                     // Record raw wire event for audit / replay
-                    let raw_json = serde_json::to_string(&ev)?;
+                    let raw_json =
+                        serde_json::to_string(&redact_wire_secrets(&serde_json::to_value(&ev)?))?;
                     let mut file = tokio::fs::OpenOptions::new()
                         .create(true)
                         .append(true)
@@ -393,6 +394,8 @@ impl WireWorkerAdapter {
         request: &Request,
         response: &serde_json::Value,
     ) -> Result<()> {
+        let redacted_request_payload = redact_wire_secrets(&params.payload);
+        let redacted_response = redact_wire_secrets(response);
         let event = Event::new(self.run_id.clone(), EventKind::TaskOutput)
             .with_actor(&self.spec.name)
             .with_payload(serde_json::json!({
@@ -402,7 +405,8 @@ impl WireWorkerAdapter {
                 "request_id": request_id,
                 "request_type": request.kind(),
                 "raw_request_type": params.request_type,
-                "response": response,
+                "request_payload": redacted_request_payload,
+                "response": redacted_response,
             }))?;
         self.event_writer.append(&event).await
     }

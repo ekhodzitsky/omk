@@ -324,6 +324,29 @@ impl EventReader {
         Ok(filtered)
     }
 
+    /// Read events for a specific task id.
+    pub async fn read_for_task(path: &Path, task_id: &str) -> Result<Vec<Event>> {
+        let all = Self::read_all(path).await?;
+        let filtered: Vec<_> = all
+            .into_iter()
+            .filter(|e| payload_string(e, "task_id").as_deref() == Some(task_id))
+            .collect();
+        Ok(filtered)
+    }
+
+    /// Read events for a specific gate id or gate name.
+    pub async fn read_for_gate(path: &Path, gate: &str) -> Result<Vec<Event>> {
+        let all = Self::read_all(path).await?;
+        let filtered: Vec<_> = all
+            .into_iter()
+            .filter(|e| {
+                payload_string(e, "gate_id").as_deref() == Some(gate)
+                    || payload_string(e, "name").as_deref() == Some(gate)
+            })
+            .collect();
+        Ok(filtered)
+    }
+
     /// Read events within a time range.
     pub async fn read_range(
         path: &Path,
@@ -366,6 +389,19 @@ impl EventReader {
         }
         Ok(summary)
     }
+}
+
+fn payload_string(event: &Event, key: &str) -> Option<String> {
+    event.payload.as_ref()?.get(key).and_then(|value| {
+        if let Some(text) = value.as_str() {
+            Some(text.to_string())
+        } else {
+            value
+                .get("0")
+                .and_then(|inner| inner.as_str())
+                .map(str::to_string)
+        }
+    })
 }
 
 #[derive(Debug, Clone, Default)]
@@ -642,6 +678,55 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(filtered.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn reader_filters_by_task_and_gate() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("events.jsonl");
+
+        let writer = EventWriter::new(&path);
+        let run_id = RunId("run-1".to_string());
+        let builder = EventBuilder::new(run_id);
+
+        writer
+            .append_many(&[
+                builder
+                    .task_claimed(
+                        TaskId("task-1".to_string()),
+                        WorkerId("worker-1".to_string()),
+                        60,
+                    )
+                    .unwrap(),
+                builder
+                    .task_completed(
+                        TaskId("task-1".to_string()),
+                        WorkerId("worker-1".to_string()),
+                        Some("done"),
+                    )
+                    .unwrap(),
+                builder.gate_passed_by_name("fmt").unwrap(),
+                builder.gate_failed_by_name("test").unwrap(),
+            ])
+            .await
+            .unwrap();
+
+        let task_events = EventReader::read_for_task(&path, "task-1").await.unwrap();
+        assert_eq!(task_events.len(), 2);
+        assert!(task_events
+            .iter()
+            .all(|e| payload_string(e, "task_id").as_deref() == Some("task-1")));
+
+        let gate_events = EventReader::read_for_gate(&path, "fmt").await.unwrap();
+        assert_eq!(gate_events.len(), 1);
+        assert_eq!(
+            payload_string(&gate_events[0], "gate_id").as_deref(),
+            Some("fmt")
+        );
+
+        let named_gate_events = EventReader::read_for_gate(&path, "test").await.unwrap();
+        assert_eq!(named_gate_events.len(), 1);
+        assert!(matches!(named_gate_events[0].kind, EventKind::GateFailed));
     }
 
     #[test]

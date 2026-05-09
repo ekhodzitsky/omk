@@ -27,7 +27,7 @@ use cli::{
 /// Oh My Kimi — Multi-agent orchestration for Kimi CLI
 #[derive(Parser, Debug)]
 #[command(name = "omk")]
-#[command(about = "Multi-agent orchestration for Kimi CLI")]
+#[command(about = "Scheduler-backed team orchestration and Kimi asset tooling")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 struct Omk {
     #[command(subcommand)]
@@ -40,7 +40,7 @@ struct Omk {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Spawn a team of Kimi agents in tmux
+    /// Team orchestration (scheduler run + tmux-compatible spawn surface)
     #[command(visible_alias = "t")]
     Team(team::Args),
     /// Run autonomous execution (single lead agent)
@@ -86,7 +86,7 @@ enum Commands {
     /// Parallel burst execution without a team
     #[command(visible_alias = "uw")]
     Ultrawork(ultrawork::Args),
-    /// Kimi-native integration (sync, doctor, install)
+    /// Kimi asset commands (sync/install/doctor + listing/rollback surfaces)
     #[command(name = "kimi", visible_alias = "k")]
     KimiNative(kimi_native_cmd::KimiNativeArgs),
     /// Inspect run event timelines
