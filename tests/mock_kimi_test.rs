@@ -383,3 +383,83 @@ async fn test_team_demo_fixture_scripted_outcomes_are_stable() {
     assert!(rendered.contains("outcomes=success,failed_verification,stalled_worker"));
     assert!(rendered.contains("workers=worker-0:success,worker-1:failed,worker-2:stalled"));
 }
+
+#[tokio::test]
+async fn test_wire_worker_adapter_times_out_stalled_turn_and_writes_failed_result() {
+    use omk::runtime::events::{EventWriter, RunId};
+    use omk::runtime::wire_worker::WireWorkerAdapter;
+    use omk::runtime::worker::{ResultStatus, WorkerSpec, WorkerTask};
+    use tempfile::TempDir;
+    use tokio::time::{Duration, Instant};
+
+    let tmp = TempDir::new().unwrap();
+    let worker_dir = tmp.path().join("worker-timeout");
+    let project_dir = tmp.path().join("project");
+    tokio::fs::create_dir_all(&worker_dir).await.unwrap();
+    tokio::fs::create_dir_all(&project_dir).await.unwrap();
+
+    let spec = WorkerSpec {
+        name: "worker-timeout".to_string(),
+        role: "coder".to_string(),
+        inbox: worker_dir.join("inbox.jsonl"),
+        outbox: worker_dir.join("outbox.jsonl"),
+        heartbeat: worker_dir.join("heartbeat.json"),
+        project_dir: Some(project_dir),
+    };
+    spec.save().await.unwrap();
+
+    let events_path = tmp.path().join("events.jsonl");
+    let event_writer = EventWriter::new(&events_path);
+    let run_id = RunId("run-wire-timeout".to_string());
+
+    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
+    let prev_mock = std::env::var("MOCK_KIMI").ok();
+    let prev_timeout_ms = std::env::var("OMK_WIRE_TURN_TIMEOUT_MS").ok();
+    std::env::set_var("MOCK_KIMI", &bin);
+    std::env::set_var("OMK_WIRE_TURN_TIMEOUT_MS", "300");
+
+    let adapter = WireWorkerAdapter::new(spec.clone(), run_id, event_writer);
+    let handle = adapter.spawn();
+
+    spec.send_task(&WorkerTask {
+        id: "task-timeout".to_string(),
+        task: "please stall forever".to_string(),
+        acceptance_criteria: vec![],
+        context: None,
+    })
+    .await
+    .unwrap();
+
+    let started = Instant::now();
+    let mut found = None;
+    while started.elapsed() < Duration::from_secs(12) {
+        let results = spec.read_results().await.unwrap();
+        if let Some(first) = results.first() {
+            found = Some(first.clone());
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    handle.abort();
+    let _ = handle.await;
+
+    match prev_mock {
+        Some(v) => std::env::set_var("MOCK_KIMI", v),
+        None => std::env::remove_var("MOCK_KIMI"),
+    }
+    match prev_timeout_ms {
+        Some(v) => std::env::set_var("OMK_WIRE_TURN_TIMEOUT_MS", v),
+        None => std::env::remove_var("OMK_WIRE_TURN_TIMEOUT_MS"),
+    }
+
+    let result = found.expect("expected failed worker result after wire turn timeout");
+    assert!(matches!(result.status, ResultStatus::Failed));
+    let summary = result.summary.to_lowercase();
+    assert!(summary.contains("timeout") || summary.contains("timed out"));
+
+    let events = tokio::fs::read_to_string(events_path).await.unwrap();
+    assert!(events.contains("\"task_failed\""));
+    let events_lower = events.to_lowercase();
+    assert!(events_lower.contains("timeout") || events_lower.contains("timed out"));
+}

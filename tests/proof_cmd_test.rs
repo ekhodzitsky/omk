@@ -334,3 +334,42 @@ this is malformed
             "event log parse failures: 1 malformed line(s) skipped",
         ));
 }
+
+#[test]
+fn test_proof_show_json_includes_gate_evidence_from_events() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (home, xdg_state) = setup_env(&tmp);
+
+    let runs_dir = xdg_state.join("omk").join("runs");
+    fs::create_dir_all(&runs_dir).unwrap();
+
+    let run_dir = runs_dir.join("gate-evidence-run");
+    fs::create_dir(&run_dir).unwrap();
+
+    let events = r#"{"id":"e1","run_id":"gate-evidence-run","ts":"2024-01-01T00:00:00Z","schema_version":1,"kind":"run_started"}
+{"id":"e2","run_id":"gate-evidence-run","ts":"2024-01-01T00:00:01Z","schema_version":1,"kind":"command_started","payload":{"gate_id":"fmt","name":"fmt","command_line":"cargo fmt --check","timeout_secs":120}}
+{"id":"e3","run_id":"gate-evidence-run","ts":"2024-01-01T00:00:02Z","schema_version":1,"kind":"command_finished","payload":{"gate_id":"fmt","name":"fmt","command_line":"cargo fmt --check","exit_code":0,"timed_out":false,"stdout_summary":"ok","stderr_summary":"","output_path":"/tmp/gates/fmt.log"}}
+{"id":"e4","run_id":"gate-evidence-run","ts":"2024-01-01T00:00:03Z","schema_version":1,"kind":"gate_passed","payload":{"gate_id":"fmt","name":"fmt","required":true,"command_line":"cargo fmt --check","exit_code":0,"timed_out":false,"stdout_summary":"ok","stderr_summary":"","output_path":"/tmp/gates/fmt.log","timeout_secs":120}}
+{"id":"e5","run_id":"gate-evidence-run","ts":"2024-01-01T00:00:04Z","schema_version":1,"kind":"run_completed"}
+"#;
+    fs::write(run_dir.join("events.jsonl"), events).unwrap();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.env("HOME", &home)
+        .env("XDG_STATE_HOME", &xdg_state)
+        .arg("proof")
+        .arg("show")
+        .arg("--format")
+        .arg("json")
+        .arg("gate-evidence-run");
+
+    cmd.assert()
+        .success()
+        .stdout(contains("\"gates\""))
+        .stdout(contains("\"name\": \"fmt\""))
+        .stdout(contains("\"evidence\""))
+        .stdout(contains("\"command_line\": \"cargo fmt --check\""))
+        .stdout(contains("\"stdout_summary\": \"ok\""))
+        .stdout(contains("\"output_path\": \"/tmp/gates/fmt.log\""))
+        .stdout(contains("\"timeout_secs\": 120"));
+}

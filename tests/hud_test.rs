@@ -558,3 +558,97 @@ fn test_hud_tmux_status_proof_failed() {
     assert!(status.contains("0 running"));
     assert!(status.contains("1 dead"));
 }
+
+#[tokio::test]
+async fn test_hud_state_json_exposes_latest_gate_and_proof_status() {
+    let (_dir, state_dir) = setup_mock_team_state("hud-json-proof-gate").await;
+    let events_path = state_dir.join("events.jsonl");
+    let writer = EventWriter::new(&events_path);
+    let run_id = RunId("hud-json-proof-gate".to_string());
+
+    writer
+        .append(
+            &Event::new(run_id.clone(), EventKind::GateFailed)
+                .with_payload(
+                    serde_json::json!({ "gate_id": "g1", "name": "fmt", "required": true }),
+                )
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    writer
+        .append(
+            &Event::new(run_id.clone(), EventKind::GateFailed)
+                .with_payload(
+                    serde_json::json!({ "gate_id": "g2", "name": "lint", "required": true }),
+                )
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    writer
+        .append(
+            &Event::new(run_id.clone(), EventKind::ProofWritten)
+                .with_payload(serde_json::json!({ "proof_path": "/tmp/p1", "status": "failed" }))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    writer
+        .append(
+            &Event::new(run_id.clone(), EventKind::ProofWritten)
+                .with_payload(serde_json::json!({ "proof_path": "/tmp/p2", "status": "ready" }))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let mut event_stream = EventStream::new(&events_path);
+    let watchdog = Watchdog::with_defaults();
+    let mut hud = HudState::new("hud-json-proof-gate", "hud-json-proof-gate");
+    hud.refresh(&mut event_stream, &watchdog, &state_dir)
+        .await
+        .unwrap();
+
+    let json: serde_json::Value = serde_json::from_str(&hud.render_json().unwrap()).unwrap();
+    assert_eq!(json["latest_failed_gate"], "lint");
+    assert_eq!(json["proof_status"], "ready");
+}
+
+#[tokio::test]
+async fn test_hud_state_text_shows_latest_gate_and_proof_status() {
+    let (_dir, state_dir) = setup_mock_team_state("hud-text-proof-gate").await;
+    let events_path = state_dir.join("events.jsonl");
+    let writer = EventWriter::new(&events_path);
+    let run_id = RunId("hud-text-proof-gate".to_string());
+
+    writer
+        .append(
+            &Event::new(run_id.clone(), EventKind::GateFailed)
+                .with_payload(
+                    serde_json::json!({ "gate_id": "g1", "name": "unit", "required": true }),
+                )
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    writer
+        .append(
+            &Event::new(run_id.clone(), EventKind::ProofWritten)
+                .with_payload(serde_json::json!({ "proof_path": "/tmp/p", "status": "failed" }))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let mut event_stream = EventStream::new(&events_path);
+    let watchdog = Watchdog::with_defaults();
+    let mut hud = HudState::new("hud-text-proof-gate", "hud-text-proof-gate");
+    hud.refresh(&mut event_stream, &watchdog, &state_dir)
+        .await
+        .unwrap();
+
+    let text = hud.render_text();
+    assert!(text.contains("Gate:    unit (failed)"));
+    assert!(text.contains("Proof:   failed"));
+}

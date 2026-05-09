@@ -369,6 +369,13 @@ pub async fn run_ralph(
                         stderr: "No gates configured and tests failed".to_string(),
                         duration_ms: 0,
                         required: true,
+                        command_line: "cargo test".to_string(),
+                        exit_code: Some(1),
+                        timed_out: false,
+                        stdout_summary: None,
+                        stderr_summary: Some("No gates configured and tests failed".to_string()),
+                        output_path: None,
+                        timeout_secs: 0,
                     }]
                 }
             }

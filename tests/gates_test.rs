@@ -67,6 +67,13 @@ async fn test_gates_passed_all_required() {
             stderr: String::new(),
             duration_ms: 100,
             required: true,
+            command_line: "cargo fmt --check".to_string(),
+            exit_code: Some(0),
+            timed_out: false,
+            stdout_summary: None,
+            stderr_summary: None,
+            output_path: None,
+            timeout_secs: 120,
         },
         omk::runtime::gates::GateResult {
             name: "clippy".to_string(),
@@ -75,6 +82,13 @@ async fn test_gates_passed_all_required() {
             stderr: String::new(),
             duration_ms: 200,
             required: true,
+            command_line: "cargo clippy -- -D warnings".to_string(),
+            exit_code: Some(0),
+            timed_out: false,
+            stdout_summary: None,
+            stderr_summary: None,
+            output_path: None,
+            timeout_secs: 120,
         },
     ];
     assert!(omk::runtime::gates::gates_passed(&results));
@@ -90,6 +104,13 @@ async fn test_gates_passed_optional_failure_ok() {
             stderr: String::new(),
             duration_ms: 100,
             required: true,
+            command_line: "cargo fmt --check".to_string(),
+            exit_code: Some(0),
+            timed_out: false,
+            stdout_summary: None,
+            stderr_summary: None,
+            output_path: None,
+            timeout_secs: 120,
         },
         omk::runtime::gates::GateResult {
             name: "coverage".to_string(),
@@ -98,6 +119,13 @@ async fn test_gates_passed_optional_failure_ok() {
             stderr: String::new(),
             duration_ms: 200,
             required: false,
+            command_line: "cargo tarpaulin".to_string(),
+            exit_code: Some(1),
+            timed_out: false,
+            stdout_summary: None,
+            stderr_summary: None,
+            output_path: None,
+            timeout_secs: 120,
         },
     ];
     assert!(omk::runtime::gates::gates_passed(&results));
@@ -113,6 +141,13 @@ async fn test_gates_passed_required_failure_fails() {
             stderr: String::new(),
             duration_ms: 100,
             required: true,
+            command_line: "cargo fmt --check".to_string(),
+            exit_code: Some(0),
+            timed_out: false,
+            stdout_summary: None,
+            stderr_summary: None,
+            output_path: None,
+            timeout_secs: 120,
         },
         omk::runtime::gates::GateResult {
             name: "clippy".to_string(),
@@ -121,6 +156,13 @@ async fn test_gates_passed_required_failure_fails() {
             stderr: String::new(),
             duration_ms: 200,
             required: true,
+            command_line: "cargo clippy -- -D warnings".to_string(),
+            exit_code: Some(1),
+            timed_out: false,
+            stdout_summary: None,
+            stderr_summary: None,
+            output_path: None,
+            timeout_secs: 120,
         },
     ];
     assert!(!omk::runtime::gates::gates_passed(&results));
@@ -221,4 +263,147 @@ async fn test_run_gates_failure() {
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
     assert!(!results[0].passed, "Fail script should not pass");
+}
+
+#[tokio::test]
+async fn test_run_gates_with_evidence_writes_output_artifact_and_metadata() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let artifacts = dir.join("artifacts");
+    tokio::fs::create_dir_all(&artifacts).await.unwrap();
+
+    let script = dir.join("evidence.sh");
+    #[cfg(unix)]
+    {
+        tokio::fs::write(
+            &script,
+            "#!/bin/sh\necho line-1\necho line-2\necho err-1 >&2\nexit 7\n",
+        )
+        .await
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    #[cfg(windows)]
+    {
+        tokio::fs::write(
+            &script,
+            "@echo line-1\r\n@echo line-2\r\n@echo err-1 1>&2\r\nexit /b 7\r\n",
+        )
+        .await
+        .unwrap();
+    }
+
+    let config = omk::runtime::gates::VerificationConfig {
+        gates: vec![omk::runtime::gates::GateDef {
+            name: "evidence".to_string(),
+            command: script.to_str().unwrap().to_string(),
+            args: vec![],
+            required: true,
+            timeout_secs: 5,
+        }],
+    };
+
+    let results =
+        omk::runtime::gates::run_gates_with_evidence(&config, dir, Some(&artifacts)).await;
+    assert_eq!(results.len(), 1);
+    let gate = &results[0];
+    assert!(!gate.passed);
+    assert_eq!(gate.exit_code, Some(7));
+    assert!(!gate.timed_out);
+    assert!(gate.command_line.contains("evidence"));
+    assert!(gate
+        .stdout_summary
+        .as_deref()
+        .unwrap_or_default()
+        .contains("line-1"));
+    assert!(gate
+        .stderr_summary
+        .as_deref()
+        .unwrap_or_default()
+        .contains("err-1"));
+    let output_path = gate.output_path.as_ref().expect("expected output path");
+    assert!(
+        std::path::Path::new(output_path).exists(),
+        "full output artifact should exist"
+    );
+    let full_output = std::fs::read_to_string(output_path).unwrap();
+    assert!(full_output.contains("line-1"));
+    assert!(full_output.contains("err-1"));
+}
+
+#[tokio::test]
+async fn test_run_gates_with_evidence_marks_timeout_without_artifact_dir() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let script = dir.join("timeout.sh");
+    #[cfg(unix)]
+    {
+        tokio::fs::write(&script, "#!/bin/sh\nsleep 2\necho done\n")
+            .await
+            .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    #[cfg(windows)]
+    {
+        tokio::fs::write(&script, "@ping 127.0.0.1 -n 3 > nul\r\n@echo done\r\n")
+            .await
+            .unwrap();
+    }
+
+    let config = omk::runtime::gates::VerificationConfig {
+        gates: vec![omk::runtime::gates::GateDef {
+            name: "timeout".to_string(),
+            command: script.to_str().unwrap().to_string(),
+            args: vec![],
+            required: true,
+            timeout_secs: 1,
+        }],
+    };
+
+    let results = omk::runtime::gates::run_gates_with_evidence(&config, dir, None).await;
+    assert_eq!(results.len(), 1);
+    let gate = &results[0];
+    assert!(!gate.passed);
+    assert!(gate.timed_out);
+    assert_eq!(gate.exit_code, None);
+    assert!(gate.output_path.is_none());
+    assert!(gate
+        .stderr_summary
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Timed out after 1s"));
+}
+
+#[tokio::test]
+async fn test_run_gates_keeps_compatibility_without_evidence_artifact() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+
+    let script = dir.join("compat.sh");
+    #[cfg(unix)]
+    {
+        tokio::fs::write(&script, "#!/bin/sh\necho ok\n")
+            .await
+            .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    #[cfg(windows)]
+    {
+        tokio::fs::write(&script, "@echo ok\n").await.unwrap();
+    }
+
+    let config = omk::runtime::gates::VerificationConfig {
+        gates: vec![omk::runtime::gates::GateDef {
+            name: "compat".to_string(),
+            command: script.to_str().unwrap().to_string(),
+            args: vec![],
+            required: true,
+            timeout_secs: 5,
+        }],
+    };
+
+    let results = omk::runtime::gates::run_gates(&config, dir).await;
+    assert_eq!(results.len(), 1);
+    assert!(results[0].passed);
+    assert!(results[0].output_path.is_none());
 }

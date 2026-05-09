@@ -5,6 +5,7 @@ use serde_json::Value;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout};
+use tokio::time::Duration;
 use tracing::{debug, info, warn};
 
 use crate::wire::protocol::*;
@@ -196,6 +197,14 @@ impl WireClient {
         let msg: WireMessage =
             serde_json::from_str(&line).context("Failed to parse wire message")?;
         Ok(msg)
+    }
+
+    /// Read the next message from stdout with a timeout.
+    pub async fn read_message_timeout(&mut self, timeout: Duration) -> Result<WireMessage> {
+        match tokio::time::timeout(timeout, self.read_message()).await {
+            Ok(msg) => msg,
+            Err(_) => anyhow::bail!("Wire message read timed out after {:?}", timeout),
+        }
     }
 
     /// Send a response to an agent request.

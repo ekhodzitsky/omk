@@ -12,6 +12,10 @@ use tracing::{info, warn};
 
 /// Poll interval for the wire worker inbox check loop.
 pub const POLL_INTERVAL_SECS: u64 = 5;
+const DEFAULT_TASK_TIMEOUT_SECS: u64 = 300;
+const DEFAULT_ACTIVE_TURN_TIMEOUT_SECS: u64 = 90;
+const WIRE_TURN_TIMEOUT_MS_ENV: &str = "OMK_WIRE_TURN_TIMEOUT_MS";
+const WIRE_TURN_TIMEOUT_SECS_ENV: &str = "OMK_WIRE_TURN_TIMEOUT_SECS";
 
 /// Adapts a worker spec to the Kimi Wire Protocol.
 /// Runs as a background task: polls inbox, spawns `kimi --wire`, processes messages,
@@ -20,6 +24,7 @@ pub struct WireWorkerAdapter {
     spec: WorkerSpec,
     run_id: RunId,
     event_writer: EventWriter,
+    active_turn_timeout: std::time::Duration,
 }
 
 impl WireWorkerAdapter {
@@ -28,6 +33,7 @@ impl WireWorkerAdapter {
             spec,
             run_id,
             event_writer,
+            active_turn_timeout: resolve_active_turn_timeout(),
         }
     }
 
@@ -132,7 +138,7 @@ impl WireWorkerAdapter {
                     match serde_json::from_str::<WorkerTask>(trimmed) {
                         Ok(task) => {
                             match tokio::time::timeout(
-                                std::time::Duration::from_secs(300),
+                                std::time::Duration::from_secs(DEFAULT_TASK_TIMEOUT_SECS),
                                 self.process_task(&task, &kimi_bin, outbox, &wire_events_path),
                             )
                             .await
@@ -149,7 +155,8 @@ impl WireWorkerAdapter {
                                     warn!(
                                         worker = %self.spec.name,
                                         task = %task.id,
-                                        "Task processing timed out after 300s"
+                                        timeout_secs = DEFAULT_TASK_TIMEOUT_SECS,
+                                        "Task processing timed out"
                                     );
                                 }
                                 Ok(Ok(())) => {}
@@ -233,10 +240,11 @@ impl WireWorkerAdapter {
         // Process wire messages
         let mut summary_parts: Vec<String> = Vec::new();
         let mut success = true;
+        let mut failure_reason: Option<String> = None;
         let start_time = std::time::Instant::now();
 
         loop {
-            match client.read_message().await {
+            match client.read_message_timeout(self.active_turn_timeout).await {
                 Ok(WireMessage::Event(ev)) => {
                     // Record raw wire event for audit / replay
                     let raw_json =
@@ -257,6 +265,8 @@ impl WireWorkerAdapter {
                             crate::wire::protocol::Event::TurnEnd => break,
                             crate::wire::protocol::Event::StepInterrupted => {
                                 success = false;
+                                failure_reason =
+                                    Some("wire step interrupted before turn_end".to_string());
                                 break;
                             }
                             _ => {}
@@ -267,6 +277,8 @@ impl WireWorkerAdapter {
                                 "turn_end" => break,
                                 "step_interrupted" => {
                                     success = false;
+                                    failure_reason =
+                                        Some("wire step interrupted before turn_end".to_string());
                                     break;
                                 }
                                 "thinking" | "text" | "content" => {
@@ -315,11 +327,37 @@ impl WireWorkerAdapter {
                 Ok(WireMessage::ErrorResponse(err)) => {
                     warn!(error = ?err.error, "Wire error response");
                     success = false;
+                    failure_reason = Some(format!(
+                        "wire error response: {} (code: {})",
+                        err.error.message, err.error.code
+                    ));
                     break;
                 }
                 Err(e) => {
                     warn!(error = %e, "Wire read error, ending task");
                     success = false;
+                    let reason = e.to_string();
+                    if reason.contains("timed out") {
+                        let timeout_event = Event::new(self.run_id.clone(), EventKind::TaskOutput)
+                            .with_actor(&self.spec.name)
+                            .with_payload(serde_json::json!({
+                                "type": "wire_turn_timeout",
+                                "task_id": task.id,
+                                "worker_id": self.spec.name,
+                                "timeout_ms": self.active_turn_timeout.as_millis(),
+                                "error": reason,
+                            }))?;
+                        self.event_writer.append(&timeout_event).await?;
+
+                        let stalled = Event::new(self.run_id.clone(), EventKind::WorkerStalled)
+                            .with_actor(&self.spec.name)
+                            .with_message(format!(
+                                "wire turn timed out after {:?}",
+                                self.active_turn_timeout
+                            ))?;
+                        self.event_writer.append(&stalled).await?;
+                    }
+                    failure_reason = Some(reason);
                     break;
                 }
             }
@@ -338,7 +376,11 @@ impl WireWorkerAdapter {
                 ResultStatus::Failed
             },
             summary: if summary.is_empty() {
-                "completed".to_string()
+                if success {
+                    "completed".to_string()
+                } else {
+                    failure_reason.unwrap_or_else(|| "wire task failed".to_string())
+                }
             } else {
                 summary
             },
@@ -410,4 +452,21 @@ impl WireWorkerAdapter {
             }))?;
         self.event_writer.append(&event).await
     }
+}
+
+fn resolve_active_turn_timeout() -> std::time::Duration {
+    if let Some(ms) = read_env_u64(WIRE_TURN_TIMEOUT_MS_ENV) {
+        return std::time::Duration::from_millis(ms);
+    }
+    if let Some(secs) = read_env_u64(WIRE_TURN_TIMEOUT_SECS_ENV) {
+        return std::time::Duration::from_secs(secs);
+    }
+    std::time::Duration::from_secs(DEFAULT_ACTIVE_TURN_TIMEOUT_SECS)
+}
+
+fn read_env_u64(key: &str) -> Option<u64> {
+    std::env::var(key)
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .filter(|v| *v > 0)
 }

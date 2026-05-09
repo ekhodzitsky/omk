@@ -103,6 +103,13 @@ async fn test_proof_from_gate_results_direct() {
             stderr: String::new(),
             duration_ms: 100,
             required: true,
+            command_line: "cargo fmt --check".to_string(),
+            exit_code: Some(0),
+            timed_out: false,
+            stdout_summary: Some("ok".to_string()),
+            stderr_summary: Some(String::new()),
+            output_path: Some("/tmp/gates/fmt.log".to_string()),
+            timeout_secs: 120,
         },
         GateResult {
             name: "clippy".to_string(),
@@ -111,6 +118,13 @@ async fn test_proof_from_gate_results_direct() {
             stderr: String::new(),
             duration_ms: 200,
             required: true,
+            command_line: "cargo clippy -- -D warnings".to_string(),
+            exit_code: Some(0),
+            timed_out: false,
+            stdout_summary: Some("ok".to_string()),
+            stderr_summary: Some(String::new()),
+            output_path: Some("/tmp/gates/clippy.log".to_string()),
+            timeout_secs: 120,
         },
         GateResult {
             name: "test".to_string(),
@@ -119,6 +133,13 @@ async fn test_proof_from_gate_results_direct() {
             stderr: "1 test failed".to_string(),
             duration_ms: 500,
             required: true,
+            command_line: "cargo test".to_string(),
+            exit_code: Some(101),
+            timed_out: false,
+            stdout_summary: Some(String::new()),
+            stderr_summary: Some("1 test failed".to_string()),
+            output_path: Some("/tmp/gates/test.log".to_string()),
+            timeout_secs: 120,
         },
     ];
 
@@ -132,4 +153,14 @@ async fn test_proof_from_gate_results_direct() {
     assert_eq!(proof.status, ProofStatus::Failed);
     assert_eq!(proof.gates.len(), 3);
     assert_eq!(proof.changed_files.len(), 1);
+    assert!(
+        proof.gates[0]
+            .evidence
+            .as_ref()
+            .and_then(|e| e.get("command_line"))
+            .and_then(|v| v.as_str())
+            .map(|v| v.contains("cargo fmt --check"))
+            .unwrap_or(false),
+        "proof gate evidence should include command line"
+    );
 }

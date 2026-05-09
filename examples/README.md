@@ -80,3 +80,7 @@ CI-safe scripted fixture with deterministic proof/demo output:
 ```bash
 examples/killer-demo/run.sh
 ```
+
+Relation to North Star demo:
+- `examples/killer-demo` is the deterministic CI fixture contract (`demo-output.txt` snapshot surface).
+- `scripts/north_star_demo.sh` is the operator-facing smoke flow; in `MOCK_KIMI=1` mode it follows the same mock-first isolation guarantees and now expects a green proof after deterministic fixture repair.

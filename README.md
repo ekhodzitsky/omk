@@ -148,7 +148,7 @@ Runtime state:
 - worker-spec.json
 - inbox.jsonl / outbox.jsonl
 - heartbeat.json
-- event-log.jsonl and proof.json
+- events.jsonl and proof.json
 ```
 
 OMK is an external orchestrator. It does not fork or patch Kimi CLI. It spawns real `kimi` processes, coordinates them through state files, and lets you attach to any session with standard tmux commands.

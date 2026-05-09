@@ -71,7 +71,7 @@ This section describes what the CLI exposes today.
 | Ultrawork | Current MVP | CLI and runtime exist; needs formatting, focused tests, and real Kimi execution validation. |
 | Skills | Current MVP | Parser/discovery, bundled skills, user install/list/search/remove, and marketplace registry support. |
 | MCP | Current Scaffold | Server command exists; deeper tool coverage and integration tests are still needed. |
-| HUD and web dashboard | Current Scaffold | Needs event-log timeline and richer runtime visibility. |
+| HUD and web dashboard | Current Scaffold | Reads team state plus event evidence; needs richer runtime visibility. |
 | Cost tracking | Current MVP | Estimated session costs are recorded; provider-accurate accounting remains future work. |
 | Notifications | Current MVP | Discord, Slack, Telegram event formatting exists; event coverage and delivery tests are incomplete. |
 | `omk team run` | Current MVP | Scheduler-backed Kimi-only entrypoint with claims, leases, and watchdogs. |
@@ -137,7 +137,7 @@ Use Rust and tmux when OMK needs visibility, process control, recovery, or long-
 
 Use append-only events to make completion explainable.
 
-1. Every mode writes events to `event-log.jsonl`.
+1. Every mode writes events to the run's append-only `events.jsonl`.
 2. Verification gates write command evidence and summaries.
 3. `omk run show <id|latest>` reads the timeline.
 4. `omk run show <id|latest>` renders Wire-derived task output, request, method, and reason fields without dumping raw payloads.
@@ -217,7 +217,7 @@ Expected options:
 ### Target Run Flow
 
 1. Create a run manifest with task, roles, gates, worker count, and state paths.
-2. Write an append-only `event-log.jsonl`.
+2. Write an append-only `events.jsonl`.
 3. Start a Kimi lead and Kimi workers.
 4. Scheduler assigns tasks through atomic claims and leases.
 5. Workers emit structured events.

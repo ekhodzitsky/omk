@@ -71,7 +71,7 @@ pub struct ProofGate {
     pub name: String,
     pub status: GateStatus,
     pub required: bool,
-    pub evidence: Option<String>,
+    pub evidence: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -343,6 +343,8 @@ impl ProofGenerator {
         let mut failures: Vec<ProofFailure> = Vec::new();
         let mut retries: Vec<ProofRetry> = Vec::new();
         let mut known_gaps: Vec<String> = Vec::new();
+        let mut command_evidence: HashMap<String, serde_json::Map<String, serde_json::Value>> =
+            HashMap::new();
         let mut wire_events = 0usize;
         let mut wire_requests = 0usize;
         let mut wire_outputs = 0usize;
@@ -402,11 +404,18 @@ impl ProofGenerator {
                     if let Some(ref payload) = event.payload {
                         if let Ok(p) = serde_json::from_value::<GateResultPayload>(payload.clone())
                         {
+                            let evidence = gate_evidence_from_payload(payload).or_else(|| {
+                                gate_key_from_payload(payload).and_then(|key| {
+                                    command_evidence
+                                        .get(&key)
+                                        .map(|m| serde_json::Value::Object(m.clone()))
+                                })
+                            });
                             gate_results.push(ProofGate {
                                 name: p.name,
                                 status: GateStatus::Passed,
                                 required: p.required,
-                                evidence: None,
+                                evidence,
                             });
                         }
                     }
@@ -415,11 +424,18 @@ impl ProofGenerator {
                     if let Some(ref payload) = event.payload {
                         if let Ok(p) = serde_json::from_value::<GateResultPayload>(payload.clone())
                         {
+                            let evidence = gate_evidence_from_payload(payload).or_else(|| {
+                                gate_key_from_payload(payload).and_then(|key| {
+                                    command_evidence
+                                        .get(&key)
+                                        .map(|m| serde_json::Value::Object(m.clone()))
+                                })
+                            });
                             gate_results.push(ProofGate {
                                 name: p.name.clone(),
                                 status: GateStatus::Failed,
                                 required: p.required,
-                                evidence: None,
+                                evidence,
                             });
                             if p.required {
                                 failures.push(ProofFailure {
@@ -493,6 +509,44 @@ impl ProofGenerator {
                             .and_then(value_as_string)
                         {
                             unique_methods.insert(method);
+                        }
+                    }
+                }
+                EventKind::CommandStarted => {
+                    if let Some(payload) = event.payload.as_ref() {
+                        let key = gate_key_from_payload(payload).unwrap_or_else(|| {
+                            payload
+                                .get("name")
+                                .and_then(value_as_string)
+                                .unwrap_or_default()
+                        });
+                        if !key.is_empty() {
+                            let entry = command_evidence.entry(key).or_default();
+                            copy_payload_field(payload, entry, "command_line");
+                            copy_payload_field(payload, entry, "timeout_secs");
+                        }
+                    }
+                }
+                EventKind::CommandFinished => {
+                    if let Some(payload) = event.payload.as_ref() {
+                        let key = gate_key_from_payload(payload).unwrap_or_else(|| {
+                            payload
+                                .get("name")
+                                .and_then(value_as_string)
+                                .unwrap_or_default()
+                        });
+                        if !key.is_empty() {
+                            let entry = command_evidence.entry(key).or_default();
+                            if !entry.contains_key("command_line") {
+                                if let Some(command) = payload.get("command") {
+                                    entry.insert("command_line".to_string(), command.clone());
+                                }
+                            }
+                            copy_payload_field(payload, entry, "exit_code");
+                            copy_payload_field(payload, entry, "timed_out");
+                            copy_payload_field(payload, entry, "stdout_summary");
+                            copy_payload_field(payload, entry, "stderr_summary");
+                            copy_payload_field(payload, entry, "output_path");
                         }
                     }
                 }
@@ -601,10 +655,15 @@ impl ProofGenerator {
                     GateStatus::Failed
                 },
                 required: gr.required,
-                evidence: Some(format!(
-                    "stdout: {}...",
-                    &gr.stdout.chars().take(200).collect::<String>()
-                )),
+                evidence: Some(serde_json::json!({
+                    "command_line": gr.command_line.clone(),
+                    "exit_code": gr.exit_code,
+                    "timed_out": gr.timed_out,
+                    "stdout_summary": gr.stdout_summary.clone(),
+                    "stderr_summary": gr.stderr_summary.clone(),
+                    "output_path": gr.output_path.clone(),
+                    "timeout_secs": gr.timeout_secs,
+                })),
             })
             .collect();
 
@@ -663,6 +722,45 @@ fn value_as_string(value: &serde_json::Value) -> Option<String> {
     value.get("0")?.as_str().map(str::to_string)
 }
 
+fn gate_evidence_from_payload(payload: &serde_json::Value) -> Option<serde_json::Value> {
+    let mut evidence = serde_json::Map::new();
+    for key in [
+        "command_line",
+        "exit_code",
+        "timed_out",
+        "stdout_summary",
+        "stderr_summary",
+        "output_path",
+        "timeout_secs",
+    ] {
+        if let Some(value) = payload.get(key) {
+            evidence.insert(key.to_string(), value.clone());
+        }
+    }
+    if evidence.is_empty() {
+        None
+    } else {
+        Some(serde_json::Value::Object(evidence))
+    }
+}
+
+fn gate_key_from_payload(payload: &serde_json::Value) -> Option<String> {
+    payload
+        .get("gate_id")
+        .and_then(value_as_string)
+        .or_else(|| payload.get("name").and_then(value_as_string))
+}
+
+fn copy_payload_field(
+    payload: &serde_json::Value,
+    into: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) {
+    if let Some(value) = payload.get(key) {
+        into.insert(key.to_string(), value.clone());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -678,6 +776,13 @@ mod tests {
                 stderr: "".to_string(),
                 duration_ms: 100,
                 required: true,
+                command_line: "cargo fmt --check".to_string(),
+                exit_code: Some(0),
+                timed_out: false,
+                stdout_summary: Some("ok".to_string()),
+                stderr_summary: Some(String::new()),
+                output_path: Some("/tmp/gates/fmt.log".to_string()),
+                timeout_secs: 120,
             },
             GateResult {
                 name: "test".to_string(),
@@ -686,6 +791,13 @@ mod tests {
                 stderr: "".to_string(),
                 duration_ms: 200,
                 required: true,
+                command_line: "cargo test".to_string(),
+                exit_code: Some(101),
+                timed_out: false,
+                stdout_summary: Some("failed".to_string()),
+                stderr_summary: Some(String::new()),
+                output_path: Some("/tmp/gates/test.log".to_string()),
+                timeout_secs: 120,
             },
         ];
 

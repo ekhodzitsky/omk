@@ -7,7 +7,8 @@ use tracing::{info, warn};
 
 use crate::kimi_native::role_packs::RolePack;
 use crate::runtime::config::{EVENTS_FILE, TEAM_DIR, WORKERS_DIR};
-use crate::runtime::events::{Event, EventBuilder, EventKind, RunId};
+use crate::runtime::events::{Event, EventBuilder, EventKind, GateId, RunId};
+use crate::runtime::gates::{run_gates_with_evidence, GateDef, VerificationConfig};
 use crate::runtime::sanitize::sanitize_name;
 use crate::runtime::{
     bridge::TeamBridge, events::EventWriter, state::TeamState, tmux,
@@ -487,7 +488,7 @@ async fn run_team(args: RunArgs) -> Result<()> {
     }
 
     if run_result.is_ok() {
-        run_verification_gates(&args.dir, &event_writer, &run_id, &args.gate).await;
+        run_verification_gates(&args.dir, &state_dir, &event_writer, &run_id, &args.gate).await;
     }
 
     println!();
@@ -498,24 +499,40 @@ async fn run_team(args: RunArgs) -> Result<()> {
 
 async fn run_verification_gates(
     dir: &std::path::Path,
+    state_dir: &std::path::Path,
     event_writer: &EventWriter,
     run_id: &RunId,
     selected: &[String],
 ) {
     let preset = vec![
-        ("fmt", vec!["fmt", "--check"]),
-        (
-            "clippy",
-            vec![
-                "clippy",
-                "--all-targets",
-                "--all-features",
-                "--",
-                "-D",
-                "warnings",
+        GateDef {
+            name: "fmt".to_string(),
+            command: "cargo".to_string(),
+            args: vec!["fmt".to_string(), "--check".to_string()],
+            required: true,
+            timeout_secs: 120,
+        },
+        GateDef {
+            name: "clippy".to_string(),
+            command: "cargo".to_string(),
+            args: vec![
+                "clippy".to_string(),
+                "--all-targets".to_string(),
+                "--all-features".to_string(),
+                "--".to_string(),
+                "-D".to_string(),
+                "warnings".to_string(),
             ],
-        ),
-        ("test", vec!["test"]),
+            required: true,
+            timeout_secs: 120,
+        },
+        GateDef {
+            name: "test".to_string(),
+            command: "cargo".to_string(),
+            args: vec!["test".to_string()],
+            required: true,
+            timeout_secs: 120,
+        },
     ];
 
     let gates_to_run: Vec<_> = if selected.is_empty() {
@@ -523,7 +540,7 @@ async fn run_verification_gates(
     } else {
         preset
             .into_iter()
-            .filter(|(name, _)| selected.iter().any(|s| s == *name))
+            .filter(|gate| selected.iter().any(|s| s == gate.name.as_str()))
             .collect()
     };
 
@@ -531,36 +548,89 @@ async fn run_verification_gates(
         return;
     }
 
+    let artifacts_dir = state_dir.join("artifacts").join("gates");
     println!("Verification:");
-    for (name, args) in gates_to_run {
-        let mut cmd = tokio::process::Command::new("cargo");
-        cmd.args(&args).current_dir(dir);
+    for gate in gates_to_run {
+        let command_line = if gate.args.is_empty() {
+            gate.command.clone()
+        } else {
+            format!("{} {}", gate.command, gate.args.join(" "))
+        };
+        let gate_id = GateId(gate.name.clone());
+        let builder = EventBuilder::new(run_id.clone());
 
-        match cmd.output().await {
-            Ok(output) => {
-                if output.status.success() {
-                    if let Ok(event) = EventBuilder::new(run_id.clone()).gate_passed_by_name(name) {
-                        let _ = event_writer.append(&event).await;
-                    }
-                    println!("  {:<8} ✓", name);
-                } else {
-                    if let Ok(event) = EventBuilder::new(run_id.clone()).gate_failed_by_name(name) {
-                        let _ = event_writer.append(&event).await;
-                    }
-                    let code = output.status.code().unwrap_or(-1);
-                    println!("  {:<8} ✗ (exit code {})", name, code);
-                }
+        if let Ok(event) = builder.command_started(
+            gate_id.clone(),
+            &gate.name,
+            &command_line,
+            gate.timeout_secs,
+        ) {
+            let _ = event_writer.append(&event).await;
+        }
+
+        let results = run_gates_with_evidence(
+            &VerificationConfig {
+                gates: vec![gate.clone()],
+            },
+            dir,
+            Some(&artifacts_dir),
+        )
+        .await;
+
+        if let Some(result) = results.first() {
+            if let Ok(event) = builder.command_finished(
+                gate_id.clone(),
+                &result.name,
+                &result.command_line,
+                result.exit_code,
+                result.timed_out,
+                result.stdout_summary.as_deref(),
+                result.stderr_summary.as_deref(),
+                result.output_path.as_deref(),
+            ) {
+                let _ = event_writer.append(&event).await;
             }
-            Err(e) => {
-                if let Ok(event) = EventBuilder::new(run_id.clone()).gate_failed_by_name(name) {
-                    let _ = event_writer.append(&event).await;
-                }
-                let reason = if e.kind() == std::io::ErrorKind::NotFound {
-                    "command not found"
-                } else {
-                    "command error"
-                };
-                println!("  {:<8} ✗ ({})", name, reason);
+
+            let gate_event = if result.passed {
+                builder.gate_passed_with_evidence(
+                    gate_id.clone(),
+                    &result.name,
+                    result.required,
+                    Some(&result.command_line),
+                    result.exit_code,
+                    result.timed_out,
+                    result.stdout_summary.as_deref(),
+                    result.stderr_summary.as_deref(),
+                    result.output_path.as_deref(),
+                    Some(result.timeout_secs),
+                )
+            } else {
+                builder.gate_failed_with_evidence(
+                    gate_id.clone(),
+                    &result.name,
+                    result.required,
+                    Some(&result.command_line),
+                    result.exit_code,
+                    result.timed_out,
+                    result.stdout_summary.as_deref(),
+                    result.stderr_summary.as_deref(),
+                    result.output_path.as_deref(),
+                    Some(result.timeout_secs),
+                )
+            };
+
+            if let Ok(event) = gate_event {
+                let _ = event_writer.append(&event).await;
+            }
+
+            if result.passed {
+                println!("  {:<8} ✓", result.name);
+            } else if result.timed_out {
+                println!("  {:<8} ✗ (timeout {}s)", result.name, result.timeout_secs);
+            } else if let Some(code) = result.exit_code {
+                println!("  {:<8} ✗ (exit code {})", result.name, code);
+            } else {
+                println!("  {:<8} ✗ (command error)", result.name);
             }
         }
     }

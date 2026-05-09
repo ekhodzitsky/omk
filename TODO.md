@@ -245,7 +245,7 @@ Tasks:
 - [x] L2-002 Add append-only JSONL writer with atomic-ish flush behavior.
 - [x] L2-003 Add event reader that tolerates partial/corrupt trailing lines.
 - [ ] L2-025 Decide run directory layout for event logs.
-- [ ] L2-026 Add `event-log.jsonl` naming convention.
+- [ ] L2-026 Add public event-log naming convention (`events.jsonl` is current; decide whether `event-log.jsonl` becomes an alias).
 - [ ] L2-033 Add tests for partial trailing line.
 - [ ] L2-035 Add tests for malformed event payloads.
 
@@ -319,7 +319,7 @@ Tasks:
 - [x] L6-001 Create mock Kimi executable fixture.
 - [x] L6-004 Mock Kimi supports success mode.
 - [x] L6-005 Mock Kimi supports failure mode.
-- [ ] L6-006 Mock Kimi supports stall mode.
+- [x] L6-006 Mock Kimi supports stall mode.
 - [x] L6-009 Mock Kimi can run under CI without network.
 - [x] L6-010 Mock Kimi can be selected via config/env without touching real Kimi.
 
@@ -412,14 +412,14 @@ Verification:
 
 ## Demo Acceptance Criteria
 
-- [ ] Demo fixture creates three worker outcomes: one success, one failed verification, one stalled worker.
+- [x] Demo fixture creates three worker outcomes: one success, one failed verification, one stalled worker.
 - [ ] HUD shows worker state, heartbeat age, current task, retry count, and verification status.
-- [ ] Watchdog records a stalled-worker event and either recovers the worker or marks the task failed with evidence.
-- [ ] Verification gates run after synthesis.
-- [ ] `omk proof show latest` reports changed files, gates run, failures, retries, known gaps, and final readiness.
-- [ ] Demo can run against mock Kimi in CI.
+- [x] Watchdog records a stalled-worker event and either recovers the worker or marks the task failed with evidence.
+- [x] Verification gates run after synthesis.
+- [x] `omk proof show latest` reports changed files, gates run, failures, retries, known gaps, and final readiness.
+- [x] Demo can run against mock Kimi in CI.
 - [ ] Demo can run against real Kimi manually.
-- [ ] Demo script exits non-zero when proof status is `failed`.
+- [x] Demo script exits non-zero when proof status is `failed`.
 - [x] README can link to the demo without pretending Next commands are Current.
 
 ---
@@ -589,13 +589,13 @@ As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports `kimi --wire` protocol 
 
 - [x] LW-015 Implement `prompt` request and response handling.
 - [x] LW-016 Implement streaming `event` notification ingestion.
-- [x] LW-017 Map Wire `event` notifications into OMK `event-log.jsonl` records.
+- [x] LW-017 Map Wire `event` notifications into OMK `events.jsonl` records.
 - [x] LW-018 Implement Wire `request` handling for approvals, questions, tool calls, or future upstream request kinds.
 - [x] LW-019 Add explicit unknown-method and unknown-event handling.
 - [x] LW-020 Implement `cancel` support.
 - [x] LW-021 Implement `steer` support for active turns if it fits OMK safety rules.
 - [ ] LW-022 Implement `set_plan_mode` only after the UX/safety implications are documented.
-- [ ] LW-023 Add timeout behavior for stuck Wire turns.
+- [x] LW-023 Add timeout behavior for stuck Wire turns.
 
 ### LW Replay And Proof Integration
 
@@ -616,7 +616,7 @@ As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports `kimi --wire` protocol 
 ### LW Definition Of Done
 
 - [x] LW-DOD-001 Fake Wire tests cover initialize, prompt, event, request, cancel, replay, malformed output, and EOF.
-- [ ] LW-DOD-002 `team run` design no longer depends on prompt-shaped result blocks for normal worker output.
+- [x] LW-DOD-002 `team run` design no longer depends on prompt-shaped result blocks for normal worker output.
 - [x] LW-DOD-003 Run metadata records Kimi binary path, Kimi CLI version when available, and Wire protocol version.
 - [x] LW-DOD-004 Docs clearly state Wire-first behavior and the tmux/text fallback boundary.
 
@@ -640,30 +640,30 @@ Can run in parallel with: L1 Kimi Pro Mode, L8 docs. Blocks large parts of L3/L4
 
 - [x] L2-004 Define `RunId`, `EventId`, `WorkerId`, `TaskId`, and `GateId` newtypes.
 - [x] L2-005 Define event timestamp format and clock source.
-- [ ] L2-006 Define `run_started` and `run_completed`.
-- [ ] L2-007 Define `run_failed`.
-- [ ] L2-008 Define `worker_started`.
-- [ ] L2-009 Define `worker_heartbeat`.
-- [ ] L2-010 Define `worker_stalled`.
-- [ ] L2-011 Define `worker_recovered`.
-- [ ] L2-012 Define `task_claimed`.
-- [ ] L2-013 Define `task_started`.
-- [ ] L2-014 Define `task_output`.
-- [ ] L2-015 Define `task_completed`.
-- [ ] L2-016 Define `task_failed`.
-- [ ] L2-017 Define `file_changed`.
-- [ ] L2-018 Define `command_started`.
-- [ ] L2-019 Define `command_finished`.
-- [ ] L2-020 Define `gate_passed`.
-- [ ] L2-021 Define `gate_failed`.
-- [ ] L2-022 Define `retry_scheduled`.
-- [ ] L2-023 Define `proof_written`.
-- [ ] L2-024 Define `manual_interrupt`.
+- [x] L2-006 Define `run_started` and `run_completed`.
+- [x] L2-007 Define `run_failed`.
+- [x] L2-008 Define `worker_started`.
+- [x] L2-009 Define `worker_heartbeat`.
+- [x] L2-010 Define `worker_stalled`.
+- [x] L2-011 Define `worker_recovered`.
+- [x] L2-012 Define `task_claimed`.
+- [x] L2-013 Define `task_started`.
+- [x] L2-014 Define `task_output`.
+- [x] L2-015 Define `task_completed`.
+- [x] L2-016 Define `task_failed`.
+- [x] L2-017 Define `file_changed`.
+- [x] L2-018 Define `command_started`.
+- [x] L2-019 Define `command_finished`.
+- [x] L2-020 Define `gate_passed`.
+- [x] L2-021 Define `gate_failed`.
+- [x] L2-022 Define `retry_scheduled`.
+- [x] L2-023 Define `proof_written`.
+- [x] L2-024 Define `manual_interrupt`.
 
 ### L2 Storage And Compatibility
 
 - [ ] L2-025 Decide run directory layout for event logs.
-- [ ] L2-026 Add `event-log.jsonl` naming convention.
+- [ ] L2-026 Add public event-log naming convention (`events.jsonl` is current; decide whether `event-log.jsonl` becomes an alias).
 - [x] L2-027 Add event schema version to every event.
 - [ ] L2-028 Decide event log rotation policy; default to no rotation until a measured fixture produces oversized logs.
 - [x] L2-029 Add event reader filters by event kind, worker, task, gate, and time.
@@ -676,9 +676,9 @@ Can run in parallel with: L1 Kimi Pro Mode, L8 docs. Blocks large parts of L3/L4
 
 ### L2 Definition Of Done
 
-- [ ] L2-DOD-001 Events can be written and read without invoking Kimi.
-- [ ] L2-DOD-002 Event logs are deterministic enough for golden tests.
-- [ ] L2-DOD-003 Partial/corrupt event logs produce useful diagnostics, not panics.
+- [x] L2-DOD-001 Events can be written and read without invoking Kimi.
+- [x] L2-DOD-002 Event logs are deterministic enough for golden tests.
+- [x] L2-DOD-003 Partial/corrupt event logs produce useful diagnostics, not panics.
 
 ---
 
@@ -761,8 +761,8 @@ Can run in parallel with: L1, L5 after L2 schema. Coordinate heavily with L2 and
 ### L3 Definition Of Done
 
 - [x] L3-DOD-001 A mock team run can complete with multiple workers and deterministic state.
-- [ ] L3-DOD-002 A stalled worker is detected and recorded.
-- [ ] L3-DOD-003 A failed worker produces evidence, not silent success.
+- [x] L3-DOD-002 A stalled worker is detected and recorded.
+- [x] L3-DOD-003 A failed worker produces evidence, not silent success.
 - [ ] L3-DOD-004 Parallel workers cannot claim conflicting file ownership scopes without a warning or block.
 
 ---
@@ -789,7 +789,7 @@ Can run in parallel with: L3 after L2 event schema. Blocks launch demo.
 - [x] L4-007 Define failure summary.
 - [x] L4-008 Define retry summary.
 - [x] L4-009 Define known gap summary.
-- [ ] L4-010 Define final readiness text.
+- [x] L4-010 Define final readiness text.
 - [x] L4-011 Define proof JSON path and naming.
 - [x] L4-012 Add proof schema golden tests.
 - [x] L4-013 Add proof markdown/text renderer after JSON proof is stable and README/demo needs human-readable output.
@@ -806,35 +806,35 @@ Can run in parallel with: L3 after L2 event schema. Blocks launch demo.
 
 ### L4 Verification Gates
 
-- [ ] L4-021 Define `VerificationGate` config model.
-- [ ] L4-022 Support fmt gate.
-- [ ] L4-023 Support lint/clippy gate.
+- [x] L4-021 Define `VerificationGate` config model.
+- [x] L4-022 Support fmt gate.
+- [x] L4-023 Support lint/clippy gate.
 - [ ] L4-024 Support typecheck/check gate.
-- [ ] L4-025 Support test gate.
+- [x] L4-025 Support test gate.
 - [ ] L4-026 Support security gate placeholder.
 - [ ] L4-027 Support docs gate.
 - [ ] L4-028 Support custom command gates.
-- [ ] L4-029 Capture command stdout/stderr summaries.
-- [ ] L4-030 Store full command output path when needed.
-- [ ] L4-031 Add timeout per gate.
+- [x] L4-029 Capture command stdout/stderr summaries.
+- [x] L4-030 Store full command output path when needed.
+- [x] L4-031 Add timeout per gate.
 - [ ] L4-032 Add allow-fail gate mode for informational checks.
 - [ ] L4-033 Add retry/fix loop hook driven by failed gate evidence.
-- [ ] L4-034 Add tests for passing gates.
-- [ ] L4-035 Add tests for failing gates.
+- [x] L4-034 Add tests for passing gates.
+- [x] L4-035 Add tests for failing gates.
 - [ ] L4-036 Add tests for skipped gates.
 
 ### L4 Completion Contract
 
 - [ ] L4-037 Make no team/autopilot/ralph run report success without a proof artifact or explicit failure artifact.
-- [ ] L4-038 Add final "done contract" fields: changed files, gates run, evidence, known gaps.
+- [x] L4-038 Add final "done contract" fields: changed files, gates run, evidence, known gaps.
 - [ ] L4-039 Add failure artifact for interrupted runs.
-- [ ] L4-040 Add proof generation from recorded event logs without rerunning Kimi.
-- [ ] L4-041 Add proof generation for partial/corrupt logs with warnings.
+- [x] L4-040 Add proof generation from recorded event logs without rerunning Kimi.
+- [x] L4-041 Add proof generation for partial/corrupt logs with warnings.
 
 ### L4 Definition Of Done
 
-- [ ] L4-DOD-001 A proof contains changed files, gates run, command evidence, failures, retries, known gaps, and final readiness.
-- [ ] L4-DOD-002 A proof can be generated from a recorded event log without rerunning Kimi.
+- [x] L4-DOD-001 A proof contains changed files, gates run, command evidence, failures, retries, known gaps, and final readiness.
+- [x] L4-DOD-002 A proof can be generated from a recorded event log without rerunning Kimi.
 - [ ] L4-DOD-003 Failed and partial runs produce useful proof/failure artifacts.
 
 ---
@@ -849,7 +849,7 @@ Can run in parallel with: L1 and L7. Needs L2 for final event-backed version.
 
 ### L5 Next 3
 
-- [ ] L5-001 Make HUD read current team state plus event logs when available.
+- [x] L5-001 Make HUD read current team state plus event logs when available.
 - [ ] L5-002 Show worker heartbeat age and stalled/dead status.
 - [ ] L5-003 Show current task, retry count, and verification status.
 
@@ -857,9 +857,9 @@ Can run in parallel with: L1 and L7. Needs L2 for final event-backed version.
 
 - [ ] L5-004 Show active team count.
 - [ ] L5-005 Show running/stalled/dead worker counts.
-- [ ] L5-006 Show latest failed gate.
-- [ ] L5-007 Show latest proof status.
-- [ ] L5-008 Keep output compact enough for tmux status bar.
+- [x] L5-006 Show latest failed gate.
+- [x] L5-007 Show latest proof status.
+- [x] L5-008 Keep output compact enough for tmux status bar.
 
 ### L5 TUI
 
@@ -893,8 +893,8 @@ Can run in parallel with: L1 and L7. Needs L2 for final event-backed version.
 ### L5 Definition Of Done
 
 - [ ] L5-DOD-001 HUD can explain what every worker is doing or why it stopped.
-- [ ] L5-DOD-002 HUD distinguishes current state from final proof.
-- [ ] L5-DOD-003 HUD works with mock run fixture.
+- [x] L5-DOD-002 HUD distinguishes current state from final proof.
+- [x] L5-DOD-003 HUD works with mock run fixture.
 
 ---
 
@@ -942,7 +942,7 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 - [ ] L6-023 Test stale state directory.
 - [ ] L6-024 Test read-only project directory.
 - [ ] L6-025 Test worker dies mid-task.
-- [ ] L6-026 Test gate command times out.
+- [x] L6-026 Test gate command times out.
 - [ ] L6-027 Test proof generation after interrupted run.
 - [ ] L6-028 Test rollback after partial sync failure.
 
@@ -950,7 +950,7 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 
 - [x] L6-DOD-001 Demo can run against mock Kimi in CI.
 - [ ] L6-DOD-002 Demo can run against real Kimi manually.
-- [ ] L6-DOD-003 Demo proof output is stable enough for docs/screenshots.
+- [x] L6-DOD-003 Demo proof output is stable enough for docs/screenshots.
 
 ---
 

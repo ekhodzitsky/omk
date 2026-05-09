@@ -37,6 +37,10 @@ pub struct HudState {
     pub task_summary: TaskSummary,
     pub start_time: DateTime<Utc>,
     pub last_update: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proof_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_failed_gate: Option<String>,
     #[serde(skip)]
     pub team_state: Option<TeamState>,
 }
@@ -51,6 +55,8 @@ impl HudState {
             task_summary: TaskSummary::default(),
             start_time: Utc::now(),
             last_update: Utc::now(),
+            proof_status: None,
+            latest_failed_gate: None,
             team_state: None,
         }
     }
@@ -87,6 +93,9 @@ impl HudState {
         } else if let Ok(team_state) = TeamState::load(state_dir).await {
             self.start_time = team_state.created_at;
         }
+
+        self.latest_failed_gate = Self::extract_latest_failed_gate(&self.events);
+        self.proof_status = Self::extract_latest_proof_status(&self.events);
 
         // Load team state for task summary and store it
         self.team_state = TeamState::load(state_dir).await.ok();
@@ -296,6 +305,12 @@ impl HudState {
         ));
         lines.push(format!("Runtime: {}", runtime_str));
         lines.push(format!("Events:  {}", self.events.len()));
+        if let Some(gate_name) = self.latest_failed_gate() {
+            lines.push(format!("Gate:    {} (failed)", gate_name));
+        }
+        if let Some(status) = self.latest_proof_status() {
+            lines.push(format!("Proof:   {}", status));
+        }
         lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".to_string());
 
         for display in self.worker_displays() {
@@ -382,7 +397,14 @@ impl HudState {
     }
 
     fn latest_failed_gate(&self) -> Option<String> {
-        for event in self.events.iter().rev() {
+        if let Some(name) = &self.latest_failed_gate {
+            return Some(name.clone());
+        }
+        Self::extract_latest_failed_gate(&self.events)
+    }
+
+    fn extract_latest_failed_gate(events: &[Event]) -> Option<String> {
+        for event in events.iter().rev() {
             if event.kind == EventKind::GateFailed {
                 if let Some(ref payload) = event.payload {
                     if let Some(name) = payload.get("name").and_then(|v| v.as_str()) {
@@ -395,7 +417,14 @@ impl HudState {
     }
 
     fn latest_proof_status(&self) -> Option<String> {
-        for event in self.events.iter().rev() {
+        if let Some(status) = &self.proof_status {
+            return Some(status.clone());
+        }
+        Self::extract_latest_proof_status(&self.events)
+    }
+
+    fn extract_latest_proof_status(events: &[Event]) -> Option<String> {
+        for event in events.iter().rev() {
             if event.kind == EventKind::ProofWritten {
                 if let Some(ref payload) = event.payload {
                     if let Some(status) = payload.get("status").and_then(|v| v.as_str()) {

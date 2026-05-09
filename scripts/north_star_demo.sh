@@ -39,6 +39,7 @@ TEAM_NAME="north-star-demo"
 USE_MOCK=false
 MOCK_KIMI_PATH=""
 OMK_CMD=""
+REAL_HOME="${HOME:-}"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -83,6 +84,13 @@ find_omk() {
 check_kimi() {
     if [[ -n "${MOCK_KIMI:-}" ]] || [[ "${USE_MOCK:-false}" == "true" ]]; then
         USE_MOCK=true
+        if [[ -n "${MOCK_KIMI:-}" ]] && [[ "${MOCK_KIMI}" != "1" ]] && [[ "${MOCK_KIMI}" != "true" ]] && [[ "${MOCK_KIMI}" != "yes" ]]; then
+            if [[ ! -x "${MOCK_KIMI}" ]]; then
+                fail "MOCK_KIMI is set but not executable: ${MOCK_KIMI}"
+                exit 1
+            fi
+            MOCK_KIMI_PATH="${MOCK_KIMI}"
+        fi
         return
     fi
 
@@ -236,6 +244,12 @@ info "Temp project: ${DEMOS_DIR}"
 # In mock mode, isolate runtime state in the temp dir for reproducible local runs.
 # This avoids permission problems in restricted environments.
 if ${USE_MOCK}; then
+    if [[ -z "${CARGO_HOME:-}" && -n "${REAL_HOME}" && -d "${REAL_HOME}/.cargo" ]]; then
+        export CARGO_HOME="${REAL_HOME}/.cargo"
+    fi
+    if [[ -z "${RUSTUP_HOME:-}" && -n "${REAL_HOME}" && -d "${REAL_HOME}/.rustup" ]]; then
+        export RUSTUP_HOME="${REAL_HOME}/.rustup"
+    fi
     export HOME="${DEMOS_DIR}/home"
     export XDG_STATE_HOME="${DEMOS_DIR}/xdg_state"
     export XDG_CONFIG_HOME="${DEMOS_DIR}/xdg_config"
@@ -274,8 +288,10 @@ pass "Created temp Rust project with intentional failing test"
 
 # Write wire-compatible mock if needed
 if ${USE_MOCK}; then
-    write_mock_kimi
-    MOCK_KIMI_PATH="${DEMOS_DIR}/mock-kimi-wire"
+    if [[ -z "${MOCK_KIMI_PATH}" ]]; then
+        write_mock_kimi
+        MOCK_KIMI_PATH="${DEMOS_DIR}/mock-kimi-wire"
+    fi
     export MOCK_KIMI="${MOCK_KIMI_PATH}"
     info "MOCK_KIMI=${MOCK_KIMI_PATH}"
 fi
@@ -292,6 +308,16 @@ else
     warn "cargo test did not fail as expected — proceeding anyway"
 fi
 cd - >/dev/null
+
+if ${USE_MOCK}; then
+    perl -0pi -e 's/assert_eq!\(add\(2, 2\), 5\);/assert_eq!(add(2, 2), 4);/' "${DEMOS_DIR}/src/lib.rs"
+    if grep -q 'assert_eq!(add(2, 2), 4);' "${DEMOS_DIR}/src/lib.rs"; then
+        pass "MOCK mode repaired the fixture deterministically before team run"
+    else
+        fail "MOCK mode could not repair the fixture"
+        exit 1
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # 2. omk kimi sync

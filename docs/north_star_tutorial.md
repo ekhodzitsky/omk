@@ -90,7 +90,7 @@ What happens under the hood in the target design:
 2. **Worker dispatch** — each subtask is claimed by a wire worker and written to the worker's `inbox.jsonl`.
 3. **Execution** — each worker spawns a `kimi --wire` process, sends the task, and collects results.
 4. **Polling & synthesis** — the scheduler polls worker `outbox.jsonl` files, marks tasks complete, and runs a synthesis agent to produce a final summary.
-5. **Verification gates** — `cargo fmt`, `cargo clippy`, and `cargo test` are run automatically. With a mock, the test gate fails because no real file edits occurred.
+5. **Verification gates** — `cargo fmt`, `cargo clippy`, and `cargo test` are run automatically. With `MOCK_KIMI=1`, the script first proves the fixture fails, then applies a deterministic fixture repair so the offline proof path can finish green.
 
 ### Step 4 — `omk hud`
 
@@ -134,7 +134,7 @@ omk proof show latest --format json
 
 The demo script validates the JSON verdict and exits non-zero when the final proof `status` is `failed`.
 
-With a real Kimi, the proof would show `Ready` and changed files. With the mock, you will typically see `Failed` because the mock returns text responses but does not edit files on disk.
+With a real Kimi, the proof should show `Ready` plus the files Kimi actually changed. With `MOCK_KIMI=1`, the script keeps OMK state isolated, repairs the tiny fixture deterministically, and expects `Ready` with passing gates.
 
 ### Step 6 — Cleanup
 

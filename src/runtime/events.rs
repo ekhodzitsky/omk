@@ -202,11 +202,27 @@ pub struct FileChangedPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandStartedPayload {
+    pub gate_id: GateId,
+    pub name: String,
+    pub command_line: String,
+    pub timeout_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommandFinishedPayload {
-    pub command: String,
-    pub exit_code: i32,
+    pub gate_id: GateId,
+    pub name: String,
+    #[serde(alias = "command")]
+    pub command_line: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(default)]
+    pub timed_out: bool,
     pub stdout_summary: Option<String>,
     pub stderr_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -214,6 +230,20 @@ pub struct GateResultPayload {
     pub gate_id: GateId,
     pub name: String,
     pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_line: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(default)]
+    pub timed_out: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stdout_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stderr_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -504,19 +534,114 @@ impl EventBuilder {
         })
     }
 
+    pub fn command_started(
+        &self,
+        gate_id: GateId,
+        name: &str,
+        command_line: &str,
+        timeout_secs: u64,
+    ) -> Result<Event> {
+        Event::new(self.run_id.clone(), EventKind::CommandStarted).with_payload(
+            CommandStartedPayload {
+                gate_id,
+                name: name.to_string(),
+                command_line: command_line.to_string(),
+                timeout_secs,
+            },
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn command_finished(
+        &self,
+        gate_id: GateId,
+        name: &str,
+        command_line: &str,
+        exit_code: Option<i32>,
+        timed_out: bool,
+        stdout_summary: Option<&str>,
+        stderr_summary: Option<&str>,
+        output_path: Option<&str>,
+    ) -> Result<Event> {
+        Event::new(self.run_id.clone(), EventKind::CommandFinished).with_payload(
+            CommandFinishedPayload {
+                gate_id,
+                name: name.to_string(),
+                command_line: command_line.to_string(),
+                exit_code,
+                timed_out,
+                stdout_summary: stdout_summary.map(str::to_string),
+                stderr_summary: stderr_summary.map(str::to_string),
+                output_path: output_path.map(str::to_string),
+            },
+        )
+    }
+
     pub fn gate_passed(&self, gate_id: GateId, name: &str, required: bool) -> Result<Event> {
+        self.gate_passed_with_evidence(
+            gate_id, name, required, None, None, false, None, None, None, None,
+        )
+    }
+
+    pub fn gate_failed(&self, gate_id: GateId, name: &str, required: bool) -> Result<Event> {
+        self.gate_failed_with_evidence(
+            gate_id, name, required, None, None, false, None, None, None, None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn gate_passed_with_evidence(
+        &self,
+        gate_id: GateId,
+        name: &str,
+        required: bool,
+        command_line: Option<&str>,
+        exit_code: Option<i32>,
+        timed_out: bool,
+        stdout_summary: Option<&str>,
+        stderr_summary: Option<&str>,
+        output_path: Option<&str>,
+        timeout_secs: Option<u64>,
+    ) -> Result<Event> {
         Event::new(self.run_id.clone(), EventKind::GatePassed).with_payload(GateResultPayload {
             gate_id,
             name: name.to_string(),
             required,
+            command_line: command_line.map(str::to_string),
+            exit_code,
+            timed_out,
+            stdout_summary: stdout_summary.map(str::to_string),
+            stderr_summary: stderr_summary.map(str::to_string),
+            output_path: output_path.map(str::to_string),
+            timeout_secs,
         })
     }
 
-    pub fn gate_failed(&self, gate_id: GateId, name: &str, required: bool) -> Result<Event> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn gate_failed_with_evidence(
+        &self,
+        gate_id: GateId,
+        name: &str,
+        required: bool,
+        command_line: Option<&str>,
+        exit_code: Option<i32>,
+        timed_out: bool,
+        stdout_summary: Option<&str>,
+        stderr_summary: Option<&str>,
+        output_path: Option<&str>,
+        timeout_secs: Option<u64>,
+    ) -> Result<Event> {
         Event::new(self.run_id.clone(), EventKind::GateFailed).with_payload(GateResultPayload {
             gate_id,
             name: name.to_string(),
             required,
+            command_line: command_line.map(str::to_string),
+            exit_code,
+            timed_out,
+            stdout_summary: stdout_summary.map(str::to_string),
+            stderr_summary: stderr_summary.map(str::to_string),
+            output_path: output_path.map(str::to_string),
+            timeout_secs,
         })
     }
 
@@ -770,5 +895,83 @@ mod tests {
             Some("kimi version 1.41.0")
         );
         assert_eq!(payload.wire_protocol_version.as_deref(), Some("1.9"));
+    }
+
+    #[test]
+    fn command_and_gate_events_can_include_evidence_payload() {
+        let run_id = RunId::generate();
+        let builder = EventBuilder::new(run_id);
+
+        let started = builder
+            .command_started(GateId("fmt".to_string()), "fmt", "cargo fmt --check", 120)
+            .unwrap();
+        assert!(matches!(started.kind, EventKind::CommandStarted));
+        let started_payload = started.payload.unwrap();
+        assert_eq!(
+            started_payload.get("command_line").and_then(|v| v.as_str()),
+            Some("cargo fmt --check")
+        );
+        assert_eq!(
+            started_payload.get("timeout_secs").and_then(|v| v.as_u64()),
+            Some(120)
+        );
+
+        let finished = builder
+            .command_finished(
+                GateId("fmt".to_string()),
+                "fmt",
+                "cargo fmt --check",
+                Some(0),
+                false,
+                Some("ok"),
+                Some(""),
+                Some("/tmp/gates/fmt.log"),
+            )
+            .unwrap();
+        assert!(matches!(finished.kind, EventKind::CommandFinished));
+        let finished_payload = finished.payload.unwrap();
+        assert_eq!(
+            finished_payload
+                .get("command_line")
+                .and_then(|v| v.as_str()),
+            Some("cargo fmt --check")
+        );
+        assert_eq!(
+            finished_payload.get("exit_code").and_then(|v| v.as_i64()),
+            Some(0)
+        );
+        assert_eq!(
+            finished_payload.get("timed_out").and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            finished_payload.get("output_path").and_then(|v| v.as_str()),
+            Some("/tmp/gates/fmt.log")
+        );
+
+        let gate_passed = builder
+            .gate_passed_with_evidence(
+                GateId("fmt".to_string()),
+                "fmt",
+                true,
+                Some("cargo fmt --check"),
+                Some(0),
+                false,
+                Some("ok"),
+                Some(""),
+                Some("/tmp/gates/fmt.log"),
+                Some(120),
+            )
+            .unwrap();
+        assert!(matches!(gate_passed.kind, EventKind::GatePassed));
+        let gate_payload = gate_passed.payload.unwrap();
+        assert_eq!(
+            gate_payload.get("stdout_summary").and_then(|v| v.as_str()),
+            Some("ok")
+        );
+        assert_eq!(
+            gate_payload.get("timeout_secs").and_then(|v| v.as_u64()),
+            Some(120)
+        );
     }
 }

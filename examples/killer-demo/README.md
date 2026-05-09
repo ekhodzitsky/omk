@@ -10,6 +10,16 @@
 - `stalled worker` outcome
 - стабильный `demo-output.txt` (детерминированный формат для proof/demo)
 
+## Связь с North Star demo
+
+- `scripts/north_star_demo.sh` в режиме `MOCK_KIMI=1` использует тот же mock-first контракт:
+  изолированный `HOME/XDG_*`, отсутствие реальных Kimi/tmux зависимостей, сохранение реального Rust toolchain через
+  `CARGO_HOME`/`RUSTUP_HOME` и явная обработка proof-статуса.
+- В mock-режиме North Star demo сначала доказывает, что fixture падает, затем чинит его детерминированно,
+  чтобы локальный proof/HUD сценарий завершался `ready` без сетевых вызовов.
+- `examples/killer-demo` — это CI fixture-эталон для стабильности demo-сигнала (`demo-output.txt`),
+  а North Star demo — операторский smoke surface с тем же ожидаемым поведением.
+
 ## Запуск
 
 ```bash

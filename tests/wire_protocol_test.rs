@@ -676,3 +676,45 @@ echo '{"jsonrpc":"2.0","id":"req-1","result":'
     assert!(result.is_err());
     client.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn test_wire_client_read_message_timeout_when_turn_stalls() {
+    use std::time::Duration;
+
+    let tmp = TempDir::new().unwrap();
+    let script_path = tmp.path().join("stall_after_prompt.sh");
+    let script = r#"#!/bin/bash
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-1","result":{"protocol_version":"1.9"}}'
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-2","result":{"status":"ok","steps":[{"n":1}]}}'
+sleep 10
+"#;
+    fs::write(&script_path, script).unwrap();
+    let mut perms = fs::metadata(&script_path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&script_path, perms).unwrap();
+
+    let mut client = WireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    client
+        .initialize(InitializeParams {
+            protocol_version: "1.9".to_string(),
+            client: None,
+            external_tools: None,
+            capabilities: None,
+            hooks: None,
+        })
+        .await
+        .unwrap();
+    let _ = client.prompt("stall please").await.unwrap();
+
+    let err = client
+        .read_message_timeout(Duration::from_millis(150))
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("timed out"));
+    assert!(err.contains("150ms"));
+
+    client.shutdown().await.unwrap();
+}
