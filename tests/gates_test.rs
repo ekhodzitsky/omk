@@ -411,3 +411,94 @@ async fn test_run_gates_keeps_compatibility_without_evidence_artifact() {
     assert!(results[0].passed);
     assert!(results[0].output_path.is_none());
 }
+
+#[tokio::test]
+async fn test_load_or_detect_gates_supports_custom_gate_without_args() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let omk_dir = dir.join(".omk");
+    tokio::fs::create_dir_all(&omk_dir).await.unwrap();
+    tokio::fs::write(
+        omk_dir.join("gates.toml"),
+        r#"
+[[gates]]
+name = "custom"
+command = "echo"
+required = true
+timeout_secs = 9
+"#,
+    )
+    .await
+    .unwrap();
+
+    let config = omk::runtime::gates::load_or_detect_gates(dir).await;
+    assert_eq!(config.gates.len(), 1);
+    let gate = &config.gates[0];
+    assert_eq!(gate.name, "custom");
+    assert_eq!(gate.command, "echo");
+    assert!(gate.args.is_empty());
+    assert!(gate.required);
+    assert_eq!(gate.timeout_secs, 9);
+}
+
+#[tokio::test]
+async fn test_load_or_detect_gates_supports_allow_fail_and_skip_semantics() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let omk_dir = dir.join(".omk");
+    tokio::fs::create_dir_all(&omk_dir).await.unwrap();
+
+    let fail_script = dir.join("fail.sh");
+    #[cfg(unix)]
+    {
+        tokio::fs::write(&fail_script, "#!/bin/sh\nexit 1\n")
+            .await
+            .unwrap();
+        std::fs::set_permissions(&fail_script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    #[cfg(windows)]
+    {
+        tokio::fs::write(&fail_script, "@exit /b 1\n")
+            .await
+            .unwrap();
+    }
+
+    tokio::fs::write(
+        omk_dir.join("gates.toml"),
+        format!(
+            r#"
+[[gates]]
+name = "allow-fail"
+command = "{}"
+allow-fail = true
+timeout_secs = 5
+
+[[gates]]
+name = "skipped"
+command = "definitely-not-a-real-command-omk"
+skip = true
+required = true
+timeout_secs = 5
+"#,
+            fail_script.display()
+        ),
+    )
+    .await
+    .unwrap();
+
+    let config = omk::runtime::gates::load_or_detect_gates(dir).await;
+    assert_eq!(config.gates.len(), 2);
+
+    let results = omk::runtime::gates::run_gates(&config, dir).await;
+    assert_eq!(results.len(), 2);
+
+    let allow_fail = results.iter().find(|g| g.name == "allow-fail").unwrap();
+    assert!(!allow_fail.passed);
+    assert!(!allow_fail.required);
+
+    let skipped = results.iter().find(|g| g.name == "skipped").unwrap();
+    assert!(skipped.passed);
+    assert!(!skipped.required);
+    assert!(skipped.command_line.contains("skipped"));
+    assert!(omk::runtime::gates::gates_passed(&results));
+}

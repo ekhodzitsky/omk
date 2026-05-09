@@ -166,6 +166,11 @@ impl TeamRunner {
             }
 
             let Some(idx) = assigned_idx else {
+                warn!(
+                    task = %task.id,
+                    write_set = ?task.write_set,
+                    "Task dispatch blocked by active ownership conflicts"
+                );
                 continue;
             };
             let worker = available_workers.remove(idx);
@@ -490,6 +495,55 @@ mod tests {
         let task = runner.claim_store.get(&"task-1".to_string()).unwrap();
         assert_eq!(task.state, TaskState::Running); // claimed + started
         assert_eq!(task.owner, Some("worker-0".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_blocks_conflicting_write_sets() {
+        let tmp = TempDir::new().unwrap();
+        let state_dir = tmp.path().join("state");
+        let event_log = state_dir.join(EVENTS_FILE);
+        tokio::fs::create_dir_all(&state_dir).await.unwrap();
+
+        let mut runner = TeamRunner::init_with_tasks(
+            "run-test",
+            tmp.path(),
+            &state_dir,
+            EventWriter::new(&event_log),
+            vec![
+                Task::new("task-1", "first writer")
+                    .with_description("write shared file first")
+                    .with_write_set(vec!["src/shared.rs".to_string()]),
+                Task::new("task-2", "second writer")
+                    .with_description("write shared file second")
+                    .with_write_set(vec!["src/shared.rs".to_string()]),
+            ],
+        )
+        .await
+        .unwrap();
+
+        let worker_a = make_spec(&tmp, "worker-a").await;
+        let worker_b = make_spec(&tmp, "worker-b").await;
+        runner
+            .dispatch_to_workers(&[worker_a.clone(), worker_b.clone()])
+            .await
+            .unwrap();
+
+        let task_1 = runner.claim_store.get(&"task-1".to_string()).unwrap();
+        let task_2 = runner.claim_store.get(&"task-2".to_string()).unwrap();
+
+        assert_eq!(task_1.state, TaskState::Running);
+        assert_eq!(task_1.owner, Some("worker-a".to_string()));
+        assert_eq!(task_2.state, TaskState::Pending);
+        assert_eq!(task_2.owner, None);
+
+        assert!(tokio::fs::read_to_string(&worker_a.inbox)
+            .await
+            .unwrap()
+            .contains("task-1"));
+        assert!(
+            !worker_b.inbox.exists(),
+            "conflicting task must not be dispatched to the second worker"
+        );
     }
 
     #[tokio::test]

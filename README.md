@@ -15,7 +15,7 @@ Turn [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) into visible agent swarm
 [![Coverage](https://codecov.io/gh/ekhodzitsky/oh-my-kimi/branch/master/graph/badge.svg)](https://codecov.io/gh/ekhodzitsky/oh-my-kimi)
 [![Crates.io](https://img.shields.io/crates/v/omk.svg)](https://crates.io/crates/omk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org)
 [![Kimi-first](https://img.shields.io/badge/Kimi--first-runtime-0ea5e9.svg)](#positioning)
 [![Proof-driven](https://img.shields.io/badge/proof--driven-roadmap-2563eb.svg)](#north-star-demo)
 [![Status](https://img.shields.io/badge/status-current%20MVP%20%2B%20next%20runtime-0f172a.svg)](#maturity)

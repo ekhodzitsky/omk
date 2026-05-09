@@ -4,8 +4,10 @@ use std::path::Path;
 use tokio::process::Command;
 use tracing::{info, warn};
 
+const SKIPPED_GATE_COMMAND: &str = "__omk_internal_skipped_gate__";
+
 /// A single verification gate definition.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct GateDef {
     pub name: String,
     pub command: String,
@@ -20,6 +22,51 @@ pub struct GateDef {
 
 fn default_required() -> bool {
     true
+}
+
+#[derive(Debug, Deserialize)]
+struct GateDefConfig {
+    name: String,
+    command: String,
+    #[serde(default)]
+    args: Vec<String>,
+    /// If true, failure blocks completion.
+    #[serde(default = "default_required")]
+    required: bool,
+    #[serde(default)]
+    timeout_secs: u64,
+    #[serde(default, alias = "allow-fail")]
+    allow_fail: bool,
+    #[serde(default, alias = "skip", alias = "skipped")]
+    skip: bool,
+}
+
+impl<'de> Deserialize<'de> for GateDef {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let config = GateDefConfig::deserialize(deserializer)?;
+        let required = if config.allow_fail || config.skip {
+            false
+        } else {
+            config.required
+        };
+        let command = if config.skip {
+            SKIPPED_GATE_COMMAND.to_string()
+        } else {
+            config.command
+        };
+        let args = if config.skip { Vec::new() } else { config.args };
+
+        Ok(Self {
+            name: config.name,
+            command,
+            args,
+            required,
+            timeout_secs: config.timeout_secs,
+        })
+    }
 }
 
 impl GateDef {
@@ -162,6 +209,25 @@ pub async fn run_gates_with_evidence(
     for (index, gate) in config.gates.iter().enumerate() {
         let start = std::time::Instant::now();
         info!(gate = %gate.name, command = %gate.command, args = ?gate.args, "Running gate");
+        if gate.command == SKIPPED_GATE_COMMAND {
+            let skipped_message = "Skipped by gate config".to_string();
+            results.push(GateResult {
+                name: gate.name.clone(),
+                passed: true,
+                stdout: String::new(),
+                stderr: skipped_message.clone(),
+                duration_ms: start.elapsed().as_millis() as u64,
+                required: gate.required,
+                command_line: "<skipped by config>".to_string(),
+                exit_code: None,
+                timed_out: false,
+                stdout_summary: None,
+                stderr_summary: Some(skipped_message),
+                output_path: None,
+                timeout_secs: gate.timeout_secs,
+            });
+            continue;
+        }
         let command_line = render_command_line(&gate.command, &gate.args);
 
         let mut cmd = Command::new(&gate.command);

@@ -30,6 +30,14 @@ omk proof show latest
 
 Some of that surface is still scaffold/roadmap. Check `README.md`, `SPEC.md`, and `ROADMAP.md` before promising a command is fully implemented.
 
+## Current vs Target (L8) Snapshot
+
+- **Current:** Kimi-only execution, scheduler-backed `team run`, compatibility `team spawn`, run/proof inspection, and Kimi-native asset sync/doctor/rollback.
+- **Current Scaffold:** web HUD and some deeper proof/timeline ergonomics are present but still hardening.
+- **Target:** Wire-first execution/observability path with fewer compatibility fallbacks and clearer proof-first operator workflows.
+
+When writing docs or implementation notes, mark maturity explicitly (`Current`, `Current MVP`, `Current Scaffold`, `Next`, `Later`) to avoid mixing shipped behavior with roadmap intent.
+
 ## Official Kimi Contract
 
 Use official Kimi Code docs as the source of truth before changing Kimi integration:
@@ -40,8 +48,8 @@ Use official Kimi Code docs as the source of truth before changing Kimi integrat
 - Subagents: https://www.kimi.com/code/docs/en/kimi-code-cli/customization/sub-agents.html
 
 Default rule: new Kimi process-control work is Wire-first. Prefer `kimi --wire` events and requests over prompt scraping.
-The current observed Wire protocol version is `1.9`, and legacy/no-handshake fallback remains valid when upstream does not support `initialize`.
-Upstream tracking notes live in [KIMI_UPSTREAM.md](KIMI_UPSTREAM.md).
+Protocol version details can change; treat [KIMI_UPSTREAM.md](KIMI_UPSTREAM.md) + fresh `kimi info`/upstream docs re-check as source of truth instead of hardcoding a version in prose.
+Legacy/no-handshake fallback remains valid when upstream does not support `initialize`.
 
 ## Repository Areas
 

@@ -549,3 +549,44 @@ command = ".kimi/hooks/missing.sh"
     cmd.arg("kimi").arg("doctor");
     cmd.assert().success().stdout(contains("missing scripts"));
 }
+
+#[test]
+fn test_kimi_doctor_validates_skills_paths() {
+    let tmp = TempDir::new().unwrap();
+
+    let mut sync_cmd = Command::cargo_bin("omk").unwrap();
+    sync_cmd.current_dir(&tmp);
+    sync_cmd.arg("kimi").arg("sync");
+    sync_cmd.assert().success();
+
+    let skill_dir = tmp.path().join(".kimi/skills/test-skill");
+    fs::create_dir_all(&skill_dir).unwrap();
+    fs::write(skill_dir.join("SKILL.md"), "# Test skill\n").unwrap();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.current_dir(&tmp);
+    cmd.arg("kimi").arg("doctor");
+    cmd.assert()
+        .success()
+        .stdout(contains("Skills paths valid (1 skill(s))"));
+}
+
+#[test]
+fn test_kimi_doctor_detects_invalid_skills_path() {
+    let tmp = TempDir::new().unwrap();
+
+    let mut sync_cmd = Command::cargo_bin("omk").unwrap();
+    sync_cmd.current_dir(&tmp);
+    sync_cmd.arg("kimi").arg("sync");
+    sync_cmd.assert().success();
+
+    fs::write(tmp.path().join(".kimi/skills"), "not a directory").unwrap();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.current_dir(&tmp);
+    cmd.arg("kimi").arg("doctor");
+    cmd.assert()
+        .success()
+        .stdout(contains("Invalid skills path"))
+        .stdout(contains("is not a directory"));
+}

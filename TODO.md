@@ -125,7 +125,7 @@ Tasks:
 
 - [x] L0-001 Run `cargo fmt` and make `cargo fmt --check` green.
 - [x] L0-007 Confirm `cargo check --all-targets` agrees with default `cargo check`.
-- [ ] L0-014 Verify `Makefile` targets match documented development commands.
+- [x] L0-014 Verify `Makefile` targets match documented development commands.
 
 Expected files:
 
@@ -443,15 +443,15 @@ Can run in parallel with: L8 docs, L9 research. Coordinate with L1/L2/L3 before 
 - [x] L0-004 Record the exact verification commands in `README.md` or `CONTRIBUTING.md`.
 - [ ] L0-005 Move network-dependent smoke coverage such as `update --check` behind an ignored/integration test or mock the release lookup.
 - [x] L0-006 Ensure `config set` creates the config directory before atomic writes.
-- [ ] L0-007 Confirm `cargo check --all-targets` agrees with default `cargo check`.
+- [x] L0-007 Confirm `cargo check --all-targets` agrees with default `cargo check`.
 - [ ] L0-008 Confirm `cargo test --all-targets` does not depend on the user's real home directory.
 - [ ] L0-009 Add test helpers for isolated XDG/HOME setup if duplicated across tests.
 - [ ] L0-010 Make failing tests print actionable paths and command hints.
 - [x] L0-011 Add a CI-friendly smoke test that does not require real Kimi or tmux.
 - [x] L0-012 Mark real Kimi/tmux E2E tests as ignored or feature-gated. (No such tests exist in the current suite; all integration tests use mocks or `--help` smoke.)
 - [ ] L0-013 Audit warnings suppressed with `allow(...)` and remove unnecessary ones.
-- [ ] L0-014 Verify `Makefile` targets match documented development commands.
-- [ ] L0-015 Verify `rust-toolchain.toml` matches README Rust version badge.
+- [x] L0-014 Verify `Makefile` targets match documented development commands.
+- [x] L0-015 Verify `rust-toolchain.toml` matches README Rust version badge.
 
 ### L0 Current Surface Honesty
 
@@ -523,7 +523,7 @@ Can run in parallel with: L2 event core, L5 HUD, L8 docs. Coordinate with L7 rol
 - [x] L1-031 Make `omk kimi doctor` validate Kimi CLI presence and version.
 - [x] L1-032 Make `omk kimi doctor` validate agent files.
 - [x] L1-033 Make `omk kimi doctor` validate hook scripts and executable bits.
-- [ ] L1-034 Make `omk kimi doctor` validate skills paths.
+- [x] L1-034 Make `omk kimi doctor` validate skills paths.
 - [ ] L1-035 Make `omk kimi doctor` validate MCP config snippets or references.
 - [x] L1-036 Make `omk kimi doctor` validate manifest drift.
 - [x] L1-037 Make `omk kimi doctor` print exact repair commands.
@@ -763,7 +763,7 @@ Can run in parallel with: L1, L5 after L2 schema. Coordinate heavily with L2 and
 - [x] L3-DOD-001 A mock team run can complete with multiple workers and deterministic state.
 - [x] L3-DOD-002 A stalled worker is detected and recorded.
 - [x] L3-DOD-003 A failed worker produces evidence, not silent success.
-- [ ] L3-DOD-004 Parallel workers cannot claim conflicting file ownership scopes without a warning or block.
+- [x] L3-DOD-004 Parallel workers cannot claim conflicting file ownership scopes without a warning or block.
 
 ---
 
@@ -813,15 +813,15 @@ Can run in parallel with: L3 after L2 event schema. Blocks launch demo.
 - [x] L4-025 Support test gate.
 - [ ] L4-026 Support security gate placeholder.
 - [ ] L4-027 Support docs gate.
-- [ ] L4-028 Support custom command gates.
+- [x] L4-028 Support custom command gates.
 - [x] L4-029 Capture command stdout/stderr summaries.
 - [x] L4-030 Store full command output path when needed.
 - [x] L4-031 Add timeout per gate.
-- [ ] L4-032 Add allow-fail gate mode for informational checks.
+- [x] L4-032 Add allow-fail gate mode for informational checks.
 - [ ] L4-033 Add retry/fix loop hook driven by failed gate evidence.
 - [x] L4-034 Add tests for passing gates.
 - [x] L4-035 Add tests for failing gates.
-- [ ] L4-036 Add tests for skipped gates.
+- [x] L4-036 Add tests for skipped gates.
 
 ### L4 Completion Contract
 
@@ -1045,9 +1045,9 @@ Can run in parallel with: all lanes, but must track actual CLI status.
 - [x] L8-015 Add tutorial for `omk kimi sync`.
 - [x] L8-016 Add tutorial for `omk team spawn`.
 - [x] L8-017 Add tutorial coverage for `omk team run` now that it is implemented.
-- [ ] L8-018 Add troubleshooting page for Kimi auth.
-- [ ] L8-019 Add troubleshooting page for tmux.
-- [ ] L8-020 Add troubleshooting page for stale state and rollback.
+- [x] L8-018 Add troubleshooting page for Kimi auth.
+- [x] L8-019 Add troubleshooting page for tmux.
+- [x] L8-020 Add troubleshooting page for stale state and rollback.
 
 ### L8 Definition Of Done
 

@@ -425,7 +425,9 @@ async fn run_team(args: RunArgs) -> Result<()> {
         .into_iter()
         .map(|s| {
             crate::runtime::scheduler::task::Task::new(&s.id, "subtask")
-                .with_description(&s.description)
+                .with_description(s.description)
+                .with_read_set(s.read_set)
+                .with_write_set(s.write_set)
         })
         .collect();
 
@@ -731,6 +733,8 @@ fn fallback_subtasks(
         .map(|i| crate::runtime::scheduler::decompose::Subtask {
             id: format!("task-{}", i + 1),
             description: format!("{} — worker-{} focus", task, i),
+            read_set: Vec::new(),
+            write_set: Vec::new(),
         })
         .collect()
 }

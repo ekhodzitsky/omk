@@ -1,4 +1,4 @@
-.PHONY: build test install release lint fmt check clean doc \
+.PHONY: build test install release lint fmt cargo-check check clean doc \
         completions man docker smoke doctor setup repo-map wire-smoke \
         install-completions install-man bench profile
 
@@ -21,7 +21,10 @@ fmt:
 fmt-fix:
 	$(CARGO) fmt
 
-check: fmt lint test
+cargo-check:
+	$(CARGO) check --all-targets
+
+check: fmt cargo-check lint test
 
 install:
 	$(CARGO) install --path .

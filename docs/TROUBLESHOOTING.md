@@ -53,9 +53,12 @@ which tmux
 
 **Solution:**
 ```bash
-pip install kimi-cli
-# or
-pipx install kimi-cli
+# Install Kimi CLI using the official upstream instructions:
+# https://www.kimi.com/code/docs
+
+# Then verify from the same shell where you run OMK:
+kimi --version
+which kimi
 ```
 
 ### Team spawn fails with "session already exists"
@@ -64,11 +67,11 @@ pipx install kimi-cli
 
 **Solution:**
 ```bash
-# Kill the existing session
-tmux kill-session -t omk-team-<name>
+# First try graceful OMK shutdown
+omk team shutdown --force <name>
 
-# Or use omk cleanup
-omk cleanup --all
+# If a tmux session is orphaned, remove only that session
+tmux kill-session -t omk-team-<name>
 ```
 
 ### Autopilot/Ralph state corruption
@@ -77,13 +80,66 @@ omk cleanup --all
 
 **Solution:**
 ```bash
-# Remove corrupted state
-rm -rf ~/.local/state/omk/autopilot/<name>
-rm -rf ~/.local/state/omk/ralph/<name>
+# Backup first
+omk backup create
 
-# Or restore from backup
+# Inspect state first
+omk state list
+
+# Dry-run cleanup first
+omk cleanup --teams --dry-run
+
+# Restore from backup if needed
 omk backup list
 omk backup restore <timestamp>
+```
+
+### Kimi auth mismatch (looks logged in, but workers fail)
+
+**Symptom:** Team workers fail early even though `kimi` is installed.
+
+**Solution:**
+```bash
+# Verify auth and binary path in the same shell
+kimi auth status
+which kimi
+
+# Re-run environment diagnostics
+omk doctor
+```
+
+If auth is not valid, complete the Kimi CLI login flow, then retry the team command.
+
+### Stale state root confusion (`~/.omk/state` vs XDG)
+
+**Symptom:** `omk run list` shows no runs, but files exist somewhere else.
+
+**Why it happens:** OMK prefers `~/.omk/state` when `~/.omk/` exists; otherwise it uses `~/.local/state/omk`.
+
+**Solution:**
+```bash
+ls -d ~/.omk/state ~/.local/state/omk 2>/dev/null
+omk run list
+omk state list
+```
+
+Use the active state root when checking logs/events manually.
+
+### Kimi assets drift / stale `.kimi` workspace
+
+**Symptom:** Team behavior does not match expected role/hook setup.
+
+**Solution:**
+```bash
+omk kimi doctor
+omk kimi sync --dry-run
+omk kimi sync
+```
+
+If sync changed the wrong files:
+```bash
+omk kimi rollback --dry-run
+omk kimi rollback
 ```
 
 ### Web dashboard port already in use
@@ -95,8 +151,8 @@ omk backup restore <timestamp>
 # Use a different port
 omk hud --web --port 8081
 
-# Or kill the existing process
-lsof -ti:8080 | xargs kill -9
+# Or inspect the process using that port before stopping it
+lsof -i :8080
 ```
 
 ## Performance Issues
@@ -107,8 +163,10 @@ lsof -ti:8080 | xargs kill -9
 
 **Solution:**
 - Check `kimi` CLI responsiveness: `time kimi --version`
-- Reduce worker count: `omk team spawn 2:coder "task"`
-- Check disk space: `df -h ~/.local/state`
+- Reduce worker count: `omk team run 2:coder "task"` (or `team spawn` for compatibility mode)
+- Check disk space in active state root:
+  - `df -h ~/.local/state`
+  - `df -h ~/.omk/state` (if legacy root is active)
 
 ### High memory usage
 

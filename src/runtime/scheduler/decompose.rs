@@ -1,15 +1,19 @@
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::wire::client::{WireClient, WireMessage};
 use crate::wire::protocol::{ClientInfo, Event, InitializeParams};
 
 /// A subtask produced by lead decomposition.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Subtask {
     pub id: String,
     pub description: String,
+    #[serde(default)]
+    pub read_set: Vec<String>,
+    #[serde(default)]
+    pub write_set: Vec<String>,
 }
 
 /// Decomposes a high-level task into parallel subtasks via a Kimi lead agent.
@@ -20,7 +24,7 @@ impl LeadDecomposer {
     /// Returns `Err` on any failure so the caller can fallback.
     pub async fn decompose(task: &str, count: usize, kimi_bin: &str) -> Result<Vec<Subtask>> {
         let prompt = format!(
-            "You are a task planner. Break down the following task into {count} parallel, non-overlapping subtasks that can be executed by independent workers.\n\nTask: {task}\n\nReturn ONLY a JSON array (no markdown, no explanation):\n[{{\"id\":\"task-1\",\"description\":\"subtask 1...\"}},{{\"id\":\"task-2\",\"description\":\"subtask 2...\"}},...]"
+            "You are a task planner. Break down the following task into {count} parallel, non-overlapping subtasks that can be executed by independent workers.\n\nTask: {task}\n\nReturn ONLY a JSON array (no markdown, no explanation). Include conservative file path ownership hints when known; use empty arrays when paths are unknown:\n[{{\"id\":\"task-1\",\"description\":\"subtask 1...\",\"read_set\":[\"path/to/read\"],\"write_set\":[\"path/to/write\"]}},{{\"id\":\"task-2\",\"description\":\"subtask 2...\",\"read_set\":[],\"write_set\":[]}},...]"
         );
         let response = run_wire_prompt(&prompt, kimi_bin, "omk-lead-decomposer").await?;
         parse_subtasks(&response)
@@ -142,4 +146,36 @@ fn parse_subtasks(text: &str) -> Result<Vec<Subtask>> {
     let tasks: Vec<Subtask> =
         serde_json::from_str(slice).context("Failed to parse JSON array from response")?;
     Ok(tasks)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_subtasks_accepts_legacy_shape_without_path_sets() {
+        let tasks = parse_subtasks(r#"[{"id":"task-1","description":"legacy"}]"#).unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert!(tasks[0].read_set.is_empty());
+        assert!(tasks[0].write_set.is_empty());
+    }
+
+    #[test]
+    fn parse_subtasks_preserves_read_and_write_sets() {
+        let tasks = parse_subtasks(
+            r#"Here is the plan:
+            [
+              {
+                "id": "task-1",
+                "description": "edit runtime",
+                "read_set": ["src/runtime/mod.rs"],
+                "write_set": ["src/runtime/scheduler/runner.rs"]
+              }
+            ]"#,
+        )
+        .unwrap();
+
+        assert_eq!(tasks[0].read_set, vec!["src/runtime/mod.rs"]);
+        assert_eq!(tasks[0].write_set, vec!["src/runtime/scheduler/runner.rs"]);
+    }
 }

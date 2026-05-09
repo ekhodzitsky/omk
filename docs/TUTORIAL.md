@@ -33,6 +33,16 @@ omk doctor
 omk setup
 ```
 
+## Current vs Target (L8) At a Glance
+
+Use this as a quick reality check while reading the tutorial:
+
+- **Current (implemented now):** `omk team run`, `omk team spawn`, `omk kimi sync/doctor/install/rollback`, `omk run list/show`, `omk proof show`.
+- **Current Scaffold (exists, still hardening):** `omk hud --web`, deeper run/proof filtering and UX polish.
+- **Target (near-term direction):** stronger Wire-first proof/HUD ergonomics and fewer tmux-bridge edge cases.
+
+For protocol and upstream truth, re-check [KIMI_UPSTREAM.md](KIMI_UPSTREAM.md) before relying on stale assumptions.
+
 ---
 
 ## Installation and Setup
@@ -259,10 +269,11 @@ set -g status-right '#(omk hud --tmux)'
 ### Live TUI
 
 ```bash
-omk hud --tui
+omk hud --tui coder-a1b2
 ```
 
 Opens an interactive terminal UI that refreshes as workers report status. Press `q` to quit.
+`--tui` requires a team name.
 
 ### Web dashboard (Scaffold)
 
@@ -470,10 +481,43 @@ sudo apt install tmux
    tmux kill-session -t omk-team-<name>
    ```
 
+### Kimi auth looks valid but workers still fail
+
+1. Re-check auth state from the same shell OMK is using:
+   ```bash
+   kimi auth status
+   which kimi
+   ```
+2. If status is not authenticated, complete the Kimi CLI login flow, then re-run:
+   ```bash
+   omk doctor
+   ```
+3. Re-run a minimal command to validate Kimi path/auth quickly:
+   ```bash
+   kimi --version
+   ```
+
+### tmux session exists but OMK team state is stale
+
+1. Inspect active teams and sessions:
+   ```bash
+   omk team list
+   tmux ls | rg omk-team-
+   ```
+2. Prefer OMK cleanup first:
+   ```bash
+   omk team shutdown --force <name>
+   ```
+3. If tmux session remains orphaned, remove it directly:
+   ```bash
+   tmux kill-session -t omk-team-<name>
+   ```
+
 ### Kimi-native assets look stale
 
 ```bash
 omk kimi doctor
+omk kimi sync --dry-run
 omk kimi sync
 ```
 
@@ -490,11 +534,21 @@ omk kimi rollback
    ```bash
    omk backup create
    ```
-2. Clean up if needed:
+2. Check which state root OMK is using (`~/.omk/state` takes priority if `~/.omk/` exists):
    ```bash
-   omk cleanup --all
+   ls -d ~/.omk/state ~/.local/state/omk 2>/dev/null
    ```
-3. Re-run `omk setup`.
+3. Start with dry-run cleanup:
+   ```bash
+   omk team cleanup --all --dry-run
+   omk cleanup --teams --dry-run
+   ```
+4. Apply cleanup only after review:
+   ```bash
+   omk team cleanup --all
+   omk cleanup --teams
+   ```
+5. Re-run `omk setup`.
 
 ### Resume after crash
 
@@ -524,7 +578,7 @@ Use mode-specific `--resume` flags where available (`omk autopilot --resume`, `o
 - `omk kimi sync`, `omk kimi doctor`, `omk kimi install`, `omk kimi agents`, `omk kimi hooks`, `omk kimi skills`, `omk kimi rollback`
 - `omk team run`, `omk team spawn`, `omk team list`, `omk team status`, `omk team attach`, `omk team broadcast`, `omk team shutdown`
 - `omk autopilot`, `omk ralph`, `omk ultrawork`
-- `omk hud --tmux`, `omk hud --tui`, `omk hud --web`
+- `omk hud --tmux`, `omk hud <team-name> --tui`, `omk hud --web`
 - `omk proof show <id\|latest>`, `omk run show <id\|latest>`, `omk run list`
 - `omk ask`, `omk marketplace`, `omk skill`, `omk backup`, `omk state`, `omk cleanup`, `omk cost`
 
