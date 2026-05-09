@@ -116,9 +116,10 @@ Use Kimi-compatible assets for work that should happen inside one Kimi session o
    - `.kimi/skills/*/SKILL.md`
    - Kimi MCP configuration
    - OMK ownership manifests and backups
-2. `omk kimi doctor` validates assets, versions, permissions, missing files, stale files, and fix hints.
-3. `omk kimi rollback` exposes manifest-backed rollback and backup restore through the CLI.
-4. Kimi hooks write lifecycle events into OMK run state.
+2. The ownership manifest stores managed paths, checksums, directories, and backup index entries linking backups to the managed file they protect.
+3. `omk kimi doctor` validates assets, versions, permissions, missing files, stale files, backup-index drift, and fix hints.
+4. `omk kimi rollback` exposes manifest-backed rollback and backup restore through the CLI.
+5. Kimi hooks write lifecycle events into OMK run state.
 
 ### External Runtime Lane
 
@@ -139,8 +140,9 @@ Use append-only events to make completion explainable.
 1. Every mode writes events to `event-log.jsonl`.
 2. Verification gates write command evidence and summaries.
 3. `omk run show <id|latest>` reads the timeline.
-4. `omk proof show <id|latest>` creates a final readiness report.
-5. A run is not complete until it has a proof artifact or an explicit failure artifact.
+4. `omk run show <id|latest>` renders Wire-derived task output, request, method, and reason fields without dumping raw payloads.
+5. `omk proof show <id|latest>` creates a final readiness report with changed files, gates, failures, retries, known gaps, and Wire evidence summaries.
+6. A run is not complete until it has a proof artifact or an explicit failure artifact.
 
 ## Current v0 Team Mode
 
@@ -277,9 +279,20 @@ Target proof shape:
   "failures": [],
   "retries": [],
   "known_gaps": [],
+  "wire_evidence": {
+    "event_count": 1,
+    "request_count": 1,
+    "output_count": 1,
+    "prompt_like_messages": 1,
+    "unique_methods": ["prompt"],
+    "unique_events": ["turn_end"],
+    "unique_requests": ["approval"]
+  },
   "summary": "string"
 }
 ```
+
+Wire evidence is a summary, not a raw transcript. Raw Wire logs may be retained after redaction for replay/debugging, while normalized OMK events are the primary contract for `run show`, HUD, proof, and CI-safe fixtures.
 
 ## Migration Plan
 

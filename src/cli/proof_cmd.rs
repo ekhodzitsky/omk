@@ -79,6 +79,7 @@ async fn cmd_show(run_id: &str, format: OutputFormat, regenerate: bool) -> Resul
             println!("{}", "=".repeat(60));
             println!("Status:      {}", proof.status);
             println!("Readiness:   {}", proof.readiness());
+            println!("Readiness+:  {}", proof.readiness_text());
             println!("Generated:   {}", proof.generated_at);
             if proof.elapsed_secs > 0 {
                 println!("Duration:    {}s", proof.elapsed_secs);
@@ -97,6 +98,29 @@ async fn cmd_show(run_id: &str, format: OutputFormat, regenerate: bool) -> Resul
             println!("  failures:        {}", proof.failures.len());
             println!("  retries:         {}", proof.retries.len());
             println!("  known_gaps:      {}", proof.known_gaps.len());
+            println!();
+
+            println!("Wire evidence:");
+            if let Some(wire) = &proof.wire_evidence {
+                println!(
+                    "  events={}, requests={}, outputs={}, prompt_like_messages={}",
+                    wire.event_count,
+                    wire.request_count,
+                    wire.output_count,
+                    wire.prompt_like_messages
+                );
+                if !wire.unique_methods.is_empty() {
+                    println!("  methods:         {}", wire.unique_methods.join(", "));
+                }
+                if !wire.unique_events.is_empty() {
+                    println!("  wire_events:     {}", wire.unique_events.join(", "));
+                }
+                if !wire.unique_requests.is_empty() {
+                    println!("  wire_requests:   {}", wire.unique_requests.join(", "));
+                }
+            } else {
+                println!("  none");
+            }
             println!();
 
             println!("Changed files ({}):", proof.changed_files.len());
@@ -163,7 +187,7 @@ async fn cmd_show(run_id: &str, format: OutputFormat, regenerate: bool) -> Resul
             println!();
             println!("{}", "=".repeat(60));
 
-            println!("Readiness verdict: {}.", proof.readiness());
+            println!("Readiness verdict: {}.", proof.readiness_text());
         }
     }
 

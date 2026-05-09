@@ -73,13 +73,13 @@ async fn cmd_sync(dir: &std::path::Path, force: bool, dry_run: bool) -> Result<(
     if dry_run {
         println!("🔍 Dry run — no changes made");
         if !report.would_update.is_empty() {
-            println!("\n  Would update:");
+            println!("\n  {} would update:", report.scope.as_label());
             for item in &report.would_update {
                 println!("    ~ {}", item);
             }
         }
         if !report.would_create.is_empty() {
-            println!("\n  Would create:");
+            println!("\n  {} would create:", report.scope.as_label());
             for item in &report.would_create {
                 println!("    + {}", item);
             }
@@ -87,13 +87,13 @@ async fn cmd_sync(dir: &std::path::Path, force: bool, dry_run: bool) -> Result<(
     } else {
         println!("✅ Sync complete");
         if !report.created.is_empty() {
-            println!("\n  Created:");
+            println!("\n  {} created:", report.scope.as_label());
             for item in &report.created {
                 println!("    + {}", item);
             }
         }
         if !report.updated.is_empty() {
-            println!("\n  Updated:");
+            println!("\n  {} updated:", report.scope.as_label());
             for item in &report.updated {
                 println!("    ~ {}", item);
             }
@@ -116,45 +116,71 @@ async fn cmd_sync(dir: &std::path::Path, force: bool, dry_run: bool) -> Result<(
     let user_report = crate::kimi_native::sync::sync_user_assets(force, dry_run).await?;
     if dry_run {
         if !user_report.would_update.is_empty() {
-            println!("\n  User-level would update:");
+            println!("\n  {} would update:", user_report.scope.as_label());
             for item in &user_report.would_update {
                 println!("    ~ {}", item);
             }
         }
         if !user_report.would_create.is_empty() {
-            println!("\n  User-level would create:");
+            println!("\n  {} would create:", user_report.scope.as_label());
             for item in &user_report.would_create {
                 println!("    + {}", item);
             }
         }
     } else {
         if !user_report.created.is_empty() {
-            println!("\n  User-level created:");
+            println!("\n  {} created:", user_report.scope.as_label());
             for item in &user_report.created {
                 println!("    + {}", item);
             }
         }
         if !user_report.updated.is_empty() {
-            println!("\n  User-level updated:");
+            println!("\n  {} updated:", user_report.scope.as_label());
             for item in &user_report.updated {
                 println!("    ~ {}", item);
             }
         }
     }
 
-    // Summary line
-    if !dry_run {
+    if dry_run {
+        println!(
+            "\n{} summary: {} planned ({} create, {} update), {} unchanged.",
+            report.scope.as_label(),
+            report.files_planned(),
+            report.would_create.len(),
+            report.would_update.len(),
+            report.files_unchanged(),
+        );
+        println!(
+            "{} summary: {} planned ({} create, {} update), {} unchanged.",
+            user_report.scope.as_label(),
+            user_report.files_planned(),
+            user_report.would_create.len(),
+            user_report.would_update.len(),
+            user_report.files_unchanged(),
+        );
+    } else {
         let proj_written = report.files_written();
         let proj_unchanged = report.files_unchanged();
         let user_written = user_report.files_written();
+        let user_unchanged = user_report.files_unchanged();
         println!(
-            "\nProject: {} files synced ({} created, {} updated), {} unchanged, {} backups. User: {} files synced.",
+            "\n{} summary: {} synced ({} created, {} updated), {} unchanged, {} backups.",
+            report.scope.as_label(),
             proj_written,
             report.created.len(),
             report.updated.len(),
             proj_unchanged,
             report.backups_created.len(),
+        );
+        println!(
+            "{} summary: {} synced ({} created, {} updated), {} unchanged, {} backups.",
+            user_report.scope.as_label(),
             user_written,
+            user_report.created.len(),
+            user_report.updated.len(),
+            user_unchanged,
+            user_report.backups_created.len(),
         );
     }
 

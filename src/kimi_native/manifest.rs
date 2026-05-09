@@ -70,6 +70,9 @@ pub struct AssetManifest {
     pub files: Vec<ManifestEntry>,
     /// Directories that OMK created (for cleanup only when empty).
     pub directories: Vec<PathBuf>,
+    /// Backup artifacts mapped to their managed file paths.
+    #[serde(default)]
+    pub backups: Vec<BackupEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +80,13 @@ pub struct ManifestEntry {
     pub path: PathBuf,
     pub kind: EntryKind,
     pub checksum: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupEntry {
+    pub managed_path: PathBuf,
+    pub backup_path: PathBuf,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -100,6 +110,7 @@ impl AssetManifest {
             project_dir: project_dir.to_path_buf(),
             files: Vec::new(),
             directories: Vec::new(),
+            backups: Vec::new(),
         }
     }
 
@@ -119,6 +130,34 @@ impl AssetManifest {
 
     pub fn add_dir(&mut self, path: &Path) {
         self.directories.push(path.to_path_buf());
+    }
+
+    /// Record backup metadata for a managed file.
+    /// Stores project-relative paths so index remains portable.
+    pub fn add_backup(&mut self, managed_path: &Path, backup_path: &Path) {
+        let managed_rel = to_project_relative(managed_path, &self.project_dir);
+        let backup_rel = to_project_relative(backup_path, &self.project_dir);
+        if let (Some(managed_path), Some(backup_path)) = (managed_rel, backup_rel) {
+            self.backups.push(BackupEntry {
+                managed_path,
+                backup_path,
+                created_at: chrono::Utc::now(),
+            });
+        } else {
+            tracing::warn!(
+                managed = %managed_path.display(),
+                backup = %backup_path.display(),
+                "Skipping backup index entry outside project root"
+            );
+        }
+    }
+
+    pub fn latest_backup_for(&self, managed_path: &Path) -> Option<PathBuf> {
+        self.backups
+            .iter()
+            .filter(|entry| entry.managed_path == managed_path)
+            .max_by_key(|entry| entry.created_at)
+            .map(|entry| entry.backup_path.clone())
     }
 
     pub fn manifest_path(project_dir: &Path) -> PathBuf {
@@ -296,6 +335,21 @@ fn absolute_root(path: &Path) -> PathBuf {
         .unwrap_or_else(|_| path.to_path_buf())
 }
 
+fn to_project_relative(path: &Path, project_root: &Path) -> Option<PathBuf> {
+    let absolute_root = absolute_root(project_root);
+    if path.is_absolute() {
+        return path.strip_prefix(&absolute_root).ok().map(PathBuf::from);
+    }
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    Some(normalized)
+}
+
 fn has_parent_traversal(path: &Path) -> bool {
     path.components()
         .any(|component| component == Component::ParentDir)
@@ -351,6 +405,19 @@ fn validate_manifest_paths(manifest: &AssetManifest, project_dir: &Path) -> Resu
 
     for (index, dir) in manifest.directories.iter().enumerate() {
         validate_manifest_entry_path(dir, &format!("directories[{}]", index), &project_root)?;
+    }
+
+    for (index, backup) in manifest.backups.iter().enumerate() {
+        validate_manifest_entry_path(
+            &backup.managed_path,
+            &format!("backups[{}].managed_path", index),
+            &project_root,
+        )?;
+        validate_manifest_entry_path(
+            &backup.backup_path,
+            &format!("backups[{}].backup_path", index),
+            &project_root,
+        )?;
     }
 
     Ok(())

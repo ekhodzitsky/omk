@@ -113,3 +113,37 @@ fn test_run_show_latest_resolves_most_recent_scheduler_run() {
         .stdout(contains("run_completed"))
         .stdout(predicates::str::contains("older-run").not());
 }
+
+#[test]
+fn test_run_show_text_displays_wire_evidence_fields_without_raw_dump() {
+    let (_tmp, envs) = omk::test_helpers::isolated_xdg_env();
+    let xdg_state = envs
+        .iter()
+        .find(|(key, _)| *key == "XDG_STATE_HOME")
+        .map(|(_, value)| value.clone())
+        .unwrap();
+    let run_dir = xdg_state.join("omk").join("runs").join("wire-run");
+    fs::create_dir_all(&run_dir).unwrap();
+    let events = r#"{"id":"e1","run_id":"wire-run","ts":"2024-01-01T00:00:00Z","schema_version":1,"kind":"run_started"}
+{"id":"e2","run_id":"wire-run","ts":"2024-01-01T00:00:01Z","schema_version":1,"kind":"task_output","actor":"worker-1","payload":{"task_id":"task-1","wire_event":"turn_delta","wire_method":"prompt","message":"chunk","reason":"stream","wire_request_id":"req-1","wire_request":"review","output_summary":"done","request_payload":{"noise":"x"}}}
+{"id":"e3","run_id":"wire-run","ts":"2024-01-01T00:00:02Z","schema_version":1,"kind":"run_completed"}
+"#;
+    fs::write(run_dir.join("events.jsonl"), events).unwrap();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+
+    cmd.arg("run").arg("show").arg("wire-run");
+    cmd.assert()
+        .success()
+        .stdout(contains("wire_event=turn_delta"))
+        .stdout(contains("wire_method=prompt"))
+        .stdout(contains("wire_request=review"))
+        .stdout(contains("wire_request_id=req-1"))
+        .stdout(contains("output_summary=done"))
+        .stdout(contains("message=chunk"))
+        .stdout(contains("reason=stream"))
+        .stdout(predicates::str::contains("request_payload").not());
+}

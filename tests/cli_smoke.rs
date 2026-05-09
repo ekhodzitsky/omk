@@ -1,5 +1,8 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, std::path::PathBuf)>) {
     omk::test_helpers::isolated_xdg_env()
@@ -382,4 +385,78 @@ fn test_help_smoke() {
     let mut cmd = Command::cargo_bin("omk").unwrap();
     cmd.arg("config").arg("--help");
     cmd.assert().success();
+}
+
+#[test]
+fn test_north_star_demo_exits_non_zero_when_proof_failed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake_bin = tmp.path().join("fake-bin");
+    fs::create_dir_all(&fake_bin).unwrap();
+
+    let fake_omk = fake_bin.join("omk");
+    let fake_kimi = fake_bin.join("kimi");
+
+    fs::write(
+        &fake_omk,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "--version" || "${1:-}" == "version" ]]; then
+  echo "omk 0.2.4"
+  exit 0
+fi
+if [[ "${1:-}" == "kimi" && "${2:-}" == "sync" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "team" && "${2:-}" == "run" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "hud" ]]; then
+  echo '{"task_summary":{"total":3,"completed":2},"workers":[{"id":"worker-0"},{"id":"worker-1"},{"id":"worker-2"}]}'
+  exit 0
+fi
+if [[ "${1:-}" == "proof" && "${2:-}" == "show" && "${3:-}" == "latest" && "${4:-}" == "--format" && "${5:-}" == "json" ]]; then
+  echo '{"status":"failed","changed_files":[],"gates":[],"failures":[{"description":"mock failure"}],"retries":[],"known_gaps":[]}'
+  exit 0
+fi
+if [[ "${1:-}" == "proof" && "${2:-}" == "show" && "${3:-}" == "latest" && "${4:-}" == "--format" && "${5:-}" == "text" ]]; then
+  echo "Proof status: failed"
+  exit 0
+fi
+if [[ "${1:-}" == "team" && "${2:-}" == "cleanup" ]]; then
+  exit 0
+fi
+echo "unsupported fake omk args: $*" >&2
+exit 1
+"#,
+    )
+    .unwrap();
+    fs::write(&fake_kimi, "#!/usr/bin/env bash\nexit 0\n").unwrap();
+
+    #[cfg(unix)]
+    {
+        let mut perms = fs::metadata(&fake_omk).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&fake_omk, perms).unwrap();
+        let mut kimi_perms = fs::metadata(&fake_kimi).unwrap().permissions();
+        kimi_perms.set_mode(0o755);
+        fs::set_permissions(&fake_kimi, kimi_perms).unwrap();
+    }
+
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let combined_path = format!("{}:{}", fake_bin.display(), current_path);
+
+    let script_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scripts")
+        .join("north_star_demo.sh");
+    let output = std::process::Command::new("bash")
+        .arg(script_path)
+        .env("PATH", combined_path)
+        .env("NORTH_STAR_DRY_RUN", "1")
+        .output()
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "north_star_demo.sh must return non-zero when proof status=failed"
+    );
 }

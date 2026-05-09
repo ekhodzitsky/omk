@@ -502,7 +502,7 @@ Can run in parallel with: L2 event core, L5 HUD, L8 docs. Coordinate with L7 rol
 ### L1 Backup And Rollback
 
 - [x] L1-015 Create backup files before overwriting any existing non-identical Kimi asset.
-- [ ] L1-016 Store backup metadata in the manifest or a companion backup index.
+- [x] L1-016 Store backup metadata in the manifest or a companion backup index.
 - [x] L1-017 Implement rollback dry-run.
 - [x] L1-018 Implement rollback apply.
 - [x] L1-019 Implement rollback report with removed files, restored files, skipped files, and errors.
@@ -517,15 +517,15 @@ Can run in parallel with: L2 event core, L5 HUD, L8 docs. Coordinate with L7 rol
 ### L1 Sync And Doctor
 
 - [ ] L1-027 Make `omk kimi sync` reconcile project `.kimi/` assets without duplicating stale copies.
-- [ ] L1-028 Make user-level sync explicit in output so users know project vs user writes.
+- [x] L1-028 Make user-level sync explicit in output so users know project vs user writes.
 - [x] L1-029 Add `--dry-run` to `omk kimi sync`.
 - [ ] L1-030 Decide and document whether `--project-only` and `--user-only` are required; add them only if sync output shows project/user writes are confusing.
 - [x] L1-031 Make `omk kimi doctor` validate Kimi CLI presence and version.
-- [ ] L1-032 Make `omk kimi doctor` validate agent files.
-- [ ] L1-033 Make `omk kimi doctor` validate hook scripts and executable bits.
+- [x] L1-032 Make `omk kimi doctor` validate agent files.
+- [x] L1-033 Make `omk kimi doctor` validate hook scripts and executable bits.
 - [ ] L1-034 Make `omk kimi doctor` validate skills paths.
 - [ ] L1-035 Make `omk kimi doctor` validate MCP config snippets or references.
-- [ ] L1-036 Make `omk kimi doctor` validate manifest drift.
+- [x] L1-036 Make `omk kimi doctor` validate manifest drift.
 - [x] L1-037 Make `omk kimi doctor` print exact repair commands.
 - [x] L1-038 Add JSON output mode for doctor when CI or tests need machine-readable diagnostics.
 
@@ -541,9 +541,9 @@ Can run in parallel with: L2 event core, L5 HUD, L8 docs. Coordinate with L7 rol
 ### L1 Definition Of Done
 
 - [ ] L1-DOD-001 `sync`, `doctor`, and `rollback` can explain every file OMK owns.
-- [ ] L1-DOD-002 `doctor` can tell the user exactly how to repair stale or missing assets.
-- [ ] L1-DOD-003 Rollback is tested without touching unrelated user files.
-- [ ] L1-DOD-004 Kimi asset install is safe to run repeatedly.
+- [x] L1-DOD-002 `doctor` can tell the user exactly how to repair stale or missing assets.
+- [x] L1-DOD-003 Rollback is tested without touching unrelated user files.
+- [x] L1-DOD-004 Kimi asset install is safe to run repeatedly.
 
 ---
 
@@ -600,10 +600,10 @@ As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports `kimi --wire` protocol 
 ### LW Replay And Proof Integration
 
 - [x] LW-024 Implement `replay` support against `wire.jsonl` or upstream-compatible transcript fixtures.
-- [ ] LW-025 Decide whether OMK stores raw Wire logs, normalized OMK events, or both.
+- [x] LW-025 Decide whether OMK stores raw Wire logs, normalized OMK events, or both. Decision: store both; raw Wire logs are redacted before durability, and normalized OMK events power `run show`, HUD, and proof.
 - [x] LW-026 Redact sensitive Wire payload fields before writing durable logs.
-- [ ] LW-027 Make `omk run show` able to reference Wire-derived events.
-- [ ] LW-028 Make `omk proof` include Wire-derived task/output/request evidence.
+- [x] LW-027 Make `omk run show` able to reference Wire-derived events.
+- [x] LW-028 Make `omk proof` include Wire-derived task/output/request evidence.
 
 ### LW Team Runtime Integration
 
@@ -615,10 +615,10 @@ As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports `kimi --wire` protocol 
 
 ### LW Definition Of Done
 
-- [ ] LW-DOD-001 Fake Wire tests cover initialize, prompt, event, request, cancel, replay, malformed output, and EOF.
+- [x] LW-DOD-001 Fake Wire tests cover initialize, prompt, event, request, cancel, replay, malformed output, and EOF.
 - [ ] LW-DOD-002 `team run` design no longer depends on prompt-shaped result blocks for normal worker output.
 - [x] LW-DOD-003 Run metadata records Kimi binary path, Kimi CLI version when available, and Wire protocol version.
-- [ ] LW-DOD-004 Docs clearly state Wire-first behavior and the tmux/text fallback boundary.
+- [x] LW-DOD-004 Docs clearly state Wire-first behavior and the tmux/text fallback boundary.
 
 ---
 
@@ -909,8 +909,8 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 ### L6 Next 3
 
 - [x] L6-001 Create mock Kimi executable fixture.
-- [ ] L6-002 Create scripted team fixture with success, failure, and stall.
-- [ ] L6-003 Create expected proof golden output for the fixture.
+- [x] L6-002 Create scripted team fixture with success, failure, and stall.
+- [x] L6-003 Create expected proof golden output for the fixture.
 
 ### L6 Mock Kimi
 
@@ -924,14 +924,14 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 
 ### L6 Demo Script
 
-- [ ] L6-011 Add `examples/killer-demo/README.md`.
-- [ ] L6-012 Add demo setup script.
-- [ ] L6-013 Add demo run script.
-- [ ] L6-014 Add demo cleanup script.
-- [ ] L6-015 Add demo expected outputs.
+- [x] L6-011 Add `examples/killer-demo/README.md`.
+- [x] L6-012 Add demo setup script.
+- [x] L6-013 Add demo run script.
+- [x] L6-014 Add demo cleanup script.
+- [x] L6-015 Add demo expected outputs.
 - [x] L6-016 Ensure demo exits non-zero when proof status is failed.
-- [ ] L6-017 Ensure demo can run in temporary directory.
-- [ ] L6-018 Ensure demo does not mutate user Kimi config unless explicitly requested.
+- [x] L6-017 Ensure demo can run in temporary directory.
+- [x] L6-018 Ensure demo does not mutate user Kimi config unless explicitly requested.
 
 ### L6 QA Matrix
 

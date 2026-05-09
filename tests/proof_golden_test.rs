@@ -27,6 +27,10 @@ async fn test_proof_golden_happy_path() {
     assert_eq!(proof.gates.len(), 3);
     assert!(proof.failures.is_empty());
     assert_eq!(proof.readiness(), "ready_for_handoff");
+    assert_eq!(
+        proof.readiness_text(),
+        "Ready for handoff: required gates passed and no blocking failures."
+    );
     assert!(proof.summary.contains("ready"));
     let md = proof.to_markdown();
     assert!(md.contains("## Verdict"));
@@ -56,6 +60,10 @@ async fn test_proof_golden_with_failures() {
     assert_eq!(proof.gates.len(), 2); // fmt + test
     assert_eq!(proof.failures.len(), 1);
     assert_eq!(proof.readiness(), "blocked");
+    assert_eq!(
+        proof.readiness_text(),
+        "Blocked: failures or required gate failures must be resolved."
+    );
     assert!(proof.known_gaps.contains(&"gate test failed".to_string()));
     let md = proof.to_markdown();
     assert!(md.contains("Readiness verdict: `blocked`."));
@@ -74,6 +82,10 @@ async fn test_proof_golden_empty_run() {
     let proof = runner.generate_proof();
     assert_eq!(proof.status, omk::runtime::proof::ProofStatus::NotReady);
     assert_eq!(proof.readiness(), "needs_follow_up");
+    assert_eq!(
+        proof.readiness_text(),
+        "Needs follow-up: required gates are incomplete or missing."
+    );
     assert!(proof.changed_files.is_empty());
     assert!(proof.gates.is_empty());
 }

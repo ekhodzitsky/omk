@@ -182,12 +182,16 @@ async fn cmd_show(
                 let task_col = payload_string(event, "task_id")
                     .map(|task_id| format!("  task={task_id}"))
                     .unwrap_or_default();
+                let evidence_col = event_wire_evidence_columns(event)
+                    .map(|details| format!("  {details}"))
+                    .unwrap_or_default();
                 println!(
-                    "  {}  {:22}  actor={}{}",
+                    "  {}  {:22}  actor={}{}{}",
                     event.ts.format("%H:%M:%S"),
                     event_kind_name(event),
                     actor_str,
-                    task_col
+                    task_col,
+                    evidence_col
                 );
             }
         }
@@ -216,4 +220,47 @@ fn value_as_string(value: &Value) -> Option<String> {
         return Some(text.to_string());
     }
     value.get("0")?.as_str().map(str::to_string)
+}
+
+fn payload_field_string(
+    event: &crate::runtime::events::Event,
+    key: &'static str,
+    aliases: &[&'static str],
+) -> Option<String> {
+    let payload = event.payload.as_ref()?;
+    let raw = payload
+        .get(key)
+        .or_else(|| aliases.iter().find_map(|alias| payload.get(alias)))?;
+    value_as_string(raw).map(|value| sanitize_inline(&value))
+}
+
+fn sanitize_inline(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn event_wire_evidence_columns(event: &crate::runtime::events::Event) -> Option<String> {
+    let fields: [(&str, &[&str]); 7] = [
+        ("wire_method", &["method"]),
+        ("wire_event", &["event_type", "type"]),
+        ("wire_request", &["request_type", "raw_request_type"]),
+        ("wire_request_id", &["request_id"]),
+        ("output_summary", &[]),
+        ("message", &[]),
+        ("reason", &["error"]),
+    ];
+
+    let details: Vec<String> = fields
+        .iter()
+        .filter_map(|(key, aliases)| {
+            payload_field_string(event, key, aliases)
+                .filter(|value| !value.is_empty())
+                .map(|value| format!("{key}={value}"))
+        })
+        .collect();
+
+    if details.is_empty() {
+        None
+    } else {
+        Some(details.join("  "))
+    }
 }

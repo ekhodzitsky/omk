@@ -13,7 +13,7 @@ pub async fn sync_project_assets(
     force: bool,
     dry_run: bool,
 ) -> Result<SyncReport> {
-    let mut report = SyncReport::default();
+    let mut report = SyncReport::project();
     let mut manifest = AssetManifest::new(project_dir);
     manifest.add_dir(&std::path::PathBuf::from(".kimi/agents"));
     manifest.add_dir(&std::path::PathBuf::from(".kimi/hooks"));
@@ -57,7 +57,9 @@ pub async fn sync_project_assets(
                 let existed = spec_path.exists();
                 tokio::fs::create_dir_all(&agent_dir).await?;
                 if let Some(backup) = maybe_backup(&spec_path, &yaml).await {
+                    let backup_path = std::path::PathBuf::from(&backup);
                     report.backups_created.push(backup);
+                    manifest.add_backup(&spec_path, &backup_path);
                 }
                 crate::runtime::atomic::atomic_write(&spec_path, yaml.as_bytes()).await?;
                 if existed {
@@ -89,7 +91,9 @@ pub async fn sync_project_assets(
                 let existed = prompt_path.exists();
                 tokio::fs::create_dir_all(&agent_dir).await?;
                 if let Some(backup) = maybe_backup(&prompt_path, &agent.system_prompt).await {
+                    let backup_path = std::path::PathBuf::from(&backup);
                     report.backups_created.push(backup);
+                    manifest.add_backup(&prompt_path, &backup_path);
                 }
                 crate::runtime::atomic::atomic_write(&prompt_path, agent.system_prompt.as_bytes())
                     .await?;
@@ -141,7 +145,9 @@ pub async fn sync_project_assets(
             } else {
                 let existed = path.exists();
                 if let Some(backup) = maybe_backup(&path, content).await {
+                    let backup_path = std::path::PathBuf::from(&backup);
                     report.backups_created.push(backup);
+                    manifest.add_backup(&path, &backup_path);
                 }
                 tokio::fs::create_dir_all(&hooks_dir).await?;
                 crate::runtime::atomic::atomic_write(&path, content.as_bytes()).await?;
@@ -188,7 +194,7 @@ pub async fn sync_user_assets(force: bool, dry_run: bool) -> Result<SyncReport> 
         .map(|d| d.join("kimi"))
         .unwrap_or_else(|| std::path::PathBuf::from("~/.config/kimi"));
 
-    let mut report = SyncReport::default();
+    let mut report = SyncReport::user();
 
     for agent in default_role_agents() {
         let agent_dir = config_dir.join("agents").join(&agent.id);
@@ -283,6 +289,7 @@ pub async fn sync_user_assets(force: bool, dry_run: bool) -> Result<SyncReport> 
 
 #[derive(Debug, Clone, Default)]
 pub struct SyncReport {
+    pub scope: SyncScope,
     pub created: Vec<String>,
     pub updated: Vec<String>,
     pub unchanged: Vec<String>,
@@ -293,11 +300,45 @@ pub struct SyncReport {
 }
 
 impl SyncReport {
+    pub fn project() -> Self {
+        Self {
+            scope: SyncScope::Project,
+            ..Self::default()
+        }
+    }
+
+    pub fn user() -> Self {
+        Self {
+            scope: SyncScope::User,
+            ..Self::default()
+        }
+    }
+
     pub fn files_written(&self) -> usize {
         self.created.len() + self.updated.len()
     }
 
     pub fn files_unchanged(&self) -> usize {
         self.unchanged.len()
+    }
+
+    pub fn files_planned(&self) -> usize {
+        self.would_create.len() + self.would_update.len()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SyncScope {
+    #[default]
+    Project,
+    User,
+}
+
+impl SyncScope {
+    pub fn as_label(self) -> &'static str {
+        match self {
+            SyncScope::Project => "Project-level",
+            SyncScope::User => "User-level",
+        }
     }
 }

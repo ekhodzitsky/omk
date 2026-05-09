@@ -36,12 +36,18 @@ pub async fn install_project_assets(project_dir: &Path, dry_run: bool) -> Result
             if let Ok(yaml) = spec.to_yaml() {
                 if let Some(backup) = super::manifest::maybe_backup(&spec_path, &yaml).await {
                     report.backups_created.push(backup);
+                    if let Some(last) = report.backups_created.last() {
+                        manifest.add_backup(&spec_path, Path::new(last));
+                    }
                 }
             }
             if let Some(backup) =
                 super::manifest::maybe_backup(&prompt_path, &agent.system_prompt).await
             {
                 report.backups_created.push(backup);
+                if let Some(last) = report.backups_created.last() {
+                    manifest.add_backup(&prompt_path, Path::new(last));
+                }
             }
 
             match write_agent_to_dir(&agent, &agent_dir).await {
@@ -82,6 +88,9 @@ pub async fn install_project_assets(project_dir: &Path, dry_run: bool) -> Result
             tokio::fs::create_dir_all(&hooks_dir).await?;
             if let Some(backup) = super::manifest::maybe_backup(&path, content).await {
                 report.backups_created.push(backup);
+                if let Some(last) = report.backups_created.last() {
+                    manifest.add_backup(&path, Path::new(last));
+                }
             }
             crate::runtime::atomic::atomic_write(&path, content.as_bytes()).await?;
             #[cfg(unix)]
@@ -109,6 +118,9 @@ pub async fn install_project_assets(project_dir: &Path, dry_run: bool) -> Result
     } else {
         if let Some(backup) = super::manifest::maybe_backup(&hooks_toml_path, &hooks_toml).await {
             report.backups_created.push(backup);
+            if let Some(last) = report.backups_created.last() {
+                manifest.add_backup(&hooks_toml_path, Path::new(last));
+            }
         }
         crate::runtime::atomic::atomic_write(&hooks_toml_path, hooks_toml.as_bytes()).await?;
         info!(path = %hooks_toml_path.display(), "Wrote hooks.toml.example");

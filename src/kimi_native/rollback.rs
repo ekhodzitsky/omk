@@ -43,7 +43,7 @@ pub async fn rollback(project_dir: &Path, dry_run: bool) -> Result<RollbackRepor
     // Process files
     for entry in &manifest.files {
         let abs = project_dir.join(&entry.path);
-        let backup = find_backup_for(&abs).await;
+        let backup = find_backup_for_entry(&manifest, project_dir, &entry.path, &abs).await;
 
         if let Some(ref backup_path) = backup {
             if dry_run {
@@ -189,6 +189,21 @@ async fn find_backup_for(path: &Path) -> Option<PathBuf> {
     // Sort lexicographically; the timestamp suffix makes the last entry the most recent.
     backups.sort();
     backups.into_iter().next_back()
+}
+
+async fn find_backup_for_entry(
+    manifest: &AssetManifest,
+    project_dir: &Path,
+    managed_rel_path: &Path,
+    managed_abs_path: &Path,
+) -> Option<PathBuf> {
+    if let Some(indexed_rel) = manifest.latest_backup_for(managed_rel_path) {
+        let indexed_abs = project_dir.join(&indexed_rel);
+        if indexed_abs.exists() {
+            return Some(indexed_abs);
+        }
+    }
+    find_backup_for(managed_abs_path).await
 }
 
 #[cfg(test)]

@@ -147,7 +147,12 @@ fn test_proof_show_text_output() {
         .stdout(contains("Failures (0):"))
         .stdout(contains("Retries (0):"))
         .stdout(contains("Known gaps (0):"))
-        .stdout(contains("Readiness verdict: ready_for_handoff."));
+        .stdout(contains(
+            "Readiness+:  Ready for handoff: required gates passed and no blocking failures.",
+        ))
+        .stdout(contains(
+            "Readiness verdict: Ready for handoff: required gates passed and no blocking failures.",
+        ));
 }
 
 #[test]
@@ -257,4 +262,75 @@ fn test_proof_path_naming() {
         proof_json.exists(),
         "proof.json should exist in run directory"
     );
+}
+
+#[test]
+fn test_proof_show_json_includes_wire_evidence_summary() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (home, xdg_state) = setup_env(&tmp);
+
+    let runs_dir = xdg_state.join("omk").join("runs");
+    fs::create_dir_all(&runs_dir).unwrap();
+
+    let run_dir = runs_dir.join("wire-proof-run");
+    fs::create_dir(&run_dir).unwrap();
+
+    let events = r#"{"id":"e1","run_id":"wire-proof-run","ts":"2024-01-01T00:00:00Z","schema_version":1,"kind":"run_started"}
+{"id":"e2","run_id":"wire-proof-run","ts":"2024-01-01T00:00:01Z","schema_version":1,"kind":"task_output","actor":"w1","payload":{"task_id":"task-1","wire_event":"turn_end","message":"done","output_summary":"summary line"}}
+{"id":"e3","run_id":"wire-proof-run","ts":"2024-01-01T00:00:02Z","schema_version":1,"kind":"task_output","actor":"w1","payload":{"task_id":"task-1","wire_request":"review","wire_request_id":"req-7","wire_method":"request"}}
+{"id":"e4","run_id":"wire-proof-run","ts":"2024-01-01T00:00:03Z","schema_version":1,"kind":"run_completed"}
+"#;
+    fs::write(run_dir.join("events.jsonl"), events).unwrap();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.env("HOME", &home)
+        .env("XDG_STATE_HOME", &xdg_state)
+        .arg("proof")
+        .arg("show")
+        .arg("--format")
+        .arg("json")
+        .arg("wire-proof-run");
+
+    cmd.assert()
+        .success()
+        .stdout(contains("\"wire_evidence\""))
+        .stdout(contains("\"event_count\": 1"))
+        .stdout(contains("\"request_count\": 1"))
+        .stdout(contains("\"output_count\": 1"))
+        .stdout(contains("\"unique_methods\""))
+        .stdout(contains("\"prompt_like_messages\": 1"));
+}
+
+#[test]
+fn test_proof_show_adds_known_gap_when_event_log_has_parse_failures() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (home, xdg_state) = setup_env(&tmp);
+
+    let runs_dir = xdg_state.join("omk").join("runs");
+    fs::create_dir_all(&runs_dir).unwrap();
+
+    let run_dir = runs_dir.join("partial-log-run");
+    fs::create_dir(&run_dir).unwrap();
+
+    let events = r#"{"id":"e1","run_id":"partial-log-run","ts":"2024-01-01T00:00:00Z","schema_version":1,"kind":"run_started"}
+this is malformed
+{"id":"e2","run_id":"partial-log-run","ts":"2024-01-01T00:00:02Z","schema_version":1,"kind":"run_completed"}
+"#;
+    fs::write(run_dir.join("events.jsonl"), events).unwrap();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.env("HOME", &home)
+        .env("XDG_STATE_HOME", &xdg_state)
+        .arg("proof")
+        .arg("show")
+        .arg("--format")
+        .arg("text")
+        .arg("partial-log-run");
+
+    cmd.assert()
+        .success()
+        .stdout(contains("Known gaps (1):"))
+        .stdout(contains(
+            "event log parse failures: 1 malformed line(s) skipped",
+        ));
 }

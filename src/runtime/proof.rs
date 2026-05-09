@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use tracing::info;
 
@@ -22,8 +22,24 @@ pub struct Proof {
     pub failures: Vec<ProofFailure>,
     pub retries: Vec<ProofRetry>,
     pub known_gaps: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wire_evidence: Option<WireEvidenceSummary>,
     pub summary: String,
     pub elapsed_secs: u64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WireEvidenceSummary {
+    pub event_count: usize,
+    pub request_count: usize,
+    pub output_count: usize,
+    pub prompt_like_messages: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unique_methods: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unique_events: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unique_requests: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,6 +108,7 @@ impl Proof {
             failures: Vec::new(),
             retries: Vec::new(),
             known_gaps: Vec::new(),
+            wire_evidence: None,
             summary: String::new(),
             elapsed_secs: 0,
         }
@@ -133,6 +150,16 @@ impl Proof {
         }
     }
 
+    pub fn readiness_text(&self) -> &'static str {
+        match self.status {
+            ProofStatus::Ready => {
+                "Ready for handoff: required gates passed and no blocking failures."
+            }
+            ProofStatus::NotReady => "Needs follow-up: required gates are incomplete or missing.",
+            ProofStatus::Failed => "Blocked: failures or required gate failures must be resolved.",
+        }
+    }
+
     pub fn gate_counts(&self) -> (usize, usize, usize) {
         (
             self.gates
@@ -157,6 +184,10 @@ impl Proof {
         md.push_str(&format!("# Proof Report for {}\n\n", self.run_id));
         md.push_str(&format!("**Status:** {}  \n", self.status));
         md.push_str(&format!("**Readiness:** {}  \n", self.readiness()));
+        md.push_str(&format!(
+            "**Readiness Detail:** {}  \n",
+            self.readiness_text()
+        ));
         md.push_str(&format!("**Generated:** {}  \n", self.generated_at));
         if self.elapsed_secs > 0 {
             md.push_str(&format!("**Duration:** {}s  \n", self.elapsed_secs));
@@ -178,6 +209,35 @@ impl Proof {
         md.push_str(&format!("- failures: `{}`\n", self.failures.len()));
         md.push_str(&format!("- retries: `{}`\n", self.retries.len()));
         md.push_str(&format!("- known_gaps: `{}`\n\n", self.known_gaps.len()));
+
+        md.push_str("## Wire Evidence\n\n");
+        if let Some(wire) = &self.wire_evidence {
+            md.push_str(&format!(
+                "- events: `{}`\n- requests: `{}`\n- outputs: `{}`\n- prompt_like_messages: `{}`\n",
+                wire.event_count, wire.request_count, wire.output_count, wire.prompt_like_messages
+            ));
+            if !wire.unique_methods.is_empty() {
+                md.push_str(&format!(
+                    "- methods: `{}`\n",
+                    wire.unique_methods.join(", ")
+                ));
+            }
+            if !wire.unique_events.is_empty() {
+                md.push_str(&format!(
+                    "- wire_events: `{}`\n",
+                    wire.unique_events.join(", ")
+                ));
+            }
+            if !wire.unique_requests.is_empty() {
+                md.push_str(&format!(
+                    "- wire_requests: `{}`\n",
+                    wire.unique_requests.join(", ")
+                ));
+            }
+            md.push('\n');
+        } else {
+            md.push_str("_none_\n\n");
+        }
 
         md.push_str("## Changed Files\n\n");
         if self.changed_files.is_empty() {
@@ -253,6 +313,7 @@ impl Proof {
         md.push_str(&format!("{}\n\n", self.summary));
         md.push_str("---\n\n");
         md.push_str(&format!("Readiness verdict: `{}`.\n", self.readiness()));
+        md.push_str(&format!("{}\n", self.readiness_text()));
 
         md
     }
@@ -263,8 +324,16 @@ pub struct ProofGenerator;
 
 impl ProofGenerator {
     pub async fn from_events(run_id: &RunId, event_log: &Path) -> Result<Proof> {
+        let log_summary = EventReader::summary(event_log).await?;
         let events = EventReader::read_all(event_log).await?;
-        Self::from_event_list(run_id, &events)
+        let mut proof = Self::from_event_list(run_id, &events)?;
+        if log_summary.parse_failures > 0 {
+            proof.known_gaps.push(format!(
+                "event log parse failures: {} malformed line(s) skipped",
+                log_summary.parse_failures
+            ));
+        }
+        Ok(proof)
     }
 
     pub fn from_event_list(run_id: &RunId, events: &[Event]) -> Result<Proof> {
@@ -274,6 +343,13 @@ impl ProofGenerator {
         let mut failures: Vec<ProofFailure> = Vec::new();
         let mut retries: Vec<ProofRetry> = Vec::new();
         let mut known_gaps: Vec<String> = Vec::new();
+        let mut wire_events = 0usize;
+        let mut wire_requests = 0usize;
+        let mut wire_outputs = 0usize;
+        let mut prompt_like_messages = 0usize;
+        let mut unique_methods = BTreeSet::new();
+        let mut unique_events = BTreeSet::new();
+        let mut unique_requests = BTreeSet::new();
 
         let mut run_start: Option<DateTime<Utc>> = None;
         let mut run_end: Option<DateTime<Utc>> = None;
@@ -377,6 +453,49 @@ impl ProofGenerator {
                         });
                     }
                 }
+                EventKind::TaskOutput | EventKind::TaskCompleted => {
+                    if let Some(payload) = event.payload.as_ref() {
+                        let wire_event = payload
+                            .get("wire_event")
+                            .or_else(|| payload.get("event_type"))
+                            .or_else(|| payload.get("type"))
+                            .and_then(value_as_string);
+                        if let Some(wire_event) = wire_event {
+                            wire_events += 1;
+                            unique_events.insert(wire_event);
+                        }
+
+                        let wire_request = payload
+                            .get("wire_request")
+                            .or_else(|| payload.get("request_type"))
+                            .or_else(|| payload.get("raw_request_type"))
+                            .and_then(value_as_string);
+                        if let Some(wire_request) = wire_request {
+                            wire_requests += 1;
+                            unique_requests.insert(wire_request);
+                        }
+
+                        if payload
+                            .get("output_summary")
+                            .and_then(value_as_string)
+                            .is_some()
+                        {
+                            wire_outputs += 1;
+                        }
+
+                        if payload.get("message").and_then(value_as_string).is_some() {
+                            prompt_like_messages += 1;
+                        }
+
+                        if let Some(method) = payload
+                            .get("wire_method")
+                            .or_else(|| payload.get("method"))
+                            .and_then(value_as_string)
+                        {
+                            unique_methods.insert(method);
+                        }
+                    }
+                }
                 EventKind::ManualInterrupt => {
                     failures.push(ProofFailure {
                         task_id: None,
@@ -407,6 +526,17 @@ impl ProofGenerator {
         proof.failures = failures;
         proof.retries = retries;
         proof.known_gaps = known_gaps;
+        if wire_events > 0 || wire_requests > 0 || wire_outputs > 0 || prompt_like_messages > 0 {
+            proof.wire_evidence = Some(WireEvidenceSummary {
+                event_count: wire_events,
+                request_count: wire_requests,
+                output_count: wire_outputs,
+                prompt_like_messages,
+                unique_methods: unique_methods.into_iter().collect(),
+                unique_events: unique_events.into_iter().collect(),
+                unique_requests: unique_requests.into_iter().collect(),
+            });
+        }
 
         // Compute elapsed time
         if let (Some(start), Some(end)) = (run_start, run_end) {
@@ -512,6 +642,25 @@ impl ProofGenerator {
 
         proof
     }
+}
+
+fn value_as_string(value: &serde_json::Value) -> Option<String> {
+    if let Some(text) = value.as_str() {
+        return Some(text.to_string());
+    }
+    if let Some(number) = value.as_i64() {
+        return Some(number.to_string());
+    }
+    if let Some(number) = value.as_u64() {
+        return Some(number.to_string());
+    }
+    if let Some(number) = value.as_f64() {
+        return Some(number.to_string());
+    }
+    if let Some(boolean) = value.as_bool() {
+        return Some(boolean.to_string());
+    }
+    value.get("0")?.as_str().map(str::to_string)
 }
 
 #[cfg(test)]

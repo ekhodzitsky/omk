@@ -3,6 +3,9 @@ use predicates::str::contains;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
+#[path = "fixtures/team_demo_fixture.rs"]
+mod team_demo_fixture;
+
 fn mock_kimi() -> Command {
     Command::cargo_bin("mock-kimi").unwrap()
 }
@@ -339,4 +342,44 @@ async fn test_wire_control_methods() {
 
     client.cancel().await.unwrap();
     client.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_team_demo_fixture_scripted_outcomes_are_stable() {
+    use team_demo_fixture::{build_stable_demo_output, read_demo_output, TeamDemoFixture};
+
+    let mut fixture = TeamDemoFixture::new().await;
+    let result = fixture.run().await;
+
+    assert!(matches!(
+        result.proof.status,
+        omk::runtime::proof::ProofStatus::Failed
+    ));
+    assert!(result
+        .proof
+        .gates
+        .iter()
+        .any(|gate| gate.name == "verification"
+            && matches!(gate.status, omk::runtime::proof::GateStatus::Failed)));
+    assert!(result
+        .proof
+        .failures
+        .iter()
+        .any(|failure| failure.description == "worker stalled"));
+    assert!(matches!(
+        result.worker_results.get("worker-0"),
+        Some(Some(summary)) if summary.starts_with("Success:")
+    ));
+    assert!(matches!(
+        result.worker_results.get("worker-1"),
+        Some(Some(summary)) if summary.starts_with("Failed:")
+    ));
+    assert!(matches!(result.worker_results.get("worker-2"), Some(None)));
+
+    let rendered = build_stable_demo_output(&result.proof, &result.worker_results);
+    let from_file = read_demo_output(&fixture.state_dir);
+    assert_eq!(result.stable_demo_output, rendered);
+    assert_eq!(from_file, rendered);
+    assert!(rendered.contains("outcomes=success,failed_verification,stalled_worker"));
+    assert!(rendered.contains("workers=worker-0:success,worker-1:failed,worker-2:stalled"));
 }

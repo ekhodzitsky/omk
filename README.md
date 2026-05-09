@@ -118,8 +118,8 @@ Prior art exists and validates demand. The detailed competitor scan lives in [SP
 | MCP server | Basic Model Context Protocol server. | Current Scaffold |
 | Kimi rollback | Expose manifest-backed rollback and backup restore in the CLI. | Current Scaffold |
 | Team run | Scheduler-backed Kimi-only entrypoint with claims, leases, and watchdogs. | Current MVP |
-| Proof | Final readiness report from event logs and verification gates. | Current Scaffold |
-| Run show | Timeline inspection for a recorded run. | Current Scaffold |
+| Proof | Final readiness report from event logs, verification gates, known gaps, and Wire evidence. | Current MVP |
+| Run show | Timeline inspection for a recorded run, including compact Wire-derived event/request details. | Current MVP |
 | Cross-provider workers | Other provider workers/advisors after the Kimi-only runtime is excellent. | Later |
 
 ## North Star Demo
@@ -148,10 +148,16 @@ Runtime state:
 - worker-spec.json
 - inbox.jsonl / outbox.jsonl
 - heartbeat.json
-- future event-log.jsonl and proof.json
+- event-log.jsonl and proof.json
 ```
 
 OMK is an external orchestrator. It does not fork or patch Kimi CLI. It spawns real `kimi` processes, coordinates them through state files, and lets you attach to any session with standard tmux commands.
+
+For CI-safe proof/demo coverage without touching real Kimi config, run:
+
+```bash
+examples/killer-demo/run.sh
+```
 
 Read more in [docs/PROJECT_MAP.md](docs/PROJECT_MAP.md), [SPEC.md](SPEC.md), [ROADMAP.md](ROADMAP.md), [TODO.md](TODO.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [docs/REGISTRY.md](docs/REGISTRY.md).
 

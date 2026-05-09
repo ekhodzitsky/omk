@@ -117,6 +117,47 @@ fn test_kimi_doctor_detects_drift() {
 }
 
 #[test]
+fn test_kimi_doctor_reports_backup_index_drift_with_repair_command() {
+    let tmp = TempDir::new().unwrap();
+
+    let mut sync_cmd = Command::cargo_bin("omk").unwrap();
+    sync_cmd.current_dir(&tmp);
+    sync_cmd.arg("kimi").arg("sync");
+    sync_cmd.assert().success();
+
+    let hook_path = tmp.path().join(".kimi/hooks/safety-check.sh");
+    fs::write(&hook_path, "# user-changed\n").unwrap();
+
+    let mut sync_cmd = Command::cargo_bin("omk").unwrap();
+    sync_cmd.current_dir(&tmp);
+    sync_cmd.arg("kimi").arg("sync");
+    sync_cmd.assert().success();
+
+    let hooks_dir = tmp.path().join(".kimi/hooks");
+    let backup = fs::read_dir(&hooks_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.contains(".omk-backup-"))
+                .unwrap_or(false)
+        })
+        .expect("expected backup file");
+    fs::remove_file(&backup).unwrap();
+
+    let mut doctor_cmd = Command::cargo_bin("omk").unwrap();
+    doctor_cmd.current_dir(&tmp);
+    doctor_cmd.arg("kimi").arg("doctor");
+    doctor_cmd
+        .assert()
+        .success()
+        .stdout(contains("Backup index drift"))
+        .stdout(contains("omk kimi sync --force"));
+}
+
+#[test]
 fn test_kimi_agents_lists_roles() {
     let mut cmd = Command::cargo_bin("omk").unwrap();
     cmd.arg("kimi").arg("agents");
@@ -224,6 +265,47 @@ fn test_kimi_sync_creates_backup_on_overwrite() {
 }
 
 #[test]
+fn test_kimi_sync_records_backup_index_in_manifest() {
+    let tmp = TempDir::new().unwrap();
+
+    let mut sync_cmd = Command::cargo_bin("omk").unwrap();
+    sync_cmd.current_dir(&tmp);
+    sync_cmd.arg("kimi").arg("sync");
+    sync_cmd.assert().success();
+
+    let hook_path = tmp.path().join(".kimi/hooks/safety-check.sh");
+    fs::write(&hook_path, "# modified for backup index\n").unwrap();
+
+    let mut sync_cmd = Command::cargo_bin("omk").unwrap();
+    sync_cmd.current_dir(&tmp);
+    sync_cmd.arg("kimi").arg("sync");
+    sync_cmd.assert().success();
+
+    let manifest_path = tmp.path().join(".kimi/omk-manifest.json");
+    let manifest = fs::read_to_string(&manifest_path).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+    let backups = json["backups"]
+        .as_array()
+        .expect("manifest must contain backups array");
+    assert!(
+        !backups.is_empty(),
+        "expected at least one backup mapping in manifest"
+    );
+
+    let linked = backups.iter().any(|entry| {
+        entry["managed_path"].as_str() == Some(".kimi/hooks/safety-check.sh")
+            && entry["backup_path"]
+                .as_str()
+                .map(|p| p.contains(".omk-backup-"))
+                .unwrap_or(false)
+    });
+    assert!(
+        linked,
+        "backup index must link managed path to backup artifact"
+    );
+}
+
+#[test]
 fn test_kimi_rollback_no_manifest() {
     let tmp = TempDir::new().unwrap();
     let mut cmd = Command::cargo_bin("omk").unwrap();
@@ -244,6 +326,21 @@ fn test_kimi_sync_dry_run_no_files_written() {
 
     // No .kimi directory should be created
     assert!(!tmp.path().join(".kimi").exists());
+}
+
+#[test]
+fn test_kimi_sync_dry_run_explicit_project_and_user_scopes() {
+    let tmp = TempDir::new().unwrap();
+    let xdg_config = tmp.path().join("xdg-config");
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.current_dir(&tmp);
+    cmd.env("XDG_CONFIG_HOME", &xdg_config);
+    cmd.arg("kimi").arg("sync").arg("--dry-run");
+    cmd.assert()
+        .success()
+        .stdout(contains("Project-level would"))
+        .stdout(contains("User-level summary"));
 }
 
 #[test]

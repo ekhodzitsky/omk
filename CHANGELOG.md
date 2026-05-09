@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Proof/run Wire evidence**: `omk run show` now renders compact Wire-derived method/event/request/output fields in text timelines, and `omk proof show` includes a Wire evidence summary plus explicit readiness text and malformed event-log warnings.
+- **Kimi backup index and scoped sync output**: Kimi asset manifests now record backup metadata that links managed files to backup artifacts, rollback consults that index first, `doctor` reports backup-index drift with repair commands, and `kimi sync` output separates project-level and user-level writes.
+- **CI-safe killer demo fixture**: added `examples/killer-demo/run.sh` and deterministic fixture output covering success, failed verification, and stalled-worker outcomes without mutating real Kimi config.
 - **Upstream Kimi docs tracking**: added `docs/KIMI_UPSTREAM.md` to record the official Kimi docs URLs we re-check before Kimi integration releases, plus the last checked date and protocol note.
 - **Run timeline filtering and hardening**: `omk run show` now supports worker/task/kind filters plus JSON output, Wire message loops explicitly skip unknown methods/events and error unknown request types, rollback reports corrupt backup restore failures without stopping unrelated cleanup, and README records the exact local verification commands.
 - **Mock Kimi edge modes**: the CI fixture now has explicit slow-streaming and malformed-output coverage, and `omk run show latest` has scheduler-run resolution tests.

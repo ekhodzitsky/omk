@@ -123,8 +123,8 @@ Goal: completion is based on evidence, not agent confidence.
 Next:
 
 - append-only `event-log.jsonl` for every run,
-- `omk run show <id|latest>` for timeline inspection,
-- `omk proof show <id|latest>` for final readiness,
+- `omk run show <id|latest>` for timeline inspection, including Wire-derived event/request details,
+- `omk proof show <id|latest>` for final readiness, including Wire evidence and malformed-log warnings,
 - verification gates for fmt, lint, typecheck, tests, security, docs, and custom commands,
 - recovery evidence for crashes, timeouts, deadlocks, stale leases, and manual interrupts.
 

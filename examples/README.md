@@ -72,3 +72,11 @@ Interactive TUI:
 ```bash
 omk hud --tui
 ```
+
+## Killer Demo Fixture
+
+CI-safe scripted fixture with deterministic proof/demo output:
+
+```bash
+examples/killer-demo/run.sh
+```

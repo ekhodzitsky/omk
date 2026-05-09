@@ -289,6 +289,32 @@ pub async fn diagnose_project(dir: &Path) -> Result<Vec<DiagResult>> {
                         }
                     }
                 }
+
+                if !manifest.backups.is_empty() {
+                    results.push(DiagResult {
+                        severity: Severity::Ok,
+                        message: format!("Backup index entries: {}", manifest.backups.len()),
+                        fix_hint: None,
+                    });
+                }
+
+                for backup in &manifest.backups {
+                    let backup_abs = dir.join(&backup.backup_path);
+                    if !backup_abs.exists() {
+                        results.push(DiagResult {
+                            severity: Severity::Warning,
+                            message: format!(
+                                "Backup index drift: managed '{}' points to missing backup '{}'",
+                                backup.managed_path.display(),
+                                backup.backup_path.display()
+                            ),
+                            fix_hint: Some(
+                                "Run `omk kimi sync --force` to refresh managed assets and backup index"
+                                    .to_string(),
+                            ),
+                        });
+                    }
+                }
             }
             Ok(None) => {
                 results.push(DiagResult {
