@@ -1,11 +1,11 @@
 # OMK Examples
 
-## Basic Team Mode
+## Kimi Team Run
 
-Spawn 3 coder agents to fix TypeScript errors:
+Run 3 coder workers to fix TypeScript errors:
 
 ```bash
-omk team spawn 3:coder "fix all TypeScript errors in src/"
+omk team run 3:coder "fix all TypeScript errors in src/"
 ```
 
 Check status:
@@ -18,6 +18,12 @@ Shut down when done:
 
 ```bash
 omk team shutdown coder-abc123
+```
+
+Inspect the run:
+
+```bash
+omk proof show latest
 ```
 
 ## Autopilot
@@ -42,19 +48,15 @@ Persistent refactoring with verification:
 omk ralph "migrate from Express to Fastify"
 ```
 
-## Cross-Provider Ask
+## Kimi Ask
 
-Get a second opinion from Claude:
-
-```bash
-omk ask claude "review my database schema design"
-```
-
-Synthesize multiple advisors:
+Get a second opinion from Kimi:
 
 ```bash
-omk ask all "architecture for a real-time chat system"
+omk ask kimi "review my database schema design"
 ```
+
+Multi-provider advisor flows are later. Keep the examples Kimi-first.
 
 ## HUD
 

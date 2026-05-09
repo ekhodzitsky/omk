@@ -20,7 +20,7 @@ Turn [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) into visible agent swarm
 [![Proof-driven](https://img.shields.io/badge/proof--driven-roadmap-2563eb.svg)](#north-star-demo)
 [![Status](https://img.shields.io/badge/status-current%20MVP%20%2B%20next%20runtime-0f172a.svg)](#maturity)
 
-[Quick Start](#quick-start) - [Features](#features) - [North Star](#north-star-demo) - [Roadmap](#roadmap) - [Spec](SPEC.md) - [TODO](TODO.md)
+[Quick Start](#quick-start) - [Features](#features) - [North Star](#north-star-demo) - [Tutorial](docs/TUTORIAL.md) - [Roadmap](#roadmap) - [Project Map](docs/PROJECT_MAP.md) - [Spec](SPEC.md) - [TODO](TODO.md)
 
 </div>
 
@@ -59,11 +59,25 @@ omk doctor
 omk kimi sync
 omk kimi doctor
 
-# Spawn a current MVP team
-omk team spawn 3:coder "refactor authentication to use JWT"
+# Start a current team
+omk team run 3:coder "refactor authentication to use JWT"
 omk team status <name-from-output>
 omk team shutdown <name-from-output>
+
+# Run the North Star demo (wire-first team run + HUD + proof show)
+./scripts/north_star_demo.sh
 ```
+
+## Quick Demo
+
+Want to see the full North Star flow in one command?
+
+```bash
+./scripts/north_star_demo.sh        # uses real Kimi
+MOCK_KIMI=1 ./scripts/north_star_demo.sh   # fully mocked, no API calls
+```
+
+See [docs/north_star_tutorial.md](docs/north_star_tutorial.md) for a step-by-step walkthrough.
 
 ## Positioning
 
@@ -102,10 +116,10 @@ Prior art exists and validates demand. The detailed competitor scan lives in [SP
 | Notifications | Discord, Slack, and Telegram event formatting. | Current MVP |
 | HUD | Tmux statusline, TUI, and web dashboard scaffold. | Current Scaffold |
 | MCP server | Basic Model Context Protocol server. | Current Scaffold |
-| Kimi rollback | Expose manifest-backed rollback and backup restore in the CLI. | Next |
-| Team run | Polished Kimi-only entrypoint with scheduler-owned claims and watchdogs. | Next |
-| Proof | Final readiness report from event logs and verification gates. | Next |
-| Run show | Timeline inspection for a recorded run. | Next |
+| Kimi rollback | Expose manifest-backed rollback and backup restore in the CLI. | Current Scaffold |
+| Team run | Scheduler-backed Kimi-only entrypoint with claims, leases, and watchdogs. | Current MVP |
+| Proof | Final readiness report from event logs and verification gates. | Current Scaffold |
+| Run show | Timeline inspection for a recorded run. | Current Scaffold |
 | Cross-provider workers | Other provider workers/advisors after the Kimi-only runtime is excellent. | Later |
 
 ## North Star Demo
@@ -116,7 +130,7 @@ These commands are the near-term target, not the fully available CLI surface tod
 omk kimi sync
 omk team run "fix all failing tests and produce a proof"
 omk hud
-omk proof latest
+omk proof show latest
 ```
 
 The demo is successful when a user can see Kimi workers progressing in parallel, watch a stuck worker recover or fail cleanly, and inspect a final proof with changed files, gates run, failures, retries, known gaps, and final readiness.
@@ -139,7 +153,7 @@ Runtime state:
 
 OMK is an external orchestrator. It does not fork or patch Kimi CLI. It spawns real `kimi` processes, coordinates them through state files, and lets you attach to any session with standard tmux commands.
 
-Read more in [SPEC.md](SPEC.md), [ROADMAP.md](ROADMAP.md), [TODO.md](TODO.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [docs/REGISTRY.md](docs/REGISTRY.md).
+Read more in [docs/PROJECT_MAP.md](docs/PROJECT_MAP.md), [SPEC.md](SPEC.md), [ROADMAP.md](ROADMAP.md), [TODO.md](TODO.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [docs/REGISTRY.md](docs/REGISTRY.md).
 
 ## Commands
 
@@ -154,11 +168,12 @@ omk kimi hooks
 omk kimi skills
 ```
 
-`omk kimi rollback` is planned, but not current.
+`omk kimi rollback` is current scaffold, with a clean no-op when no manifest exists.
 
 ### Team Mode
 
 ```bash
+omk team run 3:coder "fix all TypeScript errors"
 omk team spawn 3:coder "fix all TypeScript errors"
 omk team list
 omk team status <name>
@@ -167,7 +182,7 @@ omk team broadcast <name> "status?"
 omk team shutdown <name>
 ```
 
-`omk team run` is the planned polished replacement/wrapper for the Kimi-only killer path.
+`omk team run` is the scheduler-backed path. `omk team spawn` remains the tmux-compatible bridge.
 
 ### Autopilot And Ralph
 
@@ -206,7 +221,7 @@ These are useful, but not the current product wedge:
 
 ```bash
 omk ask kimi "review my API design"
-omk ask all "architecture for real-time chat"
+omk ask kimi "architecture for real-time chat"
 omk marketplace list
 omk marketplace install rust-expert
 omk ultrawork --help
@@ -219,11 +234,13 @@ git clone https://github.com/ekhodzitsky/oh-my-kimi
 cd oh-my-kimi
 
 make check
+make repo-map
+make wire-smoke # optional: requires local authenticated Kimi CLI
 make release
 make install
 ```
 
-We follow spec-driven development and TDD. See [SPEC.md](SPEC.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+We follow spec-driven development and TDD. Start with [docs/PROJECT_MAP.md](docs/PROJECT_MAP.md) when navigating the repository, then use the area README for the module you are changing. See [SPEC.md](SPEC.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Troubleshooting
 
@@ -240,8 +257,8 @@ We follow spec-driven development and TDD. See [SPEC.md](SPEC.md) and [CONTRIBUT
 
 The near-term roadmap is intentionally Kimi-only:
 
-- Current: stabilize existing CLI, Kimi asset sync, team spawn, HUD scaffold, and diagnostics.
-- Next: Kimi rollback CLI, backup restore, manifest checksums, `omk team run`, event logs, `omk run show`, `omk proof`, watchdog recovery, and demo fixtures.
+- Current: stabilize existing CLI, Kimi asset sync, team run/spawn, HUD scaffold, proof show, and diagnostics.
+- Next: Kimi rollback hardening, backup restore, manifest checksums, event logs, `omk run show` polish, `omk proof show` polish, watchdog recovery, and demo fixtures.
 - Later: provider-neutral workers after the Kimi-only runtime proves itself.
 
 See [ROADMAP.md](ROADMAP.md) for the detailed plan.
