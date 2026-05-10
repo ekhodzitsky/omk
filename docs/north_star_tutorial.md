@@ -148,6 +148,7 @@ Unset `MOCK_KIMI` and ensure the `kimi` CLI is authenticated:
 
 ```bash
 kimi --version        # should print version
+kimi info             # should show wire protocol 1.9 or the currently supported protocol
 kimi auth status      # should show you are logged in
 ```
 
@@ -158,6 +159,8 @@ Then run the demo without the mock:
 ```
 
 > ⚠️ **Cost warning**: running with real Kimi will consume API tokens. The demo creates 2 workers + 1 lead + 1 synthesis agent, each making at least one LLM call.
+
+If you are validating a new Kimi CLI release, first run `kimi info` and compare it with [KIMI_UPSTREAM.md](KIMI_UPSTREAM.md). Extension fields in `initialize.result`, such as `hooks`, can evolve while the protocol remains compatible, so OMK should parse them as structured JSON evidence rather than a closed schema.
 
 ---
 
@@ -186,6 +189,13 @@ The scheduler waits for workers to complete. With real Kimi, workers can take mi
 - Check `~/.local/state/omk/team/<name>/workers/*/inbox.jsonl` — tasks should be written there.
 - Check `~/.local/state/omk/team/<name>/workers/*/outbox.jsonl` — results should appear there.
 - Check `~/.local/state/omk/team/<name>/events.jsonl` — events track the run lifecycle.
+
+### Real Kimi fails during `initialize`
+
+- Rebuild OMK after Wire protocol changes: `cargo build --bin omk`.
+- Check the local protocol report: `kimi info`.
+- Run a minimal handshake outside the demo and inspect whether `initialize.result` has new extension fields.
+- Record upstream drift in [KIMI_UPSTREAM.md](KIMI_UPSTREAM.md) before changing runtime parsing.
 
 ### `cargo test` in the temp project does not fail
 

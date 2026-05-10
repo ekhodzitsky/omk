@@ -369,8 +369,8 @@ Tasks:
 - [x] L7-012 Architect role.
 - [x] L7-013 Executor role.
 - [x] L7-014 Verifier role.
-- [ ] L7-022 Add prompt anti-slop review pass for every role.
-- [ ] L7-024 Ensure roles do not contradict AGENTS.md hierarchy.
+- [x] L7-022 Add prompt anti-slop review pass for every role.
+- [x] L7-024 Ensure roles do not contradict AGENTS.md hierarchy.
 
 Expected files:
 
@@ -936,12 +936,12 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 ### L6 QA Matrix
 
 - [x] L6-019 Test no Kimi installed.
-- [ ] L6-020 Test Kimi installed but unauthenticated.
-- [ ] L6-021 Test no tmux installed.
+- [x] L6-020 Test Kimi installed but unauthenticated.
+- [x] L6-021 Test no tmux installed.
 - [ ] L6-022 Test tmux session already exists.
-- [ ] L6-023 Test stale state directory.
+- [x] L6-023 Test stale state directory.
 - [ ] L6-024 Test read-only project directory.
-- [ ] L6-025 Test worker dies mid-task.
+- [x] L6-025 Test worker dies mid-task.
 - [x] L6-026 Test gate command times out.
 - [x] L6-027 Test proof generation after interrupted run.
 - [ ] L6-028 Test rollback after partial sync failure.
@@ -949,7 +949,7 @@ Can run in parallel with: L1/L2/L5 after interfaces stabilize.
 ### L6 Definition Of Done
 
 - [x] L6-DOD-001 Demo can run against mock Kimi in CI.
-- [ ] L6-DOD-002 Demo can run against real Kimi manually.
+- [x] L6-DOD-002 Demo can run against real Kimi manually.
 - [x] L6-DOD-003 Demo proof output is stable enough for docs/screenshots.
 
 ---
@@ -994,9 +994,9 @@ Can run in parallel with: L1 after role-pack format is agreed.
 
 ### L7 Role Quality
 
-- [ ] L7-022 Add prompt anti-slop review pass for every role.
+- [x] L7-022 Add prompt anti-slop review pass for every role.
 - [ ] L7-023 Ensure each role prompt stays under a documented length budget.
-- [ ] L7-024 Ensure roles do not contradict AGENTS.md hierarchy.
+- [x] L7-024 Ensure roles do not contradict AGENTS.md hierarchy.
 - [ ] L7-025 Add examples for role selection.
 - [ ] L7-026 Compare against `dmae97/oh-my-kimi` role coverage.
 - [ ] L7-027 Compare against `whatevertogo/oh-my-kimicli` skills/hooks.

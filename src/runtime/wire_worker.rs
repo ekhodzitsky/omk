@@ -234,8 +234,9 @@ impl WireWorkerAdapter {
             self.spec.role, self.spec.name, task.task
         );
 
-        // Send prompt
-        let _prompt_result = client.prompt(&prompt).await?;
+        // Send prompt, then drive the streamed turn directly. Real Kimi may
+        // emit events and requests before the JSON-RPC prompt response.
+        client.start_prompt(&prompt).await?;
 
         // Process wire messages
         let mut summary_parts: Vec<String> = Vec::new();
@@ -273,7 +274,7 @@ impl WireWorkerAdapter {
                         },
                         Err(_) => {
                             // Fallback: match by event_type string
-                            match ev.params.event_type.as_str() {
+                            match ev.params.normalized_event_type().as_str() {
                                 "turn_end" => break,
                                 "step_interrupted" => {
                                     success = false;
@@ -281,7 +282,7 @@ impl WireWorkerAdapter {
                                         Some("wire step interrupted before turn_end".to_string());
                                     break;
                                 }
-                                "thinking" | "text" | "content" => {
+                                "thinking" | "text" | "content" | "content_part" => {
                                     if let Some(text) =
                                         ev.params.payload.get("text").and_then(|v| v.as_str())
                                     {
@@ -292,9 +293,9 @@ impl WireWorkerAdapter {
                                         summary_parts.push(chunk.to_string());
                                     }
                                 }
-                                other => {
-                                    warn!(event_type = %other, "Unknown wire event kind");
-                                }
+                                "turn_begin" | "step_begin" | "tool_call" | "tool_call_part"
+                                | "tool_result" | "status_update" | "approval_response" => {}
+                                other => warn!(event_type = %other, "Unknown wire event kind"),
                             }
                         }
                     }

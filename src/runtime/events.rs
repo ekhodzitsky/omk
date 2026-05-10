@@ -270,32 +270,34 @@ impl EventWriter {
     /// Append a single event atomically-ish: open, write, flush, close.
     /// This is not OS-level atomic, but it minimizes the window for corruption.
     pub async fn append(&self, event: &Event) -> Result<()> {
-        let line = serde_json::to_string(event)?;
+        let mut line = serde_json::to_vec(event)?;
+        line.push(b'\n');
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)
             .await?;
         use tokio::io::AsyncWriteExt;
-        file.write_all(line.as_bytes()).await?;
-        file.write_all(b"\n").await?;
+        file.write_all(&line).await?;
         file.flush().await?;
         debug!(event_id = %event.id, "Appended event");
         Ok(())
     }
 
     pub async fn append_many(&self, events: &[Event]) -> Result<()> {
+        let mut buffer = Vec::new();
+        for event in events {
+            serde_json::to_writer(&mut buffer, event)?;
+            buffer.push(b'\n');
+        }
+
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)
             .await?;
         use tokio::io::AsyncWriteExt;
-        for event in events {
-            let line = serde_json::to_string(event)?;
-            file.write_all(line.as_bytes()).await?;
-            file.write_all(b"\n").await?;
-        }
+        file.write_all(&buffer).await?;
         file.flush().await?;
         Ok(())
     }
@@ -718,6 +720,34 @@ mod tests {
         assert_eq!(events.len(), 3);
         assert!(matches!(events[0].kind, EventKind::RunStarted));
         assert!(matches!(events[2].kind, EventKind::RunCompleted));
+    }
+
+    #[tokio::test]
+    async fn writer_concurrent_appends_preserve_jsonl_boundaries() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("events.jsonl");
+        let writer = EventWriter::new(&path);
+        let run_id = RunId("run-concurrent".to_string());
+
+        let mut handles = Vec::new();
+        for idx in 0..32 {
+            let writer = writer.clone();
+            let run_id = run_id.clone();
+            handles.push(tokio::spawn(async move {
+                let event = Event::new(run_id, EventKind::TaskOutput)
+                    .with_payload(serde_json::json!({ "idx": idx }))
+                    .unwrap();
+                writer.append(&event).await.unwrap();
+            }));
+        }
+
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        let summary = EventReader::summary(&path).await.unwrap();
+        assert_eq!(summary.valid_events, 32);
+        assert_eq!(summary.parse_failures, 0);
     }
 
     #[tokio::test]

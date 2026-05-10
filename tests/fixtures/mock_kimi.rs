@@ -10,7 +10,7 @@ fn main() {
 
     if args.len() == 1 {
         eprintln!(
-            "Usage: mock-kimi [--version | --help | --wire | -p <prompt_file>] [--stall] [--slow] [--malformed]"
+            "Usage: mock-kimi [--version | --help | --wire | -p <prompt_file>] [--stall] [--slow] [--malformed] [--crash-after-turn-begin]"
         );
         process::exit(1);
     }
@@ -18,6 +18,7 @@ fn main() {
     let stall = args.iter().any(|a| a == "--stall");
     let slow = args.iter().any(|a| a == "--slow");
     let malformed = args.iter().any(|a| a == "--malformed");
+    let crash_after_turn_begin = args.iter().any(|a| a == "--crash-after-turn-begin");
 
     match args[1].as_str() {
         "--version" => {
@@ -35,9 +36,11 @@ fn main() {
             println!("  mock-kimi --stall            Enable stall mode");
             println!("  mock-kimi --slow             Enable slow streaming mode");
             println!("  mock-kimi --malformed        Emit malformed output");
+            println!("  mock-kimi --crash-after-turn-begin");
+            println!("                               Crash immediately after turn_begin");
             process::exit(0);
         }
-        "--wire" => run_wire_mode(stall, slow, malformed),
+        "--wire" => run_wire_mode(stall, slow, malformed, crash_after_turn_begin),
         "-p" => run_prompt_mode(&args, stall, slow, malformed),
         _ => {
             eprintln!("Unknown argument: {}", args[1]);
@@ -125,7 +128,7 @@ fn run_prompt_mode(args: &[String], stall: bool, slow: bool, malformed: bool) {
     process::exit(0);
 }
 
-fn run_wire_mode(stall: bool, slow: bool, malformed: bool) {
+fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begin: bool) {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
 
@@ -174,6 +177,8 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool) {
                 let preview: String = user_input.chars().take(60).collect();
                 let lower = user_input.to_lowercase();
                 let is_stall = stall || lower.contains("stall");
+                let is_crash_after_turn_begin =
+                    crash_after_turn_begin || lower.contains("crash-after-turn-begin");
 
                 let resp = serde_json::json!({
                     "jsonrpc": "2.0",
@@ -194,6 +199,10 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool) {
                     "turn_begin",
                     serde_json::json!({"user_input": preview}),
                 );
+
+                if is_crash_after_turn_begin {
+                    process::abort();
+                }
 
                 if is_stall {
                     let heartbeat_interval = if slow {

@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::VecDeque;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout};
@@ -17,6 +18,7 @@ pub struct WireClient {
     child: Child,
     stdin: ChildStdin,
     stdout_reader: BufReader<ChildStdout>,
+    pending_messages: VecDeque<WireMessage>,
     request_id_counter: u64,
     handshake_done: bool,
 }
@@ -58,6 +60,7 @@ impl WireClient {
             child,
             stdin,
             stdout_reader,
+            pending_messages: VecDeque::new(),
             request_id_counter: 0,
             handshake_done: false,
         })
@@ -69,7 +72,7 @@ impl WireClient {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             method: "initialize".to_string(),
-            id,
+            id: id.clone(),
             params,
         };
         self.send_request(&req).await?;
@@ -115,17 +118,27 @@ impl WireClient {
 
     /// Send a prompt and start a turn.
     pub async fn prompt(&mut self, user_input: &str) -> Result<PromptResult> {
+        let id = self.start_prompt(user_input).await?;
+        self.read_response::<PromptResult>(&id).await
+    }
+
+    /// Send a prompt without waiting for the final prompt response.
+    ///
+    /// Real Kimi may stream `event` / `request` messages before it sends the
+    /// JSON-RPC response for `prompt`. Runtime callers that need to handle those
+    /// messages must use this method and then drive `read_message`.
+    pub async fn start_prompt(&mut self, user_input: &str) -> Result<String> {
         let id = self.next_id();
         let req = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             method: "prompt".to_string(),
-            id,
+            id: id.clone(),
             params: PromptParams {
                 user_input: UserInput::Text(user_input.to_string()),
             },
         };
         self.send_request(&req).await?;
-        self.read_response::<PromptResult>().await
+        Ok(id)
     }
 
     /// Replay events and requests from the current session.
@@ -134,11 +147,11 @@ impl WireClient {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             method: "replay".to_string(),
-            id,
+            id: id.clone(),
             params: ReplayParams::default(),
         };
         self.send_request(&req).await?;
-        self.read_response::<ReplayResult>().await
+        self.read_response::<ReplayResult>(&id).await
     }
 
     /// Steer the current turn with additional user input.
@@ -147,13 +160,13 @@ impl WireClient {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             method: "steer".to_string(),
-            id,
+            id: id.clone(),
             params: SteerParams {
                 user_input: UserInput::Text(user_input.to_string()),
             },
         };
         self.send_request(&req).await?;
-        self.read_response::<SteerResult>().await
+        self.read_response::<SteerResult>(&id).await
     }
 
     /// Enable or disable plan mode for the current wire session.
@@ -162,11 +175,11 @@ impl WireClient {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             method: "set_plan_mode".to_string(),
-            id,
+            id: id.clone(),
             params: SetPlanModeParams { enabled },
         };
         self.send_request(&req).await?;
-        self.read_response::<SetPlanModeResult>().await
+        self.read_response::<SetPlanModeResult>(&id).await
     }
 
     /// Cancel current turn.
@@ -175,16 +188,24 @@ impl WireClient {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             method: "cancel".to_string(),
-            id,
+            id: id.clone(),
             params: CancelParams::default(),
         };
         self.send_request(&req).await?;
-        let _: CancelResult = self.read_response().await?;
+        let _: CancelResult = self.read_response(&id).await?;
         Ok(())
     }
 
     /// Read the next message from stdout (event, request, or response).
     pub async fn read_message(&mut self) -> Result<WireMessage> {
+        if let Some(msg) = self.pending_messages.pop_front() {
+            return Ok(msg);
+        }
+
+        self.read_message_from_stdout().await
+    }
+
+    async fn read_message_from_stdout(&mut self) -> Result<WireMessage> {
         let mut line = String::new();
         self.stdout_reader
             .read_line(&mut line)
@@ -267,29 +288,74 @@ impl WireClient {
         Ok(())
     }
 
-    async fn read_response<ResultType: DeserializeOwned>(&mut self) -> Result<ResultType> {
-        let mut line = String::new();
-        self.stdout_reader
-            .read_line(&mut line)
-            .await
-            .context("Failed to read response")?;
-        if line.is_empty() {
-            anyhow::bail!("kimi stdout closed while waiting for response");
-        }
-        match serde_json::from_str::<WireMessage>(&line).context("Failed to parse response")? {
-            WireMessage::SuccessResponse(resp) => {
-                serde_json::from_value(resp.result).context("Failed to decode response result")
+    async fn read_response<ResultType: DeserializeOwned>(
+        &mut self,
+        expected_id: &str,
+    ) -> Result<ResultType> {
+        loop {
+            if let Some(idx) = self
+                .pending_messages
+                .iter()
+                .position(|msg| wire_message_id(msg) == Some(expected_id))
+            {
+                let msg = self
+                    .pending_messages
+                    .remove(idx)
+                    .expect("pending response index should be valid");
+                return decode_response(msg, expected_id);
             }
-            WireMessage::ErrorResponse(resp) => {
-                anyhow::bail!(
-                    "Wire request failed: {} (code: {})",
-                    resp.error.message,
-                    resp.error.code
-                )
+
+            match self
+                .read_message_from_stdout()
+                .await
+                .context("Failed to read response")?
+            {
+                WireMessage::SuccessResponse(resp) if resp.id == expected_id => {
+                    return serde_json::from_value(resp.result)
+                        .context("Failed to decode response result");
+                }
+                WireMessage::ErrorResponse(resp) if resp.id == expected_id => {
+                    return bail_wire_error(resp);
+                }
+                other => {
+                    debug!(message = ?other, "Buffering pre-response wire message");
+                    self.pending_messages.push_back(other);
+                }
             }
-            other => anyhow::bail!("Expected wire response, got {:?}", other),
         }
     }
+}
+
+fn wire_message_id(msg: &WireMessage) -> Option<&str> {
+    match msg {
+        WireMessage::SuccessResponse(resp) => Some(resp.id.as_str()),
+        WireMessage::ErrorResponse(resp) => Some(resp.id.as_str()),
+        WireMessage::Request(req) => Some(req.id.as_str()),
+        WireMessage::Event(_) => None,
+    }
+}
+
+fn decode_response<ResultType: DeserializeOwned>(
+    msg: WireMessage,
+    expected_id: &str,
+) -> Result<ResultType> {
+    match msg {
+        WireMessage::SuccessResponse(resp) if resp.id == expected_id => {
+            serde_json::from_value(resp.result).context("Failed to decode response result")
+        }
+        WireMessage::ErrorResponse(resp) if resp.id == expected_id => bail_wire_error(resp),
+        other => anyhow::bail!(
+            "Buffered wire message did not match expected response id {expected_id}: {other:?}"
+        ),
+    }
+}
+
+fn bail_wire_error<ResultType>(resp: JsonRpcErrorResponse) -> Result<ResultType> {
+    anyhow::bail!(
+        "Wire request failed: {} (code: {})",
+        resp.error.message,
+        resp.error.code
+    )
 }
 
 /// A union type for all incoming wire messages.
@@ -461,6 +527,103 @@ echo '{"jsonrpc":"2.0","id":"req-1","result":{"status":"ok","steps":[{"n":1}]}}'
                 assert_eq!(steps[0]["n"], 1);
             }
             other => panic!("expected legacy prompt trace, got {:?}", other),
+        }
+
+        client.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_prompt_buffers_events_that_arrive_before_response() {
+        let tmp = tempfile::tempdir().unwrap();
+        let script = tmp.path().join("mock-wire-event-first");
+        let script_content = r#"#!/bin/bash
+read -r line
+echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":{"user_input":"hello"}}}'
+echo '{"jsonrpc":"2.0","id":"req-1","result":{"status":"ok"}}'
+"#;
+        tokio::fs::write(&script, script_content).await.unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = tokio::fs::metadata(&script).await.unwrap().permissions();
+            perms.set_mode(0o755);
+            tokio::fs::set_permissions(&script, perms).await.unwrap();
+        }
+
+        let mut client = WireClient::spawn(script.to_str().unwrap(), None, None, None).unwrap();
+
+        let result = client.prompt("hello").await.unwrap();
+        assert_eq!(result.status, "ok");
+
+        let buffered = client.read_message().await.unwrap();
+        match buffered {
+            WireMessage::Event(ev) => assert_eq!(ev.params.event_type, "turn_begin"),
+            other => panic!("expected buffered event, got {:?}", other),
+        }
+
+        client.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_prompt_waits_for_matching_response_id() {
+        let tmp = tempfile::tempdir().unwrap();
+        let script = tmp.path().join("mock-wire-interleaved-response");
+        let script_content = r#"#!/bin/bash
+read -r line
+echo '{"jsonrpc":"2.0","id":"req-999","result":{"status":"wrong"}}'
+echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":{"user_input":"hello"}}}'
+echo '{"jsonrpc":"2.0","id":"req-1","result":{"status":"ok"}}'
+"#;
+        tokio::fs::write(&script, script_content).await.unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = tokio::fs::metadata(&script).await.unwrap().permissions();
+            perms.set_mode(0o755);
+            tokio::fs::set_permissions(&script, perms).await.unwrap();
+        }
+
+        let mut client = WireClient::spawn(script.to_str().unwrap(), None, None, None).unwrap();
+
+        let result = client.prompt("hello").await.unwrap();
+        assert_eq!(result.status, "ok");
+
+        let buffered = client.read_message().await.unwrap();
+        match buffered {
+            WireMessage::SuccessResponse(resp) => assert_eq!(resp.id, "req-999"),
+            other => panic!("expected buffered non-matching response, got {:?}", other),
+        }
+
+        client.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_start_prompt_allows_streaming_before_response() {
+        let tmp = tempfile::tempdir().unwrap();
+        let script = tmp.path().join("mock-wire-stream-before-response");
+        let script_content = r#"#!/bin/bash
+read -r line
+echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":{"user_input":"hello"}}}'
+sleep 1
+"#;
+        tokio::fs::write(&script, script_content).await.unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = tokio::fs::metadata(&script).await.unwrap().permissions();
+            perms.set_mode(0o755);
+            tokio::fs::set_permissions(&script, perms).await.unwrap();
+        }
+
+        let mut client = WireClient::spawn(script.to_str().unwrap(), None, None, None).unwrap();
+
+        let id = client.start_prompt("hello").await.unwrap();
+        assert_eq!(id, "req-1");
+
+        let msg = client.read_message().await.unwrap();
+        match msg {
+            WireMessage::Event(ev) => assert_eq!(ev.params.event_type, "turn_begin"),
+            other => panic!("expected streaming event, got {:?}", other),
         }
 
         client.shutdown().await.unwrap();

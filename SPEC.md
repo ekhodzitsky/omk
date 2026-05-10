@@ -50,6 +50,7 @@ Implications for OMK:
 - New scheduler, HUD, proof, and replay work should use a `kimi --wire` adapter before inventing prompt scraping or result-block parsing.
 - The adapter must record the observed Kimi CLI version and negotiated Wire protocol version in run metadata.
 - If `initialize` returns method-not-found, OMK should fall back to legacy/no-handshake Wire mode as documented upstream.
+- Wire handshake extension fields must be forward-compatible. Kimi CLI 1.41.0 returns object-shaped `initialize.result.hooks` metadata, so OMK should preserve unknown extension payloads as JSON instead of narrowing them to fixed arrays.
 - Tmux remains useful for visible sessions and current `team spawn` compatibility, but target `team run` should treat Wire events/requests as the structured worker contract.
 - Any task touching Kimi assets, hooks, agents, MCP, process launch, event capture, replay, or worker control must re-check the official docs before implementation.
 - Upstream tracking notes live in [docs/KIMI_UPSTREAM.md](docs/KIMI_UPSTREAM.md).

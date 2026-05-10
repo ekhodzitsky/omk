@@ -61,7 +61,7 @@ async fn run_wire_prompt(prompt: &str, kimi_bin: &str, client_name: &str) -> Res
         "Wire prompt initialized"
     );
 
-    let _prompt_result = client.prompt(prompt).await?;
+    client.start_prompt(prompt).await?;
 
     let mut text_parts: Vec<String> = Vec::new();
 
@@ -76,12 +76,12 @@ async fn run_wire_prompt(prompt: &str, kimi_bin: &str, client_name: &str) -> Res
                     _ => {}
                 }
 
-                match ev.params.event_type.as_str() {
+                match ev.params.normalized_event_type().as_str() {
                     "turn_end" => break,
                     "step_interrupted" => {
                         anyhow::bail!("Wire prompt was interrupted");
                     }
-                    "thinking" | "text" | "content" => {
+                    "thinking" | "text" | "content" | "content_part" => {
                         if let Some(text) = ev.params.payload.get("text").and_then(|v| v.as_str()) {
                             text_parts.push(text.to_string());
                         } else if let Some(chunk) =

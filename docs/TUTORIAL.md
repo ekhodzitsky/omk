@@ -10,11 +10,12 @@ A step-by-step guide for new users. This tutorial covers **Current** commands on
 4. [Your First Team](#your-first-team)
 5. [Watching Your Team](#watching-your-team)
 6. [Proof and Run Inspection](#proof-and-run-inspection)
-7. [Autopilot, Ralph, and Ultrawork](#autopilot-ralph-and-ultrawork)
-8. [Skills and Marketplace](#skills-and-marketplace)
-9. [Maintenance](#maintenance)
-10. [Troubleshooting](#troubleshooting)
-11. [Command Maturity Cheat Sheet](#command-maturity-cheat-sheet)
+7. [Verification Gates](#verification-gates)
+8. [Autopilot, Ralph, and Ultrawork](#autopilot-ralph-and-ultrawork)
+9. [Skills and Marketplace](#skills-and-marketplace)
+10. [Maintenance](#maintenance)
+11. [Troubleshooting](#troubleshooting)
+12. [Command Maturity Cheat Sheet](#command-maturity-cheat-sheet)
 
 ---
 
@@ -340,6 +341,36 @@ omk proof show latest --format md
 ```
 
 > **Maturity note:** `omk run show` and `omk proof show` are **Current Scaffold**. They exist in the CLI today, but deeper timeline filtering, gate integration, and proof regeneration are still being hardened.
+
+---
+
+## Verification Gates
+
+`omk team run` detects default gates from the project and also honors `.omk/gates.toml` when present. Use an explicit config when a repo needs a smaller proof surface, an informational check, or a temporarily skipped gate.
+
+```toml
+[[gates]]
+name = "check"
+command = "cargo"
+args = ["check", "--all-targets"]
+required = true
+timeout_secs = 120
+
+[[gates]]
+name = "audit"
+command = "cargo"
+args = ["deny", "check"]
+allow-fail = true
+timeout_secs = 120
+
+[[gates]]
+name = "slow-docs"
+command = "cargo"
+args = ["doc", "--no-deps"]
+skip = true
+```
+
+Required gate failures make the proof `failed`. `allow-fail = true` records evidence without blocking readiness. `skip = true` records an intentional skipped gate instead of running the command.
 
 ---
 

@@ -297,6 +297,46 @@ fn test_team_spawn_missing_task() {
 }
 
 #[test]
+fn test_team_spawn_fails_gracefully_when_tmux_missing() {
+    let (tmp, envs) = isolated_env();
+    let empty_path = tmp.path().join("empty-path");
+    fs::create_dir_all(&empty_path).unwrap();
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+
+    cmd.env("PATH", empty_path)
+        .arg("team")
+        .arg("spawn")
+        .arg("1:coder")
+        .arg("smoke task");
+
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "tmux is required but not installed",
+    ));
+}
+
+#[test]
+fn test_team_list_ignores_stale_or_empty_state_dirs() {
+    let (tmp, envs) = isolated_env();
+    let team_root = tmp.path().join("xdg_state").join("omk").join("team");
+    fs::create_dir_all(team_root.join("stale-empty")).unwrap();
+    let broken = team_root.join("stale-broken");
+    fs::create_dir_all(&broken).unwrap();
+    fs::write(broken.join("team-state.json"), "not-json").unwrap();
+
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in &envs {
+        cmd.env(k, v);
+    }
+    cmd.arg("team").arg("list");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("No teams found."));
+}
+
+#[test]
 fn test_magic_keywords() {
     let mut cmd = Command::cargo_bin("omk").unwrap();
     cmd.arg("t").arg("--help");
@@ -754,4 +794,88 @@ exit 1
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Neither 'kimi' nor 'mock-kimi' found."));
     assert!(stdout.contains("Or run with MOCK_KIMI=1 for a fully mocked demo"));
+}
+
+#[test]
+fn test_north_star_demo_fails_cleanly_when_kimi_path_is_unusable() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fake_bin = tmp.path().join("fake-bin");
+    fs::create_dir_all(&fake_bin).unwrap();
+
+    let fake_omk = fake_bin.join("omk");
+    let fake_kimi = fake_bin.join("kimi");
+
+    fs::write(
+        &fake_omk,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "--version" || "${1:-}" == "version" ]]; then
+  echo "omk 0.2.4"
+  exit 0
+fi
+if [[ "${1:-}" == "kimi" && "${2:-}" == "sync" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "team" && "${2:-}" == "run" ]]; then
+  echo "kimi auth required" >&2
+  exit 1
+fi
+if [[ "${1:-}" == "hud" ]]; then
+  echo '{"task_summary":{"total":2,"completed":0},"workers":[]}'
+  exit 0
+fi
+if [[ "${1:-}" == "proof" && "${2:-}" == "show" && "${3:-}" == "latest" && "${4:-}" == "--format" && "${5:-}" == "json" ]]; then
+  echo '{"status":"failed","changed_files":[],"gates":[],"failures":[{"description":"run failed"}],"retries":[],"known_gaps":[]}'
+  exit 0
+fi
+if [[ "${1:-}" == "proof" && "${2:-}" == "show" && "${3:-}" == "latest" && "${4:-}" == "--format" && "${5:-}" == "text" ]]; then
+  echo "Proof status: failed"
+  exit 0
+fi
+if [[ "${1:-}" == "team" && "${2:-}" == "cleanup" ]]; then
+  exit 0
+fi
+echo "unsupported fake omk args: $*" >&2
+exit 1
+"#,
+    )
+    .unwrap();
+    fs::write(
+        &fake_kimi,
+        "#!/usr/bin/env bash\necho 'kimi version 1.0.0'\nexit 0\n",
+    )
+    .unwrap();
+
+    #[cfg(unix)]
+    {
+        let mut omk_perms = fs::metadata(&fake_omk).unwrap().permissions();
+        omk_perms.set_mode(0o755);
+        fs::set_permissions(&fake_omk, omk_perms).unwrap();
+
+        let mut kimi_perms = fs::metadata(&fake_kimi).unwrap().permissions();
+        kimi_perms.set_mode(0o755);
+        fs::set_permissions(&fake_kimi, kimi_perms).unwrap();
+    }
+
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let combined_path = format!("{}:{}", fake_bin.display(), current_path);
+
+    let script_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scripts")
+        .join("north_star_demo.sh");
+    let output = std::process::Command::new("bash")
+        .arg(script_path)
+        .env("PATH", combined_path)
+        .env("NORTH_STAR_DRY_RUN", "1")
+        .output()
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "north_star_demo.sh must fail when available kimi path is unusable during team run"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Using real Kimi CLI"));
+    assert!(stdout.contains("omk team run failed"));
 }

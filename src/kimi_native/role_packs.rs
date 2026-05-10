@@ -28,12 +28,11 @@ impl RolePack {
         Self {
             id: "architect".to_string(),
             name: "Architect".to_string(),
-            description:
-                "Designs system structure, APIs, and data models. Writes ADRs and interface specs."
-                    .to_string(),
+            description: "Kimi-native architecture role for boundaries, APIs, and ADR-quality design decisions."
+                .to_string(),
             system_prompt: include_str!("../../.kimi/agents/architect/system.md").to_string(),
             tools: vec!["read".to_string(), "write".to_string(), "ask".to_string()],
-            default_skills: vec!["design-review".to_string()],
+            default_skills: vec!["architect".to_string()],
             suggested_worker_count: 1,
         }
     }
@@ -42,10 +41,11 @@ impl RolePack {
         Self {
             id: "executor".to_string(),
             name: "Executor".to_string(),
-            description: "Implements features, writes tests, and fixes bugs. Fast and pragmatic.".to_string(),
-            system_prompt: "You are an expert software engineer. Your job is to write clean, tested, production-ready code. Follow existing patterns in the codebase. Write tests for every change.".to_string(),
+            description: "Kimi-native implementation role for focused delivery with tests and anti-slop discipline."
+                .to_string(),
+            system_prompt: include_str!("../../.kimi/agents/executor/system.md").to_string(),
             tools: vec!["read".to_string(), "write".to_string(), "shell".to_string(), "test".to_string()],
-            default_skills: vec!["test-driven".to_string()],
+            default_skills: vec!["backend".to_string(), "qa".to_string()],
             suggested_worker_count: 2,
         }
     }
@@ -54,10 +54,11 @@ impl RolePack {
         Self {
             id: "verifier".to_string(),
             name: "Verifier".to_string(),
-            description: "Runs gates, checks proofs, and validates completeness. The QA layer.".to_string(),
-            system_prompt: "You are a meticulous QA engineer. Verify that all requirements are met, tests pass, and no regressions were introduced. Produce a clear pass/fail report with evidence.".to_string(),
+            description: "Kimi-native verification role for evidence-first gates, regression checks, and proof quality."
+                .to_string(),
+            system_prompt: include_str!("../../.kimi/agents/verifier/system.md").to_string(),
             tools: vec!["read".to_string(), "shell".to_string(), "test".to_string()],
-            default_skills: vec!["gate-runner".to_string()],
+            default_skills: vec!["qa".to_string()],
             suggested_worker_count: 1,
         }
     }
@@ -66,8 +67,9 @@ impl RolePack {
         Self {
             id: "reviewer".to_string(),
             name: "Reviewer".to_string(),
-            description: "Reviews code, docs, and design decisions. Catches issues before merge.".to_string(),
-            system_prompt: "You are a senior code reviewer. Review changes for correctness, security, performance, and maintainability. Be constructive but rigorous.".to_string(),
+            description: "Kimi-native review role for correctness, risk discovery, and actionable feedback before merge."
+                .to_string(),
+            system_prompt: include_str!("../../.kimi/agents/reviewer/system.md").to_string(),
             tools: vec!["read".to_string(), "ask".to_string()],
             default_skills: vec!["security-review".to_string()],
             suggested_worker_count: 1,
@@ -78,10 +80,11 @@ impl RolePack {
         Self {
             id: "integrator".to_string(),
             name: "Integrator".to_string(),
-            description: "Merges branches, resolves conflicts, and prepares releases.".to_string(),
-            system_prompt: "You are a DevOps engineer. Handle git operations, resolve merge conflicts, run CI gates, and prepare clean releases.".to_string(),
+            description: "Kimi-native release role for safe integration, CI gates, and release readiness checks."
+                .to_string(),
+            system_prompt: include_str!("../../.kimi/agents/integrator/system.md").to_string(),
             tools: vec!["shell".to_string(), "read".to_string(), "write".to_string()],
-            default_skills: vec!["ship-it".to_string()],
+            default_skills: vec!["devops".to_string()],
             suggested_worker_count: 1,
         }
     }
@@ -121,5 +124,32 @@ mod tests {
     fn test_executor_has_test_tool() {
         let pack = RolePack::find("executor").unwrap();
         assert!(pack.tools.contains(&"test".to_string()));
+    }
+
+    #[test]
+    fn test_every_role_prompt_includes_hierarchy_and_anti_slop_guards() {
+        let roles = RolePack::all();
+        for role in roles {
+            assert!(
+                role.system_prompt.contains("Instruction Hierarchy"),
+                "{} prompt must define instruction hierarchy",
+                role.id
+            );
+            assert!(
+                role.system_prompt.contains("AGENTS.md"),
+                "{} prompt must mention AGENTS.md hierarchy",
+                role.id
+            );
+            assert!(
+                role.system_prompt.contains("Anti-Slop"),
+                "{} prompt must include anti-slop discipline",
+                role.id
+            );
+            assert!(
+                role.system_prompt.contains("Review Discipline"),
+                "{} prompt must include review discipline",
+                role.id
+            );
+        }
     }
 }

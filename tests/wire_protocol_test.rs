@@ -81,6 +81,32 @@ fn test_initialize_result_roundtrip_wire_19() {
 }
 
 #[test]
+fn test_initialize_result_accepts_kimi_141_hooks_object() {
+    let json = json!({
+        "protocol_version": "1.9",
+        "server": {"name": "Kimi Code CLI", "version": "1.41.0"},
+        "slash_commands": [],
+        "capabilities": {"supports_question": true},
+        "hooks": {
+            "supported_events": ["PreToolUse", "PostToolUse", "Stop"],
+            "configured": {}
+        }
+    });
+
+    let parsed: InitializeResult = serde_json::from_value(json).unwrap();
+    assert_eq!(parsed.protocol_version, "1.9");
+    assert_eq!(
+        parsed
+            .hooks
+            .as_ref()
+            .and_then(|hooks| hooks.get("supported_events"))
+            .and_then(|events| events.as_array())
+            .map(Vec::len),
+        Some(3)
+    );
+}
+
+#[test]
 fn test_prompt_result_finished() {
     let result = PromptResult {
         status: "finished".to_string(),
@@ -112,6 +138,22 @@ fn test_event_params_turn_begin() {
     };
     let json = serde_json::to_string(&event).unwrap();
     assert!(json.contains("\"type\":\"TurnBegin\""));
+}
+
+#[test]
+fn test_event_params_normalizes_pascal_case_events() {
+    let event = EventParams {
+        event_type: "ContentPart".to_string(),
+        payload: json!({"type": "text", "text": "Hello"}),
+    };
+    assert_eq!(event.normalized_event_type(), "content_part");
+
+    let turn_end = EventParams {
+        event_type: "TurnEnd".to_string(),
+        payload: json!({}),
+    };
+    assert_eq!(turn_end.normalized_event_type(), "turn_end");
+    assert!(matches!(turn_end.to_event().unwrap(), Event::TurnEnd));
 }
 
 #[test]
@@ -266,9 +308,9 @@ async fn test_mock_wire_session() {
     let script_path = tmp.path().join("mock_wire.sh");
 
     let script = r#"#!/bin/bash
-echo '{"jsonrpc":"2.0","id":"init-1","result":{"protocol_version":"1.9"}}'
+echo '{"jsonrpc":"2.0","id":"req-1","result":{"protocol_version":"1.9"}}'
 echo '{"jsonrpc":"2.0","method":"event","params":{"type":"TurnBegin","payload":{"user_input":"Hello"}}}'
-echo '{"jsonrpc":"2.0","id":"prompt-1","result":{"status":"finished"}}'
+echo '{"jsonrpc":"2.0","id":"req-2","result":{"status":"finished"}}'
 cat > /dev/null
 "#;
 

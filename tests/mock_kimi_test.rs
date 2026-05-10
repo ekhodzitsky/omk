@@ -224,6 +224,59 @@ fn test_wire_stall_mode_with_flag() {
 }
 
 #[test]
+fn test_wire_crash_after_turn_begin_mode() {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command as StdCommand, Stdio};
+
+    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
+    let mut child = StdCommand::new(&bin)
+        .arg("--wire")
+        .arg("--crash-after-turn-begin")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("Failed to spawn mock-kimi");
+
+    let mut stdin = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let reader = BufReader::new(stdout);
+
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","method":"initialize","id":"init-1","params":{{}}}}"#
+    )
+    .unwrap();
+    stdin.flush().unwrap();
+
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","method":"prompt","id":"prompt-1","params":{{"user_input":"please crash-after-turn-begin now"}}}}"#
+    )
+    .unwrap();
+    stdin.flush().unwrap();
+
+    let mut saw_turn_begin = false;
+    for line in reader.lines() {
+        let line = line.unwrap();
+        if line.contains("turn_begin") {
+            saw_turn_begin = true;
+            break;
+        }
+    }
+    assert!(
+        saw_turn_begin,
+        "Expected turn_begin event before crash in crash-after-turn-begin mode"
+    );
+
+    let status = child.wait().expect("Failed to wait on child");
+    assert!(
+        !status.success(),
+        "Expected crash-after-turn-begin mode to exit with failure"
+    );
+}
+
+#[test]
 fn test_wire_slow_mode_emits_delayed_event() {
     use std::io::{BufRead, BufReader};
     use std::process::{Command as StdCommand, Stdio};
@@ -462,4 +515,86 @@ async fn test_wire_worker_adapter_times_out_stalled_turn_and_writes_failed_resul
     assert!(events.contains("\"task_failed\""));
     let events_lower = events.to_lowercase();
     assert!(events_lower.contains("timeout") || events_lower.contains("timed out"));
+}
+
+#[tokio::test]
+async fn test_wire_worker_adapter_handles_mid_task_crash_after_turn_begin() {
+    use omk::runtime::events::{EventWriter, RunId};
+    use omk::runtime::wire_worker::WireWorkerAdapter;
+    use omk::runtime::worker::{ResultStatus, WorkerSpec, WorkerTask};
+    use tempfile::TempDir;
+    use tokio::time::{Duration, Instant};
+
+    let tmp = TempDir::new().unwrap();
+    let worker_dir = tmp.path().join("worker-crash-mid-task");
+    let project_dir = tmp.path().join("project");
+    tokio::fs::create_dir_all(&worker_dir).await.unwrap();
+    tokio::fs::create_dir_all(&project_dir).await.unwrap();
+
+    let spec = WorkerSpec {
+        name: "worker-crash-mid-task".to_string(),
+        role: "coder".to_string(),
+        inbox: worker_dir.join("inbox.jsonl"),
+        outbox: worker_dir.join("outbox.jsonl"),
+        heartbeat: worker_dir.join("heartbeat.json"),
+        project_dir: Some(project_dir),
+    };
+    spec.save().await.unwrap();
+
+    let events_path = tmp.path().join("events.jsonl");
+    let event_writer = EventWriter::new(&events_path);
+    let run_id = RunId("run-wire-crash-mid-task".to_string());
+
+    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
+    let prev_mock = std::env::var("MOCK_KIMI").ok();
+    std::env::set_var("MOCK_KIMI", &bin);
+
+    let adapter = WireWorkerAdapter::new(spec.clone(), run_id, event_writer);
+    let handle = adapter.spawn();
+
+    spec.send_task(&WorkerTask {
+        id: "task-crash-mid-task".to_string(),
+        task: "please crash-after-turn-begin right after turn start".to_string(),
+        acceptance_criteria: vec![],
+        context: None,
+    })
+    .await
+    .unwrap();
+
+    let started = Instant::now();
+    let mut found = None;
+    while started.elapsed() < Duration::from_secs(12) {
+        let results = spec.read_results().await.unwrap();
+        if let Some(first) = results.first() {
+            found = Some(first.clone());
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    handle.abort();
+    let _ = handle.await;
+
+    match prev_mock {
+        Some(v) => std::env::set_var("MOCK_KIMI", v),
+        None => std::env::remove_var("MOCK_KIMI"),
+    }
+
+    let result = found.expect("expected failed worker result after mid-task crash");
+    assert!(matches!(result.status, ResultStatus::Failed));
+    let summary = result.summary.to_lowercase();
+    assert!(
+        summary.contains("error")
+            || summary.contains("eof")
+            || summary.contains("closed")
+            || summary.contains("broken pipe")
+            || summary.contains("aborted")
+            || summary.contains("failed"),
+        "unexpected crash summary: {}",
+        result.summary
+    );
+
+    let events = tokio::fs::read_to_string(events_path).await.unwrap();
+    assert!(events.contains("\"task_failed\""));
+    assert!(events.contains("task-crash-mid-task"));
 }

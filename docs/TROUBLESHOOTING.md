@@ -110,6 +110,18 @@ omk doctor
 
 If auth is not valid, complete the Kimi CLI login flow, then retry the team command.
 
+### Kimi Wire initialize fails
+
+**Symptom:** `omk team run` reports `Failed to parse initialize response` or fails before a worker turn begins.
+
+**Solution:**
+```bash
+kimi info
+cargo build --bin omk
+```
+
+Then compare the local protocol report with `docs/KIMI_UPSTREAM.md`. Kimi CLI 1.41.0 reports Wire protocol `1.9` and returns object-shaped hook metadata in `initialize.result.hooks`; new Kimi releases may add more extension fields.
+
 ### Stale state root confusion (`~/.omk/state` vs XDG)
 
 **Symptom:** `omk run list` shows no runs, but files exist somewhere else.
