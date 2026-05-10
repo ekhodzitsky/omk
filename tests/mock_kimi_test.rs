@@ -1,10 +1,19 @@
 use assert_cmd::Command;
 use predicates::str::contains;
 use std::io::Write;
+use std::path::PathBuf;
 use tempfile::NamedTempFile;
 
 #[path = "fixtures/team_demo_fixture.rs"]
 mod team_demo_fixture;
+
+fn mock_kimi_path() -> PathBuf {
+    assert_cmd::cargo::cargo_bin("mock-kimi")
+}
+
+fn mock_kimi_path_string() -> String {
+    mock_kimi_path().to_string_lossy().into_owned()
+}
 
 fn mock_kimi() -> Command {
     Command::cargo_bin("mock-kimi").unwrap()
@@ -102,8 +111,7 @@ fn test_wire_stall_mode() {
     use std::thread;
     use std::time::Duration;
 
-    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
-    let mut child = StdCommand::new(&bin)
+    let mut child = StdCommand::new(mock_kimi_path())
         .arg("--wire")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -166,8 +174,7 @@ fn test_wire_stall_mode_with_flag() {
     use std::thread;
     use std::time::Duration;
 
-    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
-    let mut child = StdCommand::new(&bin)
+    let mut child = StdCommand::new(mock_kimi_path())
         .arg("--wire")
         .arg("--stall")
         .stdin(Stdio::piped())
@@ -228,8 +235,7 @@ fn test_wire_crash_after_turn_begin_mode() {
     use std::io::{BufRead, BufReader};
     use std::process::{Command as StdCommand, Stdio};
 
-    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
-    let mut child = StdCommand::new(&bin)
+    let mut child = StdCommand::new(mock_kimi_path())
         .arg("--wire")
         .arg("--crash-after-turn-begin")
         .stdin(Stdio::piped())
@@ -282,8 +288,7 @@ fn test_wire_slow_mode_emits_delayed_event() {
     use std::process::{Command as StdCommand, Stdio};
     use std::time::{Duration, Instant};
 
-    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
-    let mut child = StdCommand::new(&bin)
+    let mut child = StdCommand::new(mock_kimi_path())
         .arg("--wire")
         .arg("--slow")
         .stdin(Stdio::piped())
@@ -333,8 +338,7 @@ fn test_wire_malformed_mode_emits_invalid_json() {
     use std::io::{BufRead, BufReader};
     use std::process::{Command as StdCommand, Stdio};
 
-    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
-    let mut child = StdCommand::new(&bin)
+    let mut child = StdCommand::new(mock_kimi_path())
         .arg("--wire")
         .arg("--malformed")
         .stdin(Stdio::piped())
@@ -367,7 +371,7 @@ async fn test_wire_control_methods() {
     use omk::wire::client::WireClient;
     use omk::wire::protocol::InitializeParams;
 
-    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
+    let bin = mock_kimi_path_string();
     let mut client = WireClient::spawn(&bin, None, None, None).unwrap();
 
     let init = client
@@ -465,10 +469,10 @@ async fn test_wire_worker_adapter_times_out_stalled_turn_and_writes_failed_resul
     let event_writer = EventWriter::new(&events_path);
     let run_id = RunId("run-wire-timeout".to_string());
 
-    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
+    let bin = mock_kimi_path();
     let prev_mock = std::env::var("MOCK_KIMI").ok();
     let prev_timeout_ms = std::env::var("OMK_WIRE_TURN_TIMEOUT_MS").ok();
-    std::env::set_var("MOCK_KIMI", &bin);
+    std::env::set_var("MOCK_KIMI", bin.as_os_str());
     std::env::set_var("OMK_WIRE_TURN_TIMEOUT_MS", "300");
 
     let adapter = WireWorkerAdapter::new(spec.clone(), run_id, event_writer);
@@ -545,9 +549,9 @@ async fn test_wire_worker_adapter_handles_mid_task_crash_after_turn_begin() {
     let event_writer = EventWriter::new(&events_path);
     let run_id = RunId("run-wire-crash-mid-task".to_string());
 
-    let bin = std::env::var("CARGO_BIN_EXE_mock-kimi").unwrap_or_else(|_| "mock-kimi".to_string());
+    let bin = mock_kimi_path();
     let prev_mock = std::env::var("MOCK_KIMI").ok();
-    std::env::set_var("MOCK_KIMI", &bin);
+    std::env::set_var("MOCK_KIMI", bin.as_os_str());
 
     let adapter = WireWorkerAdapter::new(spec.clone(), run_id, event_writer);
     let handle = adapter.spawn();
