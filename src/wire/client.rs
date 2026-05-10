@@ -31,25 +31,36 @@ impl WireClient {
         session: Option<&str>,
         model: Option<&str>,
     ) -> Result<Self> {
-        let mut cmd = tokio::process::Command::new(kimi_binary);
-        cmd.arg("--wire");
-        if let Some(dir) = work_dir {
-            cmd.arg("--work-dir").arg(dir);
-        }
-        if let Some(s) = session {
-            cmd.arg("--session").arg(s);
-        }
-        if let Some(m) = model {
-            cmd.arg("--model").arg(m);
-        }
-        cmd.stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        let mut child = None;
+        for attempt in 0..3 {
+            let mut cmd = tokio::process::Command::new(kimi_binary);
+            cmd.arg("--wire");
+            if let Some(dir) = work_dir {
+                cmd.arg("--work-dir").arg(dir);
+            }
+            if let Some(s) = session {
+                cmd.arg("--session").arg(s);
+            }
+            if let Some(m) = model {
+                cmd.arg("--model").arg(m);
+            }
+            cmd.stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
 
-        let mut child = cmd
-            .kill_on_drop(true)
-            .spawn()
-            .context("Failed to spawn kimi --wire")?;
+            match cmd.kill_on_drop(true).spawn() {
+                Ok(spawned) => {
+                    child = Some(spawned);
+                    break;
+                }
+                Err(err) if err.raw_os_error() == Some(26) && attempt < 2 => {
+                    std::thread::sleep(Duration::from_millis(25));
+                }
+                Err(err) => return Err(err).context("Failed to spawn kimi --wire"),
+            }
+        }
+
+        let mut child = child.context("Failed to spawn kimi --wire")?;
         let stdin = child.stdin.take().context("No stdin")?;
         let stdout = child.stdout.take().context("No stdout")?;
         let stdout_reader = BufReader::new(stdout);
