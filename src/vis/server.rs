@@ -54,8 +54,8 @@ async fn shutdown_signal() {
     println!("\n🛑 Shutting down gracefully...");
 }
 
-async fn dashboard_handler() -> Html<&'static str> {
-    Html(DASHBOARD_HTML)
+async fn dashboard_handler() -> Html<String> {
+    Html(DASHBOARD_HTML.replace("{{OMK_VERSION}}", env!("CARGO_PKG_VERSION")))
 }
 
 const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
@@ -185,7 +185,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
     <div class="container">
         <header>
             <h1>🌙 omk dashboard</h1>
-            <span class="version">v0.2.4</span>
+            <span class="version">v{{OMK_VERSION}}</span>
             <span style="margin-left:auto;color:#666;font-size:0.875rem;">
                 <span class="live-indicator"></span>Live
             </span>

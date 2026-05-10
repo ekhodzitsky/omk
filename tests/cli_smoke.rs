@@ -14,7 +14,7 @@ fn test_version_flag() {
     cmd.arg("--version");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("0.2.4"));
+        .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
 }
 
 #[test]
@@ -88,7 +88,10 @@ fn test_version_subcommand() {
     cmd.arg("version");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("omk 0.2.4"));
+        .stdout(predicate::str::contains(format!(
+            "omk {}",
+            env!("CARGO_PKG_VERSION")
+        )));
 }
 
 #[test]
@@ -441,7 +444,7 @@ fn test_north_star_demo_exits_non_zero_when_proof_failed() {
         r#"#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "--version" || "${1:-}" == "version" ]]; then
-  echo "omk 0.2.4"
+  echo "omk 0.2.5"
   exit 0
 fi
 if [[ "${1:-}" == "kimi" && "${2:-}" == "sync" ]]; then
@@ -515,7 +518,7 @@ fn test_north_star_demo_mock_mode_isolates_home_and_xdg() {
         r#"#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "--version" || "${1:-}" == "version" ]]; then
-  echo "omk 0.2.4"
+  echo "omk 0.2.5"
   exit 0
 fi
 if [[ "${1:-}" == "kimi" && "${2:-}" == "sync" ]]; then
@@ -602,7 +605,7 @@ fn test_north_star_demo_accepts_custom_executable_mock_kimi_path() {
         r#"#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "--version" || "${1:-}" == "version" ]]; then
-  echo "omk 0.2.4"
+  echo "omk 0.2.5"
   exit 0
 fi
 if [[ "${1:-}" == "kimi" && "${2:-}" == "sync" ]]; then
@@ -692,7 +695,7 @@ fn test_north_star_demo_rejects_non_executable_mock_kimi_path() {
         r#"#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "--version" || "${1:-}" == "version" ]]; then
-  echo "omk 0.2.4"
+  echo "omk 0.2.5"
   exit 0
 fi
 echo "unsupported fake omk args: $*" >&2
@@ -748,7 +751,7 @@ fn test_north_star_demo_missing_kimi_prints_mock_kimi_hint() {
         r#"#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "--version" || "${1:-}" == "version" ]]; then
-  echo "omk 0.2.4"
+  echo "omk 0.2.5"
   exit 0
 fi
 echo "unsupported fake omk args: $*" >&2
@@ -810,7 +813,7 @@ fn test_north_star_demo_fails_cleanly_when_kimi_path_is_unusable() {
         r#"#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "--version" || "${1:-}" == "version" ]]; then
-  echo "omk 0.2.4"
+  echo "omk 0.2.5"
   exit 0
 fi
 if [[ "${1:-}" == "kimi" && "${2:-}" == "sync" ]]; then

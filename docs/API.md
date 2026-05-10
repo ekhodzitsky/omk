@@ -106,7 +106,7 @@ Health check.
 ```json
 {
   "status": "ok",
-  "version": "0.2.0",
+  "version": "0.2.5",
   "timestamp": "2026-05-08T12:00:00Z"
 }
 ```

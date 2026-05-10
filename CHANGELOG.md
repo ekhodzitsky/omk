@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-05-10
+
+### Fixed
+
+- **GitHub Actions bootstrap**: CI, coverage, and release workflows now install Rust through `dtolnay/rust-toolchain`, use the current `cargo-deny` action, and avoid runner-local `sccache` assumptions that made macOS clippy brittle.
+- **CI-safe CLI integration tests**: command tests now use Cargo-built binaries instead of nested `cargo run`, keeping normal CI and tarpaulin coverage runs from timing out or depending on runner PATH state.
+- **Coverage mock fixture lookup**: direct `mock-kimi` process tests now resolve the built fixture binary through Cargo metadata, so `cargo tarpaulin --all-features` can run the Wire/mock coverage suite without a real `mock-kimi` on PATH.
+
 ### Added
 
 - **Proof-backed team run evidence**: verification gates now emit command start/finish events, capture stdout/stderr summaries and full output artifacts, feed command evidence into proofs, surface latest gate/proof status in HUD output, time out stalled Wire turns with `worker_stalled` evidence, and make the `MOCK_KIMI=1` North Star demo finish with a ready proof.
