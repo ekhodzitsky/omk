@@ -1,21 +1,24 @@
-use std::process::Command;
+use assert_cmd::Command;
 
 fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, std::path::PathBuf)>) {
     omk::test_helpers::isolated_xdg_env()
 }
 
+fn omk_cmd(envs: &[(&'static str, std::path::PathBuf)]) -> Command {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+    cmd
+}
+
 #[test]
 fn test_marketplace_cli_help() {
     let (_tmp, envs) = isolated_env();
-    let mut cmd = Command::new("cargo");
-    for (k, v) in &envs {
-        cmd.env(k, v);
-    }
-    let output = cmd
-        .args(["run", "--", "marketplace", "--help"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+    let output = omk_cmd(&envs)
+        .args(["marketplace", "--help"])
         .output()
-        .expect("cargo run failed");
+        .expect("omk failed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -31,15 +34,10 @@ fn test_marketplace_cli_help() {
 #[test]
 fn test_marketplace_list_runs() {
     let (_tmp, envs) = isolated_env();
-    let mut cmd = Command::new("cargo");
-    for (k, v) in &envs {
-        cmd.env(k, v);
-    }
-    let output = cmd
-        .args(["run", "--", "marketplace", "list"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+    let output = omk_cmd(&envs)
+        .args(["marketplace", "list"])
         .output()
-        .expect("cargo run failed");
+        .expect("omk failed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);

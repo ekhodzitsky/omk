@@ -1,7 +1,37 @@
 use assert_cmd::Command;
 use predicates::str::contains;
+use std::ffi::OsString;
 use std::fs;
 use tempfile::TempDir;
+
+fn path_with_fake_kimi(tmp: &TempDir) -> OsString {
+    let bin_dir = tmp.path().join("bin");
+    fs::create_dir_all(&bin_dir).unwrap();
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let kimi = bin_dir.join("kimi");
+        fs::write(&kimi, "#!/bin/sh\necho 'kimi 0.0.0-test'\n").unwrap();
+        fs::set_permissions(&kimi, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[cfg(windows)]
+    {
+        fs::write(
+            bin_dir.join("kimi.cmd"),
+            "@echo off\r\necho kimi 0.0.0-test\r\n",
+        )
+        .unwrap();
+    }
+
+    let mut paths = vec![bin_dir];
+    paths.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    std::env::join_paths(paths).unwrap()
+}
 
 #[test]
 fn test_kimi_native_help() {
@@ -90,6 +120,7 @@ fn test_kimi_doctor_passes_after_sync() {
     // Then doctor
     let mut cmd = Command::cargo_bin("omk").unwrap();
     cmd.current_dir(&tmp);
+    cmd.env("PATH", path_with_fake_kimi(&tmp));
     cmd.arg("kimi").arg("doctor");
     cmd.assert().success().stdout(contains("All checks passed"));
 }

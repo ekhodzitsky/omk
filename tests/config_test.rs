@@ -1,7 +1,15 @@
-use std::process::Command;
+use assert_cmd::Command;
 
 fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, std::path::PathBuf)>) {
     omk::test_helpers::isolated_xdg_env()
+}
+
+fn omk_cmd(envs: &[(&'static str, std::path::PathBuf)]) -> Command {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+    cmd
 }
 
 fn env_path(envs: &[(&'static str, std::path::PathBuf)], key: &str) -> std::path::PathBuf {
@@ -13,15 +21,10 @@ fn env_path(envs: &[(&'static str, std::path::PathBuf)], key: &str) -> std::path
 #[test]
 fn test_config_validate_cli_help() {
     let (_tmp, envs) = isolated_env();
-    let mut cmd = Command::new("cargo");
-    for (k, v) in &envs {
-        cmd.env(k, v);
-    }
-    let output = cmd
-        .args(["run", "--", "config", "--help"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+    let output = omk_cmd(&envs)
+        .args(["config", "--help"])
         .output()
-        .expect("cargo run failed");
+        .expect("omk failed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -37,15 +40,10 @@ fn test_config_validate_cli_help() {
 #[test]
 fn test_config_show_runs() {
     let (_tmp, envs) = isolated_env();
-    let mut cmd = Command::new("cargo");
-    for (k, v) in &envs {
-        cmd.env(k, v);
-    }
-    let output = cmd
-        .args(["run", "--", "config", "show"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+    let output = omk_cmd(&envs)
+        .args(["config", "show"])
         .output()
-        .expect("cargo run failed");
+        .expect("omk failed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -61,15 +59,10 @@ fn test_config_show_runs() {
 #[test]
 fn test_config_validate_runs() {
     let (_tmp, envs) = isolated_env();
-    let mut cmd = Command::new("cargo");
-    for (k, v) in &envs {
-        cmd.env(k, v);
-    }
-    let output = cmd
-        .args(["run", "--", "config", "validate"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+    let output = omk_cmd(&envs)
+        .args(["config", "validate"])
         .output()
-        .expect("cargo run failed");
+        .expect("omk failed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -103,15 +96,10 @@ fn test_config_set_creates_config_dir_before_write() {
             .expect("failed to make config file permissive");
     }
 
-    let mut cmd = Command::new("cargo");
-    for (k, v) in &envs {
-        cmd.env(k, v);
-    }
-    let output = cmd
-        .args(["run", "--", "config", "set", "default_yolo", "true"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+    let output = omk_cmd(&envs)
+        .args(["config", "set", "default_yolo", "true"])
         .output()
-        .expect("cargo run failed");
+        .expect("omk failed");
 
     assert!(
         output.status.success(),
