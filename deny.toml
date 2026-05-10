@@ -8,6 +8,11 @@ targets = [
 [advisories]
 version = 2
 yanked = "warn"
+# Transitive through ratatui 0.29.0. Cargo-deny reports no safe upgrade,
+# so keep this visible and revisit when ratatui drops paste or replaces it.
+ignore = [
+    "RUSTSEC-2024-0436",
+]
 
 [licenses]
 version = 2
@@ -15,8 +20,11 @@ allow = [
     "MIT",
     "Apache-2.0",
     "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
     "ISC",
-    "Unicode-DFS-2016",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
 ]
 confidence-threshold = 0.8
 

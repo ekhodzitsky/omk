@@ -7,7 +7,7 @@ use tracing::{debug, info};
 use super::parser::{parse_skill, Skill};
 
 /// Load a bundled skill by name from the built-in skills directory.
-/// Falls back to CARGO_MANIFEST_DIR/skills/<name>/SKILL.md
+/// Falls back to `CARGO_MANIFEST_DIR/skills/<name>/SKILL.md`.
 pub async fn load_bundled_skill(name: &str) -> Result<String> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
@@ -33,7 +33,7 @@ pub async fn load_bundled_skill(name: &str) -> Result<String> {
 /// Discover skills from multiple directories in priority order:
 /// 1. Project scope: .omk/skills/
 /// 2. User scope: ~/.omk/skills/
-/// 3. System/bundled: <omk binary dir>/skills/
+/// 3. System/bundled: `<omk binary dir>/skills/`
 pub async fn discover_skills(project_root: Option<&Path>) -> Result<Vec<Skill>> {
     let mut skills: Vec<Skill> = Vec::new();
     let mut seen_names = std::collections::HashSet::new();

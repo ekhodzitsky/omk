@@ -29,13 +29,15 @@ pub async fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
 
     debug!(tmp = %tmp_path.display(), target = %path.display(), "Atomic write start");
 
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    set_private_create_mode(&mut options);
+
+    let mut file = options
         .open(&tmp_path)
         .await
         .with_context(|| format!("Failed to create temp file: {}", tmp_path.display()))?;
+    set_private_file_permissions(&file, &tmp_path).await?;
 
     file.write_all(content).await?;
     file.flush().await?;
@@ -63,14 +65,40 @@ pub async fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
 /// the content. This is not atomic across processes, but it is
 /// sufficient for append-only logs when a single writer is guaranteed.
 pub async fn atomic_append(path: &Path, content: &[u8]) -> Result<()> {
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
+    let mut options = fs::OpenOptions::new();
+    options.create(true).append(true);
+    set_private_create_mode(&mut options);
+
+    let mut file = options
         .open(path)
         .await
         .with_context(|| format!("Failed to open file for append: {}", path.display()))?;
+    set_private_file_permissions(&file, path).await?;
     file.write_all(content).await?;
     file.flush().await?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_private_create_mode(options: &mut fs::OpenOptions) {
+    options.mode(0o600);
+}
+
+#[cfg(not(unix))]
+fn set_private_create_mode(_options: &mut fs::OpenOptions) {}
+
+#[cfg(unix)]
+async fn set_private_file_permissions(file: &fs::File, path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))
+        .await
+        .with_context(|| format!("Failed to harden file permissions: {}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+async fn set_private_file_permissions(_file: &fs::File, _path: &Path) -> Result<()> {
     Ok(())
 }
 

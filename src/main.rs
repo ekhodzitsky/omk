@@ -132,8 +132,10 @@ async fn main() -> Result<()> {
     });
 
     // File logging with daily rotation
-    let log_dir = crate::runtime::config::state_dir().join("logs");
-    tokio::fs::create_dir_all(&log_dir).await?;
+    let state_dir = crate::runtime::config::state_dir();
+    crate::runtime::config::ensure_private_dir(&state_dir).await?;
+    let log_dir = state_dir.join("logs");
+    crate::runtime::config::ensure_private_dir(&log_dir).await?;
     let file_appender = tracing_appender::rolling::daily(&log_dir, "omk.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
@@ -233,7 +235,7 @@ default_yolo = false
 # Enable metrics collection
 enable_metrics = true
 "#;
-        tokio::fs::write(&config_path, default_config).await?;
+        crate::runtime::atomic::atomic_write(&config_path, default_config.as_bytes()).await?;
     }
 
     // Install bundled skills to data dir

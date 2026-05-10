@@ -89,11 +89,19 @@ fn test_config_set_creates_config_dir_before_write() {
     let config_dir = config_home.join("omk");
     let config_file = config_dir.join("config.toml");
 
-    assert!(
-        !config_dir.exists(),
-        "config dir should not exist before test: {}",
-        config_dir.display()
-    );
+    std::fs::create_dir_all(&config_dir).expect("failed to precreate config dir");
+    std::fs::write(&config_file, "default_yolo = false\n")
+        .expect("failed to precreate config file");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o777))
+            .expect("failed to make config dir permissive");
+        std::fs::set_permissions(&config_file, std::fs::Permissions::from_mode(0o666))
+            .expect("failed to make config file permissive");
+    }
 
     let mut cmd = Command::new("cargo");
     for (k, v) in &envs {
@@ -121,6 +129,25 @@ fn test_config_set_creates_config_dir_before_write() {
         "config file was not created: {}",
         config_file.display()
     );
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir_mode = std::fs::metadata(&config_dir)
+            .expect("failed to stat config dir")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(dir_mode, 0o700, "config dir should be owner-only");
+
+        let file_mode = std::fs::metadata(&config_file)
+            .expect("failed to stat config file")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(file_mode, 0o600, "config file should be owner-only");
+    }
 
     let content = std::fs::read_to_string(&config_file).expect("failed to read config file");
     assert!(

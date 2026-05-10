@@ -191,7 +191,7 @@ async fn check_cmd(cmd: &str, args: &[&str]) -> Result<String> {
 }
 
 async fn check_dir_writable(path: &std::path::Path) -> Result<()> {
-    tokio::fs::create_dir_all(path).await?;
+    crate::runtime::config::ensure_private_dir(path).await?;
     let test_file = path.join(".omk-write-test");
     tokio::fs::write(&test_file, b"test").await?;
     tokio::fs::remove_file(&test_file).await?;

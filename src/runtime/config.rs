@@ -202,10 +202,34 @@ fn parse_config(content: &str) -> Result<OmkConfig> {
 
 /// Initialize XDG directories.
 pub async fn ensure_dirs() -> Result<()> {
-    tokio::fs::create_dir_all(config_dir()).await?;
-    tokio::fs::create_dir_all(state_dir()).await?;
-    tokio::fs::create_dir_all(data_dir()).await?;
-    tokio::fs::create_dir_all(cache_dir()).await?;
+    ensure_private_dir(&config_dir()).await?;
+    ensure_private_dir(&state_dir()).await?;
+    ensure_private_dir(&data_dir()).await?;
+    ensure_private_dir(&cache_dir()).await?;
+    Ok(())
+}
+
+/// Create a directory and make it readable, writable, and traversable only
+/// by the current user on Unix platforms.
+pub async fn ensure_private_dir(path: &Path) -> Result<()> {
+    tokio::fs::create_dir_all(path)
+        .await
+        .with_context(|| format!("Failed to create directory: {}", path.display()))?;
+    set_private_dir_permissions(path).await
+}
+
+#[cfg(unix)]
+async fn set_private_dir_permissions(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+        .await
+        .with_context(|| format!("Failed to harden directory permissions: {}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+async fn set_private_dir_permissions(_path: &Path) -> Result<()> {
     Ok(())
 }
 

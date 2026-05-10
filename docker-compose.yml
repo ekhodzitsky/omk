@@ -9,8 +9,8 @@ services:
       - "8080:8080"
     command: ["hud", "--web", "--port", "8080"]
     volumes:
-      - omk-state:/root/.local/state/omk
-      - omk-data:/root/.local/share/omk
+      - omk-state:/home/omk/.local/state/omk
+      - omk-data:/home/omk/.local/share/omk
     environment:
       - RUST_LOG=info
     restart: unless-stopped

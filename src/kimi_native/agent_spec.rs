@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Top-level agent spec file for Kimi CLI.
-/// Reference: https://github.com/MoonshotAI/kimi-cli/blob/main/AGENTS.md
+/// Reference: <https://github.com/MoonshotAI/kimi-cli/blob/main/AGENTS.md>
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentSpec {
     pub version: u32,

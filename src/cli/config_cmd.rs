@@ -195,7 +195,7 @@ async fn set(key: &str, value: &str) -> Result<()> {
     }
 
     let config_dir = crate::runtime::config::config_dir();
-    tokio::fs::create_dir_all(&config_dir).await?;
+    crate::runtime::config::ensure_private_dir(&config_dir).await?;
     let config_path = config_dir.join("config.toml");
     let content = toml::to_string_pretty(&config)
         .map_err(|e| anyhow::anyhow!("Failed to serialize config: {}", e))?;
@@ -206,9 +206,7 @@ async fn set(key: &str, value: &str) -> Result<()> {
 }
 
 async fn check_dir(path: &std::path::Path) -> Result<()> {
-    if !path.exists() {
-        tokio::fs::create_dir_all(path).await?;
-    }
+    crate::runtime::config::ensure_private_dir(path).await?;
     let test = path.join(".omk-write-test");
     tokio::fs::write(&test, b"x").await?;
     tokio::fs::remove_file(&test).await?;

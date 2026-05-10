@@ -1,0 +1,10 @@
+target/
+.git/
+.github/
+.omc/
+.omk/
+.omx/
+*.log
+.env
+.env.*
+.DS_Store
