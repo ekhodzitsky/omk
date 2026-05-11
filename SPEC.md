@@ -23,6 +23,20 @@ The product promise is not "generate lots of code." The product promise is:
 `omk goal` must be allowed to run for hours or days, but it must not be allowed
 to claim success without evidence.
 
+## Must-Have Positioning
+
+Canonical market map: `docs/COMPETITIVE_POSITIONING.md`.
+
+`omk goal` must be positioned as a local, repo-native, proof-driven autonomous
+software engineering runtime. It is not a generic AI app builder, IDE
+autocomplete product, hosted coding-agent clone, or unbounded recursive agent
+launcher.
+
+The direct competitive set is Devin, OpenHands, and Claude Code. Aider, Dify,
+and Cody are adjacent benchmarks. OMK should learn from the category while
+competing on durable goal state, explicit task graphs, verification gates, and
+proof artifacts.
+
 ## Example Commands
 
 ```bash

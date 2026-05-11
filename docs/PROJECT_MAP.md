@@ -30,6 +30,10 @@ omk proof show latest
 
 The core commands are current; web HUD, secondary dashboard surfaces, and proof/operator ergonomics are still hardening. `omk goal` is the planned north-star workflow for long-running proof-backed engineering goals. Check `README.md`, `SPEC.md`, `ROADMAP.md`, and `TODO.md` before promising a command is fully polished.
 
+Competitive positioning is tracked in `docs/COMPETITIVE_POSITIONING.md`. Keep
+public wording anchored on "local, repo-native, proof-driven autonomous software
+engineering runtime" rather than "Devin clone" or "generic agent workflow app."
+
 ## Current vs Target (L8) Snapshot
 
 - **Current:** Kimi-only execution, scheduler-backed Wire `team run`, run/proof inspection, and Kimi-native asset sync/doctor/rollback.
@@ -67,6 +71,7 @@ Legacy/no-handshake fallback remains valid when upstream does not support `initi
 | `tests/fixtures/` | Shared mocks and fixture runners. | `tests/fixture_runner.rs` | Used by integration tests |
 | `.kimi/` | Project-level Kimi assets for agents/skills/hooks. | `.kimi/skills/omk-navigation/SKILL.md` | `omk kimi doctor` |
 | `SPEC.md`, `ROADMAP.md`, `TODO.md` | Product direction, staged delivery path, and `omk goal` backlog. | `SPEC.md` | docs diff review |
+| `docs/COMPETITIVE_POSITIONING.md` | Must-have positioning, competitor map, and inspiration/benchmark wording rules. | `docs/COMPETITIVE_POSITIONING.md` | docs diff review |
 
 ## Navigation By Task
 

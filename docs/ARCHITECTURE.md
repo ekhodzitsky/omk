@@ -7,6 +7,9 @@ observability, and proof artifacts.
 The north-star architecture adds `omk goal`: a durable controller that plans a
 large outcome, builds a task graph, launches bounded agents, verifies results,
 and writes a proof-backed terminal status. See `SPEC.md` for the product spec.
+That controller is a local repository runtime, not a hosted coding-agent clone,
+visual workflow builder, or IDE assistant. Competitive boundaries are tracked in
+`docs/COMPETITIVE_POSITIONING.md`.
 
 ## Design Principles
 

@@ -20,7 +20,7 @@ OMK is inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claud
 [![crates.io](https://img.shields.io/badge/crates.io-not%20published-lightgrey.svg)](#install)
 [![Status: beta MVP](https://img.shields.io/badge/status-beta%20MVP-0f172a.svg)](#mvp-status)
 
-[Why](#why) - [MVP Status](#mvp-status) - [North Star](#north-star) - [Install](#install) - [First Run](#first-run) - [Features](#features) - [Commands](#commands) - [Why Better](#where-omk-is-stronger)
+[Why](#why) - [MVP Status](#mvp-status) - [North Star](#north-star) - [Positioning](#positioning) - [Install](#install) - [First Run](#first-run) - [Features](#features) - [Commands](#commands) - [Why Better](#where-omk-is-stronger)
 
 </div>
 
@@ -91,6 +91,21 @@ truthful terminal status such as `ready`, `not_ready`, `blocked_on_human`, or
 This is not implemented yet. The current `team run`, event log, gates, and proof
 systems are the foundation. The design is tracked in [SPEC.md](SPEC.md), the
 delivery path in [ROADMAP.md](ROADMAP.md), and the task backlog in [TODO.md](TODO.md).
+
+## Positioning
+
+OMK is not trying to be a generic AI app builder, IDE autocomplete product, or
+hosted coding-agent clone. The intended category is:
+
+> Local, repo-native, proof-driven autonomous software engineering runtime.
+
+The direct competitive set includes Devin, OpenHands, and Claude Code. Aider,
+Dify, and Cody are adjacent benchmarks for terminal editing, agentic workflows,
+and codebase context. OMK's wedge is trustable completion semantics: durable
+goal state, bounded agents, verification gates, and inspectable proof artifacts.
+
+The market map and wording rules are in
+[Competitive Positioning](docs/COMPETITIVE_POSITIONING.md).
 
 ## Install
 
@@ -258,6 +273,12 @@ Compared with cloud agent orchestrators:
 - OMK does not require a hosted control plane for the core workflow.
 - OMK focuses on Kimi-native assets instead of treating Kimi as a generic interchangeable provider.
 
+Compared with agentic coding assistants:
+
+- OMK's north-star surface is a goal controller, not a chat session.
+- OMK treats `ready`, `not_ready`, and `blocked` as evidence-backed terminal states.
+- OMK's proof bundle is meant to survive after the assistant session ends.
+
 ## Development
 
 ```bash
@@ -295,6 +316,7 @@ MOCK_KIMI=1 ./scripts/north_star_demo.sh
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Project map](docs/PROJECT_MAP.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Competitive Positioning](docs/COMPETITIVE_POSITIONING.md)
 - [Roadmap](ROADMAP.md)
 - [Spec](SPEC.md)
 - [Goal backlog](TODO.md)

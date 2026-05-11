@@ -138,6 +138,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [ ] Add troubleshooting entries for blocked goals.
 - [ ] Add architecture diagram for goal controller and scheduler.
 - [ ] Add examples for rewrite, greenfield, audit, and refactor goals.
+- [ ] Refresh `docs/COMPETITIVE_POSITIONING.md` before each major `omk goal` release.
 - [ ] Update README feature table when the first goal MVP lands.
 
 ## Release Gates for First Goal MVP

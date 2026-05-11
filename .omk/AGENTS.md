@@ -150,12 +150,14 @@ Canonical docs:
 - `SPEC.md` — product contract
 - `ROADMAP.md` — staged delivery path
 - `TODO.md` — implementation backlog
+- `docs/COMPETITIVE_POSITIONING.md` — competitor map and positioning contract
 - `docs/superpowers/specs/2026-05-11-omk-goal-design.md` — detailed design
 
 ## Project Conventions
 
 - Kimi-only first; provider-neutral workers are deferred
 - `omk goal` work must reuse current Wire/team/event/proof primitives before adding new orchestration layers.
+- Position `omk goal` as a local, repo-native, proof-driven engineering runtime, not as a hosted agent clone or visual workflow builder.
 - Event-driven: all team operations emit typed events to `events.jsonl`
 - Proof-first: every run produces a `Proof` with gates, changed files, failures, known gaps
 - Scheduler-backed: `ClaimStore` + `OwnershipMap` + `RunManifest` for task lifecycle

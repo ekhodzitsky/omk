@@ -12,6 +12,10 @@ omk goal run "Build or transform this project until it is proof-backed ready" --
 The system should plan, research, spawn agents, assign tasks, verify results,
 recover from failures, and stop only with a proof-backed terminal status.
 
+Positioning is locked in `docs/COMPETITIVE_POSITIONING.md`: OMK is a local,
+repo-native, proof-driven autonomous software engineering runtime, not a hosted
+agent clone, visual app builder, or IDE chat product.
+
 ## Stage 0 - Current Foundation
 
 Status: current beta MVP.

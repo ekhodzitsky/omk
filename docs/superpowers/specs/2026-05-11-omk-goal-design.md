@@ -9,6 +9,7 @@ Related docs:
 - `SPEC.md`
 - `ROADMAP.md`
 - `TODO.md`
+- `docs/COMPETITIVE_POSITIONING.md`
 - `docs/ARCHITECTURE.md`
 - `docs/PROJECT_MAP.md`
 
@@ -39,6 +40,11 @@ parts that make engineering trustworthy:
 OMK already has useful primitives: Wire workers, scheduler-backed team runs,
 events, gates, run inspection, and proof reports. `omk goal` should compose
 those primitives into the top-level workflow.
+
+Competitive boundary: `omk goal` is a local, repo-native, proof-driven
+engineering runtime. It should be benchmarked against Devin, OpenHands, Claude
+Code, Aider, Dify, and Cody, but it should not be described as a clone of any of
+them.
 
 ## User Promise
 

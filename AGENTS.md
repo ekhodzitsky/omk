@@ -4,6 +4,8 @@ This file contains agent-level conventions for the entire project tree.
 For OMK-specific context (wire protocol, agent roles, roadmap), see `.omk/AGENTS.md`.
 For the main product direction, read `SPEC.md`, `ROADMAP.md`, `TODO.md`, and
 `docs/superpowers/specs/2026-05-11-omk-goal-design.md`.
+For market positioning and competitor boundaries, read
+`docs/COMPETITIVE_POSITIONING.md`.
 
 ## Meta Principle
 
@@ -21,6 +23,8 @@ documentation.
 `omk goal` is the north-star feature. It must be designed as a proof-driven
 controller over existing Wire/team/event/proof primitives, not as an unbounded
 recursive agent launcher.
+Position it as a local, repo-native, proof-driven autonomous software
+engineering runtime, not as a Devin clone, generic app builder, or IDE chat.
 
 1. **`src/main.rs` stays thin.** The binary crate must only call the library
    entrypoint (currently `omk::cli::run().await`). Do not declare project modules
