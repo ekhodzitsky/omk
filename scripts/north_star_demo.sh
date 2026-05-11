@@ -4,8 +4,8 @@
 #
 # Demonstrates the full North Star flow:
 #   omk kimi sync
-#   omk team run "fix all failing tests and produce a proof"
-#   omk hud
+#   omk team run 2:coder "fix all failing tests and produce a proof"
+#   omk hud --once
 #   omk proof show latest
 #
 # This script is idempotent and safe — it only touches a temporary directory.

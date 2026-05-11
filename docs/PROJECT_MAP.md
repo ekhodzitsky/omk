@@ -23,17 +23,17 @@ The current public wedge is Kimi-only:
 
 ```text
 omk kimi sync
-omk team run "fix all failing tests and produce a proof"
-omk hud
+omk team run 2:coder "fix all failing tests and produce a proof"
+omk hud --once
 omk proof show latest
 ```
 
-Some of that surface is still scaffold/roadmap. Check `README.md`, `SPEC.md`, and `ROADMAP.md` before promising a command is fully implemented.
+The core commands are current; web HUD, secondary dashboard surfaces, and proof/operator ergonomics are still hardening. Check `README.md`, `SPEC.md`, and `ROADMAP.md` before promising a command is fully polished.
 
 ## Current vs Target (L8) Snapshot
 
 - **Current:** Kimi-only execution, scheduler-backed `team run`, compatibility `team spawn`, run/proof inspection, and Kimi-native asset sync/doctor/rollback.
-- **Current Scaffold:** web HUD and some deeper proof/timeline ergonomics are present but still hardening.
+- **Current Scaffold:** web HUD and secondary dashboard/MCP surfaces are present but still hardening.
 - **Target:** Wire-first execution/observability path with fewer compatibility fallbacks and clearer proof-first operator workflows.
 
 When writing docs or implementation notes, mark maturity explicitly (`Current`, `Current MVP`, `Current Scaffold`, `Next`, `Later`) to avoid mixing shipped behavior with roadmap intent.

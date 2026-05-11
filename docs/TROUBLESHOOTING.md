@@ -2,12 +2,13 @@
 
 ## Installation Issues
 
-### `cargo install omk` fails
+### `cargo install --git https://github.com/ekhodzitsky/oh-my-kimi.git` fails
 
 **Symptom:** Compilation errors or missing dependencies.
 
 **Solution:**
 - Ensure Rust 1.78+ is installed: `rustc --version`
+- OMK is not published to crates.io yet; install from GitHub Release assets or with `cargo install --git`.
 - Install required system packages:
   ```bash
   # Ubuntu/Debian

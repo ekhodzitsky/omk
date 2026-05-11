@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **GitHub-only public docs positioning**: README now documents why OMK exists, current MVP readiness, GitHub-only installation, usable features, limits, and how OMK compares with raw Kimi CLI, ad hoc scripts, and cloud orchestrators. Tutorial and project-map docs now align with current `team run`, HUD, and proof command shapes.
+
 ## [0.2.5] - 2026-05-10
 
 ### Fixed

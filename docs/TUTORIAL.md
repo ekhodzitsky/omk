@@ -23,7 +23,7 @@ A step-by-step guide for new users. This tutorial covers **Current** commands on
 
 You will need:
 
-- **Rust 1.78+** (to build from source) or a published `omk` binary
+- **Rust 1.78+** (to build from source) or a GitHub Release `omk` binary
 - **Kimi CLI** installed and authenticated: `kimi --version` and `kimi auth status`
 - **tmux** installed: `brew install tmux` or `apt install tmux`
 
@@ -39,7 +39,7 @@ omk setup
 Use this as a quick reality check while reading the tutorial:
 
 - **Current (implemented now):** `omk team run`, `omk team spawn`, `omk kimi sync/doctor/install/rollback`, `omk run list/show`, `omk proof show`.
-- **Current Scaffold (exists, still hardening):** `omk hud --web`, deeper run/proof filtering and UX polish.
+- **Current Scaffold (exists, still hardening):** `omk hud --web` and secondary dashboard/MCP surfaces.
 - **Target (near-term direction):** stronger Wire-first proof/HUD ergonomics and fewer tmux-bridge edge cases.
 
 For protocol and upstream truth, re-check [KIMI_UPSTREAM.md](KIMI_UPSTREAM.md) before relying on stale assumptions.
@@ -51,8 +51,8 @@ For protocol and upstream truth, re-check [KIMI_UPSTREAM.md](KIMI_UPSTREAM.md) b
 ### Install `omk`
 
 ```bash
-# Via cargo
-cargo install omk
+# Via Cargo from GitHub
+cargo install --git https://github.com/ekhodzitsky/oh-my-kimi.git
 
 # Or via install script
 curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
@@ -144,7 +144,7 @@ omk kimi skills           # List linked skills
 
 ## Your First Team
 
-`omk team run` is the current scheduler-backed way to start a visible swarm of Kimi workers. `omk team spawn` remains available as the tmux-bridge compatibility path. Each worker runs in its own tmux pane, and OMK tracks state in JSONL inbox/outbox files.
+`omk team run` is the current scheduler-backed way to start a proof-oriented Kimi team without requiring tmux. `omk team spawn` remains available as the visible tmux-bridge compatibility path. OMK tracks state in JSONL inbox/outbox files and run event logs.
 
 ### Run a scheduler-backed team
 
@@ -340,7 +340,7 @@ omk proof show latest --format json
 omk proof show latest --format md
 ```
 
-> **Maturity note:** `omk run show` and `omk proof show` are **Current Scaffold**. They exist in the CLI today, but deeper timeline filtering, gate integration, and proof regeneration are still being hardened.
+> **Maturity note:** `omk run show` is **Current** and `omk proof show` is **Current MVP**. They are usable today; deeper proof ergonomics and richer operator output are still being hardened.
 
 ---
 

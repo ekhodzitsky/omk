@@ -2,14 +2,14 @@
 
 This tutorial walks through the **North Star Demo** — the target oh-my-kimi workflow that shows Kimi agents fixing code, producing a proof, and reporting status.
 
-> **Maturity note:** `omk kimi sync` is **Current Scaffold**. `omk team run`, `omk hud`, `omk run show`, and `omk proof show` are in the CLI today. The remaining work is demo hardening and richer proof output, not command invention. For the tutorial covering only today's CLI surface, see [TUTORIAL.md](TUTORIAL.md).
+> **Maturity note:** `omk kimi sync`, `omk team run`, `omk hud`, `omk run show`, and `omk proof show` are in the CLI today. The remaining work is proof/HUD polish and hardening, not command invention. For the tutorial covering only today's CLI surface, see [TUTORIAL.md](TUTORIAL.md).
 
 ## North Star Commands (Target Workflow)
 
 ```bash
 omk kimi sync
-omk team run "fix all failing tests and produce a proof"
-omk hud
+omk team run 2:coder "fix all failing tests and produce a proof"
+omk hud --once
 omk proof show latest
 ```
 
