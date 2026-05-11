@@ -32,7 +32,7 @@ We actively use the official Kimi Code CLI documentation:
 ## Wire Protocol Reference
 
 Kimi Code CLI supports `--wire` mode for structured bidirectional communication via JSON-RPC 2.0 over stdin/stdout. Protocol version: 1.9.
-The code anchor is `src/wire/protocol.rs::KIMI_WIRE_PROTOCOL_VERSION`; update this file, README/docs, changelog, and tests whenever that constant or the observed protocol shape changes.
+The code anchor is `src/wire/protocol/mod.rs::KIMI_WIRE_PROTOCOL_VERSION`; update this file, README/docs, changelog, and tests whenever that constant or the observed protocol shape changes.
 
 ### Initialization
 

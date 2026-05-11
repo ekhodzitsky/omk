@@ -142,3 +142,4 @@ new or modified production code during review.
 - When modifying code, check whether a subdirectory has its own `AGENTS.md` for more specific guidance.
 - Keep deeper-directory rules as overrides to these root rules.
 - Update this file if you change any convention it describes.
+- **File size hard limit: 400 lines.** Any file exceeding this limit must be split into a directory module (`foo.rs` → `foo/mod.rs` + focused submodules) following SRP. Preserve the public API via `pub use` re-exports in `mod.rs`.

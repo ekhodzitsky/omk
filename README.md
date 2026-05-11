@@ -10,13 +10,15 @@ Turn [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) into observable local co
 
 OMK is inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode), but it is not a line-for-line port. It is a Kimi-native runtime: Kimi remains the execution engine, while OMK owns orchestration, state, recovery, evidence, and release-grade observability.
 
-[![CI](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml/badge.svg)](https://github.com/ekhodzitsky/oh-my-kimi/actions)
-[![Release](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/release.yml/badge.svg)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/release.yml)
-[![Coverage](https://codecov.io/gh/ekhodzitsky/oh-my-kimi/branch/master/graph/badge.svg)](https://codecov.io/gh/ekhodzitsky/oh-my-kimi)
+[![CI](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml)
+[![Coverage](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/coverage.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/coverage.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/ekhodzitsky/oh-my-kimi?label=github%20release&sort=semver)](https://github.com/ekhodzitsky/oh-my-kimi/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
-[![GitHub-only](https://img.shields.io/badge/install-GitHub%20release-0ea5e9.svg)](#install)
-[![MVP](https://img.shields.io/badge/status-beta%20MVP-0f172a.svg)](#mvp-status)
+[![Rust MSRV](https://img.shields.io/badge/MSRV-1.78%2B-orange.svg)](https://www.rust-lang.org)
+[![Runtime: Wire-first](https://img.shields.io/badge/runtime-Wire--first-2563eb.svg)](#features)
+[![Install: GitHub only](https://img.shields.io/badge/install-GitHub%20only-0ea5e9.svg)](#install)
+[![crates.io](https://img.shields.io/badge/crates.io-not%20published-lightgrey.svg)](#install)
+[![Status: beta MVP](https://img.shields.io/badge/status-beta%20MVP-0f172a.svg)](#mvp-status)
 
 [Why](#why) - [MVP Status](#mvp-status) - [Install](#install) - [First Run](#first-run) - [Features](#features) - [Commands](#commands) - [Why Better](#where-omk-is-stronger)
 
