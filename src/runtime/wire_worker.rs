@@ -87,6 +87,19 @@ impl WireWorkerAdapter {
         let mut last_inbox_offset: u64 = 0;
 
         loop {
+            if self.cancel_token.is_cancelled() {
+                info!(worker = %self.spec.name, "Wire worker adapter shutting down due to cancellation");
+                let hb_stopped = serde_json::json!({
+                    "status": "stopped",
+                    "name": self.spec.name,
+                    "ts": chrono::Utc::now().to_rfc3339(),
+                });
+                if let Err(e) = tokio::fs::write(heartbeat, hb_stopped.to_string()).await {
+                    warn!(error = %e, "Failed to write final heartbeat");
+                }
+                return Ok(());
+            }
+
             // Update heartbeat
             let hb_alive = serde_json::json!({
                 "status": "alive",

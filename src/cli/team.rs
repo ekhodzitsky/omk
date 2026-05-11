@@ -298,19 +298,13 @@ async fn run_team(args: RunArgs, cancel: CancellationToken) -> Result<()> {
     .await?;
 
     // Run the orchestration loop
-    let run_result = tokio::select! {
+    let (run_result, was_cancelled) = tokio::select! {
         biased;
         _ = cancel.cancelled() => {
-            Err(anyhow::anyhow!("run cancelled by user"))
+            (Err(anyhow::anyhow!("run cancelled by user")), true)
         }
-        res = runner.run(&worker_specs) => res,
+        res = runner.run(&worker_specs) => (res, false),
     };
-
-    let was_cancelled = run_result
-        .as_ref()
-        .err()
-        .map(|e| e.to_string().contains("cancelled by user"))
-        .unwrap_or(false);
 
     // Abort wire worker adapters
     for handle in wire_handles {

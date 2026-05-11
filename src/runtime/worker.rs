@@ -87,7 +87,7 @@ pub struct WorkerResult {
     pub elapsed_secs: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ResultStatus {
     Success,
