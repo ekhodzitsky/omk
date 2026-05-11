@@ -1,6 +1,6 @@
 ---
 name: oh-my-kimi
-description: Orchestration layer for Kimi CLI — team mode, event logs, proof generation, and scheduler-backed execution
+description: Orchestration layer for Kimi CLI — Wire teams, event logs, proof generation, and planned goal-driven execution
 agents:
   - role: architect
     description: Designs system structure, APIs, and runtime scheduler
@@ -32,7 +32,7 @@ We actively use the official Kimi Code CLI documentation:
 ## Wire Protocol Reference
 
 Kimi Code CLI supports `--wire` mode for structured bidirectional communication via JSON-RPC 2.0 over stdin/stdout. Protocol version: 1.9.
-The code anchor is `src/wire/protocol/mod.rs::KIMI_WIRE_PROTOCOL_VERSION`; update this file, README/docs, changelog, and tests whenever that constant or the observed protocol shape changes.
+The code anchor is `src/wire/protocol.rs::KIMI_WIRE_PROTOCOL_VERSION`; update this file, README/docs, changelog, and tests whenever that constant or the observed protocol shape changes.
 
 ### Initialization
 
@@ -138,9 +138,24 @@ Experimental Rust implementation: `MoonshotAI/kimi-agent-rs`
 - [ ] Approval proxy (OMK approves/rejects on behalf of user)
 - [ ] Hook integration (OMK hooks via wire HookRequest)
 
+## OMK Goal North Star
+
+`omk goal` is the main planned product layer. It should turn a large engineering
+goal into a durable controller run that plans, researches, spawns agents,
+assigns tasks, verifies evidence, and exits only as `ready`, `not_ready`,
+`blocked_on_human`, `blocked_on_external`, `needs_more_budget`, `failed_infra`,
+or `cancelled`.
+
+Canonical docs:
+- `SPEC.md` — product contract
+- `ROADMAP.md` — staged delivery path
+- `TODO.md` — implementation backlog
+- `docs/superpowers/specs/2026-05-11-omk-goal-design.md` — detailed design
+
 ## Project Conventions
 
 - Kimi-only first; provider-neutral workers are deferred
+- `omk goal` work must reuse current Wire/team/event/proof primitives before adding new orchestration layers.
 - Event-driven: all team operations emit typed events to `events.jsonl`
 - Proof-first: every run produces a `Proof` with gates, changed files, failures, known gaps
 - Scheduler-backed: `ClaimStore` + `OwnershipMap` + `RunManifest` for task lifecycle

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Project coding contract**: added root `AGENTS.md` rules for library-first CLI structure, Wire protocol tests, machine-readable output boundaries, worker lifecycle semantics, deterministic Rust tests, dependency discipline, and release hygiene.
 - **Runtime/module refactor**: split large team CLI, autopilot, event, proof, scheduler runner, Wire client, and Wire protocol modules into focused submodules without changing the public command surface.
 - **GitHub project metadata**: refreshed README badges and repository metadata to emphasize the current Wire-first beta MVP, GitHub-only install path, and unpublished crates.io status.
+- **`omk goal` product direction**: added the canonical goal spec, roadmap, backlog, and detailed design for long-running proof-backed autonomous engineering runs.
 
 ## [0.3.1] - 2026-05-11
 

@@ -1,316 +1,264 @@
-# OMK Specification
+# OMK Goal Product Spec
 
-## Overview
+`omk goal` is the north-star feature for oh-my-kimi.
 
-OMK (oh-my-kimi) is a Rust orchestration layer for Kimi CLI. It runs outside Kimi CLI, starts real `kimi --wire` processes, coordinates them through Kimi Wire Protocol and state files, and records enough state to make multi-agent work observable and recoverable.
+It turns OMK from a set of useful orchestration commands into a long-running,
+proof-driven engineering runtime. The command accepts a high-level outcome,
+builds an evidence-backed plan, launches agents and subagents under policy, and
+keeps working until the goal is ready, blocked, or out of budget.
 
-The current product lane is **Kimi-only first**. Provider-neutral workers can return later, but the first public push should make OMK the best power layer for Kimi CLI.
+Canonical detailed design:
+`docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
-## Status Vocabulary
+## Product Thesis
 
-| Label | Meaning |
+Progress is powered by laziness: users should be able to express intent once and
+let OMK do the tedious engineering work.
+
+The product promise is not "generate lots of code." The product promise is:
+
+> Work autonomously until the requested engineering goal is proof-backed ready,
+> or produce a precise, actionable reason why it is not ready.
+
+`omk goal` must be allowed to run for hours or days, but it must not be allowed
+to claim success without evidence.
+
+## Example Commands
+
+```bash
+omk goal run "Build a production-ready CLI for managing local LLM costs" --until-ready
+omk goal run "Rewrite this Python project in Rust" --until-ready --budget-time 7d
+omk goal status
+omk goal show latest
+omk goal pause latest
+omk goal resume latest
+omk goal cancel latest
+```
+
+## Scope
+
+`omk goal` covers large engineering outcomes:
+
+- greenfield products;
+- rewrites and migrations;
+- large refactors;
+- bug-fix campaigns;
+- security hardening;
+- performance work;
+- documentation and release readiness.
+
+It does not replace human product judgment. When a goal depends on taste,
+business strategy, credentials, paid APIs, or ambiguous acceptance criteria, the
+correct outcome is `blocked_on_human`, not a fake success.
+
+## Current Foundation
+
+`omk goal` is planned, but it should reuse the current beta MVP instead of
+inventing a parallel runtime:
+
+- Kimi-native asset sync, doctor, install, and rollback;
+- scheduler-backed `omk team run`;
+- Wire worker control through `kimi --wire`;
+- task claims, leases, retries, and write-set conflict checks;
+- append-only event logs;
+- verification gates;
+- run/proof/HUD inspection;
+- `proof.json` and `failure.json` artifacts.
+
+The current foundation is documented in `README.md`, `docs/ARCHITECTURE.md`,
+and `docs/PROJECT_MAP.md`.
+
+## Core Outcomes
+
+Every goal run ends in exactly one terminal status:
+
+| Status | Meaning |
 | --- | --- |
-| Current | Implemented in the CLI today. |
-| MVP | Usable, but still needs hardening and real-world validation. |
-| Scaffold | Command/module exists, but the full product behavior is incomplete. |
-| Next | Planned for the Kimi-only killer demo. |
-| Later | Deferred until the Kimi-only loop is excellent. |
+| `ready` | Required gates passed and the proof bundle supports the readiness claim. |
+| `not_ready` | Work was attempted, but required proof or gates did not pass. |
+| `blocked_on_human` | A human decision is required before progress can continue safely. |
+| `blocked_on_external` | External access, credentials, APIs, or services are missing. |
+| `needs_more_budget` | Time, token, cost, or compute budget was exhausted. |
+| `failed_infra` | OMK infrastructure failed in a way the run could not recover from. |
+| `cancelled` | User cancelled the goal. |
 
-## Product Direction
+## Non-Negotiable Principles
 
-OMK is inspired by oh-my-claudecode, but it is not a line-for-line port. The goal is to build a Kimi-native runtime that can use Kimi CLI's own primitives where they are stronger:
+1. **Proof over confidence.** Agents may propose completion; only verifiers and
+   gates can accept completion.
+2. **Oracle first.** Rewrites need compatibility tests. Greenfield work needs
+   acceptance tests. Security/performance work needs explicit gates.
+3. **Bounded autonomy.** Agents can request tasks and subagents, but the goal
+   controller enforces policy, budgets, write scopes, and concurrency limits.
+4. **No silent branching.** Material product or architecture choices are logged
+   as decisions. Human-blocking decisions stop with `blocked_on_human`.
+5. **Recoverable by default.** Goal state, task graph, messages, heartbeats,
+   artifacts, and proofs must survive process crashes and context compaction.
+6. **Small accepted increments.** Long goals are completed through accepted
+   subgoals, not one giant unreviewable diff.
+7. **Local-first.** OMK owns local state and execution; GitHub integration is an
+   output surface, not the source of truth.
 
-- Kimi Code CLI Wire Protocol for structured bidirectional control,
-- custom agent files for specialist roles,
-- Kimi-compatible skills,
-- Kimi lifecycle hooks,
-- Kimi MCP configuration,
-- print and stream output for programmatic execution.
+## Functional Requirements
 
-The product position:
+### Goal Intake
 
-> OMC is an orchestration plugin. OMK should become a Kimi orchestration runtime.
+- Accept a natural-language goal and optional constraints.
+- Classify the goal as greenfield, rewrite, migration, refactor, audit, bugfix,
+  performance, documentation, or mixed.
+- Inspect the repository before planning.
+- Create a goal directory under `.omk/goals/<goal-id>/`.
+- Persist the original user request, normalized goal, assumptions, constraints,
+  budgets, and terminal criteria.
 
-This means LLMs may plan and execute, but the Rust runtime owns durable state, scheduling, retries, verification gates, conflict detection, recovery, and observability.
+### Planning
 
-## Upstream Kimi Contract
+- Produce a PRD or goal brief.
+- Produce a technical plan.
+- Produce a test specification.
+- Build a task graph with dependencies, read sets, write sets, risk level, and
+  acceptance criteria for each task.
+- Identify the oracle that will decide whether the goal is done.
+- Stop early with `blocked_on_human` if the oracle cannot be defined.
 
-OMK must track official Kimi Code documentation as the source of truth for Kimi integration work:
+### Agent Orchestration
 
-- Docs root: <https://www.kimi.com/code/docs>
-- Wire Protocol: <https://www.kimi.com/code/docs/en/kimi-code-cli/customization/wire-protocol.html>
+- Launch role-specific agents and subagents through the existing OMK team/runtime
+  surfaces.
+- Assign bounded tasks with explicit ownership.
+- Allow agents to propose follow-up tasks.
+- Require the goal controller to approve task graph mutations.
+- Track worker leases, heartbeats, retries, and failure evidence.
+- Support long-running execution with resume after interruption.
 
-The default integration path for new Kimi process-control work is **Wire first**.
+### Research
 
-As of 2026-05-08, `kimi info` on Kimi CLI 1.41.0 reports Wire protocol `1.9`, and the official Wire Protocol page documents `kimi --wire` as the low-level structured communication mode for external programs. It uses JSON-RPC 2.0 over stdin/stdout, one JSON message per line. Relevant methods and message flows include `initialize`, `prompt`, `replay`, `steer`, `set_plan_mode`, `cancel`, `event`, and `request`.
+- Search official docs and relevant repositories when the goal depends on
+  libraries, frameworks, APIs, security practices, or migration strategies.
+- Record sources and decisions in the goal decision log.
+- Prefer official documentation and primary sources for implementation facts.
 
-Implications for OMK:
+### Implementation
 
-- New scheduler, HUD, proof, and replay work should use a `kimi --wire` adapter before inventing prompt scraping or result-block parsing.
-- The adapter must record the observed Kimi CLI version and negotiated Wire protocol version in run metadata.
-- If `initialize` returns method-not-found, OMK should fall back to legacy/no-handshake Wire mode as documented upstream.
-- Wire handshake extension fields must be forward-compatible. Kimi CLI 1.41.0 returns object-shaped `initialize.result.hooks` metadata, so OMK should preserve unknown extension payloads as JSON instead of narrowing them to fixed arrays.
-- Any task touching Kimi assets, hooks, agents, MCP, process launch, event capture, replay, or worker control must re-check the official docs before implementation.
-- Upstream tracking notes live in [docs/KIMI_UPSTREAM.md](docs/KIMI_UPSTREAM.md).
+- Use isolated worktrees or branches for independent slices.
+- Keep write scopes explicit.
+- Merge accepted slices through an integrator step.
+- Preserve changelog, docs, migration notes, and release notes as part of done.
+- Avoid new dependencies unless a recorded decision justifies them.
 
-## Current v0 Surface
+### Verification
 
-This section describes what the CLI exposes today.
+The verification wall is configurable, but the default Rust profile includes:
 
-| Capability | Status | Notes |
-| --- | --- | --- |
-| Rust CLI surface | Current | Commands include team, autopilot, ralph, ask, hud, mcp-server, doctor, config, backup, state, cleanup, skill, marketplace, cost, ultrawork, and kimi. |
-| `omk kimi sync` | Current Scaffold | Syncs project/user Kimi assets and writes a project manifest. Needs checksums, backups, rollback CLI, stronger tests, and docs polish. |
-| `omk kimi doctor` | Current Scaffold | Validates Kimi-native project assets and suggests fixes. Needs version compatibility checks and deeper manifest-aware repair. |
-| `omk kimi install` | Current Scaffold | Installs project Kimi assets. Needs clearer relationship with `sync`. |
-| `omk team run` | Current MVP | Scheduler-backed Kimi-only entrypoint with claims, leases, Wire workers, watchdogs, and proof/failure artifacts. |
-| `omk team list/status/health/shutdown/cleanup` | Current MVP | Operates on durable team state and worker heartbeats. |
-| Autopilot | Current MVP | Six-phase state machine with resume/yolo, phase logs, fallback content, cost tracking, and notifications. |
-| Ralph | Current MVP | Persistent verify/fix loop with PRD state, iteration limits, resume/yolo, cost tracking, and notifications. |
-| Ultrawork | Current MVP | CLI and runtime exist; needs formatting, focused tests, and real Kimi execution validation. |
-| Skills | Current MVP | Parser/discovery, bundled skills, user install/list/search/remove, and marketplace registry support. |
-| MCP | Current Scaffold | Server command exists; deeper tool coverage and integration tests are still needed. |
-| HUD and web dashboard | Current Scaffold | Reads team state plus event evidence; needs richer runtime visibility. |
-| Cost tracking | Current MVP | Estimated session costs are recorded; provider-accurate accounting remains future work. |
-| Notifications | Current MVP | Discord, Slack, Telegram event formatting exists; event coverage and delivery tests are incomplete. |
-| `omk run show` | Current Scaffold | Event timeline inspection for recorded runs. |
-| `omk proof show` | Current Scaffold | Readiness report from event logs and verification gates. |
-| `omk kimi rollback` | Current Scaffold | Manifest-backed rollback via CLI; clean no-op when no manifest exists. |
-| Provider-neutral workers | Later | Deferred until Kimi-only runtime is excellent. |
+- `cargo fmt -- --check`
+- `cargo check --all-targets`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo test --all-features`
+- `cargo doc --no-deps`
+- dependency and license audit when configured
 
-## Kimi-Only Killer Feature Set
+Additional gates are selected by goal type:
 
-The first public product push should center on one cohesive target workflow:
+- rewrite: compatibility and golden tests against the original implementation;
+- greenfield: acceptance, smoke, and demo tests;
+- security: threat model, secret scan, dependency audit, abuse-case checks;
+- performance: baseline and regression benchmarks;
+- frontend: browser QA, responsive screenshots, accessibility checks.
 
-```bash
-omk kimi sync
-omk team run "fix all failing tests and produce a proof"
-omk hud
-omk proof show latest
-```
+### Proof Bundle
 
-The commands `omk team run` and `omk proof show` exist in the CLI today. The remaining work is proof hardening and richer replay/filtering, not command invention.
+Each goal writes `.omk/goals/<goal-id>/proof.json` with:
 
-The killer features behind the workflow:
+- terminal status;
+- goal summary;
+- accepted and rejected assumptions;
+- task graph summary;
+- changed files;
+- commits or branches produced;
+- gates run and outputs;
+- test results;
+- reviews performed;
+- security/performance notes;
+- known gaps;
+- human decisions required;
+- links to artifacts.
 
-1. **Kimi Pro Mode**: `omk kimi sync` installs or reconciles Kimi-compatible agents, skills, hooks, MCP config, backups, and ownership metadata.
-2. **Kimi Team Runtime**: `omk team run` starts a Kimi lead and Kimi workers with role assignment, task claims, leases, ownership scopes, retries, and watchdogs.
-3. **Live Kimi HUD**: `omk hud` shows workers, tasks, heartbeats, file ownership, retries, tests, cost estimates, and stuck/hung processes.
-4. **Proof And Replay**: `omk proof show` reports changed files, verification gates, failures, retries, known gaps, and final readiness from structured evidence rather than agent self-report.
-5. **Crash And Deadlock Recovery**: the runtime detects stalled Kimi processes, `kimi --print` / non-TTY hangs, stale leases, dead workers, and partially completed tasks, then recovers or explains the stop condition.
-6. **Curated Kimi Role Packs**: role packs are Kimi-native and practical: Rust maintainer, frontend fixer, security reviewer, docs writer, test repair, release captain, and repo-specific workflows.
+### Commands
 
-## Target v1 Architecture
-
-Target v1 has three cooperating lanes.
-
-### Native Kimi Lane
-
-Use Kimi-compatible assets for work that should happen inside one Kimi session or one Kimi project.
-
-1. `omk kimi sync` installs and reconciles:
-   - `.kimi/agents/*.yaml`
-   - `.kimi/hooks/*.sh`
-   - `.kimi/skills/*/SKILL.md`
-   - Kimi MCP configuration
-   - OMK ownership manifests and backups
-2. The ownership manifest stores managed paths, checksums, directories, and backup index entries linking backups to the managed file they protect.
-3. `omk kimi doctor` validates assets, versions, permissions, missing files, stale files, backup-index drift, and fix hints.
-4. `omk kimi rollback` exposes manifest-backed rollback and backup restore through the CLI.
-5. Kimi hooks write lifecycle events into OMK run state.
-
-### External Runtime Lane
-
-Use Rust and Kimi Wire when OMK needs visibility, process control, recovery, or long-running parallel work.
-
-1. `omk team run` creates a durable run directory under the OMK state root.
-2. The Rust scheduler owns task state, worker state, claims, leases, retries, and final synthesis status.
-3. Worker processes are real `kimi --wire` CLI processes in the primary Kimi-only lane.
-4. Worker control maps Wire `event` / `request` messages into OMK events.
-5. Prompt-shaped result extraction is a fallback path, not the target contract.
-6. The watchdog detects stale heartbeats, stuck Wire turns, stuck non-TTY execution, and stale leases.
-
-### Proof Lane
-
-Use append-only events to make completion explainable.
-
-1. Every mode writes events to the run's append-only `events.jsonl`.
-2. Verification gates write command evidence and summaries.
-3. `omk run show <id|latest>` reads the timeline.
-4. `omk run show <id|latest>` renders Wire-derived task output, request, method, and reason fields without dumping raw payloads.
-5. `omk proof show <id|latest>` creates a final readiness report with changed files, gates, failures, retries, known gaps, and Wire evidence summaries.
-6. A run is not complete until it has a proof artifact or an explicit failure artifact.
-
-## Current Team Run
-
-Current team mode is `run` for the scheduler-backed Wire runtime.
-
-### Command
+Initial command surface:
 
 ```bash
-omk team run <N:ROLE> [OPTIONS] <TASK...>
+omk goal run <goal> [--until-ready] [--budget-time <duration>] [--max-agents <n>]
+omk goal status [goal-id|latest]
+omk goal show [goal-id|latest] [--format text|json|md]
+omk goal list
+omk goal pause [goal-id|latest]
+omk goal resume [goal-id|latest]
+omk goal cancel [goal-id|latest]
+omk goal proof [goal-id|latest]
 ```
 
-Example:
+Later command surface:
 
 ```bash
-omk team run 3:executor "fix all TypeScript errors"
+omk goal plan <goal>
+omk goal approve-plan <goal-id>
+omk goal add-task <goal-id> <task>
+omk goal open-pr <goal-id>
+omk goal replay <goal-id>
 ```
 
-### Current Run Flow
+## MVP Definition
 
-1. Parse `N:ROLE`, for example `3:executor`.
-2. Generate a team name or accept `--name`.
-3. Create state directory under the OMK team state root.
-4. Write `team-state.json` with initial state.
-5. Create a run manifest and scheduler task set.
-6. Dispatch work through worker inbox files.
-7. Workers launch `kimi --wire`, process the assigned task, and write outbox plus heartbeat evidence.
-8. The scheduler records task, worker, Wire, gate, proof, and failure events.
-9. Verification gates run after synthesis.
-10. OMK writes `proof.json` or `failure.json`.
+The first usable `omk goal` MVP is not "rewrite any 200k line project."
 
-### Current State Files
+It is:
+
+- one long-running goal state directory;
+- PRD, technical plan, and test spec artifacts;
+- task graph persisted as JSON;
+- limited agent execution through the existing team runner;
+- status/resume/cancel;
+- proof bundle;
+- one greenfield demo;
+- one rewrite/refactor demo using a small fixture;
+- CI coverage for state transitions and proof statuses.
+
+## State Layout
 
 ```text
-team-state.json
-workers/<worker>/worker-spec.json
-workers/<worker>/inbox.jsonl
-workers/<worker>/outbox.jsonl
-workers/<worker>/heartbeat.json
+.omk/goals/<goal-id>/
+  goal.json
+  prd.md
+  technical-plan.md
+  test-spec.md
+  task-graph.json
+  decisions.jsonl
+  events.jsonl
+  heartbeats/
+  artifacts/
+  reviews/
+  proof.json
+  failure.json
 ```
 
-### Current Limitations
+## Open Risks
 
-- The lead prompt still owns much of the orchestration.
-- Proof/HUD ergonomics are still hardening.
-- Some power-user modes are less polished than the team run path.
-- Real Kimi runs depend on local Kimi CLI auth and upstream Wire behavior.
+- Agents can produce plausible but wrong code when the oracle is weak.
+- Long-running goals can waste budget if task graph mutation is unconstrained.
+- Parallel work can conflict without strong write-set enforcement.
+- Security work needs explicit threat modeling, not only dependency scans.
+- Product correctness cannot be fully automated without real-world feedback.
 
-## Target v1 Team Run
+## Success Criteria
 
-Target team mode is `run`.
+`omk goal` is successful when a user can start a large goal, leave the machine,
+return later, and inspect a trustworthy state:
 
-### Command
-
-```bash
-omk team run <N:ROLE> [OPTIONS] <TASK...>
-```
-
-Expected options:
-
-- `--dir <PATH>`
-- `--gate <NAME>`
-- `--name <RUN_NAME>`
-- `--yolo`
-
-### Target Run Flow
-
-1. Create a run manifest with task, roles, gates, worker count, and state paths.
-2. Write an append-only `events.jsonl`.
-3. Start a Kimi lead and Kimi workers.
-4. Scheduler assigns tasks through atomic claims and leases.
-5. Workers emit structured events.
-6. Watchdog recovers dead/stuck workers or records a failure event.
-7. Verification gates run after synthesis.
-8. `proof.json` records final readiness, known gaps, and evidence.
-
-## Event Schema
-
-Target event records are JSONL lines with a common envelope:
-
-```json
-{
-  "id": "uuid",
-  "run_id": "string",
-  "ts": "2026-05-08T12:00:00Z",
-  "kind": "task_started",
-  "actor": "worker-0",
-  "payload": {}
-}
-```
-
-Required event kinds:
-
-- `run_started`
-- `worker_started`
-- `worker_heartbeat`
-- `task_claimed`
-- `task_started`
-- `task_output`
-- `file_changed`
-- `command_started`
-- `command_finished`
-- `gate_passed`
-- `gate_failed`
-- `retry_scheduled`
-- `worker_stalled`
-- `worker_recovered`
-- `run_failed`
-- `run_completed`
-- `proof_written`
-
-## Proof Schema
-
-Target proof shape:
-
-```json
-{
-  "run_id": "string",
-  "status": "ready|not_ready|failed",
-  "changed_files": ["path"],
-  "gates": [
-    {
-      "name": "cargo test",
-      "status": "passed|failed|skipped",
-      "evidence_event_id": "uuid"
-    }
-  ],
-  "failures": [],
-  "retries": [],
-  "known_gaps": [],
-  "wire_evidence": {
-    "event_count": 1,
-    "request_count": 1,
-    "output_count": 1,
-    "prompt_like_messages": 1,
-    "unique_methods": ["prompt"],
-    "unique_events": ["turn_end"],
-    "unique_requests": ["approval"]
-  },
-  "summary": "string"
-}
-```
-
-Wire evidence is a summary, not a raw transcript. Raw Wire logs may be retained after redaction for replay/debugging, while normalized OMK events are the primary contract for `run show`, HUD, proof, and CI-safe fixtures.
-
-## Migration Plan
-
-1. Stabilize current v0 docs and code: formatting, clippy, tests, current command docs.
-2. Finish Kimi asset safety: manifest checksums, backups, `doctor` drift checks, and rollback CLI.
-3. Keep event logging on the `team run` path complete enough for run/proof/HUD.
-4. Add `omk run show` and proof generation from recorded event logs.
-5. Add scheduler-owned claims, leases, ownership scopes, and watchdog recovery.
-6. Introduce `omk team run` as the polished v1 entrypoint.
-7. Keep the public CLI Wire-first and document any future process-control surface explicitly.
-
-## Prior Art And Competitive Scan
-
-As of 2026-05-08, the Kimi orchestration space is no longer empty. OMK should treat these projects as validation and pressure to differentiate, not as reasons to stop.
-
-| Project | Signal | Product lesson |
-| --- | --- | --- |
-| [MoonshotAI/kimi-cli](https://github.com/MoonshotAI/kimi-cli) | Official Kimi CLI with MCP, ACP, shell mode, and agent execution primitives. | Build on Kimi-native capabilities instead of emulating Claude-only workflows. |
-| [dmae97/oh-my-kimi](https://github.com/dmae97/oh-my-kimi) | Strongest direct competitor: TypeScript/npm CLI, worktree team runtime, DAG/ensemble planning, MCP skill-hooks, quality gates, graph memory, and provider routing claims. Its maturity notes mark some team/runtime surfaces as alpha or experimental. | Competing only on command names is not enough. OMK needs a clearer reliability/runtime story. |
-| [whatevertogo/oh-my-kimicli](https://github.com/whatevertogo/oh-my-kimicli) | Personal Kimi workflow layer with skills, hooks, continuation, review, insights, setup/update/uninstall, and project state. | Asset sync must be disciplined: install, status, backup, rollback, and uninstall should be first-class. |
-| [mikehenken/kimable](https://github.com/mikehenken/kimable) | Claude-to-Kimi delegation/orchestration adapter using `kimi --agent-file`; notes that `kimi --print` / `--quiet` can hang in some non-TTY environments. | Structured protocol work must include TTY-safe execution, timeouts, and compatibility fallbacks. |
-| [geoyws/atmux](https://github.com/geoyws/atmux) | tmux-native multi-TUI orchestrator for Claude Code, OpenCode, Kimi, and Cursor CLI with pull-based task claims, lanes, watchdogs, and digests. | The team scheduler should use explicit claims, dependencies, lane isolation, watchdogs, and audit trails. |
-| [wang-h/oh-my-kimi-python](https://github.com/wang-h/oh-my-kimi-python) | Python-native Kimi orchestrator with tmux teams, HUD, instruction overlays, and MCP-style state. | Rust is OMK's differentiator only if it produces a more reliable runtime, not just another wrapper. |
-| [mm7894215/TokenTracker](https://github.com/mm7894215/TokenTracker) | Cross-agent CLI token and usage tracker including Kimi. | Cost and usage visibility should be part of the product, not an afterthought. |
-
-## Test Strategy
-
-- Unit tests: parsers, state serialization, event schema, proof schema, asset manifests, command generation.
-- Integration tests: mock Kimi team run, JSONL flow, event logs, proof generation, rollback behavior.
-- Fixture tests: one successful worker, one failed worker, one stuck worker, expected proof output.
-- E2E tests: real Kimi CLI, run manually or in gated CI environments.
+- what was attempted;
+- what changed;
+- what passed;
+- what failed;
+- what was not tested;
+- what needs a human decision;
+- whether the result is ready to merge or release.

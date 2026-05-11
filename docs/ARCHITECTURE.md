@@ -4,6 +4,10 @@ OMK is a local Rust orchestration runtime for Kimi CLI. Kimi remains the model
 execution engine; OMK owns scheduling, durable state, verification gates,
 observability, and proof artifacts.
 
+The north-star architecture adds `omk goal`: a durable controller that plans a
+large outcome, builds a task graph, launches bounded agents, verifies results,
+and writes a proof-backed terminal status. See `SPEC.md` for the product spec.
+
 ## Design Principles
 
 1. **External orchestrator**: OMK never forks or patches Kimi CLI. It starts and
@@ -24,6 +28,13 @@ User
 omk CLI (Rust)
   |
   +-- Kimi asset sync/install/doctor/rollback
+  |
+  +-- goal controller (planned)
+  |     |
+  |     +-- PRD, technical plan, test spec
+  |     +-- task graph, budgets, decisions
+  |     +-- team run execution waves
+  |     +-- goal proof or failure
   |
   +-- team run scheduler
         |
@@ -57,6 +68,7 @@ omk CLI (Rust)
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
+| `runtime/goal/` | Planned goal controller, task graph, budgets, and long-running proof state. |
 
 ## Data Flow
 
@@ -72,6 +84,15 @@ omk CLI (Rust)
 8. Operators inspect the result with `omk run show`, `omk proof show`,
    `omk hud`, or `omk team health`.
 
+Planned `omk goal` data flow:
+
+1. User runs `omk goal run "large outcome" --until-ready`.
+2. OMK writes `.omk/goals/<goal-id>/goal.json`.
+3. The controller creates PRD, technical plan, test spec, and task graph.
+4. The controller dispatches execution waves through team/runtime primitives.
+5. Review and verification loops accept or reject task outputs.
+6. OMK writes goal-level `proof.json` or `failure.json`.
+
 ## CLI Surfaces
 
 | Surface | Role |
@@ -83,6 +104,7 @@ omk CLI (Rust)
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
+| `omk goal ...` | Planned north-star controller for long-running proof-backed engineering goals. |
 
 ## MCP Integration
 

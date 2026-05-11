@@ -20,7 +20,7 @@ OMK is inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claud
 [![crates.io](https://img.shields.io/badge/crates.io-not%20published-lightgrey.svg)](#install)
 [![Status: beta MVP](https://img.shields.io/badge/status-beta%20MVP-0f172a.svg)](#mvp-status)
 
-[Why](#why) - [MVP Status](#mvp-status) - [Install](#install) - [First Run](#first-run) - [Features](#features) - [Commands](#commands) - [Why Better](#where-omk-is-stronger)
+[Why](#why) - [MVP Status](#mvp-status) - [North Star](#north-star) - [Install](#install) - [First Run](#first-run) - [Features](#features) - [Commands](#commands) - [Why Better](#where-omk-is-stronger)
 
 </div>
 
@@ -74,6 +74,23 @@ Current limits:
 - Team workers run through Kimi Wire; there is no terminal-pane orchestration layer.
 - Agent runs can edit your repository; use a clean git branch and inspect diffs.
 - Some pre-1.0 command details may still change.
+
+## North Star
+
+`omk goal` is the main planned feature and the product direction for OMK:
+
+```bash
+omk goal run "Build or transform this project until it is proof-backed ready" --until-ready
+```
+
+The goal runtime is intended to plan, research, launch agents and subagents,
+assign tasks, verify results, recover from failures, and stop only with a
+truthful terminal status such as `ready`, `not_ready`, `blocked_on_human`, or
+`needs_more_budget`.
+
+This is not implemented yet. The current `team run`, event log, gates, and proof
+systems are the foundation. The design is tracked in [SPEC.md](SPEC.md), the
+delivery path in [ROADMAP.md](ROADMAP.md), and the task backlog in [TODO.md](TODO.md).
 
 ## Install
 
@@ -216,6 +233,7 @@ These modes are available and useful, but the strongest MVP path today is still:
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
 | HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
 | Cleanup and recovery | Team cleanup, backups, rollback, watchdog events, and interrupted-run failure artifacts. | Current |
+| Goal runtime | Long-running autonomous controller for planning, spawning agents, verifying, and proving large goals. | Planned |
 | Autopilot | Single-lead autonomous execution with verification gates and resume/yolo options. | Power-user MVP |
 | Ralph | Persistent verify/fix loop with iteration limits and completion evidence. | Power-user MVP |
 | Ultrawork | Parallel burst prompts from args, files, or globs, with JSON output support. | Power-user MVP |
@@ -279,6 +297,8 @@ MOCK_KIMI=1 ./scripts/north_star_demo.sh
 - [Architecture](docs/ARCHITECTURE.md)
 - [Roadmap](ROADMAP.md)
 - [Spec](SPEC.md)
+- [Goal backlog](TODO.md)
+- [Goal detailed design](docs/superpowers/specs/2026-05-11-omk-goal-design.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## License

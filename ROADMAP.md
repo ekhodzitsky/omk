@@ -1,165 +1,157 @@
 # OMK Roadmap
 
-This roadmap captures the current product decision: **Kimi-only first**.
-
-OMK should become the best power layer for Kimi CLI before it expands into a generic control plane for every AI coding agent. The goal is not to copy OMC command names. The goal is to make Kimi teams observable, recoverable, and provable.
-Official Kimi docs and local upstream notes are tracked in [docs/KIMI_UPSTREAM.md](docs/KIMI_UPSTREAM.md).
-
-## Status Labels
-
-- Current: implemented in the CLI today.
-- Next: planned for the Kimi-only killer demo.
-- Later: deferred until the Kimi-only runtime is excellent.
+This roadmap tracks the path from the current Wire-first beta MVP to the
+`omk goal` autonomous engineering runtime.
 
 ## North Star
 
-Target demo:
-
 ```bash
-omk kimi sync
-omk team run "fix all failing tests and produce a proof"
-omk hud
-omk proof show latest
+omk goal run "Build or transform this project until it is proof-backed ready" --until-ready
 ```
 
-`omk kimi sync` is Current Scaffold. `omk team run`, `omk run show`, and `omk proof show` exist today, with the remaining work focused on hardening and demo polish.
+The system should plan, research, spawn agents, assign tasks, verify results,
+recover from failures, and stop only with a proof-backed terminal status.
 
-The demo should show a real or mock Kimi team working in parallel, a live HUD, a stuck or failed worker being handled, verification gates running, and a final proof or failure artifact that explains what happened.
+## Stage 0 - Current Foundation
 
-## Demo Acceptance Criteria
+Status: current beta MVP.
 
-The first launch demo must be reproducible.
+- Kimi-native asset sync, install, doctor, rollback.
+- Scheduler-backed `omk team run`.
+- Wire worker runtime.
+- Event logs.
+- Proof and failure artifacts.
+- Run/proof/HUD inspection.
+- Verification gates.
+- GitHub CI and coverage.
 
-- It can run against mock Kimi in CI.
-- It can run against real Kimi manually.
-- It creates three worker outcomes:
-  - one successful worker,
-  - one worker with failed verification,
-  - one stalled worker detected by the watchdog.
-- HUD shows worker status, task status, heartbeat age, retry count, and verification status.
-- Watchdog records a recovery or terminal failure event for the stalled worker.
-- The final proof or failure artifact includes changed files, gates run, failures, retries, known gaps, and readiness.
-- The demo script exits non-zero when proof status is `failed`.
+## Stage 1 - Goal State Core
 
-## Milestone 0 - Stabilize Current v0
+Target: make goals durable and inspectable.
 
-Goal: make the existing repository trustworthy before adding more surface area.
+- Add `.omk/goals/<goal-id>/` state layout.
+- Add `omk goal run/status/show/list/cancel`.
+- Persist normalized goal, constraints, budgets, and terminal criteria.
+- Emit goal lifecycle events.
+- Write `failure.json` for blocked or failed goals.
+- Add JSON and Markdown output for `goal show`.
 
-Scope:
+Exit criteria:
 
-- Make `cargo fmt --check` green.
-- Make `cargo clippy --all-targets --all-features -- -D warnings` green.
-- Run the full test suite with isolated home/config/cache directories.
-- Gate or finish in-progress surfaces such as ultrawork, cost tracking, notifications, HUD, and MCP.
-- Keep README maturity labels honest: Current, MVP, Scaffold, Next, Later.
+- A goal can be created, inspected, cancelled, and resumed after process restart.
+- State transitions have tests.
 
-Definition of Done:
+## Stage 2 - Planning and Oracle
 
-- Formatting, clippy, and tests are green.
-- README documents only current commands as current.
-- `SPEC.md`, `TODO.md`, and `ROADMAP.md` use the same vocabulary.
+Target: make goals testable before execution.
 
-## Milestone 1 - Kimi Pro Mode
+- Generate PRD or goal brief.
+- Generate technical plan.
+- Generate test spec.
+- Build task graph with dependencies and write sets.
+- Define the oracle for completion.
+- Block execution when the oracle is missing.
 
-Goal: one command safely turns a normal Kimi CLI setup into an OMK-powered setup.
+Exit criteria:
 
-Current:
+- Greenfield and rewrite fixture goals produce different oracle shapes.
+- `blocked_on_human` is used when success criteria are ambiguous.
 
-- `omk team run`
-- `omk kimi sync`
-- `omk kimi doctor`
-- `omk kimi install`
-- `omk kimi agents`
-- `omk kimi hooks`
-- `omk kimi skills`
+## Stage 3 - Agent Orchestration
 
-Next:
+Target: let the goal controller create and manage work.
 
-- `omk kimi rollback`
-- manifest checksums,
-- backups before overwrite,
-- manifest-aware `doctor` repair hints,
-- tests for clean install, overwrite, partial failure, and rollback.
+- Launch role-specific agents through existing team/runtime surfaces.
+- Allow agents to propose tasks.
+- Require controller validation before mutating the task graph.
+- Track heartbeats, leases, retries, stale work, and task ownership.
+- Support bounded concurrency and cost/time budgets.
 
-Definition of Done:
+Exit criteria:
 
-- `sync`, `doctor`, and `rollback` can explain every file OMK owns.
-- Rollback does not touch unrelated user files.
-- Kimi asset install is safe to run repeatedly.
+- A goal can execute multiple dependent tasks.
+- Failed tasks retry or produce explicit proof evidence.
 
-## Milestone 2 - Kimi Team Runtime
+## Stage 4 - Verification Wall
 
-Goal: make multi-Kimi execution reliable enough to leave running unattended.
+Target: make readiness proof-backed.
 
-Current:
+- Run configured gates by project type.
+- Capture command evidence and artifacts.
+- Add compatibility/golden gates for rewrite goals.
+- Add security and dependency gates for hardening goals.
+- Add benchmark gates for performance goals.
 
-- `omk team run`
-- `omk team list`
-- `omk team status`
-- `omk team health`
-- `omk team shutdown`
-- `omk team cleanup`
+Exit criteria:
 
-Next:
+- `ready` cannot be emitted while required gates are failing.
+- `not_ready` includes the failing evidence.
 
-- runtime-owned task claims,
-- leases and stale-lease recovery,
-- file ownership scopes,
-- watchdog for stalled heartbeats, stuck Wire turns, non-TTY hangs, and partial task completion,
-- live HUD backed by runtime events.
+## Stage 5 - Worktree and Integration Flow
 
-Definition of Done:
+Target: make parallel work safe.
 
-- A mock team can run deterministically in tests.
-- A stalled worker is detected and recorded.
-- A failed worker produces evidence.
-- `omk team run` remains the documented team execution path.
+- Create isolated worktrees or branches for independent task slices.
+- Merge accepted slices through an integrator task.
+- Detect write conflicts before dispatch.
+- Support partial acceptance of completed subgoals.
+- Preserve changelog and docs updates during integration.
 
-## Milestone 3 - Proof And Replay
+Exit criteria:
 
-Goal: completion is based on evidence, not agent confidence.
+- Two independent slices can run concurrently and integrate deterministically.
+- Conflicting write sets block dispatch or require a plan change.
 
-Next:
+## Stage 6 - Self-Review and Hardening
 
-- append-only `events.jsonl` for every run,
-- `omk run show <id|latest>` for timeline inspection, including Wire-derived event/request details,
-- `omk proof show <id|latest>` for final readiness, including Wire evidence and malformed-log warnings,
-- verification gates for fmt, lint, typecheck, tests, security, docs, and custom commands,
-- recovery evidence for crashes, timeouts, deadlocks, stale leases, and manual interrupts.
+Target: move from useful automation to autonomous engineering quality.
 
-Definition of Done:
+- Add reviewer, security, performance, and test-engineer loops.
+- Add "break it" challenge passes.
+- Add anti-slop cleanup pass.
+- Add dependency rationale checks.
+- Add threat-model artifact for security-sensitive goals.
 
-- A proof can be generated from a recorded event log without rerunning Kimi.
-- Failed and partial runs produce useful proof/failure artifacts.
-- A run cannot silently claim success without proof or explicit failure.
+Exit criteria:
 
-## Milestone 4 - Kimi Role Packs
+- A goal proof records independent review results.
+- Known gaps are explicit and cannot be hidden by a final summary.
 
-Goal: make OMK useful immediately on real projects.
+## Stage 7 - GitHub Output
 
-Next:
+Target: turn long-running goals into reviewable delivery artifacts.
 
-- curated Kimi-native role packs instead of a broad low-quality marketplace,
-- packs for Rust, frontend, backend, security, documentation, QA, release, and migration work,
-- repo-local role overrides with `omk kimi doctor` validation,
-- examples that show complete workflows, not just isolated commands.
+- Open a PR or draft PR from a goal result.
+- Attach proof summary to PR body.
+- Link changed files, gates, known gaps, and decisions.
+- Support release-candidate output for GitHub-only releases.
 
-Definition of Done:
+Exit criteria:
 
-- Role packs are Kimi-native and can be synced, validated, and rolled back.
-- Bad role-pack config is caught by `omk kimi doctor`.
-- Examples demonstrate realistic work on a repo.
+- `omk goal open-pr latest` creates a reviewable PR with proof evidence.
 
-## Later - Provider-Neutral Control Plane
+## Stage 8 - Long-Horizon Reliability
 
-Provider-neutral workers remain valuable, but they are not the first wedge.
+Target: let goals run for days safely.
 
-Before expanding beyond Kimi workers, OMK should prove:
+- Add pause/resume across machine restarts.
+- Add goal replay.
+- Add budget checkpoints.
+- Add crash recovery tests.
+- Add stale agent cleanup.
+- Add operator notifications.
 
-- Kimi sync is safe and reversible.
-- Kimi team runs are observable and recoverable.
-- `omk proof show` can explain completion better than agent self-report.
-- The HUD makes parallel work understandable.
-- The product has a demo that makes users want to install it immediately.
+Exit criteria:
 
-After that, Codex, Gemini, Claude, and OpenCode can return as optional advisors or workers.
+- A multi-hour fixture goal can survive process restart and continue.
+- Operators can answer "what is it doing?" without reading raw logs.
+
+## Not Yet
+
+These are deliberately out of early scope:
+
+- Guaranteed production-ready output for arbitrary underspecified ideas.
+- Unbounded recursive agent spawning.
+- Automatic paid API or infrastructure provisioning.
+- Rewriting very large projects without first building compatibility oracles.
+- Silent force-push or destructive repository operations.

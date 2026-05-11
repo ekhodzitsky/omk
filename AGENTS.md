@@ -2,6 +2,8 @@
 
 This file contains agent-level conventions for the entire project tree.
 For OMK-specific context (wire protocol, agent roles, roadmap), see `.omk/AGENTS.md`.
+For the main product direction, read `SPEC.md`, `ROADMAP.md`, `TODO.md`, and
+`docs/superpowers/specs/2026-05-11-omk-goal-design.md`.
 
 ## Meta Principle
 
@@ -15,6 +17,10 @@ Decoration is not engineering.
 These rules protect OMK's most fragile contracts: the CLI surface, Kimi Wire
 protocol boundary, async worker lifecycle, event/proof output, and release
 documentation.
+
+`omk goal` is the north-star feature. It must be designed as a proof-driven
+controller over existing Wire/team/event/proof primitives, not as an unbounded
+recursive agent launcher.
 
 1. **`src/main.rs` stays thin.** The binary crate must only call the library
    entrypoint (currently `omk::cli::run().await`). Do not declare project modules
