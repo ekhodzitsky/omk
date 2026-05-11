@@ -257,7 +257,7 @@ impl HudState {
         "-".to_string()
     }
 
-    /// Render as formatted text (for terminal or tmux status)
+    /// Render as formatted text for terminal output.
     pub fn render_text(&self) -> String {
         let runtime = self.last_update.signed_duration_since(self.start_time);
         let runtime_str = format!(
@@ -350,52 +350,6 @@ impl HudState {
         Ok(json)
     }
 
-    /// Render compact tmux statusline string (max ~80 chars).
-    pub fn to_tmux_status(&self) -> String {
-        let total = self.workers.len();
-        let running = self
-            .workers
-            .iter()
-            .filter(|w| w.status == HealthStatus::Healthy)
-            .count();
-        let stalled = self
-            .workers
-            .iter()
-            .filter(|w| w.status == HealthStatus::Stalled)
-            .count();
-        let dead = self
-            .workers
-            .iter()
-            .filter(|w| w.status == HealthStatus::Dead)
-            .count();
-
-        let core = format!(
-            "OMK:{} workers | {} running | {} stalled | {} dead",
-            total, running, stalled, dead
-        );
-
-        const MAX_LEN: usize = 80;
-        let mut result = core;
-
-        if let Some(gate_name) = self.latest_failed_gate() {
-            let gate_part = format!("gate:{}-FAILED", gate_name);
-            let candidate = format!("{} | {}", result, gate_part);
-            if candidate.len() <= MAX_LEN {
-                result = candidate;
-            }
-        }
-
-        if let Some(proof_status) = self.latest_proof_status() {
-            let proof_part = format!("proof:{}", proof_status);
-            let candidate = format!("{} | {}", result, proof_part);
-            if candidate.len() <= MAX_LEN {
-                result = candidate;
-            }
-        }
-
-        result
-    }
-
     fn latest_failed_gate(&self) -> Option<String> {
         if let Some(name) = &self.latest_failed_gate {
             return Some(name.clone());
@@ -460,7 +414,6 @@ mod tests {
             status: HealthStatus::Healthy,
             last_heartbeat: Some(Utc::now()),
             heartbeat_content: None,
-            tmux_pane_alive: true,
             inbox_count: 0,
             outbox_count: 0,
             message: "Heartbeat fresh (5s ago)".to_string(),

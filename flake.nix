@@ -22,7 +22,7 @@
       {
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "omk";
-          version = "0.1.1";
+          version = "0.3.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           nativeBuildInputs = [ pkgs.pkg-config ];
@@ -43,7 +43,6 @@
             rustToolchain
             cargo-watch
             cargo-deny
-            tmux
             kimi
           ];
         };

@@ -7,10 +7,6 @@ pub(crate) struct Args {
     /// Team name to monitor
     pub team_name: Option<String>,
 
-    /// Render tmux status bar string
-    #[arg(long)]
-    pub tmux: bool,
-
     /// Show live TUI
     #[arg(long)]
     pub tui: bool,
@@ -69,19 +65,11 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         {
             anyhow::bail!("Server feature is not enabled. Rebuild with --features server");
         }
-    } else if args.tmux {
-        if let Some(team_name) = args.team_name {
-            run_team_hud_tmux(team_name).await?;
-        } else {
-            let status = generate_status_bar().await?;
-            println!("{}", status);
-        }
     } else if let Some(team_name) = args.team_name {
         run_team_hud(team_name, args.once, args.json).await?;
     } else {
         println!("omk hud");
         println!("  <team_name>  Monitor a specific team");
-        println!("  --tmux       Output tmux status bar string");
         println!("  --tui        Run interactive TUI");
         println!("  --web        Start web dashboard");
         println!("  --port       Port for web dashboard (default: 8080)");
@@ -106,11 +94,7 @@ async fn run_team_hud(team_name: String, once: bool, json: bool) -> Result<()> {
 
     let events_path = state_dir.join("events.jsonl");
     let mut event_stream = crate::vis::event_stream::EventStream::new(&events_path);
-    let config = crate::runtime::watchdog::WatchdogConfig {
-        require_tmux: false,
-        ..Default::default()
-    };
-    let watchdog = crate::runtime::watchdog::Watchdog::new(config);
+    let watchdog = crate::runtime::watchdog::Watchdog::with_defaults();
 
     let run_id = team_name.clone();
     let mut hud_state = crate::vis::hud::HudState::new(&team_name, &run_id);
@@ -170,49 +154,4 @@ async fn run_team_hud(team_name: String, once: bool, json: bool) -> Result<()> {
     }
 
     Ok(())
-}
-
-async fn run_team_hud_tmux(team_name: String) -> Result<()> {
-    let state_dir = crate::runtime::config::omk_state_dir()
-        .join("team")
-        .join(&team_name);
-
-    if !state_dir.exists() {
-        anyhow::bail!(
-            "Team '{}' not found. Expected state at: {}",
-            team_name,
-            state_dir.display()
-        );
-    }
-
-    let events_path = state_dir.join("events.jsonl");
-    let mut event_stream = crate::vis::event_stream::EventStream::new(&events_path);
-    let watchdog = crate::runtime::watchdog::Watchdog::with_defaults();
-
-    let run_id = team_name.clone();
-    let mut hud_state = crate::vis::hud::HudState::new(&team_name, &run_id);
-    hud_state
-        .refresh(&mut event_stream, &watchdog, &state_dir)
-        .await?;
-    println!("{}", hud_state.to_tmux_status());
-    Ok(())
-}
-
-async fn generate_status_bar() -> Result<String> {
-    // TODO: Read .omk/state/ for active teams, ralph modes, token usage
-    let mut parts = vec!["omk".to_string()];
-
-    let omk_dir = Some(crate::runtime::config::omk_state_dir()).filter(|p| p.exists());
-
-    if let Some(state_dir) = omk_dir {
-        let mut read = tokio::fs::read_dir(&state_dir).await?;
-        while let Some(entry) = read.next_entry().await? {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with("team-") || name.starts_with("ralph-") {
-                parts.push(name);
-            }
-        }
-    }
-
-    Ok(parts.join(" | "))
 }

@@ -10,26 +10,26 @@ omk mcp-server
 
 ### Tools
 
-#### `omk_team_spawn`
+#### `omk_team_run`
 
-Spawn a team of Kimi agents.
+Run a scheduler-backed Kimi team through the Wire runtime.
 
 **Parameters:**
 
 | Name | Type | Description |
-|------|------|-------------|
-| `count` | integer | Number of workers |
-| `role` | string | Worker role (e.g. `coder`) |
-| `task` | string | Task description |
+| --- | --- | --- |
+| `spec` | string | Worker spec, for example `3:executor`. |
+| `task` | string | Task description. |
+| `name` | string | Optional team name. |
 
 **Response:**
 
 ```json
 {
-  "status": "spawned",
-  "name": "coder-a1b2",
-  "count": 3,
-  "role": "coder",
+  "status": "completed",
+  "stdout": "...",
+  "stderr": "",
+  "spec": "3:executor",
   "task": "refactor authentication"
 }
 ```
@@ -41,36 +41,40 @@ Get team status.
 **Parameters:**
 
 | Name | Type | Description |
-|------|------|-------------|
-| `name` | string | Team name |
+| --- | --- | --- |
+| `name` | string | Team name. |
 
 **Response:**
 
 ```json
 {
-  "name": "coder-a1b2",
-  "task": "refactor authentication",
-  "phase": "Running",
-  "workers": 3
+  "status": "ok",
+  "team": "coder-a1b2",
+  "stdout": "...",
+  "stderr": ""
 }
 ```
 
 #### `omk_team_shutdown`
 
-Shutdown a team.
+Shutdown or mark a team interrupted.
 
 **Parameters:**
 
 | Name | Type | Description |
-|------|------|-------------|
-| `name` | string | Team name |
+| --- | --- | --- |
+| `name` | string | Team name. |
+| `force` | boolean | Force shutdown handling. Defaults to `false`. |
 
 **Response:**
 
 ```json
 {
   "status": "shutdown",
-  "name": "coder-a1b2"
+  "team": "coder-a1b2",
+  "force": false,
+  "stdout": "...",
+  "stderr": ""
 }
 ```
 
@@ -78,18 +82,16 @@ Shutdown a team.
 
 Run environment diagnostics.
 
-**Parameters:** None
+**Parameters:** none
 
 **Response:**
 
 ```json
 {
-  "status": "ok",
-  "checks": {
-    "tmux": true,
-    "kimi": true,
-    "config_dir": "/home/user/.config/omk"
-  }
+  "status": "healthy",
+  "healthy": true,
+  "stdout": "...",
+  "stderr": ""
 }
 ```
 
@@ -97,23 +99,17 @@ Run environment diagnostics.
 
 Base URL: `http://localhost:8080`
 
-### Endpoints
-
-#### `GET /api/health`
-
-Health check.
+### `GET /api/health`
 
 ```json
 {
   "status": "ok",
-  "version": "0.2.5",
-  "timestamp": "2026-05-08T12:00:00Z"
+  "version": "0.3.0",
+  "timestamp": "2026-05-11T12:00:00Z"
 }
 ```
 
-#### `GET /api/teams`
-
-List active teams.
+### `GET /api/teams`
 
 ```json
 [
@@ -126,9 +122,7 @@ List active teams.
 ]
 ```
 
-#### `GET /api/autopilots`
-
-List active autopilot sessions.
+### `GET /api/autopilots`
 
 ```json
 [
@@ -141,9 +135,7 @@ List active autopilot sessions.
 ]
 ```
 
-#### `GET /api/ralphs`
-
-List active Ralph sessions.
+### `GET /api/ralphs`
 
 ```json
 [
@@ -157,14 +149,14 @@ List active Ralph sessions.
 ]
 ```
 
-#### `GET /api/metrics`
+### `GET /api/metrics`
 
-Aggregated metrics.
+Aggregated runtime counters.
 
 ```json
 {
-  "teams_spawned": 12,
-  "teams_shutdown": 10,
+  "total_spawns": 12,
+  "total_shutdowns": 10,
   "tasks_completed": 45,
   "ask_calls": 78,
   "autopilot_runs": 5,

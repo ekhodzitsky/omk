@@ -60,11 +60,11 @@ Multi-provider advisor flows are later. Keep the examples Kimi-first.
 
 ## HUD
 
-Attach tmux status bar:
+One-shot status:
 
 ```bash
-# In ~/.tmux.conf
-set -g status-right '#(omk hud --tmux)'
+omk hud --once
+omk hud --json
 ```
 
 Interactive TUI:

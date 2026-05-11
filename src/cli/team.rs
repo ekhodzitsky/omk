@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use serde::Serialize;
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
@@ -13,10 +11,8 @@ use crate::runtime::gates::{run_gates_with_evidence, GateDef, VerificationConfig
 use crate::runtime::proof::{Proof, ProofGenerator, ProofStatus};
 use crate::runtime::sanitize::sanitize_name;
 use crate::runtime::{
-    bridge::TeamBridge, events::EventWriter, state::TeamState, tmux,
-    wire_worker::WireWorkerAdapter, worker::WorkerSpec,
+    events::EventWriter, state::TeamState, wire_worker::WireWorkerAdapter, worker::WorkerSpec,
 };
-use crate::skills::discovery::load_bundled_skill;
 
 #[derive(Parser, Debug, Clone)]
 pub(crate) struct Args {
@@ -26,18 +22,12 @@ pub(crate) struct Args {
 
 #[derive(Subcommand, Debug, Clone)]
 pub(crate) enum TeamCommands {
-    /// Spawn workers in tmux compatibility mode
-    Spawn(SpawnArgs),
-    /// Run a scheduler-backed team workflow (no tmux required)
+    /// Run a scheduler-backed team workflow
     Run(RunArgs),
     /// List all active teams
     List,
     /// Check team status
     Status(StatusArgs),
-    /// Attach to a team's tmux session
-    Attach(AttachArgs),
-    /// Broadcast a message to all team panes
-    Broadcast(BroadcastArgs),
     /// Rename a team
     Rename(RenameArgs),
     /// Export a team state to JSON
@@ -52,34 +42,6 @@ pub(crate) enum TeamCommands {
     Cleanup(CleanupArgs),
     /// List available role packs
     Roles,
-}
-
-#[derive(Parser, Debug, Clone)]
-pub(crate) struct SpawnArgs {
-    #[arg(value_name = "N:ROLE")]
-    pub spec: Option<String>,
-
-    #[arg(trailing_var_arg = true, value_name = "TASK")]
-    pub task: Vec<String>,
-
-    #[arg(short, long)]
-    pub name: Option<String>,
-
-    #[arg(short, long, default_value = ".")]
-    pub dir: PathBuf,
-
-    #[arg(long)]
-    pub no_ralph: bool,
-
-    #[arg(long)]
-    pub yolo: bool,
-
-    /// Skill to inject into lead prompt
-    #[arg(short, long, default_value = "team")]
-    pub skill: String,
-
-    #[arg(long)]
-    pub role_pack: Option<String>,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -108,21 +70,6 @@ pub(crate) struct RunArgs {
 pub(crate) struct StatusArgs {
     #[arg(value_name = "NAME")]
     pub name: String,
-}
-
-#[derive(Parser, Debug, Clone)]
-pub(crate) struct AttachArgs {
-    #[arg(value_name = "NAME")]
-    pub name: String,
-}
-
-#[derive(Parser, Debug, Clone)]
-pub(crate) struct BroadcastArgs {
-    #[arg(value_name = "NAME")]
-    pub name: String,
-
-    #[arg(trailing_var_arg = true, value_name = "MESSAGE")]
-    pub message: Vec<String>,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -162,10 +109,6 @@ pub(crate) struct ShutdownArgs {
 pub(crate) struct HealthArgs {
     #[arg(value_name = "NAME")]
     pub name: String,
-
-    /// Attempt to recover dead or stalled workers
-    #[arg(long)]
-    pub recover: bool,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -185,12 +128,9 @@ pub(crate) struct CleanupArgs {
 
 pub(crate) async fn run(args: Args) -> Result<()> {
     match args.command {
-        TeamCommands::Spawn(args) => spawn(args).await,
         TeamCommands::Run(args) => run_team(args).await,
         TeamCommands::List => list_teams().await,
         TeamCommands::Status(args) => status(args).await,
-        TeamCommands::Attach(args) => attach(args).await,
-        TeamCommands::Broadcast(args) => broadcast(args).await,
         TeamCommands::Rename(args) => rename_team(args).await,
         TeamCommands::Export(args) => export_team(args).await,
         TeamCommands::Import(args) => import_team(args).await,
@@ -216,11 +156,9 @@ async fn list_teams() -> Result<()> {
         let path = entry.path();
         if path.is_dir() {
             let name = entry.file_name().to_string_lossy().to_string();
-            let session_name = format!("omk-team-{}", name);
-            let running = crate::runtime::tmux::session_exists(&session_name).unwrap_or(false);
 
             if let Ok(state) = TeamState::load(&path).await {
-                teams.push((name, state, running));
+                teams.push((name, state));
             }
         }
     }
@@ -231,15 +169,13 @@ async fn list_teams() -> Result<()> {
     }
 
     println!("Active teams:\n");
-    println!("{:<20} {:<8} {:<20} Task", "Name", "Running", "Phase");
-    println!("{}", "─".repeat(90));
+    println!("{:<20} {:<20} Task", "Name", "Phase");
+    println!("{}", "─".repeat(78));
 
-    for (name, state, running) in teams {
-        let status = if running { "●" } else { "○" };
+    for (name, state) in teams {
         println!(
-            "{:<20} {:<8} {:<20} {}",
+            "{:<20} {:<20} {}",
             name,
-            status,
             format!("{:?}", state.phase),
             state.task.chars().take(40).collect::<String>()
         );
@@ -247,93 +183,6 @@ async fn list_teams() -> Result<()> {
 
     println!("\nUse `omk team status <name>` for details.");
     Ok(())
-}
-
-async fn spawn(mut args: SpawnArgs) -> Result<()> {
-    if args.spec.is_none() && args.role_pack.is_none() {
-        anyhow::bail!("Either spec (N:ROLE) or --role-pack is required");
-    }
-
-    // If --role-pack is provided and spec looks like a task word (not a valid spec),
-    // prepend spec to task so the user can write: omk team spawn --role-pack architect test task
-    if args.role_pack.is_some() && args.spec.is_some() {
-        let spec = args.spec.as_ref().unwrap();
-        if spec.contains(':') || resolve_role_alias(spec).is_some() {
-            anyhow::bail!("Cannot use both --role-pack and N:ROLE spec");
-        }
-        let mut task = vec![args.spec.take().unwrap()];
-        task.extend(args.task);
-        args.task = task;
-    }
-
-    let task = args.task.join(" ");
-    if task.is_empty() {
-        anyhow::bail!("Task description is required");
-    }
-
-    let (count, role, pack_opt) = if let Some(ref role_pack_id) = args.role_pack {
-        let pack = RolePack::find(role_pack_id)
-            .ok_or_else(|| anyhow::anyhow!("Unknown role pack: {}", role_pack_id))?;
-        info!("Using role pack: {} ({})", pack.name, pack.description);
-        (pack.suggested_worker_count, pack.id.clone(), Some(pack))
-    } else if let Some(ref spec) = args.spec {
-        let (count, role) = parse_spec(spec)?;
-        let pack = RolePack::find(&role);
-        if let Some(ref pack) = pack {
-            info!("Using role pack: {} ({})", pack.name, pack.description);
-        }
-        (count, role, pack)
-    } else {
-        unreachable!()
-    };
-
-    let team_name = if let Some(ref name) = args.name {
-        sanitize_name(name)?
-    } else {
-        format!(
-            "{}-{}",
-            role,
-            uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
-        )
-    };
-
-    info!(team = %team_name, workers = count, role = role, task = %task, "Starting team");
-
-    tmux::ensure_tmux()?;
-
-    let state_dir = crate::runtime::config::omk_state_dir()
-        .join(TEAM_DIR)
-        .join(&team_name);
-    tokio::fs::create_dir_all(&state_dir).await?;
-
-    // Initialize event logging
-    let event_log = state_dir.join(EVENTS_FILE);
-    let event_writer = EventWriter::new(&event_log);
-    let run_id = RunId(team_name.clone());
-
-    let run_started = EventBuilder::new(run_id.clone()).run_started("team", &args.dir, &task)?;
-    event_writer.append(&run_started).await?;
-
-    let spawn_result = spawn_inner(
-        args,
-        &team_name,
-        &task,
-        count,
-        &role,
-        pack_opt.as_ref(),
-        &state_dir,
-        &event_writer,
-        &run_id,
-    )
-    .await;
-
-    if let Err(ref e) = spawn_result {
-        let run_failed =
-            EventBuilder::new(run_id.clone()).run_failed(&format!("spawn failed: {}", e))?;
-        let _ = event_writer.append(&run_failed).await;
-    }
-
-    spawn_result
 }
 
 async fn run_team(args: RunArgs) -> Result<()> {
@@ -407,7 +256,7 @@ async fn run_team(args: RunArgs) -> Result<()> {
         }
     };
 
-    // Create wire workers (no tmux, no bash bridge)
+    // Create Wire workers for scheduler-backed execution.
     let (worker_specs, wire_handles) = setup_wire_workers(
         &team_name,
         &task,
@@ -857,61 +706,6 @@ async fn synthesize_results(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn setup_workers(
-    team_name: &str,
-    task: &str,
-    count: usize,
-    role: &str,
-    state_dir: &std::path::Path,
-    dir: &std::path::Path,
-    event_writer: &EventWriter,
-    run_id: &RunId,
-) -> Result<Vec<WorkerSpec>> {
-    let state = TeamState::new(team_name, task, state_dir, count, role);
-    state.save().await?;
-
-    let session_name = format!("omk-team-{team_name}");
-    let window_name = "lead";
-
-    if !tmux::session_exists(&session_name)? {
-        tmux::create_session(&session_name, window_name, dir)?;
-    }
-
-    let mut worker_specs = Vec::new();
-
-    for i in 0..count {
-        let worker_name = format!("worker-{i}");
-        let worker_dir = state_dir.join(WORKERS_DIR).join(&worker_name);
-        tokio::fs::create_dir_all(&worker_dir).await?;
-
-        tmux::split_window(&session_name, window_name, dir)?;
-        tmux::rename_pane(&session_name, window_name, i + 1, &worker_name)?;
-
-        let worker_spec = WorkerSpec {
-            name: worker_name.clone(),
-            role: role.to_string(),
-            inbox: worker_dir.join("inbox.jsonl"),
-            outbox: worker_dir.join("outbox.jsonl"),
-            heartbeat: worker_dir.join("heartbeat.json"),
-            project_dir: Some(dir.to_path_buf()),
-        };
-        worker_spec.save().await?;
-        worker_specs.push(worker_spec.clone());
-
-        let bridge = TeamBridge::new(&worker_spec, &session_name);
-        bridge.spawn_worker(i + 1).await?;
-
-        let worker_started = EventBuilder::new(run_id.clone())
-            .worker_started(crate::runtime::events::WorkerId(worker_name.clone()), role)?;
-        event_writer.append(&worker_started).await?;
-    }
-
-    tmux::select_layout(&session_name, window_name, "tiled")?;
-
-    Ok(worker_specs)
-}
-
-#[allow(clippy::too_many_arguments)]
 async fn setup_wire_workers(
     team_name: &str,
     task: &str,
@@ -957,117 +751,6 @@ async fn setup_wire_workers(
     Ok((worker_specs, handles))
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn spawn_inner(
-    args: SpawnArgs,
-    team_name: &str,
-    task: &str,
-    count: usize,
-    role: &str,
-    role_pack: Option<&RolePack>,
-    state_dir: &std::path::Path,
-    event_writer: &EventWriter,
-    run_id: &RunId,
-) -> Result<()> {
-    let _worker_specs = setup_workers(
-        team_name,
-        task,
-        count,
-        role,
-        state_dir,
-        &args.dir,
-        event_writer,
-        run_id,
-    )
-    .await?;
-
-    let session_name = format!("omk-team-{team_name}");
-    let window_name = "lead";
-
-    let mut skill_md = load_bundled_skill(&args.skill).await.unwrap_or_default();
-    if let Some(pack) = role_pack {
-        for skill_name in &pack.default_skills {
-            if let Ok(content) = load_bundled_skill(skill_name).await {
-                if !skill_md.is_empty() {
-                    skill_md.push('\n');
-                    skill_md.push('\n');
-                }
-                skill_md.push_str(&content);
-            }
-        }
-    }
-
-    // Load AGENTS.md context if available
-    let agents_context =
-        if let Ok(Some(manifest)) = crate::agents::runtime::load_project_agents(&args.dir).await {
-            Some(crate::agents::runtime::inject_agents_context(
-                &manifest, task, role,
-            ))
-        } else {
-            None
-        };
-
-    let lead_prompt = build_lead_prompt(
-        task,
-        count,
-        role,
-        state_dir,
-        args.yolo,
-        &skill_md,
-        agents_context.as_deref(),
-        role_pack.map(|p| &*p.system_prompt),
-    );
-    crate::runtime::shell::validate_safe(&lead_prompt)
-        .map_err(|e| anyhow::anyhow!("Invalid prompt: {}", e))?;
-    tmux::send_keys(
-        &session_name,
-        window_name,
-        &format!(
-            "kimi -p {}",
-            crate::runtime::shell::shell_escape(&lead_prompt)
-        ),
-    )?;
-
-    // Record metrics
-    let _ = crate::runtime::metrics::record(
-        &crate::runtime::config::state_dir().join("metrics.json"),
-        |m| m.total_spawns += 1,
-    )
-    .await;
-
-    // Send notification
-    let config = crate::runtime::config::load_config()
-        .await
-        .unwrap_or_default();
-    if let Some(webhooks) = config.webhooks {
-        crate::notifications::send_notification(
-            &webhooks,
-            &crate::notifications::NotificationEvent::TeamSpawned {
-                name: team_name.to_string(),
-                task: task.to_string(),
-                workers: count,
-                role: role.to_string(),
-            },
-        )
-        .await;
-    }
-
-    println!(
-        "✓ Team '{}' started with {} {} worker(s)",
-        team_name, count, role
-    );
-    println!("  Session: {}", session_name);
-    println!("  State:   {}", state_dir.display());
-    println!();
-    println!("Commands:");
-    println!("  omk team status {team_name}");
-    println!("  omk team shutdown {team_name}");
-    println!();
-    println!("Attach with: tmux attach -t {}", session_name);
-
-    Ok(())
-}
-
 async fn status(args: StatusArgs) -> Result<()> {
     let team_name = sanitize_name(&args.name)?;
     let state_dir = crate::runtime::config::omk_state_dir()
@@ -1083,17 +766,11 @@ async fn status(args: StatusArgs) -> Result<()> {
     }
 
     let state = TeamState::load(&state_dir).await?;
-    let session_name = format!("omk-team-{}", team_name);
-    let tmux_alive = tmux::session_exists(&session_name).unwrap_or(false);
 
     println!("Team:        {}", state.name);
     println!("Task:        {}", state.task);
     println!("Phase:       {:?}", state.phase);
     println!("Created:     {}", state.created_at);
-    println!(
-        "Tmux:        {}",
-        if tmux_alive { "running" } else { "not found" }
-    );
     println!();
     println!("Workers:");
 
@@ -1161,8 +838,6 @@ async fn shutdown(args: ShutdownArgs) -> Result<()> {
         );
     }
 
-    let session_name = format!("omk-team-{}", team_name);
-
     // Emit manual_interrupt event before killing
     let event_log = state_dir.join(EVENTS_FILE);
     let event_writer = EventWriter::new(&event_log);
@@ -1172,21 +847,8 @@ async fn shutdown(args: ShutdownArgs) -> Result<()> {
             .with_actor("omk-cli");
     let _ = event_writer.append(&interrupt_event).await;
 
-    if tmux::session_exists(&session_name)? {
-        if !args.force {
-            println!("Sending interrupt to team '{}'...", team_name);
-            // Send Ctrl-C to all panes
-            let _ = tmux::send_keys(&session_name, "lead", "C-c");
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        }
-
-        tmux::kill_session(&session_name)?;
-        println!("✓ Tmux session '{}' killed", session_name);
-    } else {
-        println!(
-            "⚠ Tmux session '{}' not found (already dead?)",
-            session_name
-        );
+    if !args.force {
+        println!("Marking team '{}' as interrupted...", team_name);
     }
 
     // Update state
@@ -1275,28 +937,13 @@ async fn health(args: HealthArgs) -> Result<()> {
     let event_writer = crate::runtime::events::EventWriter::new(&event_log);
     let run_id = crate::runtime::events::RunId(team_name.clone());
 
-    let mut config = crate::runtime::watchdog::WatchdogConfig {
-        require_tmux: true,
-        ..Default::default()
-    };
-    if args.recover {
-        config.attempt_recovery = true;
-    }
-    let watchdog = crate::runtime::watchdog::Watchdog::new(config);
+    let watchdog = crate::runtime::watchdog::Watchdog::with_defaults();
     let report = watchdog
         .check_team(&run_id, &state_dir, &event_writer)
         .await?;
 
     println!("🩺 Health check — {}", report.run_id);
     println!("Checked at:  {}", report.checked_at);
-    println!(
-        "Tmux:        {}",
-        if report.tmux_session_alive {
-            "alive"
-        } else {
-            "missing"
-        }
-    );
     println!("Workers:     {}", report.workers.len());
     println!();
 
@@ -1308,65 +955,13 @@ async fn health(args: HealthArgs) -> Result<()> {
             crate::runtime::watchdog::HealthStatus::Unknown => "❓",
         };
         println!(
-            "  {} {:12} hb={} inbox={} outbox={}",
-            status_icon,
-            worker.worker_id,
-            worker.tmux_pane_alive,
-            worker.inbox_count,
-            worker.outbox_count
+            "  {} {:12} inbox={} outbox={}",
+            status_icon, worker.worker_id, worker.inbox_count, worker.outbox_count
         );
         println!("     → {}", worker.message);
     }
 
     println!();
-
-    let mut recovery_performed = false;
-    if args.recover && report.issues_found > 0 {
-        println!("🔧 Attempting recovery...");
-        for worker in &report.workers {
-            if worker.status == crate::runtime::watchdog::HealthStatus::Dead
-                || worker.status == crate::runtime::watchdog::HealthStatus::Stalled
-            {
-                let result = watchdog
-                    .attempt_recovery(worker, &state_dir, &event_writer, &run_id)
-                    .await?;
-                recovery_performed = true;
-                let icon = if result.success { "✅" } else { "❌" };
-                println!(
-                    "  {} {} — {}: {}",
-                    icon, result.worker_id, result.action, result.message
-                );
-            }
-        }
-    }
-
-    if recovery_performed {
-        println!();
-        println!("🩺 Re-running health check after recovery...");
-        println!();
-        let report = watchdog
-            .check_team(&run_id, &state_dir, &event_writer)
-            .await?;
-
-        for worker in &report.workers {
-            let status_icon = match worker.status {
-                crate::runtime::watchdog::HealthStatus::Healthy => "✅",
-                crate::runtime::watchdog::HealthStatus::Stalled => "⚠️",
-                crate::runtime::watchdog::HealthStatus::Dead => "❌",
-                crate::runtime::watchdog::HealthStatus::Unknown => "❓",
-            };
-            println!(
-                "  {} {:12} hb={} inbox={} outbox={}",
-                status_icon,
-                worker.worker_id,
-                worker.tmux_pane_alive,
-                worker.inbox_count,
-                worker.outbox_count
-            );
-            println!("     → {}", worker.message);
-        }
-        println!();
-    }
 
     if report.issues_found == 0 {
         println!("🎉 All workers healthy.");
@@ -1390,113 +985,6 @@ async fn count_jsonl_lines(path: &PathBuf) -> usize {
     }
 }
 
-async fn attach(args: AttachArgs) -> Result<()> {
-    let team_name = sanitize_name(&args.name)?;
-    let session_name = format!("omk-team-{}", team_name);
-
-    // Check if session exists
-    let output = tokio::process::Command::new("tmux")
-        .args(["has-session", "-t", &session_name])
-        .output()
-        .await
-        .context("Failed to check tmux session")?;
-
-    if !output.status.success() {
-        anyhow::bail!(
-            "Team '{}' is not running (tmux session '{}' not found)",
-            team_name,
-            session_name
-        );
-    }
-
-    println!("Attaching to team '{}'...", team_name);
-    println!("(Press Ctrl+B then D to detach)");
-
-    // Replace current process with tmux attach on Unix
-    #[cfg(unix)]
-    {
-        let err = std::process::Command::new("tmux")
-            .args(["attach-session", "-t", &session_name])
-            .exec();
-        anyhow::bail!("Failed to attach to tmux session: {}", err)
-    }
-
-    #[cfg(not(unix))]
-    {
-        let status = tokio::process::Command::new("tmux")
-            .args(["attach-session", "-t", &session_name])
-            .status()
-            .await
-            .context("Failed to attach to tmux session")?;
-        if !status.success() {
-            anyhow::bail!("tmux attach exited with code {:?}", status.code());
-        }
-        Ok(())
-    }
-}
-
-async fn broadcast(args: BroadcastArgs) -> Result<()> {
-    let team_name = sanitize_name(&args.name)?;
-    let session_name = format!("omk-team-{}", team_name);
-    let message = args.message.join(" ");
-
-    if message.is_empty() {
-        anyhow::bail!("Message is required");
-    }
-
-    // Check if session exists
-    let output = tokio::process::Command::new("tmux")
-        .args(["has-session", "-t", &session_name])
-        .output()
-        .await
-        .context("Failed to check tmux session")?;
-
-    if !output.status.success() {
-        anyhow::bail!(
-            "Team '{}' is not running (tmux session '{}' not found)",
-            team_name,
-            session_name
-        );
-    }
-
-    // Get list of panes
-    let pane_list = tokio::process::Command::new("tmux")
-        .args(["list-panes", "-t", &session_name, "-F", "#{pane_index}"])
-        .output()
-        .await
-        .context("Failed to list tmux panes")?;
-
-    if !pane_list.status.success() {
-        anyhow::bail!("Failed to list tmux panes");
-    }
-
-    let pane_output = String::from_utf8_lossy(&pane_list.stdout);
-    let panes: Vec<&str> = pane_output
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .collect();
-
-    let escaped = crate::runtime::shell::shell_escape(&message);
-    for pane in &panes {
-        let target = format!("{}.{}", session_name, pane);
-        let result = tokio::process::Command::new("tmux")
-            .args(["send-keys", "-t", &target, &escaped, "C-m"])
-            .output()
-            .await;
-
-        if let Err(e) = result {
-            println!("  ⚠ Failed to send to pane {}: {}", pane, e);
-        }
-    }
-
-    println!(
-        "✓ Broadcasted to {} pane(s) in team '{}'",
-        panes.len(),
-        team_name
-    );
-    Ok(())
-}
-
 async fn rename_team(args: RenameArgs) -> Result<()> {
     let old_name = sanitize_name(&args.old_name)?;
     let new_name = sanitize_name(&args.new_name)?;
@@ -1512,32 +1000,6 @@ async fn rename_team(args: RenameArgs) -> Result<()> {
         anyhow::bail!("Team '{}' already exists", new_name);
     }
 
-    // Check if tmux session is running
-    let old_session = format!("omk-team-{}", old_name);
-    let running = crate::runtime::tmux::session_exists(&old_session).unwrap_or(false);
-
-    if running {
-        // Rename tmux session
-        let result = tokio::process::Command::new("tmux")
-            .args([
-                "rename-session",
-                "-t",
-                &old_session,
-                &format!("omk-team-{}", new_name),
-            ])
-            .output()
-            .await
-            .context("Failed to rename tmux session")?;
-
-        if !result.status.success() {
-            anyhow::bail!(
-                "Failed to rename tmux session: {}",
-                String::from_utf8_lossy(&result.stderr)
-            );
-        }
-    }
-
-    // Rename state directory
     tokio::fs::rename(&old_path, &new_path).await?;
 
     // Update state file
@@ -1550,9 +1012,6 @@ async fn rename_team(args: RenameArgs) -> Result<()> {
     }
 
     println!("✓ Renamed team '{}' → '{}'", old_name, new_name);
-    if !running {
-        println!("  (tmux session was not running, only state was renamed)");
-    }
     Ok(())
 }
 
@@ -1607,7 +1066,7 @@ async fn import_team(args: ImportArgs) -> Result<()> {
 
     println!("✓ Imported team '{}' from {}", state.name, args.file);
     println!("  State dir: {}", state_dir.display());
-    println!("  Run `omk team attach {}` to connect", state.name);
+    println!("  Run `omk team status {}` to inspect it", state.name);
     Ok(())
 }
 
@@ -1637,61 +1096,6 @@ fn resolve_role_alias(alias: &str) -> Option<(usize, String)> {
         "team" => Some((3, "executor".to_string())),
         _ => RolePack::find(alias).map(|p| (p.suggested_worker_count, p.id)),
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn build_lead_prompt(
-    task: &str,
-    count: usize,
-    role: &str,
-    state_dir: &std::path::Path,
-    yolo: bool,
-    skill_md: &str,
-    agents_context: Option<&str>,
-    system_prompt: Option<&str>,
-) -> String {
-    let mut prompt = format!(
-        r#"You are the Lead Orchestrator of a team of {count} {role} agent(s).
-
-Your task: {task}
-
-## Orchestration Skill
-{skill_md}
-
-## State Directory
-{state_dir}
-
-## Worker Inbox/Outbox Paths
-{inbox_dir}
-
-## Available Tools
-- ReadFile / WriteFile for inbox/outbox
-- Shell for tmux commands if needed
-- TaskList / TaskOutput for background work
-"#,
-        count = count,
-        role = role,
-        task = task,
-        skill_md = skill_md,
-        state_dir = state_dir.display(),
-        inbox_dir = state_dir.join(WORKERS_DIR).display(),
-    );
-
-    if let Some(ctx) = agents_context {
-        prompt.push_str("\n## Project Context (from AGENTS.md)\n\n");
-        prompt.push_str(ctx);
-    }
-
-    if let Some(sp) = system_prompt {
-        prompt.push_str("\n## Role System Prompt\n\n");
-        prompt.push_str(sp);
-    }
-
-    if yolo {
-        prompt.push_str("\n\nYOLO mode is enabled. Auto-approve safe operations.\n");
-    }
-
-    prompt
 }
 
 fn roles() -> Result<()> {

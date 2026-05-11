@@ -9,7 +9,6 @@ RUN cargo +stable build --release --features server
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    tmux \
     && useradd --create-home --home-dir /home/omk --shell /usr/sbin/nologin omk \
     && mkdir -p \
         /home/omk/.config/omk \

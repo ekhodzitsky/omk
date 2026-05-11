@@ -333,7 +333,11 @@ impl Autopilot {
         info!(path = %expansion_path.display(), "Wrote expansion notes");
 
         if self.interactive {
-            let _ = self.spawn_tmux_for_phase("expansion", &prompt);
+            debug!(
+                phase = "expansion",
+                prompt_bytes = prompt.len(),
+                "Prepared expansion prompt"
+            );
         }
 
         Ok(())
@@ -386,7 +390,11 @@ impl Autopilot {
         info!(path = %plan_path.display(), "Wrote plan");
 
         if self.interactive {
-            let _ = self.spawn_tmux_for_phase("planning", &prompt);
+            debug!(
+                phase = "planning",
+                prompt_bytes = prompt.len(),
+                "Prepared planning prompt"
+            );
         }
 
         Ok(())
@@ -402,10 +410,10 @@ impl Autopilot {
         let is_complex = self.task.len() > 100 || self.task.contains(" and ");
 
         if is_complex {
-            info!("Task is complex, spawning omk team 2:executor");
+            info!("Task is complex, running omk team 2:executor");
             let omk_exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("omk"));
             let output = Command::new(&omk_exe)
-                .args(["team", "spawn", "2:executor", &self.task])
+                .args(["team", "run", "2:executor", &self.task])
                 .current_dir(&self.dir)
                 .output()
                 .await;
@@ -420,7 +428,7 @@ impl Autopilot {
                     }
                 }
                 Err(e) => {
-                    warn!(error = %e, "Failed to spawn omk team");
+                    warn!(error = %e, "Failed to run omk team");
                 }
             }
         } else {
@@ -605,21 +613,6 @@ impl Autopilot {
         let path = self.state_dir.join("done-contract.json");
         contract.save(&path).await?;
         info!(path = %path.display(), passed = contract.passed, "Saved done contract");
-        Ok(())
-    }
-
-    fn spawn_tmux_for_phase(&self, phase_name: &str, prompt: &str) -> Result<()> {
-        let session_name = format!("omk-ap-{}-{}", self.name, phase_name);
-        if !crate::runtime::tmux::session_exists(&session_name)? {
-            crate::runtime::tmux::create_session(&session_name, phase_name, &self.dir)?;
-        }
-        let escaped = shell_escape(prompt);
-        crate::runtime::tmux::send_keys(
-            &session_name,
-            phase_name,
-            &format!("kimi -p {}", escaped),
-        )?;
-        info!(session = %session_name, "Spawned tmux session for phase");
         Ok(())
     }
 }

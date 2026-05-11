@@ -2,7 +2,7 @@
 
 ## Overview
 
-OMK (oh-my-kimi) is a Rust orchestration layer for Kimi CLI. It runs outside Kimi CLI, starts real `kimi` processes, coordinates them through Kimi Wire Protocol, tmux, and state files, and records enough state to make multi-agent work observable and recoverable.
+OMK (oh-my-kimi) is a Rust orchestration layer for Kimi CLI. It runs outside Kimi CLI, starts real `kimi --wire` processes, coordinates them through Kimi Wire Protocol and state files, and records enough state to make multi-agent work observable and recoverable.
 
 The current product lane is **Kimi-only first**. Provider-neutral workers can return later, but the first public push should make OMK the best power layer for Kimi CLI.
 
@@ -25,8 +25,7 @@ OMK is inspired by oh-my-claudecode, but it is not a line-for-line port. The goa
 - Kimi-compatible skills,
 - Kimi lifecycle hooks,
 - Kimi MCP configuration,
-- print and stream output for programmatic execution,
-- tmux workers for visible long-running Kimi processes.
+- print and stream output for programmatic execution.
 
 The product position:
 
@@ -51,7 +50,6 @@ Implications for OMK:
 - The adapter must record the observed Kimi CLI version and negotiated Wire protocol version in run metadata.
 - If `initialize` returns method-not-found, OMK should fall back to legacy/no-handshake Wire mode as documented upstream.
 - Wire handshake extension fields must be forward-compatible. Kimi CLI 1.41.0 returns object-shaped `initialize.result.hooks` metadata, so OMK should preserve unknown extension payloads as JSON instead of narrowing them to fixed arrays.
-- Tmux remains useful for visible sessions and current `team spawn` compatibility, but target `team run` should treat Wire events/requests as the structured worker contract.
 - Any task touching Kimi assets, hooks, agents, MCP, process launch, event capture, replay, or worker control must re-check the official docs before implementation.
 - Upstream tracking notes live in [docs/KIMI_UPSTREAM.md](docs/KIMI_UPSTREAM.md).
 
@@ -65,8 +63,8 @@ This section describes what the CLI exposes today.
 | `omk kimi sync` | Current Scaffold | Syncs project/user Kimi assets and writes a project manifest. Needs checksums, backups, rollback CLI, stronger tests, and docs polish. |
 | `omk kimi doctor` | Current Scaffold | Validates Kimi-native project assets and suggests fixes. Needs version compatibility checks and deeper manifest-aware repair. |
 | `omk kimi install` | Current Scaffold | Installs project Kimi assets. Needs clearer relationship with `sync`. |
-| `omk team spawn` | Current MVP | Starts lead/worker Kimi processes in tmux, uses JSONL inbox/outbox and heartbeats. |
-| `omk team list/status/attach/broadcast/shutdown` | Current MVP | Operates on current team state and tmux sessions. |
+| `omk team run` | Current MVP | Scheduler-backed Kimi-only entrypoint with claims, leases, Wire workers, watchdogs, and proof/failure artifacts. |
+| `omk team list/status/health/shutdown/cleanup` | Current MVP | Operates on durable team state and worker heartbeats. |
 | Autopilot | Current MVP | Six-phase state machine with resume/yolo, phase logs, fallback content, cost tracking, and notifications. |
 | Ralph | Current MVP | Persistent verify/fix loop with PRD state, iteration limits, resume/yolo, cost tracking, and notifications. |
 | Ultrawork | Current MVP | CLI and runtime exist; needs formatting, focused tests, and real Kimi execution validation. |
@@ -75,7 +73,6 @@ This section describes what the CLI exposes today.
 | HUD and web dashboard | Current Scaffold | Reads team state plus event evidence; needs richer runtime visibility. |
 | Cost tracking | Current MVP | Estimated session costs are recorded; provider-accurate accounting remains future work. |
 | Notifications | Current MVP | Discord, Slack, Telegram event formatting exists; event coverage and delivery tests are incomplete. |
-| `omk team run` | Current MVP | Scheduler-backed Kimi-only entrypoint with claims, leases, and watchdogs. |
 | `omk run show` | Current Scaffold | Event timeline inspection for recorded runs. |
 | `omk proof show` | Current Scaffold | Readiness report from event logs and verification gates. |
 | `omk kimi rollback` | Current Scaffold | Manifest-backed rollback via CLI; clean no-op when no manifest exists. |
@@ -124,15 +121,14 @@ Use Kimi-compatible assets for work that should happen inside one Kimi session o
 
 ### External Runtime Lane
 
-Use Rust and tmux when OMK needs visibility, process control, recovery, or long-running parallel work.
+Use Rust and Kimi Wire when OMK needs visibility, process control, recovery, or long-running parallel work.
 
 1. `omk team run` creates a durable run directory under the OMK state root.
 2. The Rust scheduler owns task state, worker state, claims, leases, retries, and final synthesis status.
-3. Worker processes are real `kimi` CLI processes in the primary Kimi-only lane.
-4. New worker control uses `kimi --wire` and maps Wire `event` / `request` messages into OMK events.
-5. Tmux panes remain available for visibility and current `team spawn` compatibility.
-6. Prompt-shaped result extraction is a fallback path, not the target contract.
-7. The watchdog detects dead panes, stale heartbeats, stuck Wire turns, stuck non-TTY execution, and stale leases.
+3. Worker processes are real `kimi --wire` CLI processes in the primary Kimi-only lane.
+4. Worker control maps Wire `event` / `request` messages into OMK events.
+5. Prompt-shaped result extraction is a fallback path, not the target contract.
+6. The watchdog detects stale heartbeats, stuck Wire turns, stuck non-TTY execution, and stale leases.
 
 ### Proof Lane
 
@@ -145,38 +141,34 @@ Use append-only events to make completion explainable.
 5. `omk proof show <id|latest>` creates a final readiness report with changed files, gates, failures, retries, known gaps, and Wire evidence summaries.
 6. A run is not complete until it has a proof artifact or an explicit failure artifact.
 
-## Current v0 Team Mode
+## Current Team Run
 
-Current team mode is `spawn` for the tmux bridge; `run` is also available for the scheduler-backed path.
+Current team mode is `run` for the scheduler-backed Wire runtime.
 
 ### Command
 
 ```bash
-omk team spawn <N:ROLE> [OPTIONS] <TASK...>
+omk team run <N:ROLE> [OPTIONS] <TASK...>
 ```
 
 Example:
 
 ```bash
-omk team spawn 3:coder "fix all TypeScript errors"
+omk team run 3:executor "fix all TypeScript errors"
 ```
 
-### Current Spawn Flow
+### Current Run Flow
 
-1. Parse `N:ROLE`, for example `3:coder`.
+1. Parse `N:ROLE`, for example `3:executor`.
 2. Generate a team name or accept `--name`.
-3. Ensure tmux is installed.
-4. Create state directory under the OMK team state root.
-5. Write `team-state.json` with initial state.
-6. Create tmux session `omk-team-<name>`.
-7. In pane 0, spawn lead `kimi -p <lead prompt>`.
-8. For each worker:
-   - create `workers/worker-<i>/`,
-   - write `worker-spec.json`,
-   - split the tmux window,
-   - spawn a bridge that polls `inbox.jsonl` and launches Kimi work,
-   - write `heartbeat.json` and `outbox.jsonl`.
-9. Print team summary and attach/status/shutdown instructions.
+3. Create state directory under the OMK team state root.
+4. Write `team-state.json` with initial state.
+5. Create a run manifest and scheduler task set.
+6. Dispatch work through worker inbox files.
+7. Workers launch `kimi --wire`, process the assigned task, and write outbox plus heartbeat evidence.
+8. The scheduler records task, worker, Wire, gate, proof, and failure events.
+9. Verification gates run after synthesis.
+10. OMK writes `proof.json` or `failure.json`.
 
 ### Current State Files
 
@@ -191,10 +183,9 @@ workers/<worker>/heartbeat.json
 ### Current Limitations
 
 - The lead prompt still owns much of the orchestration.
-- There is no central scheduler with leases and stale-lease recovery.
-- File ownership and conflict detection are not first-class.
-- Completion is not governed by one proof contract.
-- Worker output still depends on text/result extraction paths.
+- Proof/HUD ergonomics are still hardening.
+- Some power-user modes are less polished than the team run path.
+- Real Kimi runs depend on local Kimi CLI auth and upstream Wire behavior.
 
 ## Target v1 Team Run
 
@@ -203,13 +194,11 @@ Target team mode is `run`.
 ### Command
 
 ```bash
-omk team run [OPTIONS] <TASK...>
+omk team run <N:ROLE> [OPTIONS] <TASK...>
 ```
 
 Expected options:
 
-- `--workers <N>`
-- `--role <ROLE>`
 - `--dir <PATH>`
 - `--gate <NAME>`
 - `--name <RUN_NAME>`
@@ -299,11 +288,11 @@ Wire evidence is a summary, not a raw transcript. Raw Wire logs may be retained 
 
 1. Stabilize current v0 docs and code: formatting, clippy, tests, current command docs.
 2. Finish Kimi asset safety: manifest checksums, backups, `doctor` drift checks, and rollback CLI.
-3. Add event logging to current `team spawn` before replacing orchestration behavior.
+3. Keep event logging on the `team run` path complete enough for run/proof/HUD.
 4. Add `omk run show` and proof generation from recorded event logs.
 5. Add scheduler-owned claims, leases, ownership scopes, and watchdog recovery.
 6. Introduce `omk team run` as the polished v1 entrypoint.
-7. Keep `omk team spawn` as a compatibility command until `run` is mature.
+7. Keep the public CLI Wire-first and document any future process-control surface explicitly.
 
 ## Prior Art And Competitive Scan
 
@@ -324,4 +313,4 @@ As of 2026-05-08, the Kimi orchestration space is no longer empty. OMK should tr
 - Unit tests: parsers, state serialization, event schema, proof schema, asset manifests, command generation.
 - Integration tests: mock Kimi team run, JSONL flow, event logs, proof generation, rollback behavior.
 - Fixture tests: one successful worker, one failed worker, one stuck worker, expected proof output.
-- E2E tests: real Kimi CLI and tmux, run manually or in gated CI environments.
+- E2E tests: real Kimi CLI, run manually or in gated CI environments.

@@ -1,7 +1,6 @@
 pub mod ask;
 pub mod atomic;
 pub mod autopilot;
-pub mod bridge;
 pub mod config;
 pub mod events;
 pub mod gates;
@@ -15,7 +14,6 @@ pub mod scheduler;
 pub mod session;
 pub mod shell;
 pub mod state;
-pub mod tmux;
 pub mod ultrawork;
 pub mod watchdog;
 pub mod wire_worker;

@@ -75,7 +75,7 @@ pub async fn save_artifact(name: &str, content: &str, timestamp: &str) -> Result
     save_artifact_to(&dir, name, content, timestamp).await
 }
 
-/// Run a provider directly (not inside tmux) and capture its stdout+stderr.
+/// Run a provider directly and capture its stdout+stderr.
 /// Used for the MVP direct-execution path and for synthesis.
 pub async fn run_advisor_direct(provider: &str, prompt: &str, timeout_secs: u64) -> Result<String> {
     if !is_provider_installed(provider).await {
@@ -133,44 +133,6 @@ pub async fn run_advisor_direct(provider: &str, prompt: &str, timeout_secs: u64)
     }
 
     Ok(format!("{}{}", stdout, stderr).trim().to_string())
-}
-
-/// Spawn an advisor inside a tmux session/window.
-/// The provider's stdout+stderr are redirected to `outbox`.
-pub async fn spawn_advisor_tmux(
-    session: &str,
-    window: &str,
-    provider: &str,
-    prompt: &str,
-    outbox: &Path,
-) -> Result<()> {
-    if !is_provider_installed(provider).await {
-        anyhow::bail!("Provider '{}' is not installed", provider);
-    }
-
-    let cmd = provider_command(provider, prompt)?;
-    let outbox_str = outbox.to_string_lossy();
-    let parent_str = outbox
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .to_string_lossy();
-
-    let wrapper = format!(
-        "mkdir -p {} && {} > {} 2>&1 && echo '___OMK_ASK_DONE___' >> {}",
-        shell_escape(&parent_str),
-        cmd,
-        shell_escape(&outbox_str),
-        shell_escape(&outbox_str),
-    );
-
-    crate::runtime::tmux::send_keys(session, window, &wrapper)?;
-    info!(
-        provider = provider,
-        session = session,
-        outbox = %outbox.display(),
-        "Spawned advisor in tmux"
-    );
-    Ok(())
 }
 
 /// Poll an outbox file until the done marker appears or a timeout is reached.

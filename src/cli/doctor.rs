@@ -11,16 +11,6 @@ pub(crate) async fn run(_args: Args) -> Result<()> {
 
     let mut issues = 0;
 
-    // Check tmux
-    print!("  tmux .................. ");
-    match check_cmd("tmux", &["-V"]).await {
-        Ok(out) => println!("✓ {}", out.trim()),
-        Err(e) => {
-            println!("✗ {}", e);
-            issues += 1;
-        }
-    }
-
     // Check kimi
     print!("  kimi CLI .............. ");
     match check_cmd("kimi", &["--version"]).await {

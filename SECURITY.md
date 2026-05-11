@@ -4,6 +4,7 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
+| 0.3.x   | :white_check_mark: |
 | 0.2.x   | :white_check_mark: |
 | 0.1.x   | :white_check_mark: |
 | < 0.1.0 | :x:                |
@@ -23,6 +24,6 @@ We will acknowledge receipt within 48 hours and provide a timeline for a fix.
 
 ## Security Considerations
 
-- `omk` spawns shell processes via `tmux`. Always validate input with `validate_safe()` before passing to shell commands.
+- `omk` runs local commands and Kimi processes. Always validate input with `validate_safe()` before passing data to shell-command helpers.
 - `omk` uses `shlex::try_quote` for shell escaping. Do not bypass this.
 - State files may contain sensitive task descriptions. Ensure `~/.local/state/omk/` has appropriate permissions (`0700`).

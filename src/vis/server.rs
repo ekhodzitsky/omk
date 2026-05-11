@@ -195,7 +195,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             <div class="card">
                 <h2>📊 Metrics</h2>
                 <div id="metrics">
-                    <div class="metric"><span>Total Spawns</span><span class="metric-value" id="m-spawns">—</span></div>
+                    <div class="metric"><span>Total Runs</span><span class="metric-value" id="m-spawns">—</span></div>
                     <div class="metric"><span>Total Shutdowns</span><span class="metric-value" id="m-shutdowns">—</span></div>
                     <div class="metric"><span>Tasks Created</span><span class="metric-value" id="m-tasks">—</span></div>
                     <div class="metric"><span>Ask Calls</span><span class="metric-value" id="m-ask">—</span></div>
@@ -207,7 +207,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                 <ul class="team-list" id="teams">
                     <li class="team-item">
                         <div class="team-name">No active teams</div>
-                        <div class="team-meta">Run <code>omk team spawn</code> to start</div>
+                        <div class="team-meta">Run <code>omk team run</code> to start</div>
                     </li>
                 </ul>
             </div>
@@ -407,18 +407,6 @@ async fn health_handler() -> Json<Value> {
     let mut checks = serde_json::json!({});
     let mut healthy = true;
 
-    // Check tmux
-    let tmux_ok = tokio::process::Command::new("tmux")
-        .arg("-V")
-        .output()
-        .await
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    checks["tmux"] = serde_json::json!({"status": if tmux_ok { "ok" } else { "error" } });
-    if !tmux_ok {
-        healthy = false;
-    }
-
     // Check kimi
     let kimi_ok = tokio::process::Command::new("kimi")
         .arg("--version")
@@ -471,7 +459,7 @@ async fn prometheus_metrics_handler() -> axum::response::Response<String> {
     if let Ok(content) = tokio::fs::read_to_string(&metrics_path).await {
         if let Ok(metrics) = serde_json::from_str::<serde_json::Value>(&content) {
             if let Some(spawns) = metrics["total_spawns"].as_u64() {
-                output.push_str("\n# HELP omk_total_spawns_total Total team spawns\n");
+                output.push_str("\n# HELP omk_total_spawns_total Total team run starts\n");
                 output.push_str("# TYPE omk_total_spawns_total counter\n");
                 output.push_str(&format!("omk_total_spawns_total {}\n", spawns));
             }

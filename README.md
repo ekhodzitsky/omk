@@ -33,11 +33,11 @@ The core problem OMK solves is **trustworthy agent execution**. A useful coding 
 OMK wraps Kimi CLI with a local runtime that can:
 
 - install Kimi-native agents, hooks, and skills into the current repo;
-- run scheduler-backed or tmux-visible Kimi teams;
+- run scheduler-backed Kimi teams through the Wire runtime;
 - keep append-only event logs for worker, task, gate, and Wire evidence;
 - detect ownership conflicts before parallel workers touch the same files;
 - run verification gates and block "done" claims when required gates fail;
-- render status through text, JSON, tmux, TUI, or web HUD surfaces;
+- render status through text, JSON, TUI, or web HUD surfaces;
 - generate `proof.json` / `failure.json` artifacts for the final state of a run.
 
 OMK is independent of Moonshot AI, Kimi CLI, and oh-my-claudecode.
@@ -46,7 +46,7 @@ OMK is independent of Moonshot AI, Kimi CLI, and oh-my-claudecode.
 
 Short answer: **yes, you can use OMK today for local/personal repo automation, but treat it as a beta MVP, not a polished 1.0 product.**
 
-Current release: **v0.2.5** on [GitHub Releases](https://github.com/ekhodzitsky/oh-my-kimi/releases/tag/v0.2.5). We are intentionally **not publishing to crates.io yet**; install from GitHub release assets or from the GitHub repository.
+Current source version: **v0.3.0**. We are intentionally **not publishing to crates.io yet**; install from GitHub release assets or from the GitHub repository.
 
 What is ready enough to use now:
 
@@ -55,13 +55,12 @@ What is ready enough to use now:
 | GitHub release binaries | Ready for macOS arm64, macOS x86_64, and Linux x86_64. |
 | `omk setup`, `omk doctor`, config/state paths | Ready. |
 | Kimi asset sync/install/doctor/rollback | Ready for repo-local Kimi assets, manifests, dry-runs, drift checks, backups, and scoped output. |
-| `omk team run` | Beta MVP. Scheduler-backed, no tmux required, writes events, proof, and failure artifacts. |
-| `omk team spawn` | Beta MVP. Visible tmux-compatible team surface. |
+| `omk team run` | Beta MVP. Scheduler-backed Wire runtime, writes events, proof, and failure artifacts. |
 | Role packs | Ready: architect, executor, verifier, reviewer, integrator. |
 | Run inspection | Ready: `omk run list`, `omk run show latest`, text/JSON output, filters. |
 | Proof reports | Beta MVP: `omk proof show latest`, cached/regenerated proof, Markdown/text/JSON formats. |
 | Verification gates | Ready for local gates and `.omk/gates.toml` customization. |
-| HUD | Text, JSON, tmux, and TUI are usable; web dashboard is still scaffold-level. |
+| HUD | Text, JSON, and TUI are usable; web dashboard is still scaffold-level. |
 | Autopilot, Ralph, Ultrawork | Power-user MVP: useful, but less polished than the Kimi asset + team/proof path. |
 | MCP server, marketplace, web dashboard | Secondary/scaffold surfaces. |
 
@@ -70,7 +69,7 @@ Current limits:
 - No crates.io release yet.
 - No Windows binary yet.
 - Real non-mock runs require Kimi CLI installed and authenticated.
-- `omk team spawn`, tmux HUD, and visible worker panes require `tmux`.
+- Team workers run through Kimi Wire; there is no terminal-pane orchestration layer.
 - Agent runs can edit your repository; use a clean git branch and inspect diffs.
 - Some pre-1.0 command details may still change.
 
@@ -92,14 +91,14 @@ Otherwise it downloads the matching binary archive from the latest GitHub Releas
 
 ### Manual GitHub release download
 
-Download one of the v0.2.5 archives:
+Download one of the latest GitHub release archives:
 
-- macOS Apple Silicon: `omk-0.2.5-aarch64-apple-darwin.tar.gz`
-- macOS Intel: `omk-0.2.5-x86_64-apple-darwin.tar.gz`
-- Linux x86_64: `omk-0.2.5-x86_64-unknown-linux-gnu.tar.gz`
+- macOS Apple Silicon: `omk-<version>-aarch64-apple-darwin.tar.gz`
+- macOS Intel: `omk-<version>-x86_64-apple-darwin.tar.gz`
+- Linux x86_64: `omk-<version>-x86_64-unknown-linux-gnu.tar.gz`
 
 ```bash
-tar -xzf omk-0.2.5-<target>.tar.gz
+tar -xzf omk-<version>-<target>.tar.gz
 chmod +x omk
 ./omk --help
 ```
@@ -118,7 +117,6 @@ cargo build --release
 Requirements:
 
 - Kimi CLI installed and authenticated for real agent runs.
-- `tmux` for visible team sessions and tmux HUD output.
 - Rust 1.78+ for source builds and development.
 
 ## First Run
@@ -167,18 +165,17 @@ omk hud --once
 
 `omk team run` is the current proof-oriented path. It records events, dispatches tasks, runs verification gates, and writes a final proof or failure artifact.
 
-### Visible tmux team
+### Team lifecycle
 
 ```bash
 omk team roles
-omk team spawn --role-pack executor 2:executor "refactor the auth module"
+omk team run 2:executor "refactor the auth module"
 omk team status <team-name>
-omk team attach <team-name>
 omk team health <team-name>
 omk team shutdown <team-name>
 ```
 
-Use this when you want visible worker panes and tmux-native control.
+Use this when you want a named team state directory that can be inspected, health-checked, and shut down after a run.
 
 ### Run and proof inspection
 
@@ -202,7 +199,7 @@ omk ralph --max-iterations 5 "make tests pass"
 omk ultrawork --concurrency 4 "task one" "task two" "task three"
 ```
 
-These modes are available and useful, but the strongest MVP path today is still: Kimi assets -> team run/spawn -> HUD/run/proof -> verification.
+These modes are available and useful, but the strongest MVP path today is still: Kimi assets -> team run -> HUD/run/proof -> verification.
 
 ## Features
 
@@ -211,12 +208,11 @@ These modes are available and useful, but the strongest MVP path today is still:
 | Kimi asset management | Sync/install/doctor/rollback for `.kimi/agents`, `.kimi/hooks`, and `.kimi/skills` with manifests and backups. | Current |
 | Role packs | Curated Kimi-native roles for architecture, execution, verification, review, and integration. | Current |
 | Scheduler-backed teams | Task claims, leases, retries, write-set conflict detection, event logs, and proof/failure artifacts. | Beta MVP |
-| Tmux-compatible teams | Visible worker panes, attach/status/broadcast/shutdown, watchdog health checks. | Beta MVP |
 | Wire protocol integration | Kimi Wire client, tolerant parser, mock fixture, and Wire evidence in run/proof output. | Current |
 | Verification gates | Rust/Node/Python/Go presets, custom `.omk/gates.toml`, skipped gates, allow-fail gates, and captured stdout/stderr. | Current |
 | Proof reports | `proof.json`, `failure.json`, cached/regenerated proof, readiness text, known gaps, and gate evidence. | Beta MVP |
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
-| HUD | Text snapshots, JSON, tmux statusline, TUI, and web dashboard scaffold. | Current/Scaffold |
+| HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
 | Cleanup and recovery | Team cleanup, backups, rollback, watchdog events, and interrupted-run failure artifacts. | Current |
 | Autopilot | Single-lead autonomous execution with verification gates and resume/yolo options. | Power-user MVP |
 | Ralph | Persistent verify/fix loop with iteration limits and completion evidence. | Power-user MVP |
@@ -268,7 +264,6 @@ MOCK_KIMI=1 ./scripts/north_star_demo.sh
 | Issue | What to do |
 | --- | --- |
 | `kimi not found` | Install and authenticate Kimi CLI, then rerun `omk doctor`. |
-| `tmux not found` | Install tmux with `brew install tmux` or `apt install tmux`. |
 | You are unsure what sync will change | Run `omk kimi sync --dry-run` first. |
 | A run failed or looks stuck | Run `omk run show latest`, `omk proof show latest`, and `omk team health <team-name>`. |
 | State looks stale | Use `omk team cleanup --dry-run` or `omk cleanup --teams --dry-run` before deleting anything. |

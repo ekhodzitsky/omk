@@ -14,7 +14,7 @@
 | `config_cmd.rs` | Config validation and display. |
 | `cost_cmd.rs` | Cost reporting command. |
 | `doctor.rs` | Environment diagnostics. |
-| `hud.rs` | Tmux/TUI/web HUD command entrypoints. |
+| `hud.rs` | Text/JSON/TUI/web HUD command entrypoints. |
 | `kimi_native_cmd.rs` | Kimi-native sync/install/doctor/assets commands. |
 | `logs.rs` | Log inspection. |
 | `marketplace.rs` | Marketplace command surface. |
@@ -23,7 +23,7 @@
 | `run_cmd.rs` | Run timeline/show command. |
 | `skill.rs` | Skill management commands. |
 | `state.rs` | State import/export/list commands. |
-| `team.rs` | Current team spawn/run/list/status/attach/broadcast/shutdown surface. |
+| `team.rs` | Current team run/list/status/rename/export/import/shutdown/health/cleanup/roles surface. |
 | `ultrawork.rs` | Ultrawork command entrypoint. |
 
 ## Edit Rules

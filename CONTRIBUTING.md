@@ -17,14 +17,12 @@ src/
   cli/        # Clap subcommands (team, ask, autopilot, ralph, hud, doctor, cleanup, config)
   runtime/    # Core orchestration logic
     atomic.rs   # Atomic file writes (tempfile + rename)
-    bridge.rs   # Worker bridge scripts for tmux panes
     config.rs   # XDG path resolution + config.toml parsing
     metrics.rs  # Telemetry collection (JSON)
     migrate.rs  # State schema versioning + forward migrations
     retry.rs    # Exponential backoff retry helper
     shell.rs    # Safe shell escaping (shlex + validation)
     state.rs    # JSON state machines (Team, Autopilot, Ralph)
-    tmux.rs     # tmux binary wrapper
     worker.rs   # Worker spec + JSONL IPC
   skills/     # Skill parser, discovery, injection
   vis/        # HUD / TUI (scaffolded)

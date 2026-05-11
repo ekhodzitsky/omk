@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-11
+
+### Removed
+
+- **Tmux team runtime**: removed the tmux-backed `omk team spawn`, `attach`, and `broadcast` command surface, the `omk hud --tmux` statusline output, tmux doctor checks, tmux package dependencies, and the old `runtime/tmux.rs` and `runtime/bridge.rs` modules. `omk team run` is now the single team execution path.
+
 ### Changed
 
+- **Wire-first team contract**: team help, watchdog health, HUD output, MCP tools, packaging, README, tutorial, troubleshooting, API, and architecture docs now describe scheduler-backed Kimi Wire execution instead of terminal-pane orchestration. The MCP team tool is now `omk_team_run`.
 - **GitHub-only public docs positioning**: README now documents why OMK exists, current MVP readiness, GitHub-only installation, usable features, limits, and how OMK compares with raw Kimi CLI, ad hoc scripts, and cloud orchestrators. Tutorial and project-map docs now align with current `team run`, HUD, and proof command shapes.
 
 ## [0.2.5] - 2026-05-10

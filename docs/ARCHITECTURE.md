@@ -1,92 +1,108 @@
 # OMK Architecture
 
+OMK is a local Rust orchestration runtime for Kimi CLI. Kimi remains the model
+execution engine; OMK owns scheduling, durable state, verification gates,
+observability, and proof artifacts.
+
 ## Design Principles
 
-1. **External Orchestrator**: OMK never forks or patches Kimi CLI. It coordinates `kimi` processes externally.
-2. **File-Based IPC**: All inter-agent communication happens through JSONL inboxes/outboxes on disk.
-3. **Tmux-Native**: Teams are first-class tmux sessions. You can attach, detach, and inspect them with standard tmux commands.
-4. **Skill-Compatible**: Skills use the same `SKILL.md` format as Claude Code, ensuring portability.
+1. **External orchestrator**: OMK never forks or patches Kimi CLI. It starts and
+   coordinates `kimi --wire` processes from the outside.
+2. **Wire-first worker control**: Team work runs through the Kimi Wire Protocol,
+   not terminal-pane automation.
+3. **Durable file state**: Runs, workers, claims, events, gates, proofs, and
+   failures are written to disk so interrupted work can be inspected.
+4. **Proof before done**: A run is not treated as ready until required gates and
+   completion artifacts exist.
 
 ## System Context
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   User      │────▶│    omk      │────▶│    tmux     │
-│             │     │   (Rust)    │     │  (system)   │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                                │
-                       ┌────────────────────────┼────────────────────────┐
-                       ▼                        ▼                        ▼
-                ┌─────────────┐          ┌─────────────┐          ┌─────────────┐
-                │  Lead Kimi  │          │ Worker Kimi │          │ Worker Kimi │
-                │   (pane 0)  │          │  (pane 1)   │          │  (pane N)   │
-                └──────┬──────┘          └──────┬──────┘          └──────┬──────┘
-                       │                        │                        │
-                       ▼                        ▼                        ▼
-                ┌─────────────┐          ┌─────────────┐          ┌─────────────┐
-                │  inbox.jsonl│          │  inbox.jsonl│          │  inbox.jsonl│
-                │ outbox.jsonl│          │ outbox.jsonl│          │ outbox.jsonl│
-                │heartbeat.json│         │heartbeat.json│         │heartbeat.json│
-                └─────────────┘          └─────────────┘          └─────────────┘
+```text
+User
+  |
+  v
+omk CLI (Rust)
+  |
+  +-- Kimi asset sync/install/doctor/rollback
+  |
+  +-- team run scheduler
+        |
+        +-- run manifest, task claims, ownership map
+        +-- workers/*/inbox.jsonl
+        +-- workers/*/outbox.jsonl
+        +-- workers/*/heartbeat.json
+        +-- events.jsonl
+        +-- proof.json or failure.json
+        |
+        +-- Wire worker tasks
+              |
+              +-- kimi --wire
 ```
 
 ## Runtime Modules
 
-### `runtime/config.rs`
-XDG Base Directory compliant path resolution. Config → `~/.config/omk/`, State → `~/.local/state/omk/`, Data → `~/.local/share/omk/`. Legacy `~/.omk/` fallback if it exists.
+| Module | Purpose |
+| --- | --- |
+| `runtime/config.rs` | XDG path resolution with legacy `~/.omk/` fallback. |
+| `runtime/state.rs` | JSON state machines for Team, Autopilot, and Ralph modes. |
+| `runtime/migrate.rs` | State schema migration and future-version rejection. |
+| `runtime/atomic.rs` | Atomic file writes via tempfile plus rename. |
+| `runtime/retry.rs` | Exponential backoff helpers for resilient local operations. |
+| `runtime/metrics.rs` | Telemetry counters persisted under the state directory. |
+| `runtime/shell.rs` | Shell escaping and validation helpers. |
+| `runtime/worker.rs` | Worker specs, inbox/outbox helpers, heartbeats. |
+| `runtime/wire_worker.rs` | Worker loop that launches `kimi --wire` and records results. |
+| `runtime/scheduler/` | Task decomposition, claims, leases, retries, and ownership checks. |
+| `runtime/events.rs` | Append-only JSONL event envelope and readers. |
+| `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
+| `runtime/proof.rs` | Proof/failure report generation from events and gates. |
+| `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
 
-### `runtime/tmux.rs`
-Thin wrapper around the `tmux` binary. Creates sessions, splits windows, sends keys, kills sessions.
+## Data Flow
 
-### `runtime/bridge.rs`
-Generates bash bridge scripts for worker panes. Workers poll `inbox.jsonl` and launch `kimi -p` for each task.
+1. User runs `omk team run 3:executor "task"`.
+2. OMK creates a team state directory under the active XDG/legacy state root.
+3. The scheduler decomposes the task and writes claimable tasks.
+4. Workers claim tasks, receive inbox records, run `kimi --wire`, and append
+   outbox records plus heartbeat evidence.
+5. OMK appends run, worker, task, Wire, gate, and failure events to `events.jsonl`.
+6. Required verification gates run and capture stdout/stderr artifacts.
+7. OMK writes `proof.json` for ready runs or `failure.json` for failed,
+   interrupted, or not-ready runs.
+8. Operators inspect the result with `omk run show`, `omk proof show`,
+   `omk hud`, or `omk team health`.
 
-### `runtime/state.rs`
-JSON state machines for Team, Autopilot, and Ralph modes. Persistent across process restarts. All states carry a `version` field for forward migration.
+## CLI Surfaces
 
-### `runtime/migrate.rs`
-State schema migration. Reads `version` field, applies forward migrations, rejects future versions with a clear error message.
+| Surface | Role |
+| --- | --- |
+| `omk kimi ...` | Manage Kimi-native agents, hooks, skills, manifests, backups, and drift checks. |
+| `omk team run` | Run the scheduler-backed Wire team workflow. |
+| `omk team status/health/shutdown/cleanup` | Inspect and manage durable team state. |
+| `omk run show/list` | Inspect event timelines and run metadata. |
+| `omk proof show` | Inspect cached or regenerated readiness evidence. |
+| `omk hud` | Render text, JSON, TUI, or web status views. |
+| `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
 
-### `runtime/atomic.rs`
-Atomic file writes via tempfile + `fs::rename`. Prevents readers from seeing partial writes even if the process crashes.
+## MCP Integration
 
-### `runtime/retry.rs`
-Exponential backoff retry helper for resilient I/O and CLI calls.
+The MCP server exposes a small CLI-backed surface:
 
-### `runtime/metrics.rs`
-Telemetry collection: spawns, shutdowns, tasks, ask calls, autopilot/ralph runs. Persisted as JSON in the state directory.
+- `omk_team_run`
+- `omk_team_status`
+- `omk_team_shutdown`
+- `omk_doctor`
 
-### `runtime/shell.rs`
-Safe shell argument escaping via `shlex::quote` + input validation to prevent injection attacks.
-
-### `runtime/worker.rs`
-Worker specification and IPC helpers. `send_task()` appends JSONL to inbox; `read_results()` parses outbox.
+The MCP tools delegate to the same CLI commands so behavior stays aligned with
+local terminal usage.
 
 ## Skill System
 
 Skills are markdown files with YAML frontmatter, discovered from:
+
 1. `.omk/skills/` (project scope, legacy)
 2. `~/.local/share/omk/skills/` (user scope, XDG)
 3. `<omk binary dir>/skills/` (bundled)
 
-The lead prompt can inject a bundled skill directly into the orchestration context.
-
-## MCP Integration (Future)
-
-OMK will expose tools via Model Context Protocol:
-- `omk_team` — spawn teams
-- `omk_status` — query state
-- `omk_shutdown` — terminate sessions
-
-This enables Cursor, Claude Desktop, and other MCP clients to orchestrate Kimi agents.
-
-## Data Flow
-
-1. User runs `omk team spawn 3:coder "task"`
-2. OMK creates state directory `~/.local/state/omk/team/<name>/` (XDG) or `~/.omk/state/team/<name>/` (legacy)
-3. OMK creates tmux session with lead + 3 workers
-4. Lead reads `skills/team/SKILL.md` and decomposes task into JSONL lines
-5. Workers poll inboxes, execute with `kimi`, write results to outboxes
-6. Lead monitors outboxes and synthesizes final answer
-7. User runs `omk team status` to inspect progress
-8. User runs `omk team shutdown` to clean up
+Kimi-native assets under `.kimi/` are the preferred current path for agents,
+hooks, and skills that should be available directly to Kimi CLI.

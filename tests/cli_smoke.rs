@@ -33,8 +33,9 @@ fn test_help_honesty_top_level_team_and_kimi() {
     cmd.assert()
         .success()
         .stdout(predicate::str::contains(
-            "team         Team orchestration (scheduler run + tmux-compatible spawn surface)",
+            "team         Team orchestration (Wire scheduler runtime)",
         ))
+        .stdout(predicate::str::contains("tmux").not())
         .stdout(predicate::str::contains(
             "kimi         Kimi asset commands (sync/install/doctor + listing/rollback surfaces)",
         ));
@@ -48,14 +49,15 @@ fn test_help_honesty_team_surfaces() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "Team orchestration (scheduler run + tmux-compatible spawn surface)",
+            "Team orchestration (Wire scheduler runtime)",
         ))
         .stdout(predicate::str::contains(
-            "spawn      Spawn workers in tmux compatibility mode",
+            "run       Run a scheduler-backed team workflow",
         ))
-        .stdout(predicate::str::contains(
-            "run        Run a scheduler-backed team workflow (no tmux required)",
-        ));
+        .stdout(predicate::str::contains("spawn").not())
+        .stdout(predicate::str::contains("attach").not())
+        .stdout(predicate::str::contains("broadcast").not())
+        .stdout(predicate::str::contains("tmux").not());
 }
 
 #[test]
@@ -104,7 +106,8 @@ fn test_doctor_runs() {
     cmd.arg("doctor");
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("omk doctor"));
+        .stdout(predicate::str::contains("omk doctor"))
+        .stdout(predicate::str::contains("tmux").not());
 }
 
 #[test]
@@ -291,33 +294,16 @@ fn test_marketplace_search_runs() {
 }
 
 #[test]
-fn test_team_spawn_missing_task() {
+fn test_team_spawn_command_is_removed() {
     let mut cmd = Command::cargo_bin("omk").unwrap();
-    cmd.arg("team").arg("spawn").arg("3:coder");
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("Task description is required"));
-}
-
-#[test]
-fn test_team_spawn_fails_gracefully_when_tmux_missing() {
-    let (tmp, envs) = isolated_env();
-    let empty_path = tmp.path().join("empty-path");
-    fs::create_dir_all(&empty_path).unwrap();
-    let mut cmd = Command::cargo_bin("omk").unwrap();
-    for (k, v) in &envs {
-        cmd.env(k, v);
-    }
-
-    cmd.env("PATH", empty_path)
-        .arg("team")
+    cmd.arg("team")
         .arg("spawn")
         .arg("1:coder")
         .arg("smoke task");
 
-    cmd.assert().failure().stderr(predicate::str::contains(
-        "tmux is required but not installed",
-    ));
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'spawn'"));
 }
 
 #[test]

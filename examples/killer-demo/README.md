@@ -1,6 +1,6 @@
 # Killer Demo Fixture (CI-safe)
 
-Этот демо-сценарий не требует реального Kimi CLI и tmux.
+Этот демо-сценарий не требует реального Kimi CLI.
 Он использует scripted fixture из тестов и изолированный `HOME`/`XDG_*`, поэтому не мутирует ваш реальный Kimi/OMK state.
 
 ## Что проверяется
@@ -13,7 +13,7 @@
 ## Связь с North Star demo
 
 - `scripts/north_star_demo.sh` в режиме `MOCK_KIMI=1` использует тот же mock-first контракт:
-  изолированный `HOME/XDG_*`, отсутствие реальных Kimi/tmux зависимостей, сохранение реального Rust toolchain через
+  изолированный `HOME/XDG_*`, отсутствие реальных Kimi-зависимостей, сохранение реального Rust toolchain через
   `CARGO_HOME`/`RUSTUP_HOME` и явная обработка proof-статуса.
 - В mock-режиме North Star demo сначала доказывает, что fixture падает, затем чинит его детерминированно,
   чтобы локальный proof/HUD сценарий завершался `ready` без сетевых вызовов.

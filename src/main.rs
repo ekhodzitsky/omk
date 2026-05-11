@@ -40,7 +40,7 @@ struct Omk {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Team orchestration (scheduler run + tmux-compatible spawn surface)
+    /// Team orchestration (Wire scheduler runtime)
     #[command(visible_alias = "t")]
     Team(team::Args),
     /// Run autonomous execution (single lead agent)
@@ -259,7 +259,7 @@ enable_metrics = true
     println!();
     println!("Next steps:");
     println!("  1. Ensure 'kimi' CLI is installed and authenticated");
-    println!("  2. Run 'omk team spawn 2:coder \"fix TypeScript errors\"' to try team mode");
+    println!("  2. Run 'omk team run 2:coder \"fix TypeScript errors\"' to try team mode");
 
     Ok(())
 }

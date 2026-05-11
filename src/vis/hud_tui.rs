@@ -36,7 +36,6 @@ impl HudTui {
         let events_path = state_dir.join("events.jsonl");
         let event_stream = EventStream::new(&events_path);
         let watchdog = Watchdog::new(crate::runtime::watchdog::WatchdogConfig {
-            require_tmux: false,
             ..Default::default()
         });
         let run_id = team_name.to_string();
@@ -398,7 +397,6 @@ mod tests {
                 status: HealthStatus::Healthy,
                 last_heartbeat: Some(Utc::now()),
                 heartbeat_content: None,
-                tmux_pane_alive: true,
                 inbox_count: 0,
                 outbox_count: 0,
                 message: "ok".to_string(),
@@ -408,7 +406,6 @@ mod tests {
                 status: HealthStatus::Stalled,
                 last_heartbeat: Some(Utc::now()),
                 heartbeat_content: None,
-                tmux_pane_alive: true,
                 inbox_count: 0,
                 outbox_count: 0,
                 message: "stalled".to_string(),
@@ -418,7 +415,6 @@ mod tests {
                 status: HealthStatus::Dead,
                 last_heartbeat: None,
                 heartbeat_content: None,
-                tmux_pane_alive: false,
                 inbox_count: 0,
                 outbox_count: 0,
                 message: "dead".to_string(),

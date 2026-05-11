@@ -94,19 +94,18 @@ Goal: make multi-Kimi execution reliable enough to leave running unattended.
 Current:
 
 - `omk team run`
-- `omk team spawn`
 - `omk team list`
 - `omk team status`
-- `omk team attach`
-- `omk team broadcast`
+- `omk team health`
 - `omk team shutdown`
+- `omk team cleanup`
 
 Next:
 
 - runtime-owned task claims,
 - leases and stale-lease recovery,
 - file ownership scopes,
-- watchdog for dead panes, stalled heartbeats, stuck `kimi --print`, non-TTY hangs, and partial task completion,
+- watchdog for stalled heartbeats, stuck Wire turns, non-TTY hangs, and partial task completion,
 - live HUD backed by runtime events.
 
 Definition of Done:
@@ -114,7 +113,7 @@ Definition of Done:
 - A mock team can run deterministically in tests.
 - A stalled worker is detected and recorded.
 - A failed worker produces evidence.
-- `omk team spawn` remains available or has a documented migration path.
+- `omk team run` remains the documented team execution path.
 
 ## Milestone 3 - Proof And Replay
 

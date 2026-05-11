@@ -97,4 +97,4 @@ bench:
 # Profiling (requires cargo-flamegraph: cargo install cargo-flamegraph)
 profile:
 	@which cargo-flamegraph > /dev/null 2>&1 || { echo "cargo-flamegraph not installed. Run: cargo install cargo-flamegraph"; exit 1; }
-	$(CARGO) flamegraph --bin $(BINARY_NAME) -- team spawn 1:coder "benchmark test"
+	$(CARGO) flamegraph --bin $(BINARY_NAME) -- team run 1:coder "benchmark test"

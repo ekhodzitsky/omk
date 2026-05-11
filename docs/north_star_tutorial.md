@@ -21,7 +21,6 @@ The demo is successful when you can see Kimi workers progressing in parallel, wa
 
 - **Rust toolchain** (1.78+) for building `omk`
 - **Kimi CLI** installed and authenticated (or use `MOCK_KIMI=1` for a fully offline demo)
-- **tmux** available on your system (`brew install tmux` or `apt install tmux`)
 - **Python 3** (only needed for the wire-compatible mock when running with `MOCK_KIMI=1`)
 
 ---
@@ -82,7 +81,7 @@ Synchronizes OMK Kimi-native assets (agents, hooks, skills) into the current pro
 
 Launches a team of 2 coder workers with the task *"fix the failing test and make cargo test pass"*.
 
-> **Status:** `omk team run` is available in the current CLI. `omk team spawn` remains the compatibility path for the older tmux bridge.
+> **Status:** `omk team run` is the current team runtime. It uses scheduler state and Kimi Wire workers.
 
 What happens under the hood in the target design:
 
@@ -219,6 +218,6 @@ The script creates a fixture with `assert_eq!(add(2, 2), 5)`. If your Rust versi
 
 ## Next Steps
 
-- Read the full [TUTORIAL.md](TUTORIAL.md) for the current CLI surface: team spawn, autopilot, skill management, and `omk kimi sync`.
+- Read the full [TUTORIAL.md](TUTORIAL.md) for the current CLI surface: `team run`, autopilot, skill management, and `omk kimi sync`.
 - Read [ARCHITECTURE.md](ARCHITECTURE.md) to understand how the scheduler, wire protocol, and proof system fit together.
 - Read [SPEC.md](../SPEC.md) for the product roadmap and design decisions.

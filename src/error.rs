@@ -14,12 +14,6 @@ pub enum OmkError {
     #[error("team '{name}' already exists")]
     TeamAlreadyExists { name: String },
 
-    #[error("tmux session '{session}' not found")]
-    TmuxSessionNotFound { session: String },
-
-    #[error("tmux command failed: {message}")]
-    TmuxFailed { message: String },
-
     #[error("invalid configuration: {field} = {value}")]
     InvalidConfig { field: String, value: String },
 
@@ -63,7 +57,6 @@ impl OmkError {
         match self {
             OmkError::TeamNotFound { .. } => 404,
             OmkError::SkillNotFound { .. } => 404,
-            OmkError::TmuxSessionNotFound { .. } => 404,
             OmkError::TeamAlreadyExists { .. } => 409,
             OmkError::SkillAlreadyExists { .. } => 409,
             OmkError::InvalidConfig { .. } => 400,
@@ -73,7 +66,6 @@ impl OmkError {
             OmkError::ShellFailed { .. } => 500,
             OmkError::Io { .. } => 500,
             OmkError::StateSerialization { .. } => 500,
-            OmkError::TmuxFailed { .. } => 500,
             OmkError::ProviderNotInstalled { .. } => 503,
             OmkError::SynthesisFailed { .. } => 500,
             OmkError::Timeout { .. } => 504,
@@ -83,13 +75,11 @@ impl OmkError {
     /// Error category for metrics/logging.
     pub fn category(&self) -> &'static str {
         match self {
-            OmkError::TeamNotFound { .. }
-            | OmkError::TeamAlreadyExists { .. }
-            | OmkError::TmuxSessionNotFound { .. } => "team",
+            OmkError::TeamNotFound { .. } | OmkError::TeamAlreadyExists { .. } => "team",
             OmkError::InvalidConfig { .. } | OmkError::InvalidInput { .. } => "validation",
             OmkError::RegistryUnreachable { .. } | OmkError::RegistryInvalid { .. } => "registry",
             OmkError::SkillNotFound { .. } | OmkError::SkillAlreadyExists { .. } => "skill",
-            OmkError::ShellFailed { .. } | OmkError::TmuxFailed { .. } => "shell",
+            OmkError::ShellFailed { .. } => "shell",
             OmkError::Io { .. } | OmkError::StateSerialization { .. } => "io",
             OmkError::ProviderNotInstalled { .. }
             | OmkError::SynthesisFailed { .. }

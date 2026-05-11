@@ -208,8 +208,6 @@ edition = "2021"
             heartbeat_missing_secs: 15,
             heartbeat_stale_secs: 5,
             command_timeout_secs: 10,
-            attempt_recovery: false,
-            require_tmux: false,
         });
 
         let health_report = watchdog

@@ -32,9 +32,9 @@ The core commands are current; web HUD, secondary dashboard surfaces, and proof/
 
 ## Current vs Target (L8) Snapshot
 
-- **Current:** Kimi-only execution, scheduler-backed `team run`, compatibility `team spawn`, run/proof inspection, and Kimi-native asset sync/doctor/rollback.
+- **Current:** Kimi-only execution, scheduler-backed Wire `team run`, run/proof inspection, and Kimi-native asset sync/doctor/rollback.
 - **Current Scaffold:** web HUD and secondary dashboard/MCP surfaces are present but still hardening.
-- **Target:** Wire-first execution/observability path with fewer compatibility fallbacks and clearer proof-first operator workflows.
+- **Target:** deeper proof-first operator workflows on top of the Wire scheduler runtime.
 
 When writing docs or implementation notes, mark maturity explicitly (`Current`, `Current MVP`, `Current Scaffold`, `Next`, `Later`) to avoid mixing shipped behavior with roadmap intent.
 
@@ -84,7 +84,7 @@ Legacy/no-handshake fallback remains valid when upstream does not support `initi
 
 Large files are known hotspots, not automatic refactor targets:
 
-- `src/cli/team.rs`: current team command surface, including `spawn` and `run`, plus tmux team operations.
+- `src/cli/team.rs`: current team command surface for `run`, state inspection, health, shutdown, cleanup, import/export, rename, and roles.
 - `src/wire/protocol.rs`: Wire JSON-RPC types and parsing contract.
 - `src/runtime/autopilot.rs`: autonomous run state machine.
 - `src/runtime/events.rs`: event envelope and timeline records.

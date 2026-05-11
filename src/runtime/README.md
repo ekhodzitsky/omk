@@ -9,7 +9,6 @@
 | `ask.rs` | Provider ask execution helpers. |
 | `atomic.rs` | Atomic file writes. |
 | `autopilot.rs` | Autopilot state machine and execution loop. |
-| `bridge.rs` | Worker bridge script generation. |
 | `config.rs` | XDG and legacy path resolution. |
 | `events.rs` | Event envelope and timeline records. |
 | `gates.rs` | Verification gate definitions and execution. |
@@ -21,7 +20,6 @@
 | `scheduler/` | Task claims, leases, ownership, and runner scaffold. |
 | `shell.rs` | Shell escaping and validation. |
 | `state.rs` | Team/autopilot/ralph state files. |
-| `tmux.rs` | Tmux process wrapper. |
 | `ultrawork.rs` | Parallel burst execution runtime. |
 | `watchdog.rs` | Dead/stuck worker detection. |
 | `wire_worker.rs` | Kimi Wire worker adapter used by `team run`. |
@@ -32,7 +30,7 @@
 - Runtime changes should be observable through state, events, logs, or proof output.
 - Prefer append-only event records for behavior that must be audited later.
 - Use `atomic.rs` for state/proof/event artifacts that readers may inspect while a run is active.
-- Keep Tmux compatibility for current `team spawn`, but prefer Wire events for `team run` and proof generation.
+- Keep `team run` Wire-first; do not add terminal-session orchestration back into the runtime.
 - Do not silently change state file shape without migration or a compatibility note.
 
 ## Tests

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use omk::runtime::events::{Event, EventKind, EventWriter, RunId};
 use omk::runtime::state::{TaskStatus, TeamState};
-use omk::runtime::watchdog::{HealthStatus, Watchdog, WorkerHealth};
+use omk::runtime::watchdog::Watchdog;
 use omk::vis::event_stream::EventStream;
 use omk::vis::hud::HudState;
 
@@ -218,7 +218,6 @@ async fn test_hud_worker_display_computation() {
 
     let mut event_stream = EventStream::new(&events_path);
     let watchdog = Watchdog::new(omk::runtime::watchdog::WatchdogConfig {
-        require_tmux: false,
         ..Default::default()
     });
     let mut hud = HudState::new("hud-display", "hud-display");
@@ -373,190 +372,6 @@ async fn test_hud_refresh_reads_all_events_from_file() {
         .unwrap();
 
     assert_eq!(hud.events.len(), 8);
-}
-
-#[test]
-fn test_hud_tmux_status_basic() {
-    let mut hud = HudState::new("tmux-test", "run-1");
-    hud.workers.push(WorkerHealth {
-        worker_id: "w1".to_string(),
-        status: HealthStatus::Healthy,
-        last_heartbeat: Some(chrono::Utc::now()),
-        heartbeat_content: None,
-        tmux_pane_alive: true,
-        inbox_count: 0,
-        outbox_count: 0,
-        message: "ok".to_string(),
-    });
-    hud.workers.push(WorkerHealth {
-        worker_id: "w2".to_string(),
-        status: HealthStatus::Healthy,
-        last_heartbeat: Some(chrono::Utc::now()),
-        heartbeat_content: None,
-        tmux_pane_alive: true,
-        inbox_count: 0,
-        outbox_count: 0,
-        message: "ok".to_string(),
-    });
-    hud.workers.push(WorkerHealth {
-        worker_id: "w3".to_string(),
-        status: HealthStatus::Stalled,
-        last_heartbeat: None,
-        heartbeat_content: None,
-        tmux_pane_alive: false,
-        inbox_count: 0,
-        outbox_count: 0,
-        message: "stalled".to_string(),
-    });
-
-    let status = hud.to_tmux_status();
-    assert!(status.contains("OMK:3 workers"));
-    assert!(status.contains("2 running"));
-    assert!(status.contains("1 stalled"));
-    assert!(status.contains("0 dead"));
-    assert!(
-        status.len() <= 80,
-        "tmux status too long: {} chars: {}",
-        status.len(),
-        status
-    );
-}
-
-#[test]
-fn test_hud_tmux_status_with_gate_failed() {
-    let mut hud = HudState::new("tmux-gate", "run-1");
-    hud.events.push(
-        Event::new(RunId("run-1".to_string()), EventKind::GateFailed)
-            .with_payload(serde_json::json!({ "gate_id": "g1", "name": "lint", "required": true }))
-            .unwrap(),
-    );
-    hud.workers.push(WorkerHealth {
-        worker_id: "w1".to_string(),
-        status: HealthStatus::Healthy,
-        last_heartbeat: Some(chrono::Utc::now()),
-        heartbeat_content: None,
-        tmux_pane_alive: true,
-        inbox_count: 0,
-        outbox_count: 0,
-        message: "ok".to_string(),
-    });
-
-    let status = hud.to_tmux_status();
-    assert!(status.contains("gate:lint-FAILED"));
-    assert!(
-        status.len() <= 80,
-        "tmux status too long: {} chars: {}",
-        status.len(),
-        status
-    );
-}
-
-#[test]
-fn test_hud_tmux_status_with_proof() {
-    let mut hud = HudState::new("tmux-proof", "run-1");
-    hud.events.push(
-        Event::new(RunId("run-1".to_string()), EventKind::ProofWritten)
-            .with_payload(serde_json::json!({ "proof_path": "/tmp/p", "status": "ready" }))
-            .unwrap(),
-    );
-    hud.workers.push(WorkerHealth {
-        worker_id: "w1".to_string(),
-        status: HealthStatus::Healthy,
-        last_heartbeat: Some(chrono::Utc::now()),
-        heartbeat_content: None,
-        tmux_pane_alive: true,
-        inbox_count: 0,
-        outbox_count: 0,
-        message: "ok".to_string(),
-    });
-
-    let status = hud.to_tmux_status();
-    assert!(status.contains("proof:ready"));
-    assert!(
-        status.len() <= 80,
-        "tmux status too long: {} chars: {}",
-        status.len(),
-        status
-    );
-}
-
-#[test]
-fn test_hud_tmux_status_truncation() {
-    let mut hud = HudState::new("tmux-trunc", "run-1");
-    let long_name = "a".repeat(100);
-    hud.events.push(
-        Event::new(RunId("run-1".to_string()), EventKind::GateFailed)
-            .with_payload(
-                serde_json::json!({ "gate_id": "g1", "name": long_name, "required": true }),
-            )
-            .unwrap(),
-    );
-    hud.events.push(
-        Event::new(RunId("run-1".to_string()), EventKind::ProofWritten)
-            .with_payload(serde_json::json!({ "proof_path": "/tmp/p", "status": "ready" }))
-            .unwrap(),
-    );
-    hud.workers.push(WorkerHealth {
-        worker_id: "w1".to_string(),
-        status: HealthStatus::Healthy,
-        last_heartbeat: Some(chrono::Utc::now()),
-        heartbeat_content: None,
-        tmux_pane_alive: true,
-        inbox_count: 0,
-        outbox_count: 0,
-        message: "ok".to_string(),
-    });
-
-    let status = hud.to_tmux_status();
-    assert!(
-        status.len() <= 80,
-        "tmux status should be <= 80 chars, got {}: {}",
-        status.len(),
-        status
-    );
-    // Core worker info should always be present
-    assert!(status.contains("OMK:1 workers"));
-}
-
-#[test]
-fn test_hud_tmux_status_omits_gate_if_fits() {
-    let mut hud = HudState::new("tmux-omit", "run-1");
-    // No workers, no events besides a passed gate
-    hud.events.push(
-        Event::new(RunId("run-1".to_string()), EventKind::GatePassed)
-            .with_payload(serde_json::json!({ "gate_id": "g1", "name": "fmt", "required": true }))
-            .unwrap(),
-    );
-
-    let status = hud.to_tmux_status();
-    // GatePassed should not appear in tmux status (only GateFailed)
-    assert!(!status.contains("gate:"));
-    assert!(status.contains("OMK:0 workers"));
-}
-
-#[test]
-fn test_hud_tmux_status_proof_failed() {
-    let mut hud = HudState::new("tmux-proof-fail", "run-1");
-    hud.events.push(
-        Event::new(RunId("run-1".to_string()), EventKind::ProofWritten)
-            .with_payload(serde_json::json!({ "proof_path": "/tmp/p", "status": "failed" }))
-            .unwrap(),
-    );
-    hud.workers.push(WorkerHealth {
-        worker_id: "w1".to_string(),
-        status: HealthStatus::Dead,
-        last_heartbeat: None,
-        heartbeat_content: None,
-        tmux_pane_alive: false,
-        inbox_count: 0,
-        outbox_count: 0,
-        message: "dead".to_string(),
-    });
-
-    let status = hud.to_tmux_status();
-    assert!(status.contains("proof:failed"));
-    assert!(status.contains("0 running"));
-    assert!(status.contains("1 dead"));
 }
 
 #[tokio::test]

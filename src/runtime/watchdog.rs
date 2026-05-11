@@ -5,7 +5,6 @@ use std::path::Path;
 use std::sync::Mutex;
 use tracing::{info, warn};
 
-use super::bridge::TeamBridge;
 use super::config::WORKERS_DIR;
 use super::events::{Event, EventKind, EventWriter, RunId};
 use super::scheduler::worker_state::{WorkerState, WorkerStateMap};
@@ -23,15 +22,6 @@ pub struct WatchdogConfig {
     pub heartbeat_stale_secs: u64,
     /// Seconds a kimi command can run before it is considered stuck.
     pub command_timeout_secs: u64,
-    /// Whether to attempt recovery when a worker is dead.
-    pub attempt_recovery: bool,
-    /// Whether to require a tmux session for workers to be considered healthy.
-    #[serde(default = "default_require_tmux")]
-    pub require_tmux: bool,
-}
-
-fn default_require_tmux() -> bool {
-    true
 }
 
 impl Default for WatchdogConfig {
@@ -40,8 +30,6 @@ impl Default for WatchdogConfig {
             heartbeat_missing_secs: HEARTBEAT_INTERVAL_SECS,
             heartbeat_stale_secs: 60,
             command_timeout_secs: 300,
-            attempt_recovery: false,
-            require_tmux: true,
         }
     }
 }
@@ -53,7 +41,6 @@ pub struct WorkerHealth {
     pub status: HealthStatus,
     pub last_heartbeat: Option<DateTime<Utc>>,
     pub heartbeat_content: Option<String>,
-    pub tmux_pane_alive: bool,
     pub inbox_count: usize,
     pub outbox_count: usize,
     pub message: String,
@@ -73,18 +60,8 @@ pub enum HealthStatus {
 pub struct HealthReport {
     pub run_id: String,
     pub checked_at: DateTime<Utc>,
-    pub tmux_session_alive: bool,
     pub workers: Vec<WorkerHealth>,
     pub issues_found: usize,
-}
-
-/// Result of a recovery attempt.
-#[derive(Debug, Clone)]
-pub struct RecoveryResult {
-    pub worker_id: String,
-    pub action: String,
-    pub success: bool,
-    pub message: String,
 }
 
 /// Watchdog checks worker health and records events.
@@ -132,8 +109,6 @@ impl Watchdog {
         event_writer: Option<&EventWriter>,
     ) -> Result<HealthReport> {
         let team_name = &run_id.0;
-        let session_name = format!("omk-team-{team_name}");
-        let tmux_alive = crate::runtime::tmux::session_exists(&session_name).unwrap_or(false);
 
         let mut workers = Vec::new();
         let mut issues_found = 0;
@@ -151,7 +126,7 @@ impl Watchdog {
                     }
                 };
 
-                let health = self.check_worker(&spec, tmux_alive).await?;
+                let health = self.check_worker(&spec).await?;
 
                 let new_state = match health.status {
                     HealthStatus::Healthy => {
@@ -211,7 +186,6 @@ impl Watchdog {
         let report = HealthReport {
             run_id: team_name.clone(),
             checked_at: Utc::now(),
-            tmux_session_alive: tmux_alive,
             workers,
             issues_found,
         };
@@ -225,11 +199,11 @@ impl Watchdog {
         Ok(report)
     }
 
-    async fn check_worker(&self, spec: &WorkerSpec, tmux_alive: bool) -> Result<WorkerHealth> {
+    async fn check_worker(&self, spec: &WorkerSpec) -> Result<WorkerHealth> {
         let now = Utc::now();
         let mut last_heartbeat = None;
         let mut heartbeat_content = None;
-        let (mut status, mut message);
+        let (status, message);
 
         // Read heartbeat
         if spec.heartbeat.exists() {
@@ -282,13 +256,6 @@ impl Watchdog {
             message = "Heartbeat file missing".to_string();
         }
 
-        // Check tmux pane (coarse check: if session is dead, all panes are dead)
-        let tmux_pane_alive = tmux_alive;
-        if !tmux_alive && self.config.require_tmux && status != HealthStatus::Dead {
-            status = HealthStatus::Dead;
-            message = format!("{}; tmux session not found", message);
-        }
-
         // Count inbox/outbox
         let inbox_count = count_jsonl_lines(&spec.inbox).await;
         let outbox_count = count_jsonl_lines(&spec.outbox).await;
@@ -298,128 +265,10 @@ impl Watchdog {
             status,
             last_heartbeat,
             heartbeat_content,
-            tmux_pane_alive,
             inbox_count,
             outbox_count,
             message,
         })
-    }
-
-    /// Attempt to recover a dead worker by reloading its bridge script.
-    pub async fn attempt_recovery(
-        &self,
-        worker_health: &WorkerHealth,
-        state_dir: &Path,
-        event_writer: &EventWriter,
-        run_id: &RunId,
-    ) -> Result<RecoveryResult> {
-        if !self.config.attempt_recovery {
-            return Ok(RecoveryResult {
-                worker_id: worker_health.worker_id.clone(),
-                action: "skipped".to_string(),
-                success: false,
-                message: "attempt_recovery is disabled in config".to_string(),
-            });
-        }
-
-        if worker_health.status != HealthStatus::Dead {
-            return Ok(RecoveryResult {
-                worker_id: worker_health.worker_id.clone(),
-                action: "skipped".to_string(),
-                success: false,
-                message: format!("Worker status is {:?}, not Dead", worker_health.status),
-            });
-        }
-
-        let workers_dir = state_dir.join(WORKERS_DIR);
-        let worker_dir = workers_dir.join(&worker_health.worker_id);
-        let spec = match WorkerSpec::load(&worker_dir).await {
-            Ok(s) => s,
-            Err(e) => {
-                return Ok(RecoveryResult {
-                    worker_id: worker_health.worker_id.clone(),
-                    action: "load_spec".to_string(),
-                    success: false,
-                    message: format!("Failed to load worker spec: {}", e),
-                });
-            }
-        };
-
-        // Derive pane index from worker name (worker-N -> pane N+1).
-        let pane_index = if let Some(n_str) = spec.name.strip_prefix("worker-") {
-            match n_str.parse::<usize>() {
-                Ok(n) => n + 1,
-                Err(_) => {
-                    return Ok(RecoveryResult {
-                        worker_id: worker_health.worker_id.clone(),
-                        action: "parse_pane_index".to_string(),
-                        success: false,
-                        message: format!("Cannot parse pane index from worker name: {}", spec.name),
-                    });
-                }
-            }
-        } else {
-            return Ok(RecoveryResult {
-                worker_id: worker_health.worker_id.clone(),
-                action: "parse_pane_index".to_string(),
-                success: false,
-                message: format!(
-                    "Worker name does not follow worker-N pattern: {}",
-                    spec.name
-                ),
-            });
-        };
-
-        let team_name = &run_id.0;
-        let session_name = format!("omk-team-{team_name}");
-        let window_name = "lead";
-
-        match crate::runtime::tmux::pane_exists(&session_name, window_name, pane_index) {
-            Ok(true) => {
-                // Pane exists — respawn the bridge script.
-                let bridge = TeamBridge::new(&spec, &session_name);
-                match bridge.spawn_worker(pane_index).await {
-                    Ok(()) => {
-                        let event = Event::new(run_id.clone(), EventKind::WorkerRecovered)
-                            .with_actor(&spec.name)
-                            .with_message(format!("Respawned bridge in pane {}", pane_index))
-                            .unwrap_or_else(|_| {
-                                Event::new(run_id.clone(), EventKind::WorkerRecovered)
-                                    .with_actor(&spec.name)
-                            });
-                        let _ = event_writer.append(&event).await;
-
-                        Ok(RecoveryResult {
-                            worker_id: worker_health.worker_id.clone(),
-                            action: "respawn_bridge".to_string(),
-                            success: true,
-                            message: format!(
-                                "Respawned bridge for {} in pane {}",
-                                spec.name, pane_index
-                            ),
-                        })
-                    }
-                    Err(e) => Ok(RecoveryResult {
-                        worker_id: worker_health.worker_id.clone(),
-                        action: "respawn_bridge".to_string(),
-                        success: false,
-                        message: format!("Failed to respawn bridge: {}", e),
-                    }),
-                }
-            }
-            Ok(false) => Ok(RecoveryResult {
-                worker_id: worker_health.worker_id.clone(),
-                action: "check_pane".to_string(),
-                success: false,
-                message: format!("Tmux pane {} does not exist", pane_index),
-            }),
-            Err(e) => Ok(RecoveryResult {
-                worker_id: worker_health.worker_id.clone(),
-                action: "check_pane".to_string(),
-                success: false,
-                message: format!("Failed to check tmux pane: {}", e),
-            }),
-        }
     }
 }
 
@@ -459,7 +308,7 @@ mod tests {
             .unwrap();
 
         let wd = Watchdog::with_defaults();
-        let health = wd.check_worker(&spec, true).await.unwrap();
+        let health = wd.check_worker(&spec).await.unwrap();
         assert_eq!(health.status, HealthStatus::Healthy);
     }
 
@@ -477,7 +326,7 @@ mod tests {
 
         // Heartbeat file does not exist
         let wd = Watchdog::with_defaults();
-        let health = wd.check_worker(&spec, true).await.unwrap();
+        let health = wd.check_worker(&spec).await.unwrap();
         assert_eq!(health.status, HealthStatus::Dead);
     }
 
@@ -508,109 +357,7 @@ mod tests {
             heartbeat_stale_secs: 60,
             ..Default::default()
         });
-        let health = wd.check_worker(&spec, true).await.unwrap();
+        let health = wd.check_worker(&spec).await.unwrap();
         assert_eq!(health.status, HealthStatus::Stalled);
-    }
-
-    #[tokio::test]
-    async fn watchdog_recovery_skipped_when_disabled() {
-        let tmp = tempfile::tempdir().unwrap();
-        let spec = WorkerSpec {
-            name: "worker-0".to_string(),
-            role: "coder".to_string(),
-            inbox: tmp.path().join("inbox.jsonl"),
-            outbox: tmp.path().join("outbox.jsonl"),
-            heartbeat: tmp.path().join("heartbeat.json"),
-            project_dir: None,
-        };
-        spec.save().await.unwrap();
-
-        let wd = Watchdog::with_defaults();
-        let health = wd.check_worker(&spec, true).await.unwrap();
-        assert_eq!(health.status, HealthStatus::Dead);
-
-        let event_log = tmp.path().join("events.jsonl");
-        let event_writer = EventWriter::new(&event_log);
-        let run_id = RunId("test-team".to_string());
-
-        let result = wd
-            .attempt_recovery(&health, tmp.path(), &event_writer, &run_id)
-            .await
-            .unwrap();
-
-        assert!(!result.success);
-        assert_eq!(result.action, "skipped");
-        assert!(result.message.contains("disabled"));
-    }
-
-    #[tokio::test]
-    async fn watchdog_recovery_skipped_for_healthy_worker() {
-        let tmp = tempfile::tempdir().unwrap();
-        let spec = WorkerSpec {
-            name: "worker-0".to_string(),
-            role: "coder".to_string(),
-            inbox: tmp.path().join("inbox.jsonl"),
-            outbox: tmp.path().join("outbox.jsonl"),
-            heartbeat: tmp.path().join("heartbeat.json"),
-            project_dir: None,
-        };
-
-        let hb = serde_json::json!({
-            "status": "alive",
-            "ts": Utc::now().to_rfc3339(),
-        });
-        tokio::fs::write(&spec.heartbeat, hb.to_string())
-            .await
-            .unwrap();
-
-        let wd = Watchdog::new(WatchdogConfig {
-            attempt_recovery: true,
-            ..Default::default()
-        });
-        let health = wd.check_worker(&spec, true).await.unwrap();
-        assert_eq!(health.status, HealthStatus::Healthy);
-
-        let event_log = tmp.path().join("events.jsonl");
-        let event_writer = EventWriter::new(&event_log);
-        let run_id = RunId("test-team".to_string());
-
-        let result = wd
-            .attempt_recovery(&health, tmp.path(), &event_writer, &run_id)
-            .await
-            .unwrap();
-
-        assert!(!result.success);
-        assert_eq!(result.action, "skipped");
-        assert!(result.message.contains("not Dead"));
-    }
-
-    #[tokio::test]
-    async fn watchdog_healthy_worker_without_tmux_when_not_required() {
-        let tmp = tempfile::tempdir().unwrap();
-        let spec = WorkerSpec {
-            name: "w1".to_string(),
-            role: "coder".to_string(),
-            inbox: tmp.path().join("inbox.jsonl"),
-            outbox: tmp.path().join("outbox.jsonl"),
-            heartbeat: tmp.path().join("heartbeat.json"),
-            project_dir: None,
-        };
-
-        // Write a fresh heartbeat
-        let hb = serde_json::json!({
-            "status": "alive",
-            "ts": Utc::now().to_rfc3339(),
-        });
-        tokio::fs::write(&spec.heartbeat, hb.to_string())
-            .await
-            .unwrap();
-
-        let wd = Watchdog::new(WatchdogConfig {
-            require_tmux: false,
-            ..Default::default()
-        });
-        let health = wd.check_worker(&spec, false).await.unwrap();
-        assert_eq!(health.status, HealthStatus::Healthy);
-        assert!(!health.tmux_pane_alive);
     }
 }

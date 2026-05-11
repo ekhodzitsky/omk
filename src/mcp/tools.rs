@@ -5,8 +5,8 @@ use tokio::process::Command;
 pub fn list_tools() -> Vec<Value> {
     vec![
         serde_json::json!({
-            "name": "omk_team_spawn",
-            "description": "Spawn a team of Kimi agents in tmux. Returns session details.",
+            "name": "omk_team_run",
+            "description": "Run a scheduler-backed Kimi team and return execution details.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -35,7 +35,7 @@ pub fn list_tools() -> Vec<Value> {
                 "type": "object",
                 "properties": {
                     "name": { "type": "string", "description": "Team name" },
-                    "force": { "type": "boolean", "description": "Force kill without sending Ctrl-C", "default": false }
+                    "force": { "type": "boolean", "description": "Force shutdown handling", "default": false }
                 },
                 "required": ["name"]
             }
@@ -55,25 +55,25 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value, Omk
     let omk_bin = std::env::current_exe().unwrap_or_else(|_| "omk".into());
 
     match name {
-        "omk_team_spawn" => {
+        "omk_team_run" => {
             let spec = arguments["spec"].as_str().unwrap_or("1:coder");
             let task = arguments["task"].as_str().unwrap_or("");
             let name_arg = arguments["name"].as_str();
 
             let mut cmd = Command::new(&omk_bin);
-            cmd.arg("team").arg("spawn").arg(spec).arg(task);
+            cmd.arg("team").arg("run").arg(spec).arg(task);
             if let Some(n) = name_arg {
                 cmd.args(["--name", n]);
             }
 
             let output = cmd.output().await.map_err(|_e| OmkError::ShellFailed {
-                command: format!("omk team spawn {}", spec),
+                command: format!("omk team run {}", spec),
             })?;
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
 
             Ok(serde_json::json!({
-                "status": if output.status.success() { "spawned" } else { "error" },
+                "status": if output.status.success() { "completed" } else { "error" },
                 "stdout": stdout.to_string(),
                 "stderr": stderr.to_string(),
                 "spec": spec,
