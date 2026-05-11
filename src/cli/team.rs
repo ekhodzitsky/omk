@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::kimi_native::role_packs::RolePack;
 use crate::runtime::config::{EVENTS_FILE, TEAM_DIR, WORKERS_DIR};
-use crate::runtime::events::{EventBuilder, EventKind, GateId, RunId};
+use crate::runtime::events::{Event, EventBuilder, EventKind, GateId, RunId};
 use crate::runtime::gates::{run_gates_with_evidence, GateDef, VerificationConfig};
 use crate::runtime::proof::ProofStatus;
 use crate::runtime::sanitize::sanitize_name;
@@ -132,9 +133,9 @@ pub(crate) struct CleanupArgs {
     pub all: bool,
 }
 
-pub(crate) async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args, cancel: CancellationToken) -> Result<()> {
     match args.command {
-        TeamCommands::Run(args) => run_team(args).await,
+        TeamCommands::Run(args) => run_team(args, cancel).await,
         TeamCommands::List => list_teams().await,
         TeamCommands::Status(args) => status(args).await,
         TeamCommands::Rename(args) => rename_team(args).await,
@@ -191,7 +192,7 @@ async fn list_teams() -> Result<()> {
     Ok(())
 }
 
-async fn run_team(args: RunArgs) -> Result<()> {
+async fn run_team(args: RunArgs, cancel: CancellationToken) -> Result<()> {
     let task = args.task.join(" ");
     if task.is_empty() {
         anyhow::bail!("Task description is required");
@@ -272,6 +273,7 @@ async fn run_team(args: RunArgs) -> Result<()> {
         dir: &args.dir,
         event_writer: &event_writer,
         run_id: &run_id,
+        cancel_token: cancel.clone(),
     })
     .await?;
 
@@ -296,7 +298,30 @@ async fn run_team(args: RunArgs) -> Result<()> {
     .await?;
 
     // Run the orchestration loop
-    let run_result = runner.run(&worker_specs).await;
+    let run_result = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => {
+            Err(anyhow::anyhow!("run cancelled by user"))
+        }
+        res = runner.run(&worker_specs) => res,
+    };
+
+    let was_cancelled = run_result
+        .as_ref()
+        .err()
+        .map(|e| e.to_string().contains("cancelled by user"))
+        .unwrap_or(false);
+
+    // Abort wire worker adapters
+    for handle in wire_handles {
+        handle.abort();
+    }
+
+    if was_cancelled {
+        let interrupt_event =
+            Event::new(run_id.clone(), EventKind::ManualInterrupt).with_actor("omk-cli");
+        let _ = event_writer.append(&interrupt_event).await;
+    }
 
     let run_succeeded = matches!(
         &run_result,
@@ -304,7 +329,7 @@ async fn run_team(args: RunArgs) -> Result<()> {
     );
 
     // Synthesize results if the scheduler returned worker output.
-    let synthesis_summary = if run_result.is_ok() {
+    let synthesis_summary = if run_result.is_ok() && !was_cancelled {
         match tokio::time::timeout(
             std::time::Duration::from_secs(30),
             synthesize_results(&worker_specs, &state_dir, &event_writer, &run_id, &kimi_bin),
@@ -324,11 +349,6 @@ async fn run_team(args: RunArgs) -> Result<()> {
     } else {
         None
     };
-
-    // Abort wire worker adapters
-    for handle in wire_handles {
-        handle.abort();
-    }
 
     match &run_result {
         Ok(summary) => {

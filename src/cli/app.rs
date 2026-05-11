@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use super::kimi_native_cmd;
@@ -105,6 +106,24 @@ enum ShellArg {
 }
 
 pub async fn run() -> Result<()> {
+    let cancel = CancellationToken::new();
+    let mut run_fut = std::pin::pin!(run_with_cancel(cancel.clone()));
+
+    tokio::select! {
+        res = &mut run_fut => res,
+        _ = wait_for_signal() => {
+            eprintln!("\nReceived shutdown signal, cancelling...");
+            cancel.cancel();
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                &mut run_fut,
+            ).await;
+            Ok(())
+        }
+    }
+}
+
+async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
     let omk = Omk::parse();
 
     let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -140,9 +159,9 @@ pub async fn run() -> Result<()> {
     info!("omk starting");
 
     match omk.command {
-        Commands::Team(args) => team::run(args).await,
-        Commands::Autopilot(args) => autopilot::run(args).await,
-        Commands::Ralph(args) => ralph::run(args).await,
+        Commands::Team(args) => team::run(args, cancel.clone()).await,
+        Commands::Autopilot(args) => autopilot::run(args, cancel.clone()).await,
+        Commands::Ralph(args) => ralph::run(args, cancel.clone()).await,
         Commands::Ask(args) => ask::run(args).await,
         Commands::Hud(args) => hud::run(args).await,
         Commands::Setup => run_setup().await,
@@ -186,6 +205,23 @@ pub async fn run() -> Result<()> {
             Ok(())
         }
     }
+}
+
+#[cfg(unix)]
+async fn wait_for_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    let mut sigint = signal(SignalKind::interrupt()).expect("SIGINT handler");
+    let mut sigterm = signal(SignalKind::terminate()).expect("SIGTERM handler");
+    tokio::select! {
+        _ = sigint.recv() => {},
+        _ = sigterm.recv() => {},
+    }
+}
+
+#[cfg(not(unix))]
+async fn wait_for_signal() {
+    let _ = tokio::signal::ctrl_c().await;
 }
 
 async fn run_setup() -> Result<()> {

@@ -144,6 +144,7 @@ pub(super) struct WireWorkerSetup<'a> {
     pub(super) dir: &'a Path,
     pub(super) event_writer: &'a EventWriter,
     pub(super) run_id: &'a RunId,
+    pub(super) cancel_token: tokio_util::sync::CancellationToken,
 }
 
 pub(super) async fn setup_wire_workers(
@@ -177,10 +178,11 @@ pub(super) async fn setup_wire_workers(
         worker_spec.save().await?;
         worker_specs.push(worker_spec.clone());
 
-        let adapter = WireWorkerAdapter::new(
+        let adapter = WireWorkerAdapter::new_with_cancel(
             worker_spec,
             config.run_id.clone(),
             config.event_writer.clone(),
+            config.cancel_token.clone(),
         );
         let handle = adapter.spawn();
         handles.push(handle);

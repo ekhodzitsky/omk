@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
+use tokio_util::sync::CancellationToken;
 
 /// Autonomous execution with single lead agent
 #[derive(Parser, Debug, Clone)]
@@ -30,7 +31,7 @@ pub(crate) struct Args {
     pub yolo: bool,
 }
 
-pub(crate) async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args, _cancel: CancellationToken) -> Result<()> {
     let task = args.task.join(" ");
 
     if args.resume {

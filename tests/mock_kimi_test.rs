@@ -442,6 +442,49 @@ async fn test_team_demo_fixture_scripted_outcomes_are_stable() {
 }
 
 #[tokio::test]
+async fn test_wire_worker_adapter_cancellation_stops_idle_worker() {
+    use omk::runtime::events::{EventWriter, RunId};
+    use omk::runtime::wire_worker::WireWorkerAdapter;
+    use omk::runtime::worker::WorkerSpec;
+    use tempfile::TempDir;
+    use tokio::time::Duration;
+    use tokio_util::sync::CancellationToken;
+
+    let tmp = TempDir::new().unwrap();
+    let worker_dir = tmp.path().join("worker-cancel");
+    let project_dir = tmp.path().join("project");
+    tokio::fs::create_dir_all(&worker_dir).await.unwrap();
+    tokio::fs::create_dir_all(&project_dir).await.unwrap();
+
+    let spec = WorkerSpec {
+        name: "worker-cancel".to_string(),
+        role: "coder".to_string(),
+        inbox: worker_dir.join("inbox.jsonl"),
+        outbox: worker_dir.join("outbox.jsonl"),
+        heartbeat: worker_dir.join("heartbeat.json"),
+        project_dir: Some(project_dir),
+    };
+    spec.save().await.unwrap();
+
+    let event_writer = EventWriter::new(tmp.path().join("events.jsonl"));
+    let run_id = RunId("run-wire-cancel".to_string());
+    let cancel = CancellationToken::new();
+    let adapter =
+        WireWorkerAdapter::new_with_cancel(spec.clone(), run_id, event_writer, cancel.clone());
+    let handle = adapter.spawn();
+
+    cancel.cancel();
+    tokio::time::timeout(Duration::from_secs(2), handle)
+        .await
+        .expect("adapter should stop after cancellation")
+        .expect("adapter task should not panic");
+
+    let heartbeat = tokio::fs::read_to_string(&spec.heartbeat).await.unwrap();
+    let heartbeat: serde_json::Value = serde_json::from_str(&heartbeat).unwrap();
+    assert_eq!(heartbeat["status"], "stopped");
+}
+
+#[tokio::test]
 async fn test_wire_worker_adapter_times_out_stalled_turn_and_writes_failed_result() {
     use omk::runtime::events::{EventWriter, RunId};
     use omk::runtime::wire_worker::WireWorkerAdapter;

@@ -8,6 +8,7 @@ use anyhow::Result;
 use std::io::SeekFrom;
 use std::path::PathBuf;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, AsyncWriteExt};
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 /// Poll interval for the wire worker inbox check loop.
@@ -25,15 +26,26 @@ pub struct WireWorkerAdapter {
     run_id: RunId,
     event_writer: EventWriter,
     active_turn_timeout: std::time::Duration,
+    cancel_token: CancellationToken,
 }
 
 impl WireWorkerAdapter {
     pub fn new(spec: WorkerSpec, run_id: RunId, event_writer: EventWriter) -> Self {
+        Self::new_with_cancel(spec, run_id, event_writer, CancellationToken::new())
+    }
+
+    pub fn new_with_cancel(
+        spec: WorkerSpec,
+        run_id: RunId,
+        event_writer: EventWriter,
+        cancel_token: CancellationToken,
+    ) -> Self {
         Self {
             spec,
             run_id,
             event_writer,
             active_turn_timeout: resolve_active_turn_timeout(),
+            cancel_token,
         }
     }
 
@@ -177,7 +189,22 @@ impl WireWorkerAdapter {
                 };
             }
 
-            tokio::time::sleep(std::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
+            tokio::select! {
+                biased;
+                _ = self.cancel_token.cancelled() => {
+                    info!(worker = %self.spec.name, "Wire worker adapter shutting down due to cancellation");
+                    let hb_stopped = serde_json::json!({
+                        "status": "stopped",
+                        "name": self.spec.name,
+                        "ts": chrono::Utc::now().to_rfc3339(),
+                    });
+                    if let Err(e) = tokio::fs::write(heartbeat, hb_stopped.to_string()).await {
+                        warn!(error = %e, "Failed to write final heartbeat");
+                    }
+                    return Ok(());
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(POLL_INTERVAL_SECS)) => {}
+            }
         }
     }
 
@@ -245,121 +272,136 @@ impl WireWorkerAdapter {
         let start_time = std::time::Instant::now();
 
         loop {
-            match client.read_message_timeout(self.active_turn_timeout).await {
-                Ok(WireMessage::Event(ev)) => {
-                    // Record raw wire event for audit / replay
-                    let raw_json =
-                        serde_json::to_string(&redact_wire_secrets(&serde_json::to_value(&ev)?))?;
-                    let mut file = tokio::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(wire_events_path)
-                        .await?;
-                    file.write_all(raw_json.as_bytes()).await?;
-                    file.write_all(b"\n").await?;
-                    file.flush().await?;
-                    drop(file);
+            tokio::select! {
+                biased;
+                _ = self.cancel_token.cancelled() => {
+                    info!(worker = %self.spec.name, task = %task.id, "Task processing cancelled");
+                    success = false;
+                    failure_reason = Some("cancelled by user".to_string());
+                    break;
+                }
+                msg = client.read_message_timeout(self.active_turn_timeout) => {
+                    match msg {
+                        Ok(WireMessage::Event(ev)) => {
+                            // Record raw wire event for audit / replay
+                            let raw_json =
+                                serde_json::to_string(&redact_wire_secrets(&serde_json::to_value(&ev)?))?;
+                            let mut file = tokio::fs::OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(wire_events_path)
+                                .await?;
+                            file.write_all(raw_json.as_bytes()).await?;
+                            file.write_all(b"\n").await?;
+                            file.flush().await?;
+                            drop(file);
 
-                    // Try typed conversion
-                    match ev.params.to_event() {
-                        Ok(typed) => match typed {
-                            crate::wire::protocol::Event::TurnEnd => break,
-                            crate::wire::protocol::Event::StepInterrupted => {
-                                success = false;
-                                failure_reason =
-                                    Some("wire step interrupted before turn_end".to_string());
-                                break;
-                            }
-                            _ => {}
-                        },
-                        Err(_) => {
-                            // Fallback: match by event_type string
-                            match ev.params.normalized_event_type().as_str() {
-                                "turn_end" => break,
-                                "step_interrupted" => {
-                                    success = false;
-                                    failure_reason =
-                                        Some("wire step interrupted before turn_end".to_string());
-                                    break;
-                                }
-                                "thinking" | "text" | "content" | "content_part" => {
-                                    if let Some(text) =
-                                        ev.params.payload.get("text").and_then(|v| v.as_str())
-                                    {
-                                        summary_parts.push(text.to_string());
-                                    } else if let Some(chunk) =
-                                        ev.params.payload.get("chunk").and_then(|v| v.as_str())
-                                    {
-                                        summary_parts.push(chunk.to_string());
+                            // Try typed conversion
+                            match ev.params.to_event() {
+                                Ok(typed) => match typed {
+                                    crate::wire::protocol::Event::TurnEnd => break,
+                                    crate::wire::protocol::Event::StepInterrupted => {
+                                        success = false;
+                                        failure_reason =
+                                            Some("wire step interrupted before turn_end".to_string());
+                                        break;
+                                    }
+                                    _ => {}
+                                },
+                                Err(_) => {
+                                    // Fallback: match by event_type string
+                                    match ev.params.normalized_event_type().as_str() {
+                                        "turn_end" => break,
+                                        "step_interrupted" => {
+                                            success = false;
+                                            failure_reason =
+                                                Some("wire step interrupted before turn_end".to_string());
+                                            break;
+                                        }
+                                        "thinking" | "text" | "content" | "content_part" => {
+                                            if let Some(text) =
+                                                ev.params.payload.get("text").and_then(|v| v.as_str())
+                                            {
+                                                summary_parts.push(text.to_string());
+                                            } else if let Some(chunk) =
+                                                ev.params.payload.get("chunk").and_then(|v| v.as_str())
+                                            {
+                                                summary_parts.push(chunk.to_string());
+                                            }
+                                        }
+                                        "turn_begin" | "step_begin" | "tool_call" | "tool_call_part"
+                                        | "tool_result" | "status_update" | "approval_response" => {}
+                                        other => warn!(event_type = %other, "Unknown wire event kind"),
                                     }
                                 }
-                                "turn_begin" | "step_begin" | "tool_call" | "tool_call_part"
-                                | "tool_result" | "status_update" | "approval_response" => {}
-                                other => warn!(event_type = %other, "Unknown wire event kind"),
                             }
                         }
-                    }
-                }
-                Ok(WireMessage::Request(req)) if req.method != "request" => {
-                    warn!(method = %req.method, "Unknown wire request method, skipping");
-                }
-                Ok(WireMessage::Request(req)) => match req.params.to_request() {
-                    Ok(request) => {
-                        let response = request.default_response();
-                        self.record_wire_request(task, &req.id, &req.params, &request, &response)
-                            .await?;
-                        client.send_response(&req.id, response).await?;
-                        info!(
-                            worker = %self.spec.name,
-                            request_id = %req.id,
-                            request_type = request.kind(),
-                            "Handled wire request"
-                        );
-                    }
-                    Err(_) => {
-                        client
-                            .send_error(&req.id, -32601, "Unknown request type")
-                            .await?;
-                    }
-                },
-                Ok(WireMessage::SuccessResponse(_)) => {
-                    // Responses to our own requests — ignore
-                }
-                Ok(WireMessage::ErrorResponse(err)) => {
-                    warn!(error = ?err.error, "Wire error response");
-                    success = false;
-                    failure_reason = Some(format!(
-                        "wire error response: {} (code: {})",
-                        err.error.message, err.error.code
-                    ));
-                    break;
-                }
-                Err(e) => {
-                    warn!(error = %e, "Wire read error, ending task");
-                    success = false;
-                    let reason = e.to_string();
-                    if reason.contains("timed out") {
-                        let timeout_event = Event::new(self.run_id.clone(), EventKind::TaskOutput)
-                            .with_actor(&self.spec.name)
-                            .with_payload(serde_json::json!({
-                                "type": "wire_turn_timeout",
-                                "task_id": task.id,
-                                "worker_id": self.spec.name,
-                                "timeout_ms": self.active_turn_timeout.as_millis(),
-                                "error": reason,
-                            }))?;
-                        self.event_writer.append(&timeout_event).await?;
+                        Ok(WireMessage::Request(req)) if req.method != "request" => {
+                            warn!(method = %req.method, "Unknown wire request method, skipping");
+                        }
+                        Ok(WireMessage::Request(req)) => match req.params.to_request() {
+                            Ok(request) => {
+                                let response = request.default_response();
+                                self.record_wire_request(task, &req.id, &req.params, &request, &response)
+                                    .await?;
+                                client.send_response(&req.id, response).await?;
+                                info!(
+                                    worker = %self.spec.name,
+                                    request_id = %req.id,
+                                    request_type = request.kind(),
+                                    "Handled wire request"
+                                );
+                            }
+                            Err(_) => {
+                                client
+                                    .send_error(&req.id, -32601, "Unknown request type")
+                                    .await?;
+                            }
+                        },
+                        Ok(WireMessage::SuccessResponse(_)) => {
+                            // Responses to our own requests — ignore
+                        }
+                        Ok(WireMessage::ErrorResponse(err)) => {
+                            warn!(error = ?err.error, "Wire error response");
+                            success = false;
+                            failure_reason = Some(format!(
+                                "wire error response: {} (code: {})",
+                                err.error.message, err.error.code
+                            ));
+                            break;
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "Wire read error, ending task");
+                            success = false;
+                            let reason = e.to_string();
+                            if reason.contains("timed out") {
+                                let timeout_event =
+                                    Event::new(self.run_id.clone(), EventKind::TaskOutput)
+                                        .with_actor(&self.spec.name)
+                                        .with_payload(serde_json::json!({
+                                            "type": "wire_turn_timeout",
+                                            "task_id": task.id,
+                                            "worker_id": self.spec.name,
+                                            "timeout_ms": self.active_turn_timeout.as_millis(),
+                                            "error": reason,
+                                        }))?;
+                                self.event_writer.append(&timeout_event).await?;
 
-                        let stalled = Event::new(self.run_id.clone(), EventKind::WorkerStalled)
-                            .with_actor(&self.spec.name)
-                            .with_message(format!(
-                                "wire turn timed out after {:?}",
-                                self.active_turn_timeout
-                            ))?;
-                        self.event_writer.append(&stalled).await?;
+                                let stalled = Event::new(
+                                    self.run_id.clone(),
+                                    EventKind::WorkerStalled,
+                                )
+                                .with_actor(&self.spec.name)
+                                .with_message(format!(
+                                    "wire turn timed out after {:?}",
+                                    self.active_turn_timeout
+                                ))?;
+                                self.event_writer.append(&stalled).await?;
+                            }
+                            failure_reason = Some(reason);
+                            break;
+                        }
                     }
-                    failure_reason = Some(reason);
-                    break;
                 }
             }
         }

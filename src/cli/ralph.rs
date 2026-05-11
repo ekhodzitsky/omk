@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
+use tokio_util::sync::CancellationToken;
 
 /// Persistent mode with verify/fix loops
 #[derive(Parser, Debug, Clone)]
@@ -26,7 +27,7 @@ pub(crate) struct Args {
     pub yolo: bool,
 }
 
-pub(crate) async fn run(args: Args) -> Result<()> {
+pub(crate) async fn run(args: Args, _cancel: CancellationToken) -> Result<()> {
     let task = args.task.join(" ");
     if task.is_empty() {
         anyhow::bail!("Task description is required");
