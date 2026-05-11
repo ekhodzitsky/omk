@@ -49,10 +49,8 @@ pub(crate) async fn run(args: Args, _cancel: CancellationToken) -> Result<()> {
     }
 
     let name = args.name.unwrap_or_else(|| {
-        format!(
-            "ap-{}",
-            uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
-        )
+        let suffix = uuid::Uuid::new_v4().simple().to_string();
+        format!("ap-{}", &suffix[..8])
     });
 
     crate::runtime::autopilot::run_autopilot(&name, &task, &args.dir, args.ralph, args.yolo).await

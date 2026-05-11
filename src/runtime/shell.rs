@@ -118,4 +118,26 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap().trim(), "hello");
     }
+
+    #[test]
+    fn shell_escape_roundtrip() {
+        let cases = [
+            "",
+            "hello",
+            "with spaces",
+            "it's quoted",
+            "$HOME",
+            "`rm -rf /`",
+            "foo | cat /etc/passwd",
+            "semi;colon",
+            "line1\nline2",
+            r#"json {"key":"value"}"#,
+        ];
+
+        for s in cases {
+            let escaped = shell_escape(s);
+            let parsed = shlex::split(&format!("cmd {escaped}"));
+            assert_eq!(parsed, Some(vec!["cmd".to_string(), s.to_string()]));
+        }
+    }
 }

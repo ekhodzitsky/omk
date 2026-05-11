@@ -1,3 +1,8 @@
+#![warn(clippy::await_holding_lock)]
+#![warn(clippy::dbg_macro)]
+#![warn(clippy::wildcard_imports)]
+#![warn(clippy::unused_async)]
+
 pub mod agents;
 pub mod cli;
 pub mod cost;
