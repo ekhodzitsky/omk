@@ -46,7 +46,7 @@ OMK is independent of Moonshot AI, Kimi CLI, and oh-my-claudecode.
 
 Short answer: **yes, you can use OMK today for local/personal repo automation, but treat it as a beta MVP, not a polished 1.0 product.**
 
-Current source version: **v0.3.0**. We are intentionally **not publishing to crates.io yet**; install from GitHub release assets or from the GitHub repository.
+Current source version: **v0.3.1**. We are intentionally **not publishing to crates.io yet**; install from GitHub release assets or from the GitHub repository.
 
 What is ready enough to use now:
 

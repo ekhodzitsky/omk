@@ -195,7 +195,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
             <div class="card">
                 <h2>📊 Metrics</h2>
                 <div id="metrics">
-                    <div class="metric"><span>Total Runs</span><span class="metric-value" id="m-spawns">—</span></div>
+                    <div class="metric"><span>Total Runs</span><span class="metric-value" id="m-team-runs">—</span></div>
                     <div class="metric"><span>Total Shutdowns</span><span class="metric-value" id="m-shutdowns">—</span></div>
                     <div class="metric"><span>Tasks Created</span><span class="metric-value" id="m-tasks">—</span></div>
                     <div class="metric"><span>Ask Calls</span><span class="metric-value" id="m-ask">—</span></div>
@@ -317,7 +317,7 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
                 // Metrics
                 if (metrics.metrics) {
                     const m = metrics.metrics;
-                    document.getElementById('m-spawns').textContent = m.total_spawns || 0;
+                    document.getElementById('m-team-runs').textContent = m.total_team_runs || m.total_spawns || 0;
                     document.getElementById('m-shutdowns').textContent = m.total_shutdowns || 0;
                     document.getElementById('m-tasks').textContent = m.total_tasks_created || 0;
                     document.getElementById('m-ask').textContent = m.total_ask_calls || 0;
@@ -395,7 +395,9 @@ async fn ralphs_handler() -> Json<Value> {
 async fn metrics_handler() -> Json<Value> {
     let metrics_path = crate::runtime::config::state_dir().join("metrics.json");
     let metrics = if let Ok(content) = tokio::fs::read_to_string(&metrics_path).await {
-        serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!(null))
+        serde_json::from_str(&content)
+            .map(normalize_metrics_value)
+            .unwrap_or_else(|_| serde_json::json!(null))
     } else {
         serde_json::json!(null)
     };
@@ -445,6 +447,26 @@ async fn check_disk_space(path: &std::path::Path) -> bool {
     true
 }
 
+fn metric_u64(metrics: &Value, primary: &str, legacy: Option<&str>) -> Option<u64> {
+    metrics
+        .get(primary)
+        .and_then(Value::as_u64)
+        .or_else(|| legacy.and_then(|key| metrics.get(key).and_then(Value::as_u64)))
+}
+
+fn normalize_metrics_value(mut metrics: Value) -> Value {
+    let Some(team_runs) = metric_u64(&metrics, "total_team_runs", Some("total_spawns")) else {
+        return metrics;
+    };
+    if let Some(obj) = metrics.as_object_mut() {
+        let value = Value::Number(team_runs.into());
+        obj.entry("total_team_runs")
+            .or_insert_with(|| value.clone());
+        obj.entry("total_spawns").or_insert(value);
+    }
+    metrics
+}
+
 async fn prometheus_metrics_handler() -> axum::response::Response<String> {
     let metrics_path = crate::runtime::config::state_dir().join("metrics.json");
     let mut output = String::new();
@@ -458,10 +480,15 @@ async fn prometheus_metrics_handler() -> axum::response::Response<String> {
 
     if let Ok(content) = tokio::fs::read_to_string(&metrics_path).await {
         if let Ok(metrics) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(spawns) = metrics["total_spawns"].as_u64() {
-                output.push_str("\n# HELP omk_total_spawns_total Total team run starts\n");
+            if let Some(team_runs) = metric_u64(&metrics, "total_team_runs", Some("total_spawns")) {
+                output.push_str("\n# HELP omk_total_team_runs_total Total team run starts\n");
+                output.push_str("# TYPE omk_total_team_runs_total counter\n");
+                output.push_str(&format!("omk_total_team_runs_total {}\n", team_runs));
+                output.push_str(
+                    "\n# HELP omk_total_spawns_total Legacy alias for omk_total_team_runs_total\n",
+                );
                 output.push_str("# TYPE omk_total_spawns_total counter\n");
-                output.push_str(&format!("omk_total_spawns_total {}\n", spawns));
+                output.push_str(&format!("omk_total_spawns_total {}\n", team_runs));
             }
             if let Some(shutdowns) = metrics["total_shutdowns"].as_u64() {
                 output.push_str("\n# HELP omk_total_shutdowns_total Total team shutdowns\n");

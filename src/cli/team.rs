@@ -1,17 +1,23 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tracing::{info, warn};
 
 use crate::kimi_native::role_packs::RolePack;
 use crate::runtime::config::{EVENTS_FILE, TEAM_DIR, WORKERS_DIR};
-use crate::runtime::events::{Event, EventBuilder, EventKind, GateId, RunId};
+use crate::runtime::events::{EventBuilder, EventKind, GateId, RunId};
 use crate::runtime::gates::{run_gates_with_evidence, GateDef, VerificationConfig};
-use crate::runtime::proof::{Proof, ProofGenerator, ProofStatus};
+use crate::runtime::proof::ProofStatus;
 use crate::runtime::sanitize::sanitize_name;
-use crate::runtime::{
-    events::EventWriter, state::TeamState, wire_worker::WireWorkerAdapter, worker::WorkerSpec,
+use crate::runtime::{events::EventWriter, state::TeamState, worker::WorkerSpec};
+
+mod proof;
+mod run_support;
+
+use proof::{failure_artifact_path, finalize_team_run_proof};
+use run_support::{
+    detect_kimi_run_metadata, fallback_subtasks, setup_wire_workers, synthesize_results,
+    WireWorkerSetup,
 };
 
 #[derive(Parser, Debug, Clone)]
@@ -257,16 +263,16 @@ async fn run_team(args: RunArgs) -> Result<()> {
     };
 
     // Create Wire workers for scheduler-backed execution.
-    let (worker_specs, wire_handles) = setup_wire_workers(
-        &team_name,
-        &task,
+    let (worker_specs, wire_handles) = setup_wire_workers(WireWorkerSetup {
+        team_name: &team_name,
+        task: &task,
         count,
-        &role,
-        &state_dir,
-        &args.dir,
-        &event_writer,
-        &run_id,
-    )
+        role: &role,
+        state_dir: &state_dir,
+        dir: &args.dir,
+        event_writer: &event_writer,
+        run_id: &run_id,
+    })
     .await?;
 
     // Build tasks from subtasks and initialize runner
@@ -512,243 +518,6 @@ async fn run_verification_gates(
             }
         }
     }
-}
-
-#[derive(Debug, Serialize)]
-struct FailureArtifact {
-    run_id: String,
-    status: String,
-    readiness: String,
-    proof_path: String,
-    summary: String,
-    failures: Vec<String>,
-    known_gaps: Vec<String>,
-}
-
-fn failure_artifact_path(state_dir: &Path) -> PathBuf {
-    state_dir.join("failure.json")
-}
-
-async fn finalize_team_run_proof(
-    state_dir: &Path,
-    event_writer: &EventWriter,
-    run_id: &RunId,
-) -> Result<Proof> {
-    let event_log = state_dir.join(EVENTS_FILE);
-    let proof = ProofGenerator::from_events(run_id, &event_log).await?;
-    proof.save(state_dir).await?;
-
-    let proof_path = Proof::proof_path(state_dir);
-    if proof.status == ProofStatus::Ready {
-        let failure_path = failure_artifact_path(state_dir);
-        if failure_path.exists() {
-            let _ = tokio::fs::remove_file(&failure_path).await;
-        }
-    } else {
-        write_failure_artifact(state_dir, &proof, &proof_path).await?;
-    }
-
-    let event =
-        EventBuilder::new(run_id.clone()).proof_written(&proof_path, &proof.status.to_string())?;
-    event_writer.append(&event).await?;
-
-    Ok(proof)
-}
-
-async fn write_failure_artifact(state_dir: &Path, proof: &Proof, proof_path: &Path) -> Result<()> {
-    let artifact = FailureArtifact {
-        run_id: proof.run_id.0.clone(),
-        status: proof.status.to_string(),
-        readiness: proof.readiness().to_string(),
-        proof_path: proof_path.to_string_lossy().to_string(),
-        summary: proof.summary.clone(),
-        failures: proof
-            .failures
-            .iter()
-            .map(|failure| failure.description.clone())
-            .collect(),
-        known_gaps: proof.known_gaps.clone(),
-    };
-    let json = serde_json::to_vec_pretty(&artifact)?;
-    crate::runtime::atomic::atomic_write(&failure_artifact_path(state_dir), &json).await?;
-    Ok(())
-}
-
-fn fallback_subtasks(
-    task: &str,
-    count: usize,
-) -> Vec<crate::runtime::scheduler::decompose::Subtask> {
-    (0..count)
-        .map(|i| crate::runtime::scheduler::decompose::Subtask {
-            id: format!("task-{}", i + 1),
-            description: format!("{} — worker-{} focus", task, i),
-            read_set: Vec::new(),
-            write_set: Vec::new(),
-        })
-        .collect()
-}
-
-struct KimiRunMetadata {
-    binary: String,
-    cli_version: Option<String>,
-    wire_protocol_version: String,
-}
-
-async fn detect_kimi_run_metadata(kimi_bin: &str) -> KimiRunMetadata {
-    let cli_version = command_first_line(kimi_bin, &["--version"]).await;
-    let wire_protocol_version = command_output(kimi_bin, &["info"])
-        .await
-        .and_then(|info| parse_wire_protocol_version(&info))
-        .unwrap_or_else(|| crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string());
-
-    KimiRunMetadata {
-        binary: kimi_bin.to_string(),
-        cli_version,
-        wire_protocol_version,
-    }
-}
-
-async fn command_first_line(binary: &str, args: &[&str]) -> Option<String> {
-    command_output(binary, args)
-        .await
-        .map(|text| text.lines().next().unwrap_or(&text).trim().to_string())
-}
-
-async fn command_output(binary: &str, args: &[&str]) -> Option<String> {
-    let output = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        tokio::process::Command::new(binary).args(args).output(),
-    )
-    .await
-    .ok()?
-    .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let text = if stdout.trim().is_empty() {
-        stderr.trim()
-    } else {
-        stdout.trim()
-    };
-    (!text.is_empty()).then(|| text.to_string())
-}
-
-fn parse_wire_protocol_version(info_output: &str) -> Option<String> {
-    for line in info_output.lines() {
-        let lower = line.to_ascii_lowercase();
-        if lower.contains("wire protocol") {
-            return line
-                .split([':', '='])
-                .nth(1)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_string);
-        }
-    }
-    None
-}
-
-async fn synthesize_results(
-    worker_specs: &[WorkerSpec],
-    state_dir: &std::path::Path,
-    event_writer: &EventWriter,
-    run_id: &RunId,
-    kimi_bin: &str,
-) -> Result<String> {
-    let mut worker_results = Vec::new();
-    for spec in worker_specs {
-        if !spec.outbox.exists() {
-            continue;
-        }
-        let content = tokio::fs::read_to_string(&spec.outbox).await?;
-        for line in content.lines() {
-            if line.trim().is_empty() {
-                continue;
-            }
-            if let Ok(result) = serde_json::from_str::<crate::runtime::worker::WorkerResult>(line) {
-                worker_results.push(format!(
-                    "{} ({}): {}",
-                    spec.name, result.task_id, result.summary
-                ));
-            }
-        }
-    }
-
-    if worker_results.is_empty() {
-        return Ok("No worker results available.".to_string());
-    }
-
-    let results_text = worker_results.join("\n");
-    let prompt = format!(
-        "You are a synthesis agent. The following subtasks were completed by a team of workers:\n{}\n\nSynthesize a concise final summary (2-3 sentences) of what was accomplished.",
-        results_text
-    );
-
-    let synthesis =
-        crate::runtime::scheduler::decompose::SynthesisAgent::synthesize(&prompt, kimi_bin).await?;
-
-    let synthesis_path = state_dir.join("synthesis.txt");
-    tokio::fs::write(&synthesis_path, &synthesis).await?;
-
-    let event = Event::new(run_id.clone(), EventKind::TaskCompleted)
-        .with_actor("synthesis-agent")
-        .with_payload(serde_json::json!({
-            "task_id": "synthesis",
-            "summary": &synthesis,
-        }))?;
-    event_writer.append(&event).await?;
-
-    Ok(synthesis)
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn setup_wire_workers(
-    team_name: &str,
-    task: &str,
-    count: usize,
-    role: &str,
-    state_dir: &std::path::Path,
-    dir: &std::path::Path,
-    event_writer: &EventWriter,
-    run_id: &RunId,
-) -> Result<(Vec<WorkerSpec>, Vec<tokio::task::JoinHandle<()>>)> {
-    let state = TeamState::new(team_name, task, state_dir, count, role);
-    state.save().await?;
-
-    let mut worker_specs = Vec::new();
-    let mut handles = Vec::new();
-
-    for i in 0..count {
-        let worker_name = format!("worker-{i}");
-        let worker_dir = state_dir.join(WORKERS_DIR).join(&worker_name);
-        tokio::fs::create_dir_all(&worker_dir).await?;
-
-        let worker_spec = WorkerSpec {
-            name: worker_name.clone(),
-            role: role.to_string(),
-            inbox: worker_dir.join("inbox.jsonl"),
-            outbox: worker_dir.join("outbox.jsonl"),
-            heartbeat: worker_dir.join("heartbeat.json"),
-            project_dir: Some(dir.to_path_buf()),
-        };
-        worker_spec.save().await?;
-        worker_specs.push(worker_spec.clone());
-
-        // Spawn wire worker adapter as a tokio task
-        let adapter = WireWorkerAdapter::new(worker_spec, run_id.clone(), event_writer.clone());
-        let handle = adapter.spawn();
-        handles.push(handle);
-
-        let worker_started = EventBuilder::new(run_id.clone())
-            .worker_started(crate::runtime::events::WorkerId(worker_name.clone()), role)?;
-        event_writer.append(&worker_started).await?;
-    }
-
-    Ok((worker_specs, handles))
 }
 
 async fn status(args: StatusArgs) -> Result<()> {
@@ -1108,109 +877,4 @@ fn roles() -> Result<()> {
         );
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::runtime::events::EventReader;
-
-    #[tokio::test]
-    async fn finalize_team_run_proof_writes_ready_proof_and_event() {
-        let temp = tempfile::tempdir().unwrap();
-        let state_dir = temp.path().join("team").join("ready-run");
-        tokio::fs::create_dir_all(&state_dir).await.unwrap();
-
-        let event_log = state_dir.join(EVENTS_FILE);
-        let event_writer = EventWriter::new(&event_log);
-        let run_id = RunId("ready-run".to_string());
-        let builder = EventBuilder::new(run_id.clone());
-
-        event_writer
-            .append(
-                &builder
-                    .run_started("team", temp.path(), "ship a ready proof")
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        event_writer
-            .append(&builder.gate_passed_by_name("fmt").unwrap())
-            .await
-            .unwrap();
-        event_writer.append(&builder.run_completed()).await.unwrap();
-
-        let proof = finalize_team_run_proof(&state_dir, &event_writer, &run_id)
-            .await
-            .unwrap();
-
-        assert_eq!(proof.status, ProofStatus::Ready);
-        assert!(Proof::proof_path(&state_dir).exists());
-        assert!(!failure_artifact_path(&state_dir).exists());
-
-        let events = EventReader::read_all(&event_log).await.unwrap();
-        assert!(events.iter().any(|event| {
-            event.kind == EventKind::ProofWritten
-                && event
-                    .payload
-                    .as_ref()
-                    .and_then(|payload| payload.get("status"))
-                    .and_then(|status| status.as_str())
-                    == Some("ready")
-        }));
-    }
-
-    #[tokio::test]
-    async fn finalize_team_run_proof_writes_failure_artifact_for_interrupt() {
-        let temp = tempfile::tempdir().unwrap();
-        let state_dir = temp.path().join("team").join("interrupted-run");
-        tokio::fs::create_dir_all(&state_dir).await.unwrap();
-
-        let event_log = state_dir.join(EVENTS_FILE);
-        let event_writer = EventWriter::new(&event_log);
-        let run_id = RunId("interrupted-run".to_string());
-        let builder = EventBuilder::new(run_id.clone());
-
-        event_writer
-            .append(
-                &builder
-                    .run_started("team", temp.path(), "interrupt a team run")
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        let interrupt =
-            Event::new(run_id.clone(), EventKind::ManualInterrupt).with_actor("omk-cli");
-        event_writer.append(&interrupt).await.unwrap();
-
-        let proof = finalize_team_run_proof(&state_dir, &event_writer, &run_id)
-            .await
-            .unwrap();
-
-        assert_eq!(proof.status, ProofStatus::Failed);
-        assert!(Proof::proof_path(&state_dir).exists());
-
-        let failure_json = tokio::fs::read_to_string(failure_artifact_path(&state_dir))
-            .await
-            .unwrap();
-        let failure: serde_json::Value = serde_json::from_str(&failure_json).unwrap();
-        assert_eq!(failure["status"], "failed");
-        assert_eq!(failure["readiness"], "blocked");
-        assert!(failure["failures"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|entry| entry == "manual interrupt"));
-
-        let events = EventReader::read_all(&event_log).await.unwrap();
-        assert!(events.iter().any(|event| {
-            event.kind == EventKind::ProofWritten
-                && event
-                    .payload
-                    .as_ref()
-                    .and_then(|payload| payload.get("status"))
-                    .and_then(|status| status.as_str())
-                    == Some("failed")
-        }));
-    }
 }

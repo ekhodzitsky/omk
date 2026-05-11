@@ -104,7 +104,7 @@ Base URL: `http://localhost:8080`
 ```json
 {
   "status": "ok",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "timestamp": "2026-05-11T12:00:00Z"
 }
 ```
@@ -155,6 +155,7 @@ Aggregated runtime counters.
 
 ```json
 {
+  "total_team_runs": 12,
   "total_spawns": 12,
   "total_shutdowns": 10,
   "tasks_completed": 45,
@@ -163,3 +164,5 @@ Aggregated runtime counters.
   "ralph_runs": 3
 }
 ```
+
+`total_spawns` is a legacy compatibility alias for `total_team_runs`.
