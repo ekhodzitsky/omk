@@ -55,8 +55,8 @@ Legacy/no-handshake fallback remains valid when upstream does not support `initi
 
 | Area | Purpose | Start With | Common Tests |
 | --- | --- | --- | --- |
-| `src/main.rs` | Top-level CLI wiring and command dispatch. | `README.md`, `src/cli/README.md` | `tests/cli_smoke.rs` |
-| `src/cli/` | Clap command handlers and user-facing command behavior. | `src/cli/README.md` | `tests/*_test.rs` matching the command |
+| `src/main.rs` | Thin binary wrapper that calls `omk::cli::run()`. | `src/cli/README.md` | `tests/library_api_test.rs` |
+| `src/cli/` | Clap app, command handlers, and user-facing command behavior compiled through the library crate. | `src/cli/README.md` | `tests/*_test.rs` matching the command |
 | `src/cli/team/` | Focused helpers for team proof artifacts and Wire run support. | `src/cli/README.md` | `cargo test finalize_team_run_proof`, `tests/team_lifecycle_test.rs` |
 | `src/runtime/` | State, process control, scheduler, events, proof, watchdogs. | `src/runtime/README.md` | `tests/team_lifecycle_test.rs`, `tests/gates_test.rs`, `tests/proof_*` |
 | `src/wire/` | Kimi Wire JSON-RPC protocol types and client adapter. | `src/wire/README.md` | `tests/wire_protocol_test.rs`, `scripts/kimi-wire-smoke.sh` |
@@ -71,7 +71,7 @@ Legacy/no-handshake fallback remains valid when upstream does not support `initi
 
 | If the task is about... | Look Here First | Then Check |
 | --- | --- | --- |
-| A CLI flag, command, or help output | `src/main.rs`, `src/cli/<command>.rs` | `tests/cli_smoke.rs`, command-specific tests |
+| A CLI flag, command, or help output | `src/cli/app.rs`, `src/cli/<command>.rs` | `tests/cli_smoke.rs`, command-specific tests |
 | Team worker lifecycle | `src/cli/team.rs`, `src/cli/team/run_support.rs`, `src/runtime/worker.rs`, `src/runtime/state.rs` | `tests/team_lifecycle_test.rs` |
 | Team proof/failure artifacts | `src/cli/team/proof.rs`, `src/runtime/proof.rs`, `src/runtime/events.rs` | `cargo test finalize_team_run_proof`, `tests/proof_*` |
 | `team run` scheduling | `src/runtime/scheduler/`, `src/runtime/events.rs`, `src/runtime/watchdog.rs` | `tests/ultrawork_test.rs`, `tests/gates_test.rs` |

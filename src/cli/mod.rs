@@ -1,3 +1,4 @@
+mod app;
 pub(crate) mod ask;
 pub(crate) mod autopilot;
 pub(crate) mod backup;
@@ -16,3 +17,5 @@ pub(crate) mod skill;
 pub(crate) mod state;
 pub(crate) mod team;
 pub(crate) mod ultrawork;
+
+pub use app::run;

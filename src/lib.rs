@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod cli;
 pub mod cost;
 pub mod error;
 pub mod kimi_native;

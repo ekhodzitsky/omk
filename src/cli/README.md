@@ -6,6 +6,7 @@
 
 | File | Owns |
 | --- | --- |
+| `app.rs` | Top-level Clap app, logging setup, setup/update/completions/man/version dispatch. |
 | `mod.rs` | CLI module exports. |
 | `ask.rs` | Provider ask command. |
 | `autopilot.rs` | Autopilot command entrypoint. |
@@ -31,6 +32,7 @@
 ## Edit Rules
 
 - Prefer calling `src/runtime/` or domain modules instead of adding business logic here.
+- Keep `src/main.rs` as a thin binary wrapper over `omk::cli::run`; the CLI app lives in the library so integration tests can import it.
 - Keep command output stable unless the task is explicitly about UX/help text.
 - Update `README.md` and `docs/PROJECT_MAP.md` when adding or renaming a public command.
 - Keep `team.rs` focused on command flow and output. Put proof/failure-artifact behavior in `team/proof.rs` and Wire run setup helpers in `team/run_support.rs`.
