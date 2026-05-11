@@ -3,14 +3,14 @@ use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use tracing::{info, warn};
 
-use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId};
-use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
+use crate::runtime::events::{Event, EventBuilder, EventKind, TaskId, WorkerId};
 use crate::runtime::wire_worker::WireWorkerAdapter;
+use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
 use crate::wire::client::{WireClient, WireMessage};
 use crate::wire::protocol::{redact_wire_secrets, Request, RequestParams};
 
 impl WireWorkerAdapter {
-    async fn process_task(
+    pub(super) async fn process_task(
         &self,
         task: &WorkerTask,
         kimi_bin: &str,
@@ -257,7 +257,7 @@ impl WireWorkerAdapter {
         Ok(())
     }
 
-    async fn record_wire_request(
+    pub(super) async fn record_wire_request(
         &self,
         task: &WorkerTask,
         request_id: &str,

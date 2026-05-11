@@ -1,14 +1,13 @@
 use anyhow::Result;
 use std::io::SeekFrom;
-use std::path::PathBuf;
-use tokio::io::{AsyncBufReadExt, AsyncSeekExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncSeekExt};
 use tracing::{info, warn};
 
 use crate::runtime::wire_worker::WireWorkerAdapter;
 use crate::runtime::worker::WorkerTask;
 
 impl WireWorkerAdapter {
-    async fn run_loop(&self) -> Result<()> {
+    pub(super) async fn run_loop(&self) -> Result<()> {
         let inbox = &self.spec.inbox;
         let outbox = &self.spec.outbox;
         let heartbeat = &self.spec.heartbeat;
