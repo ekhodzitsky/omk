@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Team CLI refactor**: split proof/failure-artifact writing and Wire worker run helpers out of the large `team` CLI module, keeping the CLI command surface focused on argument handling and user output.
 - **Run metrics naming**: renamed current runtime metrics from spawn-oriented `total_spawns` to `total_team_runs`, while preserving `total_spawns` as a JSON/API and Prometheus compatibility alias.
+- **Documentation accuracy**: refreshed README positioning, web API examples, and project/CLI maps to match the v0.3.1 Wire-first team layout.
 
 ## [0.3.0] - 2026-05-11
 

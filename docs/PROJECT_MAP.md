@@ -57,6 +57,7 @@ Legacy/no-handshake fallback remains valid when upstream does not support `initi
 | --- | --- | --- | --- |
 | `src/main.rs` | Top-level CLI wiring and command dispatch. | `README.md`, `src/cli/README.md` | `tests/cli_smoke.rs` |
 | `src/cli/` | Clap command handlers and user-facing command behavior. | `src/cli/README.md` | `tests/*_test.rs` matching the command |
+| `src/cli/team/` | Focused helpers for team proof artifacts and Wire run support. | `src/cli/README.md` | `cargo test finalize_team_run_proof`, `tests/team_lifecycle_test.rs` |
 | `src/runtime/` | State, process control, scheduler, events, proof, watchdogs. | `src/runtime/README.md` | `tests/team_lifecycle_test.rs`, `tests/gates_test.rs`, `tests/proof_*` |
 | `src/wire/` | Kimi Wire JSON-RPC protocol types and client adapter. | `src/wire/README.md` | `tests/wire_protocol_test.rs`, `scripts/kimi-wire-smoke.sh` |
 | `src/kimi_native/` | Kimi-native assets, role packs, manifests, sync/doctor support. | `src/kimi_native/README.md` | `tests/kimi_native_test.rs`, `tests/role_pack_test.rs` |
@@ -71,7 +72,8 @@ Legacy/no-handshake fallback remains valid when upstream does not support `initi
 | If the task is about... | Look Here First | Then Check |
 | --- | --- | --- |
 | A CLI flag, command, or help output | `src/main.rs`, `src/cli/<command>.rs` | `tests/cli_smoke.rs`, command-specific tests |
-| Team worker lifecycle | `src/cli/team.rs`, `src/runtime/worker.rs`, `src/runtime/state.rs` | `tests/team_lifecycle_test.rs` |
+| Team worker lifecycle | `src/cli/team.rs`, `src/cli/team/run_support.rs`, `src/runtime/worker.rs`, `src/runtime/state.rs` | `tests/team_lifecycle_test.rs` |
+| Team proof/failure artifacts | `src/cli/team/proof.rs`, `src/runtime/proof.rs`, `src/runtime/events.rs` | `cargo test finalize_team_run_proof`, `tests/proof_*` |
 | `team run` scheduling | `src/runtime/scheduler/`, `src/runtime/events.rs`, `src/runtime/watchdog.rs` | `tests/ultrawork_test.rs`, `tests/gates_test.rs` |
 | Kimi Wire integration | `src/wire/`, `src/runtime/wire_worker.rs` | `tests/wire_protocol_test.rs`, official Wire docs |
 | Kimi assets and sync | `src/kimi_native/`, `.kimi/` | `tests/kimi_native_test.rs`, Kimi docs |
@@ -84,7 +86,7 @@ Legacy/no-handshake fallback remains valid when upstream does not support `initi
 
 Large files are known hotspots, not automatic refactor targets:
 
-- `src/cli/team.rs`: current team command surface for `run`, state inspection, health, shutdown, cleanup, import/export, rename, and roles.
+- `src/cli/team.rs`: current team command surface for `run`, state inspection, health, shutdown, cleanup, import/export, rename, and roles. Proof artifact writing lives in `src/cli/team/proof.rs`; Wire run support lives in `src/cli/team/run_support.rs`.
 - `src/wire/protocol.rs`: Wire JSON-RPC types and parsing contract.
 - `src/runtime/autopilot.rs`: autonomous run state machine.
 - `src/runtime/events.rs`: event envelope and timeline records.

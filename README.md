@@ -4,14 +4,14 @@
 
 # oh-my-kimi (omk)
 
-**Local, proof-driven orchestration for Kimi CLI**
+**Local, Wire-first, proof-driven orchestration for Kimi CLI**
 
 Turn [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) into observable local coding teams with role assets, scheduler state, verification gates, run timelines, and proof reports.
 
 OMK is inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode), but it is not a line-for-line port. It is a Kimi-native runtime: Kimi remains the execution engine, while OMK owns orchestration, state, recovery, evidence, and release-grade observability.
 
 [![CI](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml/badge.svg)](https://github.com/ekhodzitsky/oh-my-kimi/actions)
-[![Release](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/release.yml/badge.svg)](https://github.com/ekhodzitsky/oh-my-kimi/releases)
+[![Release](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/release.yml/badge.svg)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/release.yml)
 [![Coverage](https://codecov.io/gh/ekhodzitsky/oh-my-kimi/branch/master/graph/badge.svg)](https://codecov.io/gh/ekhodzitsky/oh-my-kimi)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.78%2B-orange.svg)](https://www.rust-lang.org)

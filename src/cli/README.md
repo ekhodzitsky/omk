@@ -24,6 +24,8 @@
 | `skill.rs` | Skill management commands. |
 | `state.rs` | State import/export/list commands. |
 | `team.rs` | Current team run/list/status/rename/export/import/shutdown/health/cleanup/roles surface. |
+| `team/proof.rs` | Team proof and failure-artifact finalization helpers. |
+| `team/run_support.rs` | Kimi metadata, fallback subtasks, synthesis, and Wire worker setup helpers. |
 | `ultrawork.rs` | Ultrawork command entrypoint. |
 
 ## Edit Rules
@@ -31,7 +33,7 @@
 - Prefer calling `src/runtime/` or domain modules instead of adding business logic here.
 - Keep command output stable unless the task is explicitly about UX/help text.
 - Update `README.md` and `docs/PROJECT_MAP.md` when adding or renaming a public command.
-- `team.rs` is intentionally left unsplit for now. Touch the smallest relevant function.
+- Keep `team.rs` focused on command flow and output. Put proof/failure-artifact behavior in `team/proof.rs` and Wire run setup helpers in `team/run_support.rs`.
 
 ## Tests
 
