@@ -64,14 +64,14 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 - [ ] Implement goal controller loop.
 - [x] Add local controller execution step for verification task evidence.
-- [ ] Reuse scheduler-backed team runner for execution tasks.
+- [x] Reuse scheduler-backed team runner for the first bounded execution task.
 - [ ] Allow agents to propose new tasks.
 - [ ] Validate proposed tasks against policy and budgets.
 - [ ] Enforce max concurrency.
-- [ ] Track heartbeats per worker.
+- [x] Track heartbeat artifacts for the first goal worker wave.
 - [ ] Recover stale tasks.
 - [ ] Emit task accepted/rejected events.
-- [ ] Add tests with mock agents.
+- [x] Add tests with a mock Wire agent for the first execution wave.
 
 ## Phase 6 - Verification and Proof
 

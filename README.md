@@ -63,7 +63,7 @@ What is ready enough to use now:
 | Proof reports | Beta MVP: `omk proof show latest`, cached/regenerated proof, Markdown/text/JSON formats. |
 | Verification gates | Ready for local gates and `.omk/gates.toml` customization. |
 | HUD | Text, JSON, and TUI are usable; web dashboard is still scaffold-level. |
-| `omk goal` controller scaffold | Current scaffold: creates durable goal state, planning artifacts, task graph, local verification task evidence, not-ready proof, and cancellation failure artifacts. |
+| `omk goal` controller scaffold | Current scaffold: creates durable goal state, planning artifacts, task graph, local verification task evidence, bounded Wire-backed agent task evidence, not-ready proof, and cancellation failure artifacts. |
 | Autopilot, Ralph, Ultrawork | Power-user MVP: useful, but less polished than the Kimi asset + team/proof path. |
 | MCP server, marketplace, web dashboard | Secondary/scaffold surfaces. |
 
@@ -95,10 +95,11 @@ state directory's `goals/` tree, writes `prd.md`, `technical-plan.md`,
 list/status/show/proof/verify/execute/cancel. The scaffold marks
 controller-owned planning tasks as done with artifact evidence. `omk goal
 verify` runs local verification gates and records gate evidence; `omk goal
-execute` currently performs that local controller step and marks
-`goal-local-verify` done when required gates pass. Agent-owned implementation
-execution is still planned. The current `team run`, event log, gates, and proof
-systems remain the execution foundation. The design is tracked in
+execute` marks `goal-local-verify` done when required gates pass, launches one
+bounded Wire-backed `goal-agent-execute` scheduler task, and records outbox plus
+Wire event evidence. Review loops, task mutation, integration, and ready proof
+generation are still planned. The current `team run`, event log, gates, and
+proof systems remain the execution foundation. The design is tracked in
 [SPEC.md](SPEC.md), the delivery path in [ROADMAP.md](ROADMAP.md), and the task
 backlog in [TODO.md](TODO.md).
 
@@ -251,9 +252,9 @@ omk goal cancel latest
 
 `omk goal` currently creates durable goal state, planning artifacts, a task
 graph with controller-owned task evidence, local verification task evidence,
-local gate evidence, and honest not-ready/cancelled proof artifacts. Goal proofs
-also capture best-effort git branch, HEAD commit, and dirty-state evidence when
-run inside a git worktree. It does not launch agents yet.
+local gate evidence, bounded Wire-backed agent task evidence, and honest
+not-ready/cancelled proof artifacts. Goal proofs also capture best-effort git
+branch, HEAD commit, and dirty-state evidence when run inside a git worktree.
 
 ### Power-user modes
 
@@ -278,7 +279,7 @@ These modes are available and useful, but the strongest MVP path today is still:
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
 | HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
 | Cleanup and recovery | Team cleanup, backups, rollback, watchdog events, and interrupted-run failure artifacts. | Current |
-| Goal runtime | Durable goal state, plan/run/list/status/show/proof/verify/execute/cancel, planning artifacts, task graph with controller-owned and local verification task evidence, git evidence, local gate evidence, not-ready proof, and cancellation failure artifacts. Agent execution is next. | Current Scaffold |
+| Goal runtime | Durable goal state, plan/run/list/status/show/proof/verify/execute/cancel, planning artifacts, task graph with controller-owned, local verification, and bounded Wire-backed agent task evidence, git evidence, local gate evidence, not-ready proof, and cancellation failure artifacts. Review and integration loops are next. | Current Scaffold |
 | Autopilot | Single-lead autonomous execution with verification gates and resume/yolo options. | Power-user MVP |
 | Ralph | Persistent verify/fix loop with iteration limits and completion evidence. | Power-user MVP |
 | Ultrawork | Parallel burst prompts from args, files, or globs, with JSON output support. | Power-user MVP |

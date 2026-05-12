@@ -61,10 +61,7 @@ impl WireWorkerAdapter {
                     Ok(f) => f,
                     Err(e) => {
                         warn!(error = %e, "Failed to open inbox");
-                        tokio::time::sleep(std::time::Duration::from_secs(
-                            crate::runtime::wire_worker::POLL_INTERVAL_SECS,
-                        ))
-                        .await;
+                        tokio::time::sleep(crate::runtime::wire_worker::poll_interval()).await;
                         continue;
                     }
                 };
@@ -73,10 +70,7 @@ impl WireWorkerAdapter {
                     Ok(m) => m,
                     Err(e) => {
                         warn!(error = %e, "Failed to get inbox metadata");
-                        tokio::time::sleep(std::time::Duration::from_secs(
-                            crate::runtime::wire_worker::POLL_INTERVAL_SECS,
-                        ))
-                        .await;
+                        tokio::time::sleep(crate::runtime::wire_worker::poll_interval()).await;
                         continue;
                     }
                 };
@@ -88,10 +82,7 @@ impl WireWorkerAdapter {
 
                 if let Err(e) = reader.seek(SeekFrom::Start(last_inbox_offset)).await {
                     warn!(error = %e, "Failed to seek inbox");
-                    tokio::time::sleep(std::time::Duration::from_secs(
-                        crate::runtime::wire_worker::POLL_INTERVAL_SECS,
-                    ))
-                    .await;
+                    tokio::time::sleep(crate::runtime::wire_worker::poll_interval()).await;
                     continue;
                 }
 
@@ -170,9 +161,7 @@ impl WireWorkerAdapter {
                     }
                     return Ok(());
                 }
-                _ = tokio::time::sleep(std::time::Duration::from_secs(
-                    crate::runtime::wire_worker::POLL_INTERVAL_SECS,
-                )) => {}
+                _ = tokio::time::sleep(crate::runtime::wire_worker::poll_interval()) => {}
             }
         }
     }

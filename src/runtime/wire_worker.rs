@@ -7,6 +7,8 @@ mod task;
 
 /// Poll interval for the wire worker inbox check loop.
 pub const POLL_INTERVAL_SECS: u64 = 5;
+const WIRE_WORKER_POLL_INTERVAL_MS_ENV: &str = "OMK_WIRE_WORKER_POLL_INTERVAL_MS";
+const WIRE_WORKER_POLL_INTERVAL_SECS_ENV: &str = "OMK_WIRE_WORKER_POLL_INTERVAL_SECS";
 const DEFAULT_TASK_TIMEOUT_SECS: u64 = 300;
 const DEFAULT_ACTIVE_TURN_TIMEOUT_SECS: u64 = 90;
 const WIRE_TURN_TIMEOUT_MS_ENV: &str = "OMK_WIRE_TURN_TIMEOUT_MS";
@@ -61,6 +63,16 @@ fn resolve_active_turn_timeout() -> std::time::Duration {
         return std::time::Duration::from_secs(secs);
     }
     std::time::Duration::from_secs(DEFAULT_ACTIVE_TURN_TIMEOUT_SECS)
+}
+
+pub(crate) fn poll_interval() -> std::time::Duration {
+    if let Some(ms) = read_env_u64(WIRE_WORKER_POLL_INTERVAL_MS_ENV) {
+        return std::time::Duration::from_millis(ms);
+    }
+    if let Some(secs) = read_env_u64(WIRE_WORKER_POLL_INTERVAL_SECS_ENV) {
+        return std::time::Duration::from_secs(secs);
+    }
+    std::time::Duration::from_secs(POLL_INTERVAL_SECS)
 }
 
 fn read_env_u64(key: &str) -> Option<u64> {

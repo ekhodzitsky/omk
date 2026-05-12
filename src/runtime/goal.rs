@@ -2,15 +2,23 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::process::Command;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::runtime::config::{HEARTBEAT_FILE, INBOX_FILE, OUTBOX_FILE, WORKERS_DIR};
 use crate::runtime::events::{
     Event, EventBuilder, EventKind, EventWriter, GateId, RunId, TaskId, WorkerId,
 };
 use crate::runtime::gates::{
     detect_changed_files, gates_passed, load_or_detect_gates, run_gates_with_evidence, GateResult,
 };
+use crate::runtime::scheduler::runner::{RunSummary, TeamRunner};
+use crate::runtime::scheduler::task::Task;
+use crate::runtime::wire_worker::WireWorkerAdapter;
+use crate::runtime::worker::{WorkerResult, WorkerSpec};
 
 pub const GOALS_DIR: &str = "goals";
 pub const GOAL_STATE_FILE: &str = "goal.json";
@@ -22,9 +30,12 @@ pub const GOAL_TASK_GRAPH_FILE: &str = "task-graph.json";
 pub const GOAL_PROOF_FILE: &str = "proof.json";
 pub const GOAL_ARTIFACTS_DIR: &str = "artifacts";
 pub const GOAL_GATE_ARTIFACTS_DIR: &str = "gates";
+pub const GOAL_AGENT_RUNS_DIR: &str = "agent-runs";
 const GOAL_CONTROLLER_ACTOR: &str = "goal-controller";
 const GOAL_LOCAL_VERIFY_TASK_ID: &str = "goal-local-verify";
 const GOAL_AGENT_EXECUTE_TASK_ID: &str = "goal-agent-execute";
+const GOAL_AGENT_WORKER_ID: &str = "goal-agent-worker-0";
+const GOAL_AGENT_WORKER_ROLE: &str = "executor";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -188,6 +199,15 @@ pub struct GoalGitEvidence {
     pub branch: String,
     pub head: String,
     pub dirty: bool,
+}
+
+#[derive(Debug, Clone)]
+struct GoalAgentRunEvidence {
+    summary: RunSummary,
+    run_path: PathBuf,
+    worker_outbox_path: PathBuf,
+    wire_events_path: PathBuf,
+    worker_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -373,7 +393,7 @@ async fn run_controller_scaffold(mut state: GoalState) -> Result<GoalState> {
     writer
         .append(
             &builder.run_failed(
-                "goal controller scaffold created; agent execution is not implemented",
+                "goal controller scaffold created; run omk goal execute to launch the bounded agent wave",
             )?,
         )
         .await?;
@@ -480,7 +500,300 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     state.completed_at = None;
     state.save().await?;
 
-    verify_goal(goal_id, project_dir).await
+    let verification_proof = verify_goal(goal_id, project_dir).await?;
+    let mut state = resolve_goal(goal_id).await?;
+    let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
+    let local_verify_done = task_graph
+        .tasks
+        .iter()
+        .any(|task| task.id == GOAL_LOCAL_VERIFY_TASK_ID && task.status == GoalTaskStatus::Done);
+
+    if !local_verify_done {
+        return Ok(verification_proof);
+    }
+
+    let now = Utc::now();
+    let agent_evidence =
+        run_goal_agent_execution_task(&state, &task_graph, project_dir, now).await?;
+    if let Some(task) = apply_agent_execution_task_result(&mut task_graph, &agent_evidence, now) {
+        append_agent_execution_task_events(&state, &task, &agent_evidence).await?;
+    }
+    write_json_artifact(&state.state_dir.join(GOAL_TASK_GRAPH_FILE), &task_graph).await?;
+
+    record_artifact_path_once(
+        &mut state,
+        "agent_run",
+        agent_evidence.run_path.clone(),
+        now,
+    );
+    state.status = GoalStatus::NotReady;
+    state.phase = GoalPhase::Proof;
+    state.updated_at = now;
+    state.completed_at = Some(now);
+    state.save().await?;
+
+    let proof = build_verified_proof(
+        &state,
+        &task_graph,
+        verification_proof.gates,
+        verification_proof.changed_files,
+        verification_proof.git,
+        now,
+    );
+    write_json_artifact(&state.state_dir.join(GOAL_PROOF_FILE), &proof).await?;
+
+    let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
+    let builder = EventBuilder::new(RunId(state.goal_id.clone()));
+    writer
+        .append(&builder.proof_written(
+            &state.state_dir.join(GOAL_PROOF_FILE),
+            &proof.status.to_string(),
+        )?)
+        .await?;
+
+    Ok(proof)
+}
+
+async fn run_goal_agent_execution_task(
+    state: &GoalState,
+    task_graph: &GoalTaskGraph,
+    project_dir: &Path,
+    started_at: DateTime<Utc>,
+) -> Result<GoalAgentRunEvidence> {
+    let run_id = format!("{}-{}", state.goal_id, GOAL_AGENT_EXECUTE_TASK_ID);
+    let run_path = PathBuf::from(GOAL_ARTIFACTS_DIR)
+        .join(GOAL_AGENT_RUNS_DIR)
+        .join(GOAL_AGENT_EXECUTE_TASK_ID);
+    let run_dir = state.state_dir.join(&run_path);
+    crate::runtime::config::ensure_private_dir(&run_dir).await?;
+
+    let worker_dir = run_dir.join(WORKERS_DIR).join(GOAL_AGENT_WORKER_ID);
+    crate::runtime::config::ensure_private_dir(&worker_dir).await?;
+
+    let worker_outbox_path = run_path
+        .join(WORKERS_DIR)
+        .join(GOAL_AGENT_WORKER_ID)
+        .join(OUTBOX_FILE);
+    let wire_events_path = run_path
+        .join(WORKERS_DIR)
+        .join(GOAL_AGENT_WORKER_ID)
+        .join("wire-events.jsonl");
+
+    let spec = WorkerSpec {
+        name: GOAL_AGENT_WORKER_ID.to_string(),
+        role: GOAL_AGENT_WORKER_ROLE.to_string(),
+        inbox: worker_dir.join(INBOX_FILE),
+        outbox: worker_dir.join(OUTBOX_FILE),
+        heartbeat: worker_dir.join(HEARTBEAT_FILE),
+        project_dir: Some(project_dir.to_path_buf()),
+    };
+    spec.save().await?;
+    tokio::fs::write(&spec.inbox, b"").await?;
+    tokio::fs::write(&spec.outbox, b"").await?;
+    tokio::fs::write(worker_dir.join("wire-events.jsonl"), b"").await?;
+
+    let event_writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
+    let builder = EventBuilder::new(RunId(run_id.clone()));
+    let scheduler_task = Task::new(GOAL_AGENT_EXECUTE_TASK_ID, "goal-agent-execute")
+        .with_description(goal_agent_task_prompt(state, task_graph, started_at))
+        .with_read_set(vec![
+            GOAL_PRD_FILE.to_string(),
+            GOAL_TECHNICAL_PLAN_FILE.to_string(),
+            GOAL_TEST_SPEC_FILE.to_string(),
+            GOAL_TASK_GRAPH_FILE.to_string(),
+        ])
+        .with_write_set(vec![GOAL_PROOF_FILE.to_string()])
+        .with_max_retries(0);
+
+    event_writer
+        .append(&builder.run_started("goal-agent", project_dir, &scheduler_task.description)?)
+        .await?;
+
+    if !goal_agent_wire_runtime_available() {
+        let summary = "Kimi CLI not found; install/authenticate kimi or set MOCK_KIMI to a mock binary before running goal agent execution";
+        event_writer.append(&builder.run_failed(summary)?).await?;
+        return Ok(GoalAgentRunEvidence {
+            summary: RunSummary {
+                run_id,
+                completed: 0,
+                failed: 1,
+                cancelled: 0,
+                total: 1,
+            },
+            run_path,
+            worker_outbox_path,
+            wire_events_path,
+            worker_summary: Some(summary.to_string()),
+        });
+    }
+
+    event_writer
+        .append(&builder.worker_started(
+            WorkerId(GOAL_AGENT_WORKER_ID.to_string()),
+            GOAL_AGENT_WORKER_ROLE,
+        )?)
+        .await?;
+
+    let cancel = CancellationToken::new();
+    let adapter = WireWorkerAdapter::new_with_cancel(
+        spec.clone(),
+        RunId(run_id.clone()),
+        event_writer.clone(),
+        cancel.clone(),
+    );
+    let mut handle = adapter.spawn();
+    let mut runner = TeamRunner::init_with_tasks(
+        &run_id,
+        project_dir,
+        &run_dir,
+        event_writer,
+        vec![scheduler_task],
+    )
+    .await?;
+
+    let run_result = runner.run(std::slice::from_ref(&spec)).await;
+    cancel.cancel();
+    stop_wire_worker(&mut handle).await;
+
+    let summary = run_result?;
+    let worker_summary = read_goal_agent_worker_summary(&spec).await?;
+
+    Ok(GoalAgentRunEvidence {
+        summary,
+        run_path,
+        worker_outbox_path,
+        wire_events_path,
+        worker_summary,
+    })
+}
+
+fn goal_agent_task_prompt(
+    state: &GoalState,
+    task_graph: &GoalTaskGraph,
+    generated_at: DateTime<Utc>,
+) -> String {
+    let local_status = task_graph
+        .tasks
+        .iter()
+        .find(|task| task.id == GOAL_LOCAL_VERIFY_TASK_ID)
+        .map(|task| task.status.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    format!(
+        "Goal ID: {}\nGenerated: {generated_at}\n\nOriginal goal:\n{}\n\nNormalized goal:\n{}\n\nTask:\nReview the existing goal artifacts and produce a concise implementation execution note. Do not mutate project files in this bounded wave. Record what would be needed next for production readiness.\n\nLocal verification task status: {local_status}",
+        state.goal_id, state.original_goal, state.normalized_goal
+    )
+}
+
+fn goal_agent_wire_runtime_available() -> bool {
+    std::env::var_os("MOCK_KIMI").is_some() || which::which("kimi").is_ok()
+}
+
+async fn stop_wire_worker(handle: &mut JoinHandle<()>) {
+    if tokio::time::timeout(Duration::from_secs(2), &mut *handle)
+        .await
+        .is_err()
+    {
+        handle.abort();
+        let _ = handle.await;
+    }
+}
+
+async fn read_goal_agent_worker_summary(spec: &WorkerSpec) -> Result<Option<String>> {
+    let results: Vec<WorkerResult> = spec.read_results().await?;
+    Ok(results
+        .into_iter()
+        .find(|result| result.task_id == GOAL_AGENT_EXECUTE_TASK_ID)
+        .map(|result| result.summary))
+}
+
+fn apply_agent_execution_task_result(
+    task_graph: &mut GoalTaskGraph,
+    evidence: &GoalAgentRunEvidence,
+    completed_at: DateTime<Utc>,
+) -> Option<GoalTask> {
+    let task = task_graph
+        .tasks
+        .iter_mut()
+        .find(|task| task.id == GOAL_AGENT_EXECUTE_TASK_ID)?;
+    let success =
+        evidence.summary.completed == evidence.summary.total && evidence.summary.failed == 0;
+
+    task.status = if success {
+        GoalTaskStatus::Done
+    } else {
+        GoalTaskStatus::Blocked
+    };
+    task.owner_role = Some(GOAL_AGENT_WORKER_ROLE.to_string());
+    task.completed_at = success.then_some(completed_at);
+    task.evidence = agent_execution_task_evidence(evidence, success);
+    Some(task.clone())
+}
+
+fn agent_execution_task_evidence(
+    evidence: &GoalAgentRunEvidence,
+    success: bool,
+) -> Vec<GoalTaskEvidence> {
+    let status = if success { "completed" } else { "blocked" };
+    let worker_summary = evidence
+        .worker_summary
+        .as_deref()
+        .filter(|summary| !summary.trim().is_empty())
+        .unwrap_or("no worker summary recorded");
+    let run_summary = format!(
+        "Agent execution {status}: {}/{} scheduler task(s) completed; failed={}, cancelled={}. Worker summary: {worker_summary}",
+        evidence.summary.completed,
+        evidence.summary.total,
+        evidence.summary.failed,
+        evidence.summary.cancelled
+    );
+
+    vec![
+        GoalTaskEvidence {
+            kind: "agent_run".to_string(),
+            path: evidence.run_path.clone(),
+            summary: run_summary,
+        },
+        GoalTaskEvidence {
+            kind: "worker_outbox".to_string(),
+            path: evidence.worker_outbox_path.clone(),
+            summary: "Worker outbox records the scheduler-visible task result.".to_string(),
+        },
+        GoalTaskEvidence {
+            kind: "wire_events".to_string(),
+            path: evidence.wire_events_path.clone(),
+            summary: "Wire event stream records the agent protocol turn.".to_string(),
+        },
+    ]
+}
+
+async fn append_agent_execution_task_events(
+    state: &GoalState,
+    task: &GoalTask,
+    evidence: &GoalAgentRunEvidence,
+) -> Result<()> {
+    let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
+    let run_id = RunId(state.goal_id.clone());
+    let task_id = TaskId(task.id.clone());
+    let worker_id = WorkerId(GOAL_AGENT_WORKER_ID.to_string());
+    let summary = format!(
+        "{} via {} (run: {}, scheduler: {})",
+        controller_task_summary(task),
+        GOAL_AGENT_WORKER_ID,
+        evidence.run_path.display(),
+        evidence.summary.run_id
+    );
+    let event = if task.status == GoalTaskStatus::Done {
+        EventBuilder::new(run_id).task_completed(task_id, worker_id, Some(&summary))?
+    } else {
+        Event::new(run_id, EventKind::TaskFailed)
+            .with_actor(GOAL_AGENT_WORKER_ID)
+            .with_payload(serde_json::json!({
+                "task_id": task.id,
+                "worker_id": GOAL_AGENT_WORKER_ID,
+                "summary": summary,
+            }))?
+    };
+    writer.append(&event).await
 }
 
 pub async fn cancel_goal(goal_id: &str) -> Result<GoalState> {
@@ -532,6 +845,26 @@ fn record_artifact(state: &mut GoalState, kind: &str, path: &str, created_at: Da
     });
 }
 
+fn record_artifact_path_once(
+    state: &mut GoalState,
+    kind: &str,
+    path: PathBuf,
+    created_at: DateTime<Utc>,
+) {
+    if state
+        .artifacts
+        .iter()
+        .any(|artifact| artifact.kind == kind && artifact.path == path)
+    {
+        return;
+    }
+    state.artifacts.push(GoalArtifact {
+        kind: kind.to_string(),
+        path,
+        created_at,
+    });
+}
+
 async fn write_goal_brief(state: &GoalState, generated_at: DateTime<Utc>) -> Result<()> {
     let body = format!(
         "# Goal Brief\n\n\
@@ -541,7 +874,7 @@ async fn write_goal_brief(state: &GoalState, generated_at: DateTime<Utc>) -> Res
          ## Normalized Goal\n\n\
          {}\n\n\
          ## Current Scope\n\n\
-         This scaffold captures intent and durable planning artifacts. Agent execution is intentionally not implemented in this slice.\n",
+         This scaffold captures intent and durable planning artifacts. Run `omk goal execute` to attach local gate evidence and a bounded Wire-backed agent wave.\n",
         state.original_goal, state.normalized_goal
     );
     write_text_artifact(&state.state_dir.join(GOAL_PRD_FILE), &body).await
@@ -557,9 +890,9 @@ async fn write_technical_plan(state: &GoalState, generated_at: DateTime<Utc>) ->
          3. Decomposition writes a task graph.\n\
          4. Verification design writes a test specification.\n\
          5. Local execution runs verification gates and refreshes proof evidence.\n\
-         6. Proof writes an honest not-ready proof until agent execution is implemented.\n\n\
+         6. Proof writes an honest not-ready proof until required execution and review evidence exists.\n\n\
          ## Execution Boundary\n\n\
-         The current controller records planning task evidence and local verification task evidence, but does not launch agents or mutate project files. `omk goal execute` runs the current local controller step; future slices will attach agent-owned implementation evidence.\n\n\
+         The current controller records planning task evidence, local verification task evidence, and a bounded Wire-backed `goal-agent-execute` wave. The initial wave records agent-owned execution evidence without mutating project files; future slices will add review loops, task mutation, and integration.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -587,7 +920,7 @@ async fn write_test_spec(
          ## Scaffold Task Acceptance\n\n\
          {task_lines}\n\n\
          ## Current Status\n\n\
-         `omk goal` remains `not_ready` because controller-owned planning and local verification can be recorded, but the agent execution task has not run.\n\n\
+         `omk goal` remains `not_ready` because readiness still requires review/security evidence beyond controller-owned planning, local verification, and the bounded agent execution wave.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -897,7 +1230,7 @@ fn build_scaffold_proof(
         git,
         gates: Vec::new(),
         known_gaps: vec![
-            "agent execution is not implemented for omk goal yet".to_string(),
+            "agent execution has not run for this goal yet".to_string(),
             "verification gates have not run for this goal".to_string(),
             "proof cannot claim readiness until agent-owned execution evidence exists".to_string(),
         ],
@@ -914,11 +1247,23 @@ fn build_verified_proof(
     generated_at: DateTime<Utc>,
 ) -> GoalProof {
     let gates_ok = !gates.is_empty() && gates_passed(&gates);
+    let agent_execution_done = task_graph
+        .tasks
+        .iter()
+        .any(|task| task.id == GOAL_AGENT_EXECUTE_TASK_ID && task.status == GoalTaskStatus::Done);
     let commits = proof_commits(&git);
-    let mut known_gaps = vec![
-        "agent execution is not implemented for omk goal yet".to_string(),
-        "proof cannot claim readiness until agent-owned execution evidence exists".to_string(),
-    ];
+    let mut known_gaps = if agent_execution_done {
+        vec![
+            "review evidence is not implemented for omk goal yet".to_string(),
+            "security and integration hardening evidence is not captured for omk goal yet"
+                .to_string(),
+        ]
+    } else {
+        vec![
+            "agent execution has not run for this goal yet".to_string(),
+            "proof cannot claim readiness until agent-owned execution evidence exists".to_string(),
+        ]
+    };
 
     if gates.is_empty() {
         known_gaps.push("no verification gates were detected or configured".to_string());
@@ -930,14 +1275,17 @@ fn build_verified_proof(
         version: 1,
         goal_id: state.goal_id.clone(),
         status: GoalStatus::NotReady,
-        readiness: if gates_ok {
+        readiness: if gates_ok && agent_execution_done {
+            "not ready: verification gates and bounded agent execution passed, but review evidence is missing"
+                .to_string()
+        } else if gates_ok {
             "not ready: verification gates passed, but agent execution evidence is missing"
                 .to_string()
         } else {
             "not ready: required verification evidence is incomplete or failing".to_string()
         },
         summary: format!(
-            "Goal '{}' has {} gate result(s) and remains not ready until agent execution evidence exists.",
+            "Goal '{}' has {} gate result(s) and remains not ready until all required execution and review evidence exists.",
             state.normalized_goal,
             gates.len()
         ),

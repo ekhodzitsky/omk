@@ -78,14 +78,15 @@ current beta MVP instead of inventing a parallel runtime:
   `task-graph.json`;
 - controller-owned planning task completion evidence in the task graph and
   goal event log;
-- honest goal-level `proof.json` with `not_ready` status until agent execution
-  evidence exists;
+- honest goal-level `proof.json` with `not_ready` status until execution,
+  review, and hardening evidence exists;
 - local verification gate execution through `omk goal verify`, with gate output
   artifacts and gate results embedded in the goal proof;
 - local controller execution through `omk goal execute`, which marks the
-  `goal-local-verify` task done when required gates pass while keeping
-  `goal-agent-execute` pending;
+  `goal-local-verify` task done when required gates pass and launches one
+  bounded Wire-backed `goal-agent-execute` scheduler task;
 - best-effort git branch, HEAD commit, and dirty-state capture in goal proofs;
+- bounded agent wave evidence under `artifacts/agent-runs/`;
 - goal-level `events.jsonl`;
 - cancellation `failure.json` artifacts;
 - Kimi-native asset sync, doctor, install, and rollback;
@@ -205,7 +206,7 @@ Each goal writes `.omk/goals/<goal-id>/proof.json` with:
 - goal summary;
 - accepted and rejected assumptions;
 - task graph summary;
-- controller-owned task evidence and remaining pending execution work;
+- controller-owned task evidence and bounded agent execution evidence;
 - changed files;
 - commits or branches produced;
 - current git HEAD, branch, and dirty state when available;
@@ -273,6 +274,8 @@ It is:
   events.jsonl
   heartbeats/
   artifacts/
+    gates/
+    agent-runs/
   reviews/
   proof.json
   failure.json

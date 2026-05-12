@@ -17,6 +17,10 @@ fn omk_cmd(envs: &[(&'static str, PathBuf)]) -> Command {
     cmd
 }
 
+fn mock_kimi_path() -> PathBuf {
+    assert_cmd::cargo::cargo_bin("mock-kimi")
+}
+
 fn xdg_state(envs: &[(&'static str, PathBuf)]) -> PathBuf {
     envs.iter()
         .find_map(|(key, value)| (*key == "XDG_STATE_HOME").then(|| value.clone()))
@@ -234,7 +238,7 @@ fn test_goal_run_writes_task_graph_and_not_ready_proof() {
         .any(|gap| gap
             .as_str()
             .unwrap()
-            .contains("agent execution is not implemented")));
+            .contains("agent execution has not run")));
 }
 
 #[test]
@@ -323,7 +327,7 @@ fn test_goal_verify_records_passing_gate_evidence_but_stays_not_ready() {
         .any(|gap| gap
             .as_str()
             .unwrap()
-            .contains("agent execution is not implemented")));
+            .contains("agent execution has not run")));
 }
 
 #[test]
@@ -430,7 +434,7 @@ fn test_goal_verify_records_git_evidence() {
 }
 
 #[test]
-fn test_goal_execute_records_local_verification_task_evidence() {
+fn test_goal_execute_runs_mock_wire_agent_and_records_agent_task_evidence() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");
     write_gate_config(project.path(), "smoke", "echo smoke-ok");
@@ -443,13 +447,15 @@ fn test_goal_execute_records_local_verification_task_evidence() {
 
     let mut execute = omk_cmd(&envs);
     execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
         .current_dir(project.path())
         .args(["goal", "execute", "latest"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Execution: not_ready"))
         .stdout(predicate::str::contains("goal-local-verify: done"))
-        .stdout(predicate::str::contains("goal-agent-execute: pending"));
+        .stdout(predicate::str::contains("goal-agent-execute: done"));
 
     let dirs = goal_dirs(&envs);
     assert_eq!(dirs.len(), 1);
@@ -485,8 +491,33 @@ fn test_goal_execute_records_local_verification_task_evidence() {
         .iter()
         .find(|task| task["id"] == "goal-agent-execute")
         .expect("missing goal-agent-execute task");
-    assert_eq!(agent_execute["status"], "pending");
-    assert!(agent_execute["evidence"].as_array().unwrap().is_empty());
+    assert_eq!(agent_execute["status"], "done");
+    assert_eq!(agent_execute["owner_role"], "executor");
+    assert!(agent_execute["completed_at"].as_str().is_some());
+    let agent_evidence = agent_execute["evidence"].as_array().unwrap();
+    assert!(agent_evidence.iter().any(|evidence| {
+        evidence["kind"] == "agent_run"
+            && evidence["path"] == "artifacts/agent-runs/goal-agent-execute"
+    }));
+    assert!(agent_evidence.iter().any(|evidence| {
+        evidence["kind"] == "worker_outbox"
+            && evidence["path"]
+                == "artifacts/agent-runs/goal-agent-execute/workers/goal-agent-worker-0/outbox.jsonl"
+    }));
+    assert!(agent_evidence.iter().any(|evidence| {
+        evidence["kind"] == "wire_events"
+            && evidence["path"]
+                == "artifacts/agent-runs/goal-agent-execute/workers/goal-agent-worker-0/wire-events.jsonl"
+    }));
+
+    assert!(dirs[0]
+        .join("artifacts/agent-runs/goal-agent-execute/workers/goal-agent-worker-0/outbox.jsonl")
+        .exists());
+    assert!(dirs[0]
+        .join(
+            "artifacts/agent-runs/goal-agent-execute/workers/goal-agent-worker-0/wire-events.jsonl"
+        )
+        .exists());
 
     let proof_output = {
         let mut cmd = omk_cmd(&envs);
@@ -500,9 +531,9 @@ fn test_goal_execute_records_local_verification_task_evidence() {
         serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
     assert_eq!(proof_json["status"], "not_ready");
     assert_eq!(proof_json["task_graph_summary"]["total_tasks"], 4);
-    assert_eq!(proof_json["task_graph_summary"]["done_tasks"], 3);
-    assert_eq!(proof_json["task_graph_summary"]["pending_tasks"], 1);
-    assert!(proof_json["known_gaps"]
+    assert_eq!(proof_json["task_graph_summary"]["done_tasks"], 4);
+    assert_eq!(proof_json["task_graph_summary"]["pending_tasks"], 0);
+    assert!(!proof_json["known_gaps"]
         .as_array()
         .unwrap()
         .iter()
@@ -510,6 +541,66 @@ fn test_goal_execute_records_local_verification_task_evidence() {
             .as_str()
             .unwrap()
             .contains("agent execution is not implemented")));
+    assert!(!proof_json["known_gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gap| gap
+            .as_str()
+            .unwrap()
+            .contains("agent execution has not run")));
+    assert!(proof_json["known_gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gap| gap.as_str().unwrap().contains("review evidence")));
+}
+
+#[test]
+fn test_goal_execute_blocks_agent_task_when_kimi_is_missing() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args(["goal", "run", "Execute without Kimi available"])
+        .assert()
+        .success();
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .env_remove("MOCK_KIMI")
+        .env("PATH", "/no-kimi-here")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Execution: not_ready"))
+        .stdout(predicate::str::contains("goal-local-verify: done"))
+        .stdout(predicate::str::contains("goal-agent-execute: blocked"));
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let task_graph: Value = serde_json::from_str(
+        &fs::read_to_string(dirs[0].join("task-graph.json")).expect("missing task graph"),
+    )
+    .expect("task graph should be JSON");
+    let agent_execute = task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|task| task["id"] == "goal-agent-execute")
+        .expect("missing goal-agent-execute task");
+    assert_eq!(agent_execute["status"], "blocked");
+    assert!(agent_execute["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|evidence| evidence["summary"]
+            .as_str()
+            .unwrap()
+            .contains("Kimi CLI not found")));
 }
 
 #[test]

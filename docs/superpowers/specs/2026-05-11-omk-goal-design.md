@@ -2,7 +2,8 @@
 
 Date: 2026-05-11
 
-Status: design approved by project direction, not implemented.
+Status: design approved; early scaffold implemented with state, planning
+artifacts, gates, git evidence, and one bounded Wire-backed execution wave.
 
 Related docs:
 

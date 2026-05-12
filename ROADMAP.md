@@ -28,7 +28,8 @@ Status: current beta MVP.
 - Run/proof/HUD inspection.
 - Verification gates.
 - `omk goal` durable scaffold with planning artifacts, task graph, local
-  verification task evidence, git evidence, and not-ready proof.
+  verification task evidence, git evidence, one bounded Wire-backed agent wave,
+  and not-ready proof.
 - GitHub CI and coverage.
 
 ## Stage 1 - Goal State Core
@@ -69,6 +70,8 @@ Exit criteria:
 Target: let the goal controller create and manage work.
 
 - Launch role-specific agents through existing team/runtime surfaces.
+- Land the first bounded `goal-agent-execute` wave on existing scheduler/Wire
+  primitives.
 - Allow agents to propose tasks.
 - Require controller validation before mutating the task graph.
 - Track heartbeats, leases, retries, stale work, and task ownership.
