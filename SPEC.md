@@ -84,10 +84,11 @@ current beta MVP instead of inventing a parallel runtime:
 - local verification gate execution through `omk goal verify`, with gate output
   artifacts and gate results embedded in the goal proof;
 - local controller execution through `omk goal execute`, which marks the
-  `goal-local-verify` task done when required gates pass and launches one
-  bounded Wire-backed `goal-agent-execute` scheduler task with mutation diff
-  and changed-file evidence, then reruns verification gates when that task
-  changes project files;
+  `goal-local-verify` task done when required gates pass, launches
+  policy-validated bounded Wire-backed agent task waves, records mutation diff
+  and changed-file evidence, dispatches accepted agent-proposed follow-up tasks,
+  enforces `max_agents` as the worker pool cap, and reruns verification gates
+  when agent work changes project files;
 - controller review through `omk goal review`, which marks `goal-review` and
   `goal-security-review` done only when execution evidence exists and the
   bounded changed-file secret scan finds no high-confidence findings;

@@ -14,7 +14,8 @@ validates them through the same controller policy used for built-in task
 proposals, writes `agent-task-proposals.json`, emits proposal/decision events,
 and appends accepted safe work as pending `task-graph.json` nodes. Later
 `execute` invocations dispatch ready pending follow-ups through the
-`goal-agent-followups` Wire wave and close the graph nodes from worker results.
+`goal-agent-followups` Wire wave, bounded by the goal `max_agents` policy, and
+close the graph nodes from worker results.
 
 ## Implementation Checklist
 
@@ -28,6 +29,7 @@ and appends accepted safe work as pending `task-graph.json` nodes. Later
       `task_rejected` from the controller actor.
 - [x] Append accepted safe proposals to the goal task graph as pending nodes.
 - [x] Dispatch accepted ready follow-up nodes on a later `goal execute`.
+- [x] Enforce `max_agents` as a bounded worker pool for ready follow-up waves.
 - [x] Update README, architecture docs, spec, TODO, changelog, and version.
 
 ## Verification
@@ -38,5 +40,4 @@ and appends accepted safe work as pending `task-graph.json` nodes. Later
 
 ## Follow-Up
 
-- Add max-concurrency enforcement for accepted task waves.
 - Add stale-task recovery coverage for goal execution waves.

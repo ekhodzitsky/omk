@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-05-12
+
+### Added
+
+- **`omk goal execute` max-agent worker pools**: accepted ready goal-agent tasks now run through a bounded Wire worker pool capped by `--max-agents` and by the number of accepted ready tasks. Follow-up waves can fan out safely across multiple workers while keeping worker-0 evidence paths stable for existing proof readers.
+
 ### Changed
 
 - Refactored `runtime::goal` into a module directory for SRP and AGENTS.md 400-line compliance. No behavior change.

@@ -885,6 +885,91 @@ fn test_goal_execute_dispatches_accepted_agent_followup_on_next_execute() {
 }
 
 #[test]
+fn test_goal_execute_uses_max_agents_worker_pool_for_ready_followups() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args([
+            "goal",
+            "run",
+            "Fan out ready follow-up work",
+            "--max-agents",
+            "2",
+        ])
+        .assert()
+        .success();
+
+    let proposals = concat!(
+        r#"OMK_TASK_PROPOSAL: {"id":"goal-agent-docs-followup-a","title":"Document follow-up A","description":"Document the first readiness follow-up.","dependencies":["goal-agent-execute"],"read_set":["README.md"],"write_set":["docs/followup-a.md"],"risk":"low","acceptance":["follow-up A is documented"],"budget_secs":120}"#,
+        "\n",
+        r#"OMK_TASK_PROPOSAL: {"id":"goal-agent-docs-followup-b","title":"Document follow-up B","description":"Document the second readiness follow-up.","dependencies":["goal-agent-execute"],"read_set":["README.md"],"write_set":["docs/followup-b.md"],"risk":"low","acceptance":["follow-up B is documented"],"budget_secs":120}"#
+    );
+    let mut first_execute = omk_cmd(&envs);
+    first_execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WIRE_TEXT_WHEN_CONTAINS", "goal-agent-implement")
+        .env("MOCK_KIMI_WIRE_TEXT", proposals)
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success();
+
+    let mut second_execute = omk_cmd(&envs);
+    second_execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success();
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let goal_dir = &dirs[0];
+    let followup_run = goal_dir.join("artifacts/agent-runs/goal-agent-followups");
+    let worker_0_outbox = followup_run.join("workers/goal-agent-worker-0/outbox.jsonl");
+    let worker_1_outbox = followup_run.join("workers/goal-agent-worker-1/outbox.jsonl");
+    assert!(
+        worker_0_outbox.exists(),
+        "expected worker 0 outbox for follow-up wave"
+    );
+    assert!(
+        worker_1_outbox.exists(),
+        "expected worker 1 outbox when --max-agents 2 allows two ready follow-ups"
+    );
+    assert!(
+        !followup_run.join("workers/goal-agent-worker-2").exists(),
+        "worker pool must not exceed --max-agents"
+    );
+
+    let mut task_ids: Vec<String> = read_jsonl(&worker_0_outbox)
+        .into_iter()
+        .chain(read_jsonl(&worker_1_outbox))
+        .filter_map(|result| result["task_id"].as_str().map(str::to_string))
+        .collect();
+    task_ids.sort();
+    assert_eq!(
+        task_ids,
+        vec![
+            "goal-agent-docs-followup-a".to_string(),
+            "goal-agent-docs-followup-b".to_string(),
+        ]
+    );
+
+    let policy: Value = serde_json::from_str(
+        &fs::read_to_string(followup_run.join("task-policy.json"))
+            .expect("missing follow-up task policy"),
+    )
+    .expect("follow-up task policy should parse");
+    assert_eq!(policy["max_agents"], 2);
+    assert_eq!(policy["accepted_tasks"].as_array().unwrap().len(), 2);
+}
+
+#[test]
 fn test_goal_review_records_controller_review_and_security_evidence_after_agent_execution() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");

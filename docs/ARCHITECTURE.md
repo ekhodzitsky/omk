@@ -110,17 +110,18 @@ Current `omk goal` scaffold data flow:
    `OMK_TASK_PROPOSAL: {...}` follow-up work; the controller records
    `agent-task-proposals.json` and appends accepted safe proposals as pending
    task graph nodes. Later `execute` invocations dispatch ready pending
-   follow-ups through `artifacts/agent-runs/goal-agent-followups/` and mark
-   those nodes done or blocked from worker results. If the worker changes
-   project files, `execute` reruns gates under `artifacts/gates/post-mutation/`
-   before writing the final proof.
+   follow-ups through `artifacts/agent-runs/goal-agent-followups/`, honor the
+   goal `max_agents` cap with a bounded Wire worker pool, and mark those nodes
+   done or blocked from worker results. If the worker changes project files,
+   `execute` reruns gates under `artifacts/gates/post-mutation/` before writing
+   the final proof.
 9. `omk goal review` writes controller review/security artifacts under
    `artifacts/reviews/` and closes `goal-review` / `goal-security-review`
    when evidence is sufficient.
 10. Operators inspect with `omk goal list/status/show/proof`.
 11. `omk goal cancel` writes `failure.json`.
 
-Planned later flow adds multi-task execution waves, task graph mutation,
+Planned later flow adds stale-task recovery, stronger graph validation,
 specialist review loops, integration acceptance, and ready proof generation.
 
 ## CLI Surfaces

@@ -48,7 +48,7 @@ OMK is independent of Moonshot AI, Kimi CLI, and oh-my-claudecode.
 
 Short answer: **yes, you can use OMK today for local/personal repo automation, but treat it as a beta MVP, not a polished 1.0 product.**
 
-Current source version: **v0.3.7**. We are intentionally **not publishing to crates.io yet**; install from GitHub release assets or from the GitHub repository.
+Current source version: **v0.3.8**. We are intentionally **not publishing to crates.io yet**; install from GitHub release assets or from the GitHub repository.
 
 What is ready enough to use now:
 
@@ -105,11 +105,13 @@ proposals, records `agent-task-proposals.json`, emits proposal/decision events,
 and appends accepted safe follow-up tasks as pending graph nodes. Later
 `execute` invocations dispatch ready pending follow-ups through a
 `goal-agent-followups` Wire wave and mark those durable graph nodes from worker
-results. When the agent changes project files, `execute` reruns verification
-gates against the mutated tree and records post-mutation gate evidence. `omk
-goal review` records controller review and bounded secret-scan security evidence
-under `artifacts/reviews/`. Integration, specialist review loops, max
-concurrency, and ready proof generation are still planned. The current `team run`, event log, gates, and
+results. Agent waves now honor the goal `--max-agents` cap by creating a bounded
+Wire worker pool for concurrently ready tasks. When the agent changes project
+files, `execute` reruns verification gates against the mutated tree and records
+post-mutation gate evidence. `omk goal review` records controller review and
+bounded secret-scan security evidence under `artifacts/reviews/`. Integration,
+specialist review loops, stale-task recovery, and ready proof generation are
+still planned. The current `team run`, event log, gates, and
 proof systems remain the execution foundation. The design is tracked in
 [SPEC.md](SPEC.md), the delivery path in [ROADMAP.md](ROADMAP.md), and the task
 backlog in [TODO.md](TODO.md).

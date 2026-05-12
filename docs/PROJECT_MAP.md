@@ -28,7 +28,7 @@ omk hud --once
 omk proof show latest
 ```
 
-The core commands are current; web HUD, secondary dashboard surfaces, and proof/operator ergonomics are still hardening. `omk goal` has a current state-core scaffold plus a policy-validated multi-task Wire-backed execution wave with mutation evidence, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, and controller review/security evidence, and is the planned north-star workflow for long-running proof-backed engineering goals. Check `README.md`, `SPEC.md`, `ROADMAP.md`, and `TODO.md` before promising a command is fully polished.
+The core commands are current; web HUD, secondary dashboard surfaces, and proof/operator ergonomics are still hardening. `omk goal` has a current state-core scaffold plus policy-validated multi-task Wire-backed execution waves with mutation evidence, accepted and later-dispatched agent-proposed follow-up tasks, bounded `max_agents` worker pools, post-mutation gate reruns, and controller review/security evidence, and is the planned north-star workflow for long-running proof-backed engineering goals. Check `README.md`, `SPEC.md`, `ROADMAP.md`, and `TODO.md` before promising a command is fully polished.
 
 Competitive positioning is tracked in `docs/COMPETITIVE_POSITIONING.md`. Keep
 public wording anchored on "local, repo-native, proof-driven autonomous software
@@ -37,7 +37,7 @@ engineering runtime" rather than "Devin clone" or "generic agent workflow app."
 ## Current vs Target (L8) Snapshot
 
 - **Current:** Kimi-only execution, scheduler-backed Wire `team run`, run/proof inspection, and Kimi-native asset sync/doctor/rollback.
-- **Current Scaffold:** `omk goal` controller scaffold with controller-owned task evidence, local verification task evidence, policy-validated multi-task Wire-backed agent execution with mutation evidence, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, controller review/security evidence, git evidence, and local gate evidence; web HUD and secondary dashboard/MCP surfaces are present but still hardening.
+- **Current Scaffold:** `omk goal` controller scaffold with controller-owned task evidence, local verification task evidence, policy-validated multi-task Wire-backed agent execution with mutation evidence, accepted and later-dispatched agent-proposed follow-up tasks, bounded `max_agents` worker pools, post-mutation gate reruns, controller review/security evidence, git evidence, and local gate evidence; web HUD and secondary dashboard/MCP surfaces are present but still hardening.
 - **Target:** `omk goal` as the proof-first controller that plans, researches, spawns agents, verifies, and stops with a truthful terminal status.
 
 When writing docs or implementation notes, mark maturity explicitly (`Current`, `Current MVP`, `Current Scaffold`, `Next`, `Later`) to avoid mixing shipped behavior with roadmap intent.
@@ -84,7 +84,7 @@ Legacy/no-handshake fallback remains valid when upstream does not support `initi
 | Kimi Wire integration | `src/wire/`, `src/runtime/wire_worker.rs` | `tests/wire_protocol_test.rs`, official Wire docs |
 | Kimi assets and sync | `src/kimi_native/`, `.kimi/` | `tests/kimi_native_test.rs`, Kimi docs |
 | Proof/readiness output | `src/runtime/proof.rs`, `src/cli/proof_cmd.rs` | `tests/proof_cmd_test.rs`, `tests/proof_golden_test.rs` |
-| `omk goal` controller scaffold and bounded execution work | `src/runtime/goal.rs`, `src/cli/goal.rs`, `SPEC.md`, `ROADMAP.md`, `TODO.md` | `tests/goal_cmd_test.rs`, future goal proof tests |
+| `omk goal` controller scaffold and bounded execution work | `src/runtime/goal/`, `src/cli/goal.rs`, `SPEC.md`, `ROADMAP.md`, `TODO.md` | `tests/goal_cmd_test.rs`, future goal proof tests |
 | HUD or event timeline | `src/vis/`, `src/runtime/events.rs` | `tests/hud_test.rs` |
 | Cost estimates | `src/cost/`, `src/cli/cost_cmd.rs` | cost tests when added |
 | Skills or marketplace | `src/skills/`, `src/marketplace/` | `tests/skill_test.rs`, `tests/marketplace_test.rs` |

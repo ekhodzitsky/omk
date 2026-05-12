@@ -181,7 +181,9 @@ follow-up work; the controller writes `agent-task-proposals.json`, applies the
 same validation, and appends accepted safe proposals as pending graph nodes.
 Later `execute` invocations dispatch ready pending follow-ups through a separate
 `goal-agent-followups` Wire wave and close those durable graph nodes from worker
-results.
+results. Both built-in and follow-up agent waves honor the goal `max_agents`
+policy by creating no more Wire workers than the accepted ready task count or
+the configured cap.
 
 ### Verification Wall
 

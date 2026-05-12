@@ -54,34 +54,19 @@ pub(crate) async fn run_goal_agent_task_wave(
     let run_dir = state.state_dir.join(&run_path);
     crate::runtime::config::ensure_private_dir(&run_dir).await?;
 
-    let worker_dir = run_dir.join(WORKERS_DIR).join(GOAL_AGENT_WORKER_ID);
-    crate::runtime::config::ensure_private_dir(&worker_dir).await?;
-
+    let primary_worker_name = goal_agent_worker_name(0);
     let worker_outbox_path = run_path
         .join(WORKERS_DIR)
-        .join(GOAL_AGENT_WORKER_ID)
+        .join(&primary_worker_name)
         .join(OUTBOX_FILE);
     let wire_events_path = run_path
         .join(WORKERS_DIR)
-        .join(GOAL_AGENT_WORKER_ID)
+        .join(&primary_worker_name)
         .join("wire-events.jsonl");
     let task_policy_path = run_path.join(GOAL_AGENT_TASK_POLICY_FILE);
     let agent_task_proposals_path = run_path.join(super::state::GOAL_AGENT_TASK_PROPOSALS_FILE);
     let mutation_diff_path = run_path.join("mutation.diff");
     let changed_files_path = run_path.join("changed-files.json");
-
-    let spec = WorkerSpec {
-        name: GOAL_AGENT_WORKER_ID.to_string(),
-        role: GOAL_AGENT_WORKER_ROLE.to_string(),
-        inbox: worker_dir.join(INBOX_FILE),
-        outbox: worker_dir.join(OUTBOX_FILE),
-        heartbeat: worker_dir.join(HEARTBEAT_FILE),
-        project_dir: Some(project_dir.to_path_buf()),
-    };
-    spec.save().await?;
-    tokio::fs::write(&spec.inbox, b"").await?;
-    tokio::fs::write(&spec.outbox, b"").await?;
-    tokio::fs::write(worker_dir.join("wire-events.jsonl"), b"").await?;
 
     let event_writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
     let builder = EventBuilder::new(RunId(run_id.clone()));
@@ -189,21 +174,25 @@ pub(crate) async fn run_goal_agent_task_wave(
         });
     }
 
-    event_writer
-        .append(&builder.worker_started(
-            WorkerId(GOAL_AGENT_WORKER_ID.to_string()),
-            GOAL_AGENT_WORKER_ROLE,
-        )?)
-        .await?;
+    let worker_count = goal_agent_worker_count(policy.max_agents, scheduler_tasks.len());
+    let worker_specs = prepare_goal_agent_workers(&run_dir, project_dir, worker_count).await?;
+    for spec in &worker_specs {
+        event_writer
+            .append(&builder.worker_started(WorkerId(spec.name.clone()), GOAL_AGENT_WORKER_ROLE)?)
+            .await?;
+    }
 
     let cancel = CancellationToken::new();
-    let adapter = WireWorkerAdapter::new_with_cancel(
-        spec.clone(),
-        RunId(run_id.clone()),
-        event_writer.clone(),
-        cancel.clone(),
-    );
-    let mut handle = adapter.spawn();
+    let mut handles = Vec::with_capacity(worker_specs.len());
+    for spec in &worker_specs {
+        let adapter = WireWorkerAdapter::new_with_cancel(
+            spec.clone(),
+            RunId(run_id.clone()),
+            event_writer.clone(),
+            cancel.clone(),
+        );
+        handles.push(adapter.spawn());
+    }
     let mut runner = TeamRunner::init_with_tasks(
         &run_id,
         project_dir,
@@ -213,12 +202,14 @@ pub(crate) async fn run_goal_agent_task_wave(
     )
     .await?;
 
-    let run_result = runner.run(std::slice::from_ref(&spec)).await;
+    let run_result = runner.run(&worker_specs).await;
     cancel.cancel();
-    stop_wire_worker(&mut handle).await;
+    for handle in &mut handles {
+        stop_wire_worker(handle).await;
+    }
 
     let summary = run_result?;
-    let worker_results = read_goal_agent_worker_results(&spec, &accepted_task_ids).await?;
+    let worker_results = read_goal_agent_worker_results(&worker_specs, &accepted_task_ids).await?;
     let worker_summary = summarize_goal_agent_worker_results(&worker_results);
     let agent_proposed_tasks = extract_goal_agent_task_proposals(&worker_results);
     let changed_files = write_goal_agent_mutation_snapshot(
@@ -246,6 +237,45 @@ pub(crate) async fn run_goal_agent_task_wave(
         worker_results,
         worker_summary,
     })
+}
+
+fn goal_agent_worker_name(index: usize) -> String {
+    if index == 0 {
+        GOAL_AGENT_WORKER_ID.to_string()
+    } else {
+        format!("goal-agent-worker-{index}")
+    }
+}
+
+fn goal_agent_worker_count(max_agents: usize, task_count: usize) -> usize {
+    max_agents.max(1).min(task_count.max(1))
+}
+
+async fn prepare_goal_agent_workers(
+    run_dir: &Path,
+    project_dir: &Path,
+    worker_count: usize,
+) -> Result<Vec<WorkerSpec>> {
+    let mut specs = Vec::with_capacity(worker_count);
+    for index in 0..worker_count {
+        let name = goal_agent_worker_name(index);
+        let worker_dir = run_dir.join(WORKERS_DIR).join(&name);
+        crate::runtime::config::ensure_private_dir(&worker_dir).await?;
+        let spec = WorkerSpec {
+            name,
+            role: GOAL_AGENT_WORKER_ROLE.to_string(),
+            inbox: worker_dir.join(INBOX_FILE),
+            outbox: worker_dir.join(OUTBOX_FILE),
+            heartbeat: worker_dir.join(HEARTBEAT_FILE),
+            project_dir: Some(project_dir.to_path_buf()),
+        };
+        spec.save().await?;
+        tokio::fs::write(&spec.inbox, b"").await?;
+        tokio::fs::write(&spec.outbox, b"").await?;
+        tokio::fs::write(worker_dir.join("wire-events.jsonl"), b"").await?;
+        specs.push(spec);
+    }
+    Ok(specs)
 }
 
 fn goal_agent_scheduler_tasks(
@@ -316,14 +346,19 @@ fn goal_agent_task_prompt(
 }
 
 async fn read_goal_agent_worker_results(
-    spec: &WorkerSpec,
+    specs: &[WorkerSpec],
     task_ids: &[String],
 ) -> Result<Vec<crate::runtime::worker::WorkerResult>> {
-    let results: Vec<crate::runtime::worker::WorkerResult> = spec.read_results().await?;
-    Ok(results
-        .into_iter()
-        .filter(|result| task_ids.iter().any(|task_id| task_id == &result.task_id))
-        .collect())
+    let mut filtered = Vec::new();
+    for spec in specs {
+        let results: Vec<crate::runtime::worker::WorkerResult> = spec.read_results().await?;
+        filtered.extend(
+            results
+                .into_iter()
+                .filter(|result| task_ids.iter().any(|task_id| task_id == &result.task_id)),
+        );
+    }
+    Ok(filtered)
 }
 
 fn summarize_goal_agent_worker_results(

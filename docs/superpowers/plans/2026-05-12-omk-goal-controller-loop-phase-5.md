@@ -30,16 +30,18 @@ Wire-backed scheduler.
 - [x] Persist `artifacts/agent-runs/goal-agent-execute/task-policy.json`.
 - [x] Pass acceptance criteria and per-task budget context to Wire workers.
 - [x] Record task policy evidence on the aggregate goal task.
+- [x] Enforce `max_agents` as a bounded Wire worker pool for accepted ready
+      tasks.
 - [x] Update README, architecture docs, spec, TODO, changelog, and version.
 
 ## Verification
 
 - `cargo test --test goal_cmd_test test_goal_execute_dispatches_policy_validated_multi_task_agent_wave`
+- `cargo test --test goal_cmd_test test_goal_execute_uses_max_agents_worker_pool_for_ready_followups`
 - `cargo test --test goal_cmd_test`
 
 ## Follow-Up
 
 - Let agents propose graph mutations back to the controller instead of relying
   only on built-in controller proposals.
-- Add true max-concurrency enforcement for parallel accepted tasks.
 - Add stale-task recovery coverage for goal execution waves.
