@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::path::Component;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::process::Command;
@@ -34,8 +36,13 @@ pub const GOAL_AGENT_RUNS_DIR: &str = "agent-runs";
 const GOAL_CONTROLLER_ACTOR: &str = "goal-controller";
 const GOAL_LOCAL_VERIFY_TASK_ID: &str = "goal-local-verify";
 const GOAL_AGENT_EXECUTE_TASK_ID: &str = "goal-agent-execute";
+const GOAL_REVIEW_TASK_ID: &str = "goal-review";
+const GOAL_SECURITY_REVIEW_TASK_ID: &str = "goal-security-review";
 const GOAL_AGENT_WORKER_ID: &str = "goal-agent-worker-0";
 const GOAL_AGENT_WORKER_ROLE: &str = "executor";
+const GOAL_REVIEW_ARTIFACTS_DIR: &str = "reviews";
+const GOAL_REVIEW_FILE: &str = "goal-review.md";
+const GOAL_SECURITY_REVIEW_FILE: &str = "goal-security-review.md";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -208,6 +215,15 @@ struct GoalAgentRunEvidence {
     worker_outbox_path: PathBuf,
     wire_events_path: PathBuf,
     worker_summary: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct GoalReviewEvidence {
+    review_path: PathBuf,
+    security_review_path: PathBuf,
+    review_summary: String,
+    security_summary: String,
+    security_findings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -554,6 +570,73 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     Ok(proof)
 }
 
+pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
+    let mut state = resolve_goal(goal_id).await?;
+    state.status = GoalStatus::Running;
+    state.phase = GoalPhase::VerificationDesign;
+    state.updated_at = Utc::now();
+    state.completed_at = None;
+    state.save().await?;
+
+    let mut state = resolve_goal(goal_id).await?;
+    let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
+    let prior_proof = GoalProof::load(&state.state_dir).await?;
+    let now = Utc::now();
+
+    let review_evidence =
+        write_goal_review_evidence(&state, &task_graph, &prior_proof, project_dir, now).await?;
+    let mut updated_tasks = Vec::new();
+    if let Some(task) = apply_goal_review_task_result(&mut task_graph, &review_evidence, now) {
+        updated_tasks.push(task);
+    }
+    if let Some(task) =
+        apply_goal_security_review_task_result(&mut task_graph, &review_evidence, now)
+    {
+        updated_tasks.push(task);
+    }
+    append_goal_review_task_events(&state, &updated_tasks).await?;
+    write_json_artifact(&state.state_dir.join(GOAL_TASK_GRAPH_FILE), &task_graph).await?;
+
+    record_artifact_path_once(
+        &mut state,
+        "review",
+        review_evidence.review_path.clone(),
+        now,
+    );
+    record_artifact_path_once(
+        &mut state,
+        "security_review",
+        review_evidence.security_review_path.clone(),
+        now,
+    );
+    state.status = GoalStatus::NotReady;
+    state.phase = GoalPhase::Proof;
+    state.updated_at = now;
+    state.completed_at = Some(now);
+    state.save().await?;
+
+    let proof = build_verified_proof(
+        &state,
+        &task_graph,
+        prior_proof.gates,
+        prior_proof.changed_files,
+        prior_proof.git,
+        now,
+    );
+    write_json_artifact(&state.state_dir.join(GOAL_PROOF_FILE), &proof).await?;
+
+    let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
+    let builder = EventBuilder::new(RunId(state.goal_id.clone()));
+    writer
+        .append(&builder.proof_written(
+            &state.state_dir.join(GOAL_PROOF_FILE),
+            &proof.status.to_string(),
+        )?)
+        .await?;
+
+    Ok(proof)
+}
+
 async fn run_goal_agent_execution_task(
     state: &GoalState,
     task_graph: &GoalTaskGraph,
@@ -796,6 +879,267 @@ async fn append_agent_execution_task_events(
     writer.append(&event).await
 }
 
+async fn write_goal_review_evidence(
+    state: &GoalState,
+    task_graph: &GoalTaskGraph,
+    proof: &GoalProof,
+    project_dir: &Path,
+    generated_at: DateTime<Utc>,
+) -> Result<GoalReviewEvidence> {
+    let review_dir = PathBuf::from(GOAL_ARTIFACTS_DIR).join(GOAL_REVIEW_ARTIFACTS_DIR);
+    let review_path = review_dir.join(GOAL_REVIEW_FILE);
+    let security_review_path = review_dir.join(GOAL_SECURITY_REVIEW_FILE);
+    let review_abs_dir = state.state_dir.join(&review_dir);
+    crate::runtime::config::ensure_private_dir(&review_abs_dir).await?;
+
+    let local_verify_done = goal_task_done(task_graph, GOAL_LOCAL_VERIFY_TASK_ID);
+    let agent_execution_done = goal_task_done(task_graph, GOAL_AGENT_EXECUTE_TASK_ID);
+    let gates_ok = !proof.gates.is_empty() && gates_passed(&proof.gates);
+    let security_findings = scan_goal_security_findings(project_dir, &proof.changed_files).await?;
+
+    let review_summary = if local_verify_done && agent_execution_done && gates_ok {
+        "Controller review passed: local gate evidence and agent execution evidence are present."
+            .to_string()
+    } else {
+        "Controller review blocked: local gates, proof, or agent execution evidence is incomplete."
+            .to_string()
+    };
+    let security_summary = if !agent_execution_done {
+        "Security review blocked: agent execution evidence is incomplete.".to_string()
+    } else if security_findings.is_empty() {
+        "Security review passed: no high-confidence secret markers found in changed files."
+            .to_string()
+    } else {
+        format!(
+            "Security review blocked: {} high-confidence secret marker(s) found.",
+            security_findings.len()
+        )
+    };
+
+    let task_lines = task_graph
+        .tasks
+        .iter()
+        .map(|task| format!("- `{}`: `{}`", task.id, task.status))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let gate_lines = if proof.gates.is_empty() {
+        "- no gate evidence recorded".to_string()
+    } else {
+        proof
+            .gates
+            .iter()
+            .map(|gate| {
+                let status = if gate.passed { "passed" } else { "failed" };
+                format!("- `{}`: `{}`", gate.name, status)
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let changed_file_lines = if proof.changed_files.is_empty() {
+        "- no changed files reported by git diff".to_string()
+    } else {
+        proof
+            .changed_files
+            .iter()
+            .map(|file| format!("- `{file}`"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    let review_body = format!(
+        "# Goal Review\n\n\
+         Generated: {generated_at}\n\n\
+         Goal ID: `{}`\n\n\
+         ## Result\n\n\
+         {review_summary}\n\n\
+         ## Task Evidence\n\n\
+         {task_lines}\n\n\
+         ## Gate Evidence\n\n\
+         {gate_lines}\n",
+        state.goal_id
+    );
+    write_text_artifact(&state.state_dir.join(&review_path), &review_body).await?;
+
+    let finding_lines = if security_findings.is_empty() {
+        "- no findings".to_string()
+    } else {
+        security_findings
+            .iter()
+            .map(|finding| format!("- {finding}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let security_body = format!(
+        "# Goal Security Review\n\n\
+         Generated: {generated_at}\n\n\
+         Goal ID: `{}`\n\n\
+         ## Result\n\n\
+         {security_summary}\n\n\
+         ## Changed Files Scanned\n\n\
+         {changed_file_lines}\n\n\
+         ## Findings\n\n\
+         {finding_lines}\n",
+        state.goal_id
+    );
+    write_text_artifact(&state.state_dir.join(&security_review_path), &security_body).await?;
+
+    Ok(GoalReviewEvidence {
+        review_path,
+        security_review_path,
+        review_summary,
+        security_summary,
+        security_findings,
+    })
+}
+
+fn apply_goal_review_task_result(
+    task_graph: &mut GoalTaskGraph,
+    evidence: &GoalReviewEvidence,
+    completed_at: DateTime<Utc>,
+) -> Option<GoalTask> {
+    let review_ok = goal_task_done(task_graph, GOAL_LOCAL_VERIFY_TASK_ID)
+        && goal_task_done(task_graph, GOAL_AGENT_EXECUTE_TASK_ID);
+    let task = task_graph
+        .tasks
+        .iter_mut()
+        .find(|task| task.id == GOAL_REVIEW_TASK_ID)?;
+
+    task.status = if review_ok {
+        GoalTaskStatus::Done
+    } else {
+        GoalTaskStatus::Blocked
+    };
+    task.owner_role = Some(GOAL_CONTROLLER_ACTOR.to_string());
+    task.completed_at = review_ok.then_some(completed_at);
+    task.evidence = vec![GoalTaskEvidence {
+        kind: "review".to_string(),
+        path: evidence.review_path.clone(),
+        summary: evidence.review_summary.clone(),
+    }];
+    Some(task.clone())
+}
+
+fn apply_goal_security_review_task_result(
+    task_graph: &mut GoalTaskGraph,
+    evidence: &GoalReviewEvidence,
+    completed_at: DateTime<Utc>,
+) -> Option<GoalTask> {
+    let security_ok = goal_task_done(task_graph, GOAL_AGENT_EXECUTE_TASK_ID)
+        && evidence.security_findings.is_empty();
+    let task = task_graph
+        .tasks
+        .iter_mut()
+        .find(|task| task.id == GOAL_SECURITY_REVIEW_TASK_ID)?;
+
+    task.status = if security_ok {
+        GoalTaskStatus::Done
+    } else {
+        GoalTaskStatus::Blocked
+    };
+    task.owner_role = Some(GOAL_CONTROLLER_ACTOR.to_string());
+    task.completed_at = security_ok.then_some(completed_at);
+    task.evidence = vec![GoalTaskEvidence {
+        kind: "security_review".to_string(),
+        path: evidence.security_review_path.clone(),
+        summary: evidence.security_summary.clone(),
+    }];
+    Some(task.clone())
+}
+
+async fn append_goal_review_task_events(state: &GoalState, tasks: &[GoalTask]) -> Result<()> {
+    let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
+    let builder = EventBuilder::new(RunId(state.goal_id.clone()));
+    let worker_id = WorkerId(GOAL_CONTROLLER_ACTOR.to_string());
+    let mut events = Vec::new();
+
+    for task in tasks {
+        let task_id = TaskId(task.id.clone());
+        let summary = controller_task_summary(task);
+        events.push(
+            Event::new(RunId(state.goal_id.clone()), EventKind::TaskStarted)
+                .with_actor(GOAL_CONTROLLER_ACTOR)
+                .with_payload(serde_json::json!({
+                    "task_id": task.id,
+                    "worker_id": GOAL_CONTROLLER_ACTOR,
+                    "title": task.title,
+                }))?,
+        );
+        let finished = if task.status == GoalTaskStatus::Done {
+            builder.task_completed(task_id, worker_id.clone(), Some(&summary))?
+        } else {
+            Event::new(RunId(state.goal_id.clone()), EventKind::TaskFailed)
+                .with_actor(GOAL_CONTROLLER_ACTOR)
+                .with_payload(serde_json::json!({
+                    "task_id": task.id,
+                    "worker_id": GOAL_CONTROLLER_ACTOR,
+                    "summary": summary,
+                }))?
+        };
+        events.push(finished);
+    }
+
+    if events.is_empty() {
+        return Ok(());
+    }
+    writer.append_many(&events).await
+}
+
+fn goal_task_done(task_graph: &GoalTaskGraph, task_id: &str) -> bool {
+    task_graph
+        .tasks
+        .iter()
+        .any(|task| task.id == task_id && task.status == GoalTaskStatus::Done)
+}
+
+async fn scan_goal_security_findings(
+    project_dir: &Path,
+    changed_files: &[String],
+) -> Result<Vec<String>> {
+    let private_key = Regex::new(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")?;
+    let secret_assignment =
+        Regex::new(r#"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*["'][^"']{16,}["']"#)?;
+    let mut findings = Vec::new();
+
+    for changed_file in changed_files {
+        let Some(path) = safe_project_file_path(project_dir, changed_file) else {
+            continue;
+        };
+        let Ok(metadata) = tokio::fs::metadata(&path).await else {
+            continue;
+        };
+        if !metadata.is_file() || metadata.len() > 512 * 1024 {
+            continue;
+        }
+        let Ok(content) = tokio::fs::read_to_string(&path).await else {
+            continue;
+        };
+        for (line_index, line) in content.lines().enumerate() {
+            if private_key.is_match(line) || secret_assignment.is_match(line) {
+                findings.push(format!(
+                    "{}:{} contains a high-confidence secret marker",
+                    changed_file,
+                    line_index + 1
+                ));
+            }
+        }
+    }
+
+    Ok(findings)
+}
+
+fn safe_project_file_path(project_dir: &Path, changed_file: &str) -> Option<PathBuf> {
+    let path = Path::new(changed_file);
+    if path.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return None;
+    }
+    Some(project_dir.join(path))
+}
+
 pub async fn cancel_goal(goal_id: &str) -> Result<GoalState> {
     let mut state = resolve_goal(goal_id).await?;
     let now = Utc::now();
@@ -874,7 +1218,7 @@ async fn write_goal_brief(state: &GoalState, generated_at: DateTime<Utc>) -> Res
          ## Normalized Goal\n\n\
          {}\n\n\
          ## Current Scope\n\n\
-         This scaffold captures intent and durable planning artifacts. Run `omk goal execute` to attach local gate evidence and a bounded Wire-backed agent wave.\n",
+         This scaffold captures intent and durable planning artifacts. Run `omk goal execute` to attach local gate evidence and a bounded Wire-backed agent wave, then `omk goal review` to attach controller review/security evidence.\n",
         state.original_goal, state.normalized_goal
     );
     write_text_artifact(&state.state_dir.join(GOAL_PRD_FILE), &body).await
@@ -890,9 +1234,10 @@ async fn write_technical_plan(state: &GoalState, generated_at: DateTime<Utc>) ->
          3. Decomposition writes a task graph.\n\
          4. Verification design writes a test specification.\n\
          5. Local execution runs verification gates and refreshes proof evidence.\n\
-         6. Proof writes an honest not-ready proof until required execution and review evidence exists.\n\n\
+         6. Review records controller review and security evidence.\n\
+         7. Proof writes an honest not-ready proof until required execution, review, and integration evidence exists.\n\n\
          ## Execution Boundary\n\n\
-         The current controller records planning task evidence, local verification task evidence, and a bounded Wire-backed `goal-agent-execute` wave. The initial wave records agent-owned execution evidence without mutating project files; future slices will add review loops, task mutation, and integration.\n\n\
+         The current controller records planning task evidence, local verification task evidence, a bounded Wire-backed `goal-agent-execute` wave, and controller review/security evidence. The initial wave records agent-owned execution evidence without mutating project files; future slices will add task mutation, specialist review loops, and integration.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -920,7 +1265,7 @@ async fn write_test_spec(
          ## Scaffold Task Acceptance\n\n\
          {task_lines}\n\n\
          ## Current Status\n\n\
-         `omk goal` remains `not_ready` because readiness still requires review/security evidence beyond controller-owned planning, local verification, and the bounded agent execution wave.\n\n\
+         `omk goal` remains `not_ready` because readiness still requires project mutation, integration, and specialist review loops beyond controller-owned planning, local verification, bounded agent execution, and controller review/security evidence.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -1036,6 +1381,61 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
                 acceptance: vec![
                     "agent execution produces task evidence".to_string(),
                     "proof status becomes ready only with evidence".to_string(),
+                ],
+            },
+            GoalTask {
+                id: GOAL_REVIEW_TASK_ID.to_string(),
+                title: "Review goal execution evidence".to_string(),
+                description: "Check that local verification and agent execution evidence are present before any readiness claim.".to_string(),
+                status: GoalTaskStatus::Pending,
+                owner_role: None,
+                completed_at: None,
+                evidence: Vec::new(),
+                dependencies: vec![GOAL_AGENT_EXECUTE_TASK_ID.to_string()],
+                read_set: vec![
+                    GOAL_PRD_FILE.to_string(),
+                    GOAL_TECHNICAL_PLAN_FILE.to_string(),
+                    GOAL_TEST_SPEC_FILE.to_string(),
+                    GOAL_TASK_GRAPH_FILE.to_string(),
+                    GOAL_PROOF_FILE.to_string(),
+                    format!("{GOAL_ARTIFACTS_DIR}/{GOAL_AGENT_RUNS_DIR}"),
+                ],
+                write_set: vec![
+                    format!("{GOAL_ARTIFACTS_DIR}/{GOAL_REVIEW_ARTIFACTS_DIR}/{GOAL_REVIEW_FILE}"),
+                    GOAL_TASK_GRAPH_FILE.to_string(),
+                    GOAL_PROOF_FILE.to_string(),
+                ],
+                risk: "medium".to_string(),
+                acceptance: vec![
+                    "review artifact cites task and gate evidence".to_string(),
+                    "review task remains blocked when execution evidence is missing".to_string(),
+                ],
+            },
+            GoalTask {
+                id: GOAL_SECURITY_REVIEW_TASK_ID.to_string(),
+                title: "Run security evidence check".to_string(),
+                description: "Run a bounded controller security review over goal evidence and changed files.".to_string(),
+                status: GoalTaskStatus::Pending,
+                owner_role: None,
+                completed_at: None,
+                evidence: Vec::new(),
+                dependencies: vec![GOAL_AGENT_EXECUTE_TASK_ID.to_string()],
+                read_set: vec![
+                    GOAL_PROOF_FILE.to_string(),
+                    GOAL_TASK_GRAPH_FILE.to_string(),
+                    "changed files".to_string(),
+                ],
+                write_set: vec![
+                    format!(
+                        "{GOAL_ARTIFACTS_DIR}/{GOAL_REVIEW_ARTIFACTS_DIR}/{GOAL_SECURITY_REVIEW_FILE}"
+                    ),
+                    GOAL_TASK_GRAPH_FILE.to_string(),
+                    GOAL_PROOF_FILE.to_string(),
+                ],
+                risk: "high".to_string(),
+                acceptance: vec![
+                    "security review artifact exists".to_string(),
+                    "high-confidence secret findings block the task".to_string(),
                 ],
             },
         ],
@@ -1251,19 +1651,34 @@ fn build_verified_proof(
         .tasks
         .iter()
         .any(|task| task.id == GOAL_AGENT_EXECUTE_TASK_ID && task.status == GoalTaskStatus::Done);
+    let review_done = task_graph
+        .tasks
+        .iter()
+        .any(|task| task.id == GOAL_REVIEW_TASK_ID && task.status == GoalTaskStatus::Done);
+    let security_review_done = task_graph
+        .tasks
+        .iter()
+        .any(|task| task.id == GOAL_SECURITY_REVIEW_TASK_ID && task.status == GoalTaskStatus::Done);
     let commits = proof_commits(&git);
-    let mut known_gaps = if agent_execution_done {
-        vec![
-            "review evidence is not implemented for omk goal yet".to_string(),
-            "security and integration hardening evidence is not captured for omk goal yet"
-                .to_string(),
-        ]
-    } else {
-        vec![
-            "agent execution has not run for this goal yet".to_string(),
+    let mut known_gaps = Vec::new();
+    if !agent_execution_done {
+        known_gaps.push("agent execution has not run for this goal yet".to_string());
+        known_gaps.push(
             "proof cannot claim readiness until agent-owned execution evidence exists".to_string(),
-        ]
-    };
+        );
+    }
+    if agent_execution_done && !review_done {
+        known_gaps.push("review evidence has not run for this goal yet".to_string());
+    }
+    if agent_execution_done && !security_review_done {
+        known_gaps.push("security review evidence has not run for this goal yet".to_string());
+    }
+    if agent_execution_done && review_done && security_review_done {
+        known_gaps.push(
+            "project mutation and integration loop is still limited to a bounded no-mutation agent wave"
+                .to_string(),
+        );
+    }
 
     if gates.is_empty() {
         known_gaps.push("no verification gates were detected or configured".to_string());
@@ -1275,9 +1690,10 @@ fn build_verified_proof(
         version: 1,
         goal_id: state.goal_id.clone(),
         status: GoalStatus::NotReady,
-        readiness: if gates_ok && agent_execution_done {
-            "not ready: verification gates and bounded agent execution passed, but review evidence is missing"
-                .to_string()
+        readiness: if gates_ok && agent_execution_done && review_done && security_review_done {
+            "not ready: verification, agent execution, review, and security evidence passed, but project mutation/integration remains bounded".to_string()
+        } else if gates_ok && agent_execution_done {
+            "not ready: verification gates and bounded agent execution passed, but review/security evidence is missing".to_string()
         } else if gates_ok {
             "not ready: verification gates passed, but agent execution evidence is missing"
                 .to_string()

@@ -95,6 +95,7 @@ fn test_goal_help_lists_goal_runtime_commands() {
         .stdout(predicate::str::contains("proof"))
         .stdout(predicate::str::contains("verify"))
         .stdout(predicate::str::contains("execute"))
+        .stdout(predicate::str::contains("review"))
         .stdout(predicate::str::contains("status"))
         .stdout(predicate::str::contains("cancel"));
 }
@@ -176,7 +177,7 @@ fn test_goal_run_writes_task_graph_and_not_ready_proof() {
     )
     .expect("task graph should be JSON");
     assert!(task_graph["goal_id"].as_str().unwrap().starts_with("goal-"));
-    assert_eq!(task_graph["tasks"].as_array().unwrap().len(), 4);
+    assert_eq!(task_graph["tasks"].as_array().unwrap().len(), 6);
     assert_eq!(task_graph["tasks"][0]["id"], "goal-intake");
     assert_eq!(task_graph["tasks"][0]["status"], "done");
     assert_eq!(task_graph["tasks"][0]["owner_role"], "goal-controller");
@@ -210,6 +211,10 @@ fn test_goal_run_writes_task_graph_and_not_ready_proof() {
         .as_array()
         .unwrap()
         .is_empty());
+    assert_eq!(task_graph["tasks"][4]["id"], "goal-review");
+    assert_eq!(task_graph["tasks"][4]["status"], "pending");
+    assert_eq!(task_graph["tasks"][5]["id"], "goal-security-review");
+    assert_eq!(task_graph["tasks"][5]["status"], "pending");
 
     let events = fs::read_to_string(dirs[0].join("events.jsonl")).expect("missing events");
     assert!(events.contains("\"kind\":\"task_completed\""));
@@ -228,9 +233,9 @@ fn test_goal_run_writes_task_graph_and_not_ready_proof() {
     let proof_json: Value =
         serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
     assert_eq!(proof_json["status"], "not_ready");
-    assert_eq!(proof_json["task_graph_summary"]["total_tasks"], 4);
+    assert_eq!(proof_json["task_graph_summary"]["total_tasks"], 6);
     assert_eq!(proof_json["task_graph_summary"]["done_tasks"], 2);
-    assert_eq!(proof_json["task_graph_summary"]["pending_tasks"], 2);
+    assert_eq!(proof_json["task_graph_summary"]["pending_tasks"], 4);
     assert!(proof_json["known_gaps"]
         .as_array()
         .unwrap()
@@ -455,7 +460,9 @@ fn test_goal_execute_runs_mock_wire_agent_and_records_agent_task_evidence() {
         .success()
         .stdout(predicate::str::contains("Execution: not_ready"))
         .stdout(predicate::str::contains("goal-local-verify: done"))
-        .stdout(predicate::str::contains("goal-agent-execute: done"));
+        .stdout(predicate::str::contains("goal-agent-execute: done"))
+        .stdout(predicate::str::contains("goal-review: pending"))
+        .stdout(predicate::str::contains("goal-security-review: pending"));
 
     let dirs = goal_dirs(&envs);
     assert_eq!(dirs.len(), 1);
@@ -463,7 +470,7 @@ fn test_goal_execute_runs_mock_wire_agent_and_records_agent_task_evidence() {
         &fs::read_to_string(dirs[0].join("task-graph.json")).expect("missing task graph"),
     )
     .expect("task graph should be JSON");
-    assert_eq!(task_graph["tasks"].as_array().unwrap().len(), 4);
+    assert_eq!(task_graph["tasks"].as_array().unwrap().len(), 6);
 
     let local_verify = task_graph["tasks"]
         .as_array()
@@ -519,6 +526,21 @@ fn test_goal_execute_runs_mock_wire_agent_and_records_agent_task_evidence() {
         )
         .exists());
 
+    let review = task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|task| task["id"] == "goal-review")
+        .expect("missing goal-review task");
+    assert_eq!(review["status"], "pending");
+    let security_review = task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|task| task["id"] == "goal-security-review")
+        .expect("missing goal-security-review task");
+    assert_eq!(security_review["status"], "pending");
+
     let proof_output = {
         let mut cmd = omk_cmd(&envs);
         cmd.current_dir(project.path())
@@ -530,9 +552,9 @@ fn test_goal_execute_runs_mock_wire_agent_and_records_agent_task_evidence() {
     let proof_json: Value =
         serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
     assert_eq!(proof_json["status"], "not_ready");
-    assert_eq!(proof_json["task_graph_summary"]["total_tasks"], 4);
+    assert_eq!(proof_json["task_graph_summary"]["total_tasks"], 6);
     assert_eq!(proof_json["task_graph_summary"]["done_tasks"], 4);
-    assert_eq!(proof_json["task_graph_summary"]["pending_tasks"], 0);
+    assert_eq!(proof_json["task_graph_summary"]["pending_tasks"], 2);
     assert!(!proof_json["known_gaps"]
         .as_array()
         .unwrap()
@@ -554,6 +576,119 @@ fn test_goal_execute_runs_mock_wire_agent_and_records_agent_task_evidence() {
         .unwrap()
         .iter()
         .any(|gap| gap.as_str().unwrap().contains("review evidence")));
+}
+
+#[test]
+fn test_goal_review_records_controller_review_and_security_evidence_after_agent_execution() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args(["goal", "run", "Review goal evidence after agent execution"])
+        .assert()
+        .success();
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success();
+
+    let mut review = omk_cmd(&envs);
+    review
+        .current_dir(project.path())
+        .args(["goal", "review", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Review: not_ready"))
+        .stdout(predicate::str::contains("goal-review: done"))
+        .stdout(predicate::str::contains("goal-security-review: done"));
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let task_graph: Value = serde_json::from_str(
+        &fs::read_to_string(dirs[0].join("task-graph.json")).expect("missing task graph"),
+    )
+    .expect("task graph should be JSON");
+
+    let review_task = task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|task| task["id"] == "goal-review")
+        .expect("missing goal-review task");
+    assert_eq!(review_task["status"], "done");
+    assert_eq!(review_task["owner_role"], "goal-controller");
+    assert!(review_task["completed_at"].as_str().is_some());
+    assert!(review_task["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|evidence| evidence["path"] == "artifacts/reviews/goal-review.md"));
+
+    let security_task = task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|task| task["id"] == "goal-security-review")
+        .expect("missing goal-security-review task");
+    assert_eq!(security_task["status"], "done");
+    assert_eq!(security_task["owner_role"], "goal-controller");
+    assert!(security_task["completed_at"].as_str().is_some());
+    assert!(security_task["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|evidence| evidence["path"] == "artifacts/reviews/goal-security-review.md"));
+
+    assert!(dirs[0].join("artifacts/reviews/goal-review.md").exists());
+    assert!(dirs[0]
+        .join("artifacts/reviews/goal-security-review.md")
+        .exists());
+
+    let proof_output = {
+        let mut cmd = omk_cmd(&envs);
+        cmd.current_dir(project.path())
+            .args(["goal", "proof", "latest", "--json"])
+            .output()
+            .expect("omk goal proof failed")
+    };
+    assert!(proof_output.status.success());
+    let proof_json: Value =
+        serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
+    assert_eq!(proof_json["status"], "not_ready");
+    assert_eq!(proof_json["task_graph_summary"]["total_tasks"], 6);
+    assert_eq!(proof_json["task_graph_summary"]["done_tasks"], 6);
+    assert_eq!(proof_json["task_graph_summary"]["pending_tasks"], 0);
+    assert!(!proof_json["known_gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gap| gap
+            .as_str()
+            .unwrap()
+            .contains("review evidence is not implemented")));
+    assert!(!proof_json["known_gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gap| gap
+            .as_str()
+            .unwrap()
+            .contains("security and integration hardening evidence")));
+    assert!(proof_json["known_gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gap| gap
+            .as_str()
+            .unwrap()
+            .contains("project mutation and integration loop")));
 }
 
 #[test]

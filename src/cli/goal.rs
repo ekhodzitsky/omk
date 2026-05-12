@@ -72,6 +72,12 @@ pub(crate) enum GoalCommands {
         #[arg(default_value = "latest")]
         goal_id: String,
     },
+    /// Review goal execution and security evidence
+    Review {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest")]
+        goal_id: String,
+    },
     /// Cancel a goal
     Cancel {
         /// Goal ID or "latest"
@@ -120,6 +126,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         } => cmd_proof(&goal_id, format, json).await,
         GoalCommands::Verify { goal_id } => cmd_verify(&goal_id).await,
         GoalCommands::Execute { goal_id } => cmd_execute(&goal_id).await,
+        GoalCommands::Review { goal_id } => cmd_review(&goal_id).await,
         GoalCommands::Cancel { goal_id } => cmd_cancel(&goal_id).await,
     }
 }
@@ -138,7 +145,7 @@ async fn cmd_run(goal: &str, options: crate::runtime::goal::CreateGoalOptions) -
             .join(crate::runtime::goal::GOAL_PROOF_FILE)
             .display()
     );
-    println!("Note: agent execution is not implemented in this controller scaffold yet.");
+    println!("Note: run `omk goal execute latest`, then `omk goal review latest` for evidence.");
     println!("Next: omk goal show latest");
     Ok(())
 }
@@ -316,6 +323,26 @@ async fn cmd_execute(goal_id: &str) -> Result<()> {
     );
     print_task_status(&task_graph, "goal-local-verify");
     print_task_status(&task_graph, "goal-agent-execute");
+    print_task_status(&task_graph, "goal-review");
+    print_task_status(&task_graph, "goal-security-review");
+    println!("Proof: {}", crate::runtime::goal::GOAL_PROOF_FILE);
+    Ok(())
+}
+
+async fn cmd_review(goal_id: &str) -> Result<()> {
+    let project_dir = std::env::current_dir()?;
+    let proof = crate::runtime::goal::review_goal(goal_id, &project_dir).await?;
+    let goal = crate::runtime::goal::resolve_goal(goal_id).await?;
+    let task_graph = crate::runtime::goal::GoalTaskGraph::load(&goal.state_dir).await?;
+
+    println!("Review: {}", proof.status);
+    println!("Readiness: {}", proof.readiness);
+    println!(
+        "Done tasks: {}/{}",
+        proof.task_graph_summary.done_tasks, proof.task_graph_summary.total_tasks
+    );
+    print_task_status(&task_graph, "goal-review");
+    print_task_status(&task_graph, "goal-security-review");
     println!("Proof: {}", crate::runtime::goal::GOAL_PROOF_FILE);
     Ok(())
 }

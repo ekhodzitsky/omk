@@ -3,7 +3,8 @@
 Date: 2026-05-11
 
 Status: design approved; early scaffold implemented with state, planning
-artifacts, gates, git evidence, and one bounded Wire-backed execution wave.
+artifacts, gates, git evidence, one bounded Wire-backed execution wave, and
+controller review/security evidence.
 
 Related docs:
 
@@ -231,6 +232,7 @@ omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
 omk goal verify [goal-id|latest]
 omk goal execute [goal-id|latest]
+omk goal review [goal-id|latest]
 ```
 
 Later:

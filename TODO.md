@@ -31,6 +31,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Add `omk goal proof [goal-id|latest] --format text|json|md`.
 - [x] Add `omk goal verify [goal-id|latest]`.
 - [x] Add `omk goal execute [goal-id|latest]`.
+- [x] Add `omk goal review [goal-id|latest]`.
 - [ ] Add `omk goal pause [goal-id|latest]`.
 - [ ] Add `omk goal resume [goal-id|latest]`.
 - [x] Add command help smoke tests.
@@ -114,13 +115,15 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 ## Phase 10 - Review Loops
 
+- [x] Add initial controller review pass.
+- [x] Add initial controller security evidence pass.
+- [x] Persist initial review artifacts.
 - [ ] Add architect review pass.
-- [ ] Add code review pass.
+- [ ] Add code reviewer pass.
 - [ ] Add test-engineer pass.
-- [ ] Add security review pass.
+- [ ] Add specialist security review pass.
 - [ ] Add performance review pass.
 - [ ] Add anti-slop cleanup pass.
-- [ ] Persist review artifacts.
 
 ## Phase 11 - GitHub Delivery
 

@@ -46,6 +46,7 @@ omk goal status
 omk goal show latest
 omk goal verify latest
 omk goal execute latest
+omk goal review latest
 omk goal pause latest
 omk goal resume latest
 omk goal cancel latest
@@ -73,7 +74,7 @@ correct outcome is `blocked_on_human`, not a fake success.
 current beta MVP instead of inventing a parallel runtime:
 
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
-- `omk goal plan/run/list/status/show/proof/verify/execute/cancel`;
+- `omk goal plan/run/list/status/show/proof/verify/execute/review/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`, and
   `task-graph.json`;
 - controller-owned planning task completion evidence in the task graph and
@@ -85,6 +86,9 @@ current beta MVP instead of inventing a parallel runtime:
 - local controller execution through `omk goal execute`, which marks the
   `goal-local-verify` task done when required gates pass and launches one
   bounded Wire-backed `goal-agent-execute` scheduler task;
+- controller review through `omk goal review`, which marks `goal-review` and
+  `goal-security-review` done only when execution evidence exists and the
+  bounded changed-file secret scan finds no high-confidence findings;
 - best-effort git branch, HEAD commit, and dirty-state capture in goal proofs;
 - bounded agent wave evidence under `artifacts/agent-runs/`;
 - goal-level `events.jsonl`;
@@ -233,6 +237,7 @@ omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
 omk goal verify [goal-id|latest]
 omk goal execute [goal-id|latest]
+omk goal review [goal-id|latest]
 ```
 
 Later command surface:

@@ -29,7 +29,7 @@ Status: current beta MVP.
 - Verification gates.
 - `omk goal` durable scaffold with planning artifacts, task graph, local
   verification task evidence, git evidence, one bounded Wire-backed agent wave,
-  and not-ready proof.
+  controller review/security evidence, and not-ready proof.
 - GitHub CI and coverage.
 
 ## Stage 1 - Goal State Core
@@ -37,7 +37,7 @@ Status: current beta MVP.
 Target: make goals durable and inspectable.
 
 - Add `.omk/goals/<goal-id>/` state layout.
-- Add `omk goal run/status/show/list/proof/verify/execute/cancel`.
+- Add `omk goal run/status/show/list/proof/verify/execute/review/cancel`.
 - Persist normalized goal, constraints, budgets, and terminal criteria.
 - Emit goal lifecycle events.
 - Write `failure.json` for blocked or failed goals.
@@ -72,6 +72,7 @@ Target: let the goal controller create and manage work.
 - Launch role-specific agents through existing team/runtime surfaces.
 - Land the first bounded `goal-agent-execute` wave on existing scheduler/Wire
   primitives.
+- Record controller review/security evidence after the bounded agent wave.
 - Allow agents to propose tasks.
 - Require controller validation before mutating the task graph.
 - Track heartbeats, leases, retries, stale work, and task ownership.
@@ -116,7 +117,7 @@ Exit criteria:
 
 Target: move from useful automation to autonomous engineering quality.
 
-- Add reviewer, security, performance, and test-engineer loops.
+- Add specialist reviewer, security, performance, and test-engineer loops.
 - Add "break it" challenge passes.
 - Add anti-slop cleanup pass.
 - Add dependency rationale checks.

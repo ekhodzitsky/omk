@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-05-12
+
 ### Added
 
+- **`omk goal review` evidence pass**: added `omk goal review [goal-id|latest]`, explicit `goal-review` and `goal-security-review` task graph nodes, review artifacts under `artifacts/reviews/`, and a bounded high-confidence secret scan over changed files. Proofs now move past the review/security gap only after this pass, while still staying `not_ready` until the project mutation/integration loop exists.
 - **`omk goal execute` bounded agent wave**: `execute` now runs a scheduler-backed `goal-agent-execute` task through the existing Wire worker adapter, records `artifacts/agent-runs/goal-agent-execute/` evidence, blocks quickly when Kimi is unavailable, and keeps proofs `not_ready` until review/security evidence exists.
 - **`omk goal verify` proof wall**: added local verification gate execution for goals, full gate output artifacts under `artifacts/gates/`, gate events, changed-file capture, and proof refreshes that stay `not_ready` until execution and review evidence exists.
 - **`omk goal execute` local controller step**: added `omk goal execute [goal-id|latest]`, split the placeholder execution task into `goal-local-verify` and `goal-agent-execute`, and now record local verification task evidence when required gates pass before the bounded agent wave runs.
