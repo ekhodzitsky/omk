@@ -4,7 +4,7 @@
 
 **Goal:** Make `goal-agent-execute` run through the existing scheduler and Wire worker adapter, producing agent-owned evidence without claiming full production readiness yet.
 
-**Architecture:** `omk goal execute` first runs the local verification wall. If required gates pass, it creates a bounded agent run under the goal artifacts directory, starts one Wire worker, dispatches the `goal-agent-execute` scheduler task, records worker artifacts, updates the goal task graph, then refreshes the proof. This slice originally blocked readiness on review/security evidence; the follow-up mutation-evidence slice now also blocks readiness until post-mutation gates and integration acceptance exist.
+**Architecture:** `omk goal execute` first runs the local verification wall. If required gates pass, it creates a bounded agent run under the goal artifacts directory, starts one Wire worker, dispatches the `goal-agent-execute` scheduler task, records worker artifacts, updates the goal task graph, then refreshes the proof. This slice originally blocked readiness on review/security evidence; follow-up slices now capture mutation evidence, rerun gates after mutation, and block readiness until integration acceptance exists.
 
 **Tech Stack:** Rust, Tokio, existing scheduler, existing Wire worker adapter, `MOCK_KIMI`, integration CLI tests.
 
@@ -65,7 +65,7 @@ When agent execution evidence exists, remove the old "not implemented" gap and r
 
 - [x] **Step 6: Update docs**
 
-Document that `omk goal execute` now launches a bounded Wire-backed agent wave when gates pass, but readiness remains blocked until review/security evidence, post-mutation gates, and integration acceptance exist.
+Document that `omk goal execute` now launches a bounded Wire-backed agent wave when gates pass, but readiness remains blocked until review/security evidence, post-mutation verification, and integration acceptance exist.
 
 - [x] **Step 7: Run verification**
 

@@ -104,15 +104,17 @@ Current `omk goal` scaffold data flow:
 8. `omk goal execute` marks `goal-local-verify` done when required gates pass,
    starts a bounded Wire worker wave for `goal-agent-execute`, and records
    outbox, Wire event, mutation diff, and changed-file evidence under
-   `artifacts/agent-runs/`.
+   `artifacts/agent-runs/`. If the worker changes project files, `execute`
+   reruns gates under `artifacts/gates/post-mutation/` before writing the final
+   proof.
 9. `omk goal review` writes controller review/security artifacts under
    `artifacts/reviews/` and closes `goal-review` / `goal-security-review`
    when evidence is sufficient.
 10. Operators inspect with `omk goal list/status/show/proof`.
 11. `omk goal cancel` writes `failure.json`.
 
-Planned later flow adds post-mutation gate reruns, multi-task execution waves,
-task graph mutation, specialist review loops, and ready proof generation.
+Planned later flow adds multi-task execution waves, task graph mutation,
+specialist review loops, integration acceptance, and ready proof generation.
 
 ## CLI Surfaces
 
@@ -125,7 +127,7 @@ task graph mutation, specialist review loops, and ready proof generation.
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, task graph with controller-owned, local verification, bounded Wire agent mutation, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
+| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, task graph with controller-owned, local verification, bounded Wire agent mutation, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
 
 ## MCP Integration
 

@@ -4,7 +4,7 @@
 
 **Goal:** Let the first `goal-agent-execute` wave make bounded project changes and record concrete mutation evidence without claiming production readiness.
 
-**Architecture:** `omk goal execute` still runs required gates before launching the Wire-backed worker. The worker prompt now allows minimal in-repo mutations, the controller captures a post-worker changed-file snapshot and mutation diff under `artifacts/agent-runs/goal-agent-execute/`, and `proof.json` remains `not_ready` until post-mutation gates, review, security, and integration acceptance run against the changed tree.
+**Architecture:** `omk goal execute` still runs required gates before launching the Wire-backed worker. The worker prompt now allows minimal in-repo mutations, the controller captures a post-worker changed-file snapshot and mutation diff under `artifacts/agent-runs/goal-agent-execute/`, and follow-up work reruns gates before review, security, and integration acceptance reason about the changed tree.
 
 **Tech Stack:** Rust, Tokio, existing goal controller, existing Wire worker adapter, git status/diff, `MOCK_KIMI`, integration CLI tests.
 
@@ -71,7 +71,7 @@ When changed files exist after agent execution, keep `proof.json` `not_ready` wi
 
 - [x] **Step 6: Update docs**
 
-Document that `omk goal execute` now captures mutation diff and changed-file evidence, but readiness remains blocked until post-mutation gates, review/security, and integration acceptance.
+Document that `omk goal execute` now captures mutation diff and changed-file evidence, but readiness remains blocked until post-mutation verification, review/security, and integration acceptance.
 
 - [x] **Step 7: Run verification**
 

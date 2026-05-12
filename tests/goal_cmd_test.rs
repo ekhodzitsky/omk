@@ -236,6 +236,7 @@ fn test_goal_run_writes_task_graph_and_not_ready_proof() {
     assert_eq!(proof_json["task_graph_summary"]["total_tasks"], 6);
     assert_eq!(proof_json["task_graph_summary"]["done_tasks"], 2);
     assert_eq!(proof_json["task_graph_summary"]["pending_tasks"], 4);
+    assert_eq!(proof_json["post_mutation_gates_ran"], false);
     assert!(proof_json["known_gaps"]
         .as_array()
         .unwrap()
@@ -325,6 +326,7 @@ fn test_goal_verify_records_passing_gate_evidence_but_stays_not_ready() {
             .as_str()
             .unwrap()
             .contains("verification gates have not run")));
+    assert_eq!(proof_json["post_mutation_gates_ran"], false);
     assert!(proof_json["known_gaps"]
         .as_array()
         .unwrap()
@@ -769,7 +771,73 @@ fn test_goal_execute_records_agent_mutation_diff_when_worker_changes_project_fil
         .unwrap()
         .iter()
         .any(|file| file.as_str() == Some("agent-output.txt")));
-    assert!(proof_json["known_gaps"]
+    assert_eq!(proof_json["post_mutation_gates_ran"], true);
+    assert!(!proof_json["known_gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gap| gap
+            .as_str()
+            .unwrap()
+            .contains("verification gates have not rerun after agent execution changes")));
+}
+
+#[test]
+fn test_goal_execute_reruns_gates_after_agent_mutation() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    let gate_counter = tempfile::NamedTempFile::new().expect("gate counter");
+    let script = format!(
+        "printf x >> {}; if test -f agent-output.txt; then echo after-agent; else echo before-agent; fi",
+        gate_counter.path().display()
+    );
+    write_gate_config(project.path(), "post-agent-rerun", &script);
+    git(project.path(), &["init"]);
+    git(project.path(), &["config", "user.email", "omk@example.com"]);
+    git(project.path(), &["config", "user.name", "OMK Test"]);
+    git(project.path(), &["add", "."]);
+    git(project.path(), &["commit", "-m", "baseline"]);
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args(["goal", "run", "Rerun gates after an agent mutation"])
+        .assert()
+        .success();
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WRITE_FILE", "agent-output.txt")
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Execution: not_ready"))
+        .stdout(predicate::str::contains("goal-agent-execute: done"));
+
+    assert_eq!(
+        fs::read_to_string(gate_counter.path()).expect("missing gate counter"),
+        "xx"
+    );
+
+    let proof_output = {
+        let mut cmd = omk_cmd(&envs);
+        cmd.current_dir(project.path())
+            .args(["goal", "proof", "latest", "--json"])
+            .output()
+            .expect("omk goal proof failed")
+    };
+    assert!(proof_output.status.success());
+    let proof_json: Value =
+        serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
+    assert!(proof_json["gates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gate| gate["name"] == "post-agent-rerun"
+            && gate["stdout_summary"].as_str() == Some("after-agent")));
+    assert!(!proof_json["known_gaps"]
         .as_array()
         .unwrap()
         .iter()

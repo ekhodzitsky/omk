@@ -28,7 +28,7 @@ omk hud --once
 omk proof show latest
 ```
 
-The core commands are current; web HUD, secondary dashboard surfaces, and proof/operator ergonomics are still hardening. `omk goal` has a current state-core scaffold plus a bounded Wire-backed execution wave with mutation evidence and controller review/security evidence, and is the planned north-star workflow for long-running proof-backed engineering goals. Check `README.md`, `SPEC.md`, `ROADMAP.md`, and `TODO.md` before promising a command is fully polished.
+The core commands are current; web HUD, secondary dashboard surfaces, and proof/operator ergonomics are still hardening. `omk goal` has a current state-core scaffold plus a bounded Wire-backed execution wave with mutation evidence, post-mutation gate reruns, and controller review/security evidence, and is the planned north-star workflow for long-running proof-backed engineering goals. Check `README.md`, `SPEC.md`, `ROADMAP.md`, and `TODO.md` before promising a command is fully polished.
 
 Competitive positioning is tracked in `docs/COMPETITIVE_POSITIONING.md`. Keep
 public wording anchored on "local, repo-native, proof-driven autonomous software
@@ -37,7 +37,7 @@ engineering runtime" rather than "Devin clone" or "generic agent workflow app."
 ## Current vs Target (L8) Snapshot
 
 - **Current:** Kimi-only execution, scheduler-backed Wire `team run`, run/proof inspection, and Kimi-native asset sync/doctor/rollback.
-- **Current Scaffold:** `omk goal` controller scaffold with controller-owned task evidence, local verification task evidence, one bounded Wire-backed agent task with mutation evidence, controller review/security evidence, git evidence, and local gate evidence; web HUD and secondary dashboard/MCP surfaces are present but still hardening.
+- **Current Scaffold:** `omk goal` controller scaffold with controller-owned task evidence, local verification task evidence, one bounded Wire-backed agent task with mutation evidence, post-mutation gate reruns, controller review/security evidence, git evidence, and local gate evidence; web HUD and secondary dashboard/MCP surfaces are present but still hardening.
 - **Target:** `omk goal` as the proof-first controller that plans, researches, spawns agents, verifies, and stops with a truthful terminal status.
 
 When writing docs or implementation notes, mark maturity explicitly (`Current`, `Current MVP`, `Current Scaffold`, `Next`, `Later`) to avoid mixing shipped behavior with roadmap intent.

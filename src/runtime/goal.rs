@@ -244,6 +244,8 @@ pub struct GoalProof {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub git: Option<GoalGitEvidence>,
     pub gates: Vec<GateResult>,
+    #[serde(default)]
+    pub post_mutation_gates_ran: bool,
     pub known_gaps: Vec<String>,
     pub human_decisions_required: Vec<String>,
 }
@@ -496,7 +498,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     state.completed_at = Some(now);
     state.save().await?;
 
-    let proof = build_verified_proof(&state, &task_graph, gates, changed_files, git, now);
+    let proof = build_verified_proof(&state, &task_graph, gates, changed_files, git, false, now);
     write_json_artifact(&state.state_dir.join(GOAL_PROOF_FILE), &proof).await?;
 
     let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
@@ -537,6 +539,33 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     if let Some(task) = apply_agent_execution_task_result(&mut task_graph, &agent_evidence, now) {
         append_agent_execution_task_events(&state, &task, &agent_evidence).await?;
     }
+
+    let agent_execution_succeeded = agent_evidence.summary.completed
+        == agent_evidence.summary.total
+        && agent_evidence.summary.failed == 0;
+    let mut proof_gates = verification_proof.gates;
+    let mut proof_git = verification_proof.git;
+    let mut proof_changed_files = agent_evidence.changed_files;
+    let mut post_mutation_gates_ran = false;
+    if agent_execution_succeeded && !proof_changed_files.is_empty() {
+        let gate_config = load_or_detect_gates(project_dir).await;
+        let gate_artifacts = state
+            .state_dir
+            .join(GOAL_ARTIFACTS_DIR)
+            .join(GOAL_GATE_ARTIFACTS_DIR)
+            .join("post-mutation");
+        proof_gates =
+            run_gates_with_evidence(&gate_config, project_dir, Some(&gate_artifacts)).await;
+        append_gate_events(&state, &proof_gates).await?;
+        proof_git = detect_git_evidence(project_dir).await;
+        proof_changed_files = detect_changed_files(project_dir).await;
+        if let Some(task) = apply_local_verification_task_result(&mut task_graph, &proof_gates, now)
+        {
+            append_local_verification_task_events(&state, &task).await?;
+        }
+        post_mutation_gates_ran = true;
+    }
+
     write_json_artifact(&state.state_dir.join(GOAL_TASK_GRAPH_FILE), &task_graph).await?;
 
     record_artifact_path_once(
@@ -554,9 +583,10 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     let proof = build_verified_proof(
         &state,
         &task_graph,
-        verification_proof.gates,
-        agent_evidence.changed_files,
-        verification_proof.git,
+        proof_gates,
+        proof_changed_files,
+        proof_git,
+        post_mutation_gates_ran,
         now,
     );
     write_json_artifact(&state.state_dir.join(GOAL_PROOF_FILE), &proof).await?;
@@ -624,6 +654,7 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
         prior_proof.gates,
         prior_proof.changed_files,
         prior_proof.git,
+        prior_proof.post_mutation_gates_ran,
         now,
     );
     write_json_artifact(&state.state_dir.join(GOAL_PROOF_FILE), &proof).await?;
@@ -1327,7 +1358,7 @@ async fn write_technical_plan(state: &GoalState, generated_at: DateTime<Utc>) ->
          6. Review records controller review and security evidence.\n\
          7. Proof writes an honest not-ready proof until required execution, review, and integration evidence exists.\n\n\
          ## Execution Boundary\n\n\
-         The current controller records planning task evidence, local verification task evidence, a bounded Wire-backed `goal-agent-execute` wave, agent mutation diff/changed-file evidence, and controller review/security evidence. The initial wave can make minimal project changes under the worker boundary, but readiness still requires post-mutation gate reruns, specialist review loops, and integration acceptance.\n\n\
+         The current controller records planning task evidence, local verification task evidence, a bounded Wire-backed `goal-agent-execute` wave, agent mutation diff/changed-file evidence, post-mutation gate reruns when files change, and controller review/security evidence. The initial wave can make minimal project changes under the worker boundary, but readiness still requires specialist review loops and integration acceptance.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -1355,7 +1386,7 @@ async fn write_test_spec(
          ## Scaffold Task Acceptance\n\n\
          {task_lines}\n\n\
          ## Current Status\n\n\
-         `omk goal` remains `not_ready` because readiness still requires post-mutation gate reruns, integration acceptance, and specialist review loops beyond controller-owned planning, local verification, bounded agent execution, mutation evidence, and controller review/security evidence.\n\n\
+         `omk goal` remains `not_ready` because readiness still requires integration acceptance and specialist review loops beyond controller-owned planning, local verification, bounded agent execution, mutation evidence, post-mutation gate reruns, and controller review/security evidence.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -1723,6 +1754,7 @@ fn build_scaffold_proof(
         commits,
         git,
         gates: Vec::new(),
+        post_mutation_gates_ran: false,
         known_gaps: vec![
             "agent execution has not run for this goal yet".to_string(),
             "verification gates have not run for this goal".to_string(),
@@ -1738,6 +1770,7 @@ fn build_verified_proof(
     gates: Vec<GateResult>,
     changed_files: Vec<String>,
     git: Option<GoalGitEvidence>,
+    post_mutation_gates_ran: bool,
     generated_at: DateTime<Utc>,
 ) -> GoalProof {
     let gates_ok = !gates.is_empty() && gates_passed(&gates);
@@ -1767,7 +1800,7 @@ fn build_verified_proof(
     if agent_execution_done && !security_review_done {
         known_gaps.push("security review evidence has not run for this goal yet".to_string());
     }
-    if agent_execution_done && !changed_files.is_empty() {
+    if agent_execution_done && !changed_files.is_empty() && !post_mutation_gates_ran {
         known_gaps
             .push("verification gates have not rerun after agent execution changes".to_string());
     }
@@ -1799,6 +1832,14 @@ fn build_verified_proof(
             && review_done
             && security_review_done
             && !changed_files.is_empty()
+            && post_mutation_gates_ran
+        {
+            "not ready: agent changes passed verification, review, and security evidence, but integration acceptance is missing".to_string()
+        } else if gates_ok
+            && agent_execution_done
+            && review_done
+            && security_review_done
+            && !changed_files.is_empty()
         {
             "not ready: agent changes exist, but verification and integration have not rerun after the mutation".to_string()
         } else if gates_ok && agent_execution_done && review_done && security_review_done {
@@ -1823,6 +1864,7 @@ fn build_verified_proof(
         commits,
         git,
         gates,
+        post_mutation_gates_ran,
         known_gaps,
         human_decisions_required: Vec::new(),
     }

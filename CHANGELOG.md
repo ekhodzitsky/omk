@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-05-12
+
+### Added
+
+- **`omk goal execute` post-mutation gates**: when the bounded Wire-backed agent wave changes project files, `execute` now reruns verification gates against the mutated tree, records the post-mutation gate evidence, marks `post_mutation_gates_ran` in `proof.json`, and removes the stale-gates gap while still keeping integration/review readiness honest.
+
 ## [0.3.3] - 2026-05-12
 
 ### Added

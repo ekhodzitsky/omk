@@ -82,7 +82,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Capture changed files.
 - [x] Capture commits/branches.
 - [x] Capture controller review results.
-- [ ] Rerun verification gates after agent mutations.
+- [x] Rerun verification gates after agent mutations.
 - [x] Capture known gaps.
 - [x] Block `ready` when required gates fail.
 - [x] Add `omk goal proof [goal-id|latest]`.
