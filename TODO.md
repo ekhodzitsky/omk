@@ -7,28 +7,30 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 ## Phase 1 - Durable Goal State
 
-- [ ] Add `src/runtime/goal/` module.
-- [ ] Define `GoalId`, `GoalStatus`, `GoalKind`, `GoalBudget`, `GoalState`.
-- [ ] Define terminal statuses: `ready`, `not_ready`, `blocked_on_human`,
+- [x] Add `src/runtime/goal.rs` module.
+- [x] Define `GoalStatus` and `GoalState`.
+- [ ] Define dedicated `GoalId`, `GoalKind`, and `GoalBudget` types.
+- [x] Define terminal statuses: `ready`, `not_ready`, `blocked_on_human`,
       `blocked_on_external`, `needs_more_budget`, `failed_infra`, `cancelled`.
-- [ ] Add `.omk/goals/<goal-id>/` state path resolution.
-- [ ] Persist `goal.json`.
-- [ ] Persist `events.jsonl`.
-- [ ] Write `failure.json` for non-ready terminal outcomes.
-- [ ] Add state migration/version field.
-- [ ] Add unit tests for serialization and backward-compatible reads.
+- [x] Add `goals/<goal-id>/` path resolution under the OMK state directory.
+- [x] Persist `goal.json`.
+- [x] Persist `events.jsonl`.
+- [x] Write `failure.json` for cancelled goals.
+- [x] Add state version field.
+- [x] Add unit tests for serialization.
+- [ ] Add backward-compatible read/migration tests.
 
 ## Phase 2 - CLI Surface
 
-- [ ] Add `omk goal run <goal>`.
-- [ ] Add `omk goal status [goal-id|latest]`.
-- [ ] Add `omk goal show [goal-id|latest] --format text|json|md`.
-- [ ] Add `omk goal list`.
-- [ ] Add `omk goal cancel [goal-id|latest]`.
+- [x] Add `omk goal run <goal>`.
+- [x] Add `omk goal status [goal-id|latest]`.
+- [x] Add `omk goal show [goal-id|latest] --format text|json|md`.
+- [x] Add `omk goal list`.
+- [x] Add `omk goal cancel [goal-id|latest]`.
 - [ ] Add `omk goal pause [goal-id|latest]`.
 - [ ] Add `omk goal resume [goal-id|latest]`.
-- [ ] Add command help smoke tests.
-- [ ] Add JSON output smoke tests.
+- [x] Add command help smoke tests.
+- [x] Add JSON output smoke tests.
 
 ## Phase 3 - Planning Artifacts
 

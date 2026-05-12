@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`omk goal` state scaffold**: added durable `goals/<goal-id>/goal.json` state under the OMK state directory, goal event logs, `run/list/status/show/cancel` CLI commands, JSON/Markdown/text output, and cancellation `failure.json` artifacts.
+
 ### Changed
 
 - **Project coding contract**: added root `AGENTS.md` rules for library-first CLI structure, Wire protocol tests, machine-readable output boundaries, worker lifecycle semantics, deterministic Rust tests, dependency discipline, and release hygiene.

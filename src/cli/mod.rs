@@ -6,6 +6,7 @@ pub(crate) mod cleanup;
 pub(crate) mod config_cmd;
 pub(crate) mod cost_cmd;
 pub(crate) mod doctor;
+pub(crate) mod goal;
 pub(crate) mod hud;
 pub(crate) mod kimi_native_cmd;
 pub(crate) mod logs;

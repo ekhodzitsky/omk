@@ -4,6 +4,7 @@ pub mod autopilot;
 pub mod config;
 pub mod events;
 pub mod gates;
+pub mod goal;
 pub mod metrics;
 pub mod migrate;
 pub mod proof;

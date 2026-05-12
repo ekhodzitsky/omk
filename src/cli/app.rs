@@ -6,7 +6,7 @@ use tracing::info;
 
 use super::kimi_native_cmd;
 use super::{
-    ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, hud, logs, marketplace,
+    ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, goal, hud, logs, marketplace,
     proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
 };
 
@@ -69,6 +69,8 @@ enum Commands {
     Marketplace(marketplace::Args),
     /// Cost tracking and estimation
     Cost(cost_cmd::Args),
+    /// Goal runtime (durable autonomous controller scaffold)
+    Goal(goal::Args),
     /// Parallel burst execution without a team
     #[command(visible_alias = "uw")]
     Ultrawork(ultrawork::Args),
@@ -189,6 +191,7 @@ async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
         Commands::Cleanup(args) => cleanup::run(args).await,
         Commands::Logs(args) => logs::run(args).await,
         Commands::Cost(args) => cost_cmd::run(args).await,
+        Commands::Goal(args) => goal::run(args).await,
         Commands::Config(args) => config_cmd::run(args).await,
         Commands::Backup(args) => backup::run(args).await,
         Commands::State(args) => state::run(args).await,

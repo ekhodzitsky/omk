@@ -67,9 +67,13 @@ correct outcome is `blocked_on_human`, not a fake success.
 
 ## Current Foundation
 
-`omk goal` is planned, but it should reuse the current beta MVP instead of
-inventing a parallel runtime:
+`omk goal` now has a current state-core scaffold, but it should reuse the
+current beta MVP instead of inventing a parallel runtime:
 
+- durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
+- `omk goal list/status/show/cancel`;
+- goal-level `events.jsonl`;
+- cancellation `failure.json` artifacts;
 - Kimi-native asset sync, doctor, install, and rollback;
 - scheduler-backed `omk team run`;
 - Wire worker control through `kimi --wire`;
@@ -228,7 +232,7 @@ The first usable `omk goal` MVP is not "rewrite any 200k line project."
 
 It is:
 
-- one long-running goal state directory;
+- one durable goal state directory;
 - PRD, technical plan, and test spec artifacts;
 - task graph persisted as JSON;
 - limited agent execution through the existing team runner;

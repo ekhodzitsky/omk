@@ -63,6 +63,7 @@ What is ready enough to use now:
 | Proof reports | Beta MVP: `omk proof show latest`, cached/regenerated proof, Markdown/text/JSON formats. |
 | Verification gates | Ready for local gates and `.omk/gates.toml` customization. |
 | HUD | Text, JSON, and TUI are usable; web dashboard is still scaffold-level. |
+| `omk goal` state core | Current scaffold: creates durable goal state, lists/shows status, writes cancellation failure artifacts. |
 | Autopilot, Ralph, Ultrawork | Power-user MVP: useful, but less polished than the Kimi asset + team/proof path. |
 | MCP server, marketplace, web dashboard | Secondary/scaffold surfaces. |
 
@@ -88,9 +89,12 @@ assign tasks, verify results, recover from failures, and stop only with a
 truthful terminal status such as `ready`, `not_ready`, `blocked_on_human`, or
 `needs_more_budget`.
 
-This is not implemented yet. The current `team run`, event log, gates, and proof
-systems are the foundation. The design is tracked in [SPEC.md](SPEC.md), the
-delivery path in [ROADMAP.md](ROADMAP.md), and the task backlog in [TODO.md](TODO.md).
+The goal state core is implemented as a scaffold: it creates records under the
+OMK state directory's `goals/` tree and supports list/status/show/cancel. Agent
+execution, planning, verification, and proof generation are still planned. The
+current `team run`, event log, gates, and proof systems remain the execution
+foundation. The design is tracked in [SPEC.md](SPEC.md), the delivery path in
+[ROADMAP.md](ROADMAP.md), and the task backlog in [TODO.md](TODO.md).
 
 ## Positioning
 
@@ -225,6 +229,19 @@ omk proof show latest --regenerate
 
 These commands are the main answer to "what actually happened?" after an agent run.
 
+### Goal state scaffold
+
+```bash
+omk goal run "fix this repository until tests and proof pass" --until-ready
+omk goal list
+omk goal status latest
+omk goal show latest --format json
+omk goal cancel latest
+```
+
+`omk goal` currently creates durable goal state and honest not-ready/cancelled
+artifacts. It does not launch agents yet.
+
 ### Power-user modes
 
 ```bash
@@ -248,7 +265,7 @@ These modes are available and useful, but the strongest MVP path today is still:
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
 | HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
 | Cleanup and recovery | Team cleanup, backups, rollback, watchdog events, and interrupted-run failure artifacts. | Current |
-| Goal runtime | Long-running autonomous controller for planning, spawning agents, verifying, and proving large goals. | Planned |
+| Goal runtime | Durable goal state, list/status/show/cancel, and cancellation failure artifacts. Planning, agent execution, and proof generation are next. | Current Scaffold |
 | Autopilot | Single-lead autonomous execution with verification gates and resume/yolo options. | Power-user MVP |
 | Ralph | Persistent verify/fix loop with iteration limits and completion evidence. | Power-user MVP |
 | Ultrawork | Parallel burst prompts from args, files, or globs, with JSON output support. | Power-user MVP |

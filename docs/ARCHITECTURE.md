@@ -87,14 +87,17 @@ omk CLI (Rust)
 8. Operators inspect the result with `omk run show`, `omk proof show`,
    `omk hud`, or `omk team health`.
 
-Planned `omk goal` data flow:
+Current `omk goal` scaffold data flow:
 
 1. User runs `omk goal run "large outcome" --until-ready`.
-2. OMK writes `.omk/goals/<goal-id>/goal.json`.
-3. The controller creates PRD, technical plan, test spec, and task graph.
-4. The controller dispatches execution waves through team/runtime primitives.
-5. Review and verification loops accept or reject task outputs.
-6. OMK writes goal-level `proof.json` or `failure.json`.
+2. OMK writes `goals/<goal-id>/goal.json` under the OMK state directory.
+3. OMK writes goal-level `events.jsonl`.
+4. Operators inspect with `omk goal list/status/show`.
+5. `omk goal cancel` writes `failure.json`.
+
+Planned later flow adds PRD, technical plan, test spec, task graph, execution
+waves through team/runtime primitives, review loops, verification, and
+goal-level proof generation.
 
 ## CLI Surfaces
 
@@ -107,7 +110,7 @@ Planned `omk goal` data flow:
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Planned north-star controller for long-running proof-backed engineering goals. |
+| `omk goal ...` | Current scaffold for durable goal state; planned controller for long-running proof-backed engineering goals. |
 
 ## MCP Integration
 
