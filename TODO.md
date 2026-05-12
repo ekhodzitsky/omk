@@ -66,6 +66,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [ ] Implement goal controller loop.
 - [x] Add local controller execution step for verification task evidence.
 - [x] Reuse scheduler-backed team runner for the first bounded execution task.
+- [x] Capture mutation diff and changed-file evidence from the first execution wave.
 - [ ] Allow agents to propose new tasks.
 - [ ] Validate proposed tasks against policy and budgets.
 - [ ] Enforce max concurrency.
@@ -80,7 +81,8 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Capture gate command evidence.
 - [x] Capture changed files.
 - [x] Capture commits/branches.
-- [ ] Capture review results.
+- [x] Capture controller review results.
+- [ ] Rerun verification gates after agent mutations.
 - [x] Capture known gaps.
 - [x] Block `ready` when required gates fail.
 - [x] Add `omk goal proof [goal-id|latest]`.

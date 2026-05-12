@@ -221,6 +221,7 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
                 }
 
                 thread::sleep(event_delay);
+                maybe_write_mock_project_file();
 
                 let text = format!("Mock wire response for: {}", preview);
                 emit_event(
@@ -292,6 +293,24 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
             }
         }
     }
+}
+
+fn maybe_write_mock_project_file() {
+    let Ok(path) = env::var("MOCK_KIMI_WRITE_FILE") else {
+        return;
+    };
+    if path.trim().is_empty() || path.contains("..") || path.starts_with('/') {
+        return;
+    }
+
+    let body = env::var("MOCK_KIMI_WRITE_BODY")
+        .unwrap_or_else(|_| "mock kimi project mutation\n".to_string());
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        if !parent.as_os_str().is_empty() {
+            let _ = fs::create_dir_all(parent);
+        }
+    }
+    let _ = fs::write(path, body);
 }
 
 fn emit_event(stdout: &mut io::Stdout, event_type: &str, payload: serde_json::Value) {

@@ -85,7 +85,8 @@ current beta MVP instead of inventing a parallel runtime:
   artifacts and gate results embedded in the goal proof;
 - local controller execution through `omk goal execute`, which marks the
   `goal-local-verify` task done when required gates pass and launches one
-  bounded Wire-backed `goal-agent-execute` scheduler task;
+  bounded Wire-backed `goal-agent-execute` scheduler task with mutation diff
+  and changed-file evidence;
 - controller review through `omk goal review`, which marks `goal-review` and
   `goal-security-review` done only when execution evidence exists and the
   bounded changed-file secret scan finds no high-confidence findings;

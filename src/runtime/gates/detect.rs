@@ -67,20 +67,40 @@ pub fn format_gate_summary(results: &[GateResult]) -> String {
     summary
 }
 
-/// Detect changed files using git diff.
+/// Detect changed files using git status, including untracked files.
 pub async fn detect_changed_files(dir: &Path) -> Vec<String> {
     let output = Command::new("git")
-        .args(["diff", "--name-only"])
+        .args(["status", "--porcelain"])
         .current_dir(dir)
         .output()
         .await;
 
-    match output {
+    let mut files = match output {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
             .lines()
-            .map(|s| s.to_string())
-            .filter(|s| !s.is_empty())
-            .collect(),
+            .filter_map(parse_porcelain_changed_file)
+            .collect::<Vec<_>>(),
         _ => Vec::new(),
+    };
+    files.sort();
+    files.dedup();
+    files
+}
+
+fn parse_porcelain_changed_file(line: &str) -> Option<String> {
+    if line.len() < 4 {
+        return None;
+    }
+
+    let path = line.get(3..)?.trim();
+    if path.is_empty() {
+        return None;
+    }
+
+    let path = path.split(" -> ").last().unwrap_or(path).trim_matches('"');
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
     }
 }

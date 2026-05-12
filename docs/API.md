@@ -104,7 +104,7 @@ Base URL: `http://localhost:8080`
 ```json
 {
   "status": "ok",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "checks": {
     "kimi": {
       "status": "ok"

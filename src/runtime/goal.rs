@@ -214,6 +214,9 @@ struct GoalAgentRunEvidence {
     run_path: PathBuf,
     worker_outbox_path: PathBuf,
     wire_events_path: PathBuf,
+    mutation_diff_path: PathBuf,
+    changed_files_path: PathBuf,
+    changed_files: Vec<String>,
     worker_summary: Option<String>,
 }
 
@@ -552,7 +555,7 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
         &state,
         &task_graph,
         verification_proof.gates,
-        verification_proof.changed_files,
+        agent_evidence.changed_files,
         verification_proof.git,
         now,
     );
@@ -661,6 +664,8 @@ async fn run_goal_agent_execution_task(
         .join(WORKERS_DIR)
         .join(GOAL_AGENT_WORKER_ID)
         .join("wire-events.jsonl");
+    let mutation_diff_path = run_path.join("mutation.diff");
+    let changed_files_path = run_path.join("changed-files.json");
 
     let spec = WorkerSpec {
         name: GOAL_AGENT_WORKER_ID.to_string(),
@@ -685,7 +690,11 @@ async fn run_goal_agent_execution_task(
             GOAL_TEST_SPEC_FILE.to_string(),
             GOAL_TASK_GRAPH_FILE.to_string(),
         ])
-        .with_write_set(vec![GOAL_PROOF_FILE.to_string()])
+        .with_write_set(vec![
+            "project files".to_string(),
+            GOAL_TASK_GRAPH_FILE.to_string(),
+            GOAL_PROOF_FILE.to_string(),
+        ])
         .with_max_retries(0);
 
     event_writer
@@ -695,6 +704,13 @@ async fn run_goal_agent_execution_task(
     if !goal_agent_wire_runtime_available() {
         let summary = "Kimi CLI not found; install/authenticate kimi or set MOCK_KIMI to a mock binary before running goal agent execution";
         event_writer.append(&builder.run_failed(summary)?).await?;
+        let changed_files = write_goal_agent_mutation_snapshot(
+            state,
+            project_dir,
+            &mutation_diff_path,
+            &changed_files_path,
+        )
+        .await?;
         return Ok(GoalAgentRunEvidence {
             summary: RunSummary {
                 run_id,
@@ -706,6 +722,9 @@ async fn run_goal_agent_execution_task(
             run_path,
             worker_outbox_path,
             wire_events_path,
+            mutation_diff_path,
+            changed_files_path,
+            changed_files,
             worker_summary: Some(summary.to_string()),
         });
     }
@@ -740,12 +759,22 @@ async fn run_goal_agent_execution_task(
 
     let summary = run_result?;
     let worker_summary = read_goal_agent_worker_summary(&spec).await?;
+    let changed_files = write_goal_agent_mutation_snapshot(
+        state,
+        project_dir,
+        &mutation_diff_path,
+        &changed_files_path,
+    )
+    .await?;
 
     Ok(GoalAgentRunEvidence {
         summary,
         run_path,
         worker_outbox_path,
         wire_events_path,
+        mutation_diff_path,
+        changed_files_path,
+        changed_files,
         worker_summary,
     })
 }
@@ -762,9 +791,52 @@ fn goal_agent_task_prompt(
         .map(|task| task.status.to_string())
         .unwrap_or_else(|| "unknown".to_string());
     format!(
-        "Goal ID: {}\nGenerated: {generated_at}\n\nOriginal goal:\n{}\n\nNormalized goal:\n{}\n\nTask:\nReview the existing goal artifacts and produce a concise implementation execution note. Do not mutate project files in this bounded wave. Record what would be needed next for production readiness.\n\nLocal verification task status: {local_status}",
+        "Goal ID: {}\nGenerated: {generated_at}\n\nOriginal goal:\n{}\n\nNormalized goal:\n{}\n\nTask:\nReview the existing goal artifacts and make a bounded project change when it is necessary to move the goal forward. Stay inside the current repository, keep the diff minimal, do not commit, do not publish, do not touch secrets, and summarize changed files plus verification still needed for production readiness.\n\nLocal verification task status: {local_status}",
         state.goal_id, state.original_goal, state.normalized_goal
     )
+}
+
+async fn write_goal_agent_mutation_snapshot(
+    state: &GoalState,
+    project_dir: &Path,
+    mutation_diff_path: &Path,
+    changed_files_path: &Path,
+) -> Result<Vec<String>> {
+    let changed_files = detect_changed_files(project_dir).await;
+    let diff = git_diff(project_dir).await.unwrap_or_default();
+    let body = if diff.trim().is_empty() {
+        if changed_files.is_empty() {
+            "No project file changes were detected after the agent wave.\n".to_string()
+        } else {
+            format!(
+                "No tracked git diff was available. Changed files:\n{}\n",
+                changed_files
+                    .iter()
+                    .map(|file| format!("- {file}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        }
+    } else {
+        diff
+    };
+
+    write_text_artifact(&state.state_dir.join(mutation_diff_path), &body).await?;
+    write_json_artifact(&state.state_dir.join(changed_files_path), &changed_files).await?;
+    Ok(changed_files)
+}
+
+async fn git_diff(project_dir: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["diff", "--no-ext-diff", "--"])
+        .current_dir(project_dir)
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 fn goal_agent_wire_runtime_available() -> bool {
@@ -829,6 +901,14 @@ fn agent_execution_task_evidence(
         evidence.summary.failed,
         evidence.summary.cancelled
     );
+    let mutation_summary = if evidence.changed_files.is_empty() {
+        "No project file changes were detected after the agent wave.".to_string()
+    } else {
+        format!(
+            "Project mutation evidence captured for changed file(s): {}",
+            evidence.changed_files.join(", ")
+        )
+    };
 
     vec![
         GoalTaskEvidence {
@@ -845,6 +925,16 @@ fn agent_execution_task_evidence(
             kind: "wire_events".to_string(),
             path: evidence.wire_events_path.clone(),
             summary: "Wire event stream records the agent protocol turn.".to_string(),
+        },
+        GoalTaskEvidence {
+            kind: "mutation_diff".to_string(),
+            path: evidence.mutation_diff_path.clone(),
+            summary: mutation_summary,
+        },
+        GoalTaskEvidence {
+            kind: "changed_files".to_string(),
+            path: evidence.changed_files_path.clone(),
+            summary: "Changed-file snapshot captured after the agent wave.".to_string(),
         },
     ]
 }
@@ -1237,7 +1327,7 @@ async fn write_technical_plan(state: &GoalState, generated_at: DateTime<Utc>) ->
          6. Review records controller review and security evidence.\n\
          7. Proof writes an honest not-ready proof until required execution, review, and integration evidence exists.\n\n\
          ## Execution Boundary\n\n\
-         The current controller records planning task evidence, local verification task evidence, a bounded Wire-backed `goal-agent-execute` wave, and controller review/security evidence. The initial wave records agent-owned execution evidence without mutating project files; future slices will add task mutation, specialist review loops, and integration.\n\n\
+         The current controller records planning task evidence, local verification task evidence, a bounded Wire-backed `goal-agent-execute` wave, agent mutation diff/changed-file evidence, and controller review/security evidence. The initial wave can make minimal project changes under the worker boundary, but readiness still requires post-mutation gate reruns, specialist review loops, and integration acceptance.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -1265,7 +1355,7 @@ async fn write_test_spec(
          ## Scaffold Task Acceptance\n\n\
          {task_lines}\n\n\
          ## Current Status\n\n\
-         `omk goal` remains `not_ready` because readiness still requires project mutation, integration, and specialist review loops beyond controller-owned planning, local verification, bounded agent execution, and controller review/security evidence.\n\n\
+         `omk goal` remains `not_ready` because readiness still requires post-mutation gate reruns, integration acceptance, and specialist review loops beyond controller-owned planning, local verification, bounded agent execution, mutation evidence, and controller review/security evidence.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -1364,7 +1454,7 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
             GoalTask {
                 id: GOAL_AGENT_EXECUTE_TASK_ID.to_string(),
                 title: "Execute agent-owned implementation tasks".to_string(),
-                description: "Run future agent work through the task graph, reviews, and integration before readiness can be claimed.".to_string(),
+                description: "Run bounded agent work through Wire, allow minimal project mutations, and capture mutation evidence before readiness can be claimed.".to_string(),
                 status: GoalTaskStatus::Pending,
                 owner_role: None,
                 completed_at: None,
@@ -1376,10 +1466,14 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
                     GOAL_TEST_SPEC_FILE.to_string(),
                     GOAL_TASK_GRAPH_FILE.to_string(),
                 ],
-                write_set: vec![GOAL_PROOF_FILE.to_string()],
+                write_set: vec![
+                    "project files".to_string(),
+                    GOAL_TASK_GRAPH_FILE.to_string(),
+                    GOAL_PROOF_FILE.to_string(),
+                ],
                 risk: "high".to_string(),
                 acceptance: vec![
-                    "agent execution produces task evidence".to_string(),
+                    "agent execution produces task and mutation evidence".to_string(),
                     "proof status becomes ready only with evidence".to_string(),
                 ],
             },
@@ -1673,9 +1767,19 @@ fn build_verified_proof(
     if agent_execution_done && !security_review_done {
         known_gaps.push("security review evidence has not run for this goal yet".to_string());
     }
-    if agent_execution_done && review_done && security_review_done {
+    if agent_execution_done && !changed_files.is_empty() {
+        known_gaps
+            .push("verification gates have not rerun after agent execution changes".to_string());
+    }
+    if agent_execution_done && review_done && security_review_done && changed_files.is_empty() {
         known_gaps.push(
-            "project mutation and integration loop is still limited to a bounded no-mutation agent wave"
+            "project mutation and integration loop has not produced changed-file evidence yet"
+                .to_string(),
+        );
+    }
+    if agent_execution_done && review_done && security_review_done && !changed_files.is_empty() {
+        known_gaps.push(
+            "integration loop has not committed, opened a PR, or accepted the agent changes yet"
                 .to_string(),
         );
     }
@@ -1690,8 +1794,15 @@ fn build_verified_proof(
         version: 1,
         goal_id: state.goal_id.clone(),
         status: GoalStatus::NotReady,
-        readiness: if gates_ok && agent_execution_done && review_done && security_review_done {
-            "not ready: verification, agent execution, review, and security evidence passed, but project mutation/integration remains bounded".to_string()
+        readiness: if gates_ok
+            && agent_execution_done
+            && review_done
+            && security_review_done
+            && !changed_files.is_empty()
+        {
+            "not ready: agent changes exist, but verification and integration have not rerun after the mutation".to_string()
+        } else if gates_ok && agent_execution_done && review_done && security_review_done {
+            "not ready: verification, agent execution, review, and security evidence passed, but no project mutation was captured".to_string()
         } else if gates_ok && agent_execution_done {
             "not ready: verification gates and bounded agent execution passed, but review/security evidence is missing".to_string()
         } else if gates_ok {

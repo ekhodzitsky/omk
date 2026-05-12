@@ -692,6 +692,94 @@ fn test_goal_review_records_controller_review_and_security_evidence_after_agent_
 }
 
 #[test]
+fn test_goal_execute_records_agent_mutation_diff_when_worker_changes_project_files() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+    git(project.path(), &["init"]);
+    git(project.path(), &["config", "user.email", "omk@example.com"]);
+    git(project.path(), &["config", "user.name", "OMK Test"]);
+    git(project.path(), &["add", "."]);
+    git(project.path(), &["commit", "-m", "baseline"]);
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args(["goal", "run", "Let the agent make a bounded project change"])
+        .assert()
+        .success();
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WRITE_FILE", "agent-output.txt")
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Execution: not_ready"))
+        .stdout(predicate::str::contains("goal-agent-execute: done"));
+
+    assert!(project.path().join("agent-output.txt").exists());
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let task_graph: Value = serde_json::from_str(
+        &fs::read_to_string(dirs[0].join("task-graph.json")).expect("missing task graph"),
+    )
+    .expect("task graph should be JSON");
+    let agent_execute = task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|task| task["id"] == "goal-agent-execute")
+        .expect("missing goal-agent-execute task");
+    let evidence = agent_execute["evidence"].as_array().unwrap();
+    assert!(evidence.iter().any(|evidence| {
+        evidence["kind"] == "mutation_diff"
+            && evidence["path"] == "artifacts/agent-runs/goal-agent-execute/mutation.diff"
+            && evidence["summary"]
+                .as_str()
+                .unwrap()
+                .contains("agent-output.txt")
+    }));
+    assert!(evidence.iter().any(|evidence| {
+        evidence["kind"] == "changed_files"
+            && evidence["path"] == "artifacts/agent-runs/goal-agent-execute/changed-files.json"
+    }));
+    assert!(dirs[0]
+        .join("artifacts/agent-runs/goal-agent-execute/mutation.diff")
+        .exists());
+    assert!(dirs[0]
+        .join("artifacts/agent-runs/goal-agent-execute/changed-files.json")
+        .exists());
+
+    let proof_output = {
+        let mut cmd = omk_cmd(&envs);
+        cmd.current_dir(project.path())
+            .args(["goal", "proof", "latest", "--json"])
+            .output()
+            .expect("omk goal proof failed")
+    };
+    assert!(proof_output.status.success());
+    let proof_json: Value =
+        serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
+    assert!(proof_json["changed_files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|file| file.as_str() == Some("agent-output.txt")));
+    assert!(proof_json["known_gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gap| gap
+            .as_str()
+            .unwrap()
+            .contains("verification gates have not rerun after agent execution changes")));
+}
+
+#[test]
 fn test_goal_execute_blocks_agent_task_when_kimi_is_missing() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");

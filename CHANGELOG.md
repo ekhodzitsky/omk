@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-05-12
+
+### Added
+
+- **`omk goal execute` mutation evidence**: the bounded Wire-backed agent wave can now make minimal project changes, captures `mutation.diff` and `changed-files.json` under `artifacts/agent-runs/goal-agent-execute/`, includes untracked files in changed-file detection, and keeps proofs `not_ready` until gates/review/integration rerun after agent mutations.
+
 ## [0.3.2] - 2026-05-12
 
 ### Added

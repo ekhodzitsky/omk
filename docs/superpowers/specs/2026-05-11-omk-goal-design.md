@@ -3,8 +3,8 @@
 Date: 2026-05-11
 
 Status: design approved; early scaffold implemented with state, planning
-artifacts, gates, git evidence, one bounded Wire-backed execution wave, and
-controller review/security evidence.
+artifacts, gates, git evidence, one bounded Wire-backed execution wave with
+mutation evidence, and controller review/security evidence.
 
 Related docs:
 

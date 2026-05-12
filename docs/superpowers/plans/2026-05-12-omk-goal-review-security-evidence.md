@@ -13,7 +13,7 @@ readiness yet.
 - Add explicit `goal-review` and `goal-security-review` tasks.
 - Add `omk goal review [goal-id|latest]`.
 - Persist review artifacts under `artifacts/reviews/`.
-- Keep `proof.json` honest: `not_ready` remains until project mutation and
+- Keep `proof.json` honest: `not_ready` remains until post-mutation gates and
   integration loops exist.
 
 ## Test First
@@ -24,7 +24,7 @@ readiness yet.
   review/security pending.
 - [x] `goal review` closes review/security tasks and writes artifacts.
 - [x] Proof moves past review/security gaps but still records the
-  no-mutation/integration gap.
+  post-mutation gate/integration gap.
 
 ## Implementation
 
