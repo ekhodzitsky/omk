@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::Component;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -36,6 +37,10 @@ pub const GOAL_AGENT_RUNS_DIR: &str = "agent-runs";
 const GOAL_CONTROLLER_ACTOR: &str = "goal-controller";
 const GOAL_LOCAL_VERIFY_TASK_ID: &str = "goal-local-verify";
 const GOAL_AGENT_EXECUTE_TASK_ID: &str = "goal-agent-execute";
+const GOAL_AGENT_IMPLEMENT_TASK_ID: &str = "goal-agent-implement";
+const GOAL_AGENT_VERIFY_TASK_ID: &str = "goal-agent-verify";
+const GOAL_AGENT_PUBLISH_TASK_ID: &str = "goal-agent-publish-crates-io";
+const GOAL_AGENT_TASK_POLICY_FILE: &str = "task-policy.json";
 const GOAL_REVIEW_TASK_ID: &str = "goal-review";
 const GOAL_SECURITY_REVIEW_TASK_ID: &str = "goal-security-review";
 const GOAL_AGENT_WORKER_ID: &str = "goal-agent-worker-0";
@@ -212,12 +217,46 @@ pub struct GoalGitEvidence {
 struct GoalAgentRunEvidence {
     summary: RunSummary,
     run_path: PathBuf,
+    task_policy_path: PathBuf,
     worker_outbox_path: PathBuf,
     wire_events_path: PathBuf,
     mutation_diff_path: PathBuf,
     changed_files_path: PathBuf,
     changed_files: Vec<String>,
+    accepted_task_count: usize,
+    rejected_task_count: usize,
+    accepted_task_ids: Vec<String>,
     worker_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct GoalAgentTaskProposal {
+    id: String,
+    title: String,
+    description: String,
+    dependencies: Vec<String>,
+    read_set: Vec<String>,
+    write_set: Vec<String>,
+    risk: String,
+    acceptance: Vec<String>,
+    budget_secs: u64,
+    priority: i32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct GoalAgentRejectedTask {
+    task: GoalAgentTaskProposal,
+    reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct GoalAgentTaskPolicy {
+    goal_id: String,
+    run_id: String,
+    max_agents: usize,
+    proposed_tasks: Vec<GoalAgentTaskProposal>,
+    accepted_tasks: Vec<GoalAgentTaskProposal>,
+    rejected_tasks: Vec<GoalAgentRejectedTask>,
 }
 
 #[derive(Debug, Clone)]
@@ -695,6 +734,7 @@ async fn run_goal_agent_execution_task(
         .join(WORKERS_DIR)
         .join(GOAL_AGENT_WORKER_ID)
         .join("wire-events.jsonl");
+    let task_policy_path = run_path.join(GOAL_AGENT_TASK_POLICY_FILE);
     let mutation_diff_path = run_path.join("mutation.diff");
     let changed_files_path = run_path.join("changed-files.json");
 
@@ -713,27 +753,32 @@ async fn run_goal_agent_execution_task(
 
     let event_writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
     let builder = EventBuilder::new(RunId(run_id.clone()));
-    let scheduler_task = Task::new(GOAL_AGENT_EXECUTE_TASK_ID, "goal-agent-execute")
-        .with_description(goal_agent_task_prompt(state, task_graph, started_at))
-        .with_read_set(vec![
-            GOAL_PRD_FILE.to_string(),
-            GOAL_TECHNICAL_PLAN_FILE.to_string(),
-            GOAL_TEST_SPEC_FILE.to_string(),
-            GOAL_TASK_GRAPH_FILE.to_string(),
-        ])
-        .with_write_set(vec![
-            "project files".to_string(),
-            GOAL_TASK_GRAPH_FILE.to_string(),
-            GOAL_PROOF_FILE.to_string(),
-        ])
-        .with_max_retries(0);
+    let proposals = propose_goal_agent_tasks(state);
+    let policy = validate_goal_agent_task_proposals(state, task_graph, &run_id, proposals);
+    write_json_artifact(&state.state_dir.join(&task_policy_path), &policy).await?;
+    append_goal_agent_task_policy_events(&event_writer, &run_id, &policy).await?;
+
+    let accepted_task_ids: Vec<String> = policy
+        .accepted_tasks
+        .iter()
+        .map(|task| task.id.clone())
+        .collect();
+    let accepted_task_count = policy.accepted_tasks.len();
+    let rejected_task_count = policy.rejected_tasks.len();
+    let scheduler_tasks =
+        goal_agent_scheduler_tasks(state, task_graph, started_at, &policy.accepted_tasks);
+    let run_description = format!(
+        "goal controller agent wave: accepted={}, rejected={}, max_agents={}",
+        accepted_task_count, rejected_task_count, policy.max_agents
+    );
 
     event_writer
-        .append(&builder.run_started("goal-agent", project_dir, &scheduler_task.description)?)
+        .append(&builder.run_started("goal-agent", project_dir, &run_description)?)
         .await?;
 
-    if !goal_agent_wire_runtime_available() {
-        let summary = "Kimi CLI not found; install/authenticate kimi or set MOCK_KIMI to a mock binary before running goal agent execution";
+    if scheduler_tasks.is_empty() {
+        let summary =
+            "Goal controller rejected all proposed agent tasks; no safe work is dispatchable";
         event_writer.append(&builder.run_failed(summary)?).await?;
         let changed_files = write_goal_agent_mutation_snapshot(
             state,
@@ -751,11 +796,47 @@ async fn run_goal_agent_execution_task(
                 total: 1,
             },
             run_path,
+            task_policy_path,
             worker_outbox_path,
             wire_events_path,
             mutation_diff_path,
             changed_files_path,
             changed_files,
+            accepted_task_count,
+            rejected_task_count,
+            accepted_task_ids,
+            worker_summary: Some(summary.to_string()),
+        });
+    }
+
+    if !goal_agent_wire_runtime_available() {
+        let summary = "Kimi CLI not found; install/authenticate kimi or set MOCK_KIMI to a mock binary before running goal agent execution";
+        event_writer.append(&builder.run_failed(summary)?).await?;
+        let changed_files = write_goal_agent_mutation_snapshot(
+            state,
+            project_dir,
+            &mutation_diff_path,
+            &changed_files_path,
+        )
+        .await?;
+        return Ok(GoalAgentRunEvidence {
+            summary: RunSummary {
+                run_id,
+                completed: 0,
+                failed: accepted_task_count,
+                cancelled: 0,
+                total: accepted_task_count,
+            },
+            run_path,
+            task_policy_path,
+            worker_outbox_path,
+            wire_events_path,
+            mutation_diff_path,
+            changed_files_path,
+            changed_files,
+            accepted_task_count,
+            rejected_task_count,
+            accepted_task_ids,
             worker_summary: Some(summary.to_string()),
         });
     }
@@ -780,7 +861,7 @@ async fn run_goal_agent_execution_task(
         project_dir,
         &run_dir,
         event_writer,
-        vec![scheduler_task],
+        scheduler_tasks,
     )
     .await?;
 
@@ -789,7 +870,7 @@ async fn run_goal_agent_execution_task(
     stop_wire_worker(&mut handle).await;
 
     let summary = run_result?;
-    let worker_summary = read_goal_agent_worker_summary(&spec).await?;
+    let worker_summary = read_goal_agent_worker_summary(&spec, &accepted_task_ids).await?;
     let changed_files = write_goal_agent_mutation_snapshot(
         state,
         project_dir,
@@ -801,19 +882,309 @@ async fn run_goal_agent_execution_task(
     Ok(GoalAgentRunEvidence {
         summary,
         run_path,
+        task_policy_path,
         worker_outbox_path,
         wire_events_path,
         mutation_diff_path,
         changed_files_path,
         changed_files,
+        accepted_task_count,
+        rejected_task_count,
+        accepted_task_ids,
         worker_summary,
     })
+}
+
+fn propose_goal_agent_tasks(state: &GoalState) -> Vec<GoalAgentTaskProposal> {
+    vec![
+        GoalAgentTaskProposal {
+            id: GOAL_AGENT_IMPLEMENT_TASK_ID.to_string(),
+            title: "Implement bounded goal slice".to_string(),
+            description: "Make one bounded in-repository project change that moves the goal forward, then summarize changed files and remaining verification needs.".to_string(),
+            dependencies: Vec::new(),
+            read_set: vec![
+                GOAL_PRD_FILE.to_string(),
+                GOAL_TECHNICAL_PLAN_FILE.to_string(),
+                GOAL_TEST_SPEC_FILE.to_string(),
+                GOAL_TASK_GRAPH_FILE.to_string(),
+            ],
+            write_set: vec![
+                "project files".to_string(),
+                GOAL_TASK_GRAPH_FILE.to_string(),
+                GOAL_PROOF_FILE.to_string(),
+            ],
+            risk: "moderate".to_string(),
+            acceptance: vec![
+                "Make only a bounded project change needed to move the goal forward.".to_string(),
+                "Do not commit, publish, or touch secrets.".to_string(),
+                "Summarize changed files and verification still needed for production readiness.".to_string(),
+            ],
+            budget_secs: goal_agent_task_budget_secs(state, 900),
+            priority: 20,
+        },
+        GoalAgentTaskProposal {
+            id: GOAL_AGENT_VERIFY_TASK_ID.to_string(),
+            title: "Verify agent wave follow-up".to_string(),
+            description: "Inspect the bounded implementation result and summarize verification, review, or hardening follow-up that still blocks readiness.".to_string(),
+            dependencies: vec![GOAL_AGENT_IMPLEMENT_TASK_ID.to_string()],
+            read_set: vec![
+                GOAL_PRD_FILE.to_string(),
+                GOAL_TECHNICAL_PLAN_FILE.to_string(),
+                GOAL_TEST_SPEC_FILE.to_string(),
+                GOAL_TASK_GRAPH_FILE.to_string(),
+                "project files".to_string(),
+            ],
+            write_set: vec![GOAL_ARTIFACTS_DIR.to_string()],
+            risk: "low".to_string(),
+            acceptance: vec![
+                "Review the bounded project change and call out remaining verification gaps.".to_string(),
+                "Do not make broad follow-up mutations without a new controller-approved task.".to_string(),
+                "Keep the goal proof honest when production readiness is still blocked.".to_string(),
+            ],
+            budget_secs: goal_agent_task_budget_secs(state, 300),
+            priority: 10,
+        },
+        GoalAgentTaskProposal {
+            id: GOAL_AGENT_PUBLISH_TASK_ID.to_string(),
+            title: "Publish crate release".to_string(),
+            description: "Publish this crate to crates.io after the agent wave succeeds.".to_string(),
+            dependencies: vec![GOAL_AGENT_VERIFY_TASK_ID.to_string()],
+            read_set: vec![GOAL_PROOF_FILE.to_string()],
+            write_set: vec!["crates.io".to_string()],
+            risk: "external-side-effect".to_string(),
+            acceptance: vec!["Publish the package to crates.io.".to_string()],
+            budget_secs: goal_agent_task_budget_secs(state, 300),
+            priority: 0,
+        },
+    ]
+}
+
+fn goal_agent_task_budget_secs(state: &GoalState, requested_secs: u64) -> u64 {
+    let Some(total_budget_secs) = state.budget_time.as_deref().and_then(parse_duration_secs) else {
+        return requested_secs;
+    };
+    let per_task_ceiling = if total_budget_secs < 60 {
+        total_budget_secs.max(1)
+    } else {
+        (total_budget_secs / 4).max(60)
+    };
+    requested_secs.min(per_task_ceiling)
+}
+
+fn parse_duration_secs(value: &str) -> Option<u64> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let (number, multiplier) = match trimmed.chars().last()? {
+        's' | 'S' => (&trimmed[..trimmed.len() - 1], 1),
+        'm' | 'M' => (&trimmed[..trimmed.len() - 1], 60),
+        'h' | 'H' => (&trimmed[..trimmed.len() - 1], 60 * 60),
+        'd' | 'D' => (&trimmed[..trimmed.len() - 1], 24 * 60 * 60),
+        _ => (trimmed, 1),
+    };
+    number.trim().parse::<u64>().ok()?.checked_mul(multiplier)
+}
+
+fn validate_goal_agent_task_proposals(
+    state: &GoalState,
+    task_graph: &GoalTaskGraph,
+    run_id: &str,
+    proposals: Vec<GoalAgentTaskProposal>,
+) -> GoalAgentTaskPolicy {
+    let mut known_dependencies: HashSet<String> = task_graph
+        .tasks
+        .iter()
+        .filter(|task| task.status == GoalTaskStatus::Done)
+        .map(|task| task.id.clone())
+        .collect();
+    let mut seen_ids = HashSet::new();
+    let mut accepted_tasks = Vec::new();
+    let mut rejected_tasks = Vec::new();
+
+    for proposal in proposals.iter().cloned() {
+        if let Some(reason) =
+            reject_goal_agent_task_proposal(&proposal, &mut seen_ids, &known_dependencies)
+        {
+            rejected_tasks.push(GoalAgentRejectedTask {
+                task: proposal,
+                reason,
+            });
+            continue;
+        }
+
+        known_dependencies.insert(proposal.id.clone());
+        accepted_tasks.push(proposal);
+    }
+
+    GoalAgentTaskPolicy {
+        goal_id: state.goal_id.clone(),
+        run_id: run_id.to_string(),
+        max_agents: state.max_agents.unwrap_or(1).max(1),
+        proposed_tasks: proposals,
+        accepted_tasks,
+        rejected_tasks,
+    }
+}
+
+fn reject_goal_agent_task_proposal(
+    proposal: &GoalAgentTaskProposal,
+    seen_ids: &mut HashSet<String>,
+    known_dependencies: &HashSet<String>,
+) -> Option<String> {
+    if !seen_ids.insert(proposal.id.clone()) {
+        return Some("duplicate task id rejected by goal policy".to_string());
+    }
+    if proposal.budget_secs == 0 {
+        return Some("task budget must be greater than zero".to_string());
+    }
+
+    let policy_text = format!(
+        "{} {} {}",
+        proposal.id,
+        proposal.description,
+        proposal.write_set.join(" ")
+    )
+    .to_ascii_lowercase();
+    if policy_text.contains("crates.io") || policy_text.contains("publish") {
+        return Some("publishing is disabled for GitHub-only goal execution".to_string());
+    }
+
+    if let Some(path) = proposal
+        .read_set
+        .iter()
+        .chain(proposal.write_set.iter())
+        .find(|path| !is_safe_goal_agent_path(path))
+    {
+        return Some(format!(
+            "path is outside the allowed goal policy roots: {path}"
+        ));
+    }
+
+    if let Some(dep) = proposal
+        .dependencies
+        .iter()
+        .find(|dep| !known_dependencies.contains(*dep))
+    {
+        return Some(format!("dependency is not accepted or completed: {dep}"));
+    }
+
+    None
+}
+
+fn is_safe_goal_agent_path(path: &str) -> bool {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if trimmed == "project files" {
+        return true;
+    }
+    let path = Path::new(trimmed);
+    !path.is_absolute()
+        && !path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+        && trimmed != ".git"
+        && !trimmed.starts_with(".git/")
+}
+
+async fn append_goal_agent_task_policy_events(
+    writer: &EventWriter,
+    run_id: &str,
+    policy: &GoalAgentTaskPolicy,
+) -> Result<()> {
+    for proposal in &policy.proposed_tasks {
+        let event = Event::new(RunId(run_id.to_string()), EventKind::TaskProposed)
+            .with_actor(GOAL_CONTROLLER_ACTOR)
+            .with_payload(goal_agent_task_policy_payload(proposal, None))?;
+        writer.append(&event).await?;
+    }
+
+    for proposal in &policy.accepted_tasks {
+        let event = Event::new(RunId(run_id.to_string()), EventKind::TaskAccepted)
+            .with_actor(GOAL_CONTROLLER_ACTOR)
+            .with_payload(goal_agent_task_policy_payload(
+                proposal,
+                Some("accepted by goal policy"),
+            ))?;
+        writer.append(&event).await?;
+    }
+
+    for decision in &policy.rejected_tasks {
+        let event = Event::new(RunId(run_id.to_string()), EventKind::TaskRejected)
+            .with_actor(GOAL_CONTROLLER_ACTOR)
+            .with_payload(goal_agent_task_policy_payload(
+                &decision.task,
+                Some(&decision.reason),
+            ))?;
+        writer.append(&event).await?;
+    }
+
+    Ok(())
+}
+
+fn goal_agent_task_policy_payload(
+    proposal: &GoalAgentTaskProposal,
+    reason: Option<&str>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "task_id": proposal.id,
+        "title": proposal.title,
+        "risk": proposal.risk,
+        "budget_secs": proposal.budget_secs,
+        "dependencies": proposal.dependencies,
+        "read_set": proposal.read_set,
+        "write_set": proposal.write_set,
+        "reason": reason,
+    })
+}
+
+fn goal_agent_scheduler_tasks(
+    state: &GoalState,
+    task_graph: &GoalTaskGraph,
+    generated_at: DateTime<Utc>,
+    proposals: &[GoalAgentTaskProposal],
+) -> Vec<Task> {
+    proposals
+        .iter()
+        .map(|proposal| {
+            let mut task = Task::new(proposal.id.clone(), proposal.title.clone())
+                .with_description(goal_agent_task_prompt(
+                    state,
+                    task_graph,
+                    generated_at,
+                    proposal,
+                ))
+                .with_dependencies(proposal.dependencies.clone())
+                .with_read_set(proposal.read_set.clone())
+                .with_write_set(proposal.write_set.clone())
+                .with_priority(proposal.priority)
+                .with_max_retries(0);
+            task.extra.insert(
+                "acceptance".to_string(),
+                serde_json::json!(proposal.acceptance),
+            );
+            task.extra.insert(
+                "budget_secs".to_string(),
+                serde_json::json!(proposal.budget_secs),
+            );
+            task.extra
+                .insert("risk".to_string(), serde_json::json!(proposal.risk));
+            task.extra.insert(
+                "controller_task_id".to_string(),
+                serde_json::json!(GOAL_AGENT_EXECUTE_TASK_ID),
+            );
+            task
+        })
+        .collect()
 }
 
 fn goal_agent_task_prompt(
     state: &GoalState,
     task_graph: &GoalTaskGraph,
     generated_at: DateTime<Utc>,
+    proposal: &GoalAgentTaskProposal,
 ) -> String {
     let local_status = task_graph
         .tasks
@@ -822,8 +1193,16 @@ fn goal_agent_task_prompt(
         .map(|task| task.status.to_string())
         .unwrap_or_else(|| "unknown".to_string());
     format!(
-        "Goal ID: {}\nGenerated: {generated_at}\n\nOriginal goal:\n{}\n\nNormalized goal:\n{}\n\nTask:\nReview the existing goal artifacts and make a bounded project change when it is necessary to move the goal forward. Stay inside the current repository, keep the diff minimal, do not commit, do not publish, do not touch secrets, and summarize changed files plus verification still needed for production readiness.\n\nLocal verification task status: {local_status}",
-        state.goal_id, state.original_goal, state.normalized_goal
+        "Goal ID: {}\nGenerated: {generated_at}\n\nOriginal goal:\n{}\n\nNormalized goal:\n{}\n\nController task: {}\nTitle: {}\nBudget: {} seconds\nRisk: {}\n\nTask:\n{}\n\nAcceptance criteria:\n- {}\n\nPolicy:\nStay inside the current repository, keep the diff minimal, do not commit, do not publish, do not touch secrets, and summarize changed files plus verification still needed for production readiness.\n\nLocal verification task status: {local_status}",
+        state.goal_id,
+        state.original_goal,
+        state.normalized_goal,
+        proposal.id,
+        proposal.title,
+        proposal.budget_secs,
+        proposal.risk,
+        proposal.description,
+        proposal.acceptance.join("\n- ")
     )
 }
 
@@ -884,12 +1263,17 @@ async fn stop_wire_worker(handle: &mut JoinHandle<()>) {
     }
 }
 
-async fn read_goal_agent_worker_summary(spec: &WorkerSpec) -> Result<Option<String>> {
+async fn read_goal_agent_worker_summary(
+    spec: &WorkerSpec,
+    task_ids: &[String],
+) -> Result<Option<String>> {
     let results: Vec<WorkerResult> = spec.read_results().await?;
-    Ok(results
+    let summaries: Vec<String> = results
         .into_iter()
-        .find(|result| result.task_id == GOAL_AGENT_EXECUTE_TASK_ID)
-        .map(|result| result.summary))
+        .filter(|result| task_ids.iter().any(|task_id| task_id == &result.task_id))
+        .map(|result| format!("{}: {}", result.task_id, result.summary))
+        .collect();
+    Ok((!summaries.is_empty()).then(|| summaries.join(" | ")))
 }
 
 fn apply_agent_execution_task_result(
@@ -946,6 +1330,16 @@ fn agent_execution_task_evidence(
             kind: "agent_run".to_string(),
             path: evidence.run_path.clone(),
             summary: run_summary,
+        },
+        GoalTaskEvidence {
+            kind: "task_policy".to_string(),
+            path: evidence.task_policy_path.clone(),
+            summary: format!(
+                "Controller task policy recorded: accepted={}, rejected={}, accepted_task_ids={}",
+                evidence.accepted_task_count,
+                evidence.rejected_task_count,
+                evidence.accepted_task_ids.join(", ")
+            ),
         },
         GoalTaskEvidence {
             kind: "worker_outbox".to_string(),

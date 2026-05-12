@@ -63,16 +63,17 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 ## Phase 5 - Agent Orchestration
 
-- [ ] Implement goal controller loop.
+- [x] Implement first policy-validating goal controller loop.
 - [x] Add local controller execution step for verification task evidence.
 - [x] Reuse scheduler-backed team runner for the first bounded execution task.
 - [x] Capture mutation diff and changed-file evidence from the first execution wave.
-- [ ] Allow agents to propose new tasks.
-- [ ] Validate proposed tasks against policy and budgets.
+- [x] Add controller-proposed multi-task dispatch for `goal-agent-execute`.
+- [ ] Allow agents to propose new tasks back to the controller.
+- [x] Validate proposed tasks against policy and per-task budgets.
 - [ ] Enforce max concurrency.
 - [x] Track heartbeat artifacts for the first goal worker wave.
 - [ ] Recover stale tasks.
-- [ ] Emit task accepted/rejected events.
+- [x] Emit task proposed/accepted/rejected events.
 - [x] Add tests with a mock Wire agent for the first execution wave.
 
 ## Phase 6 - Verification and Proof

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-05-12
+
+### Added
+
+- **`omk goal execute` controller loop**: the bounded agent wave is now a policy-validated multi-task dispatch instead of one scheduler task. The controller records `task-policy.json`, assigns per-task budgets and acceptance criteria, emits `task_proposed`, `task_accepted`, and `task_rejected` events, and rejects crates.io publishing in the current GitHub-only release lane.
+
 ## [0.3.4] - 2026-05-12
 
 ### Added

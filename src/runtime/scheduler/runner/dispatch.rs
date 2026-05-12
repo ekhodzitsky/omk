@@ -6,6 +6,38 @@ use crate::runtime::scheduler::runner::TeamRunner;
 use crate::runtime::scheduler::task::{Task, TaskState};
 use crate::runtime::worker::WorkerSpec;
 
+fn task_extra_string_list(task: &Task, key: &str) -> Vec<String> {
+    task.extra
+        .get(key)
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn task_extra_u64(task: &Task, key: &str) -> Option<u64> {
+    task.extra.get(key).and_then(|value| value.as_u64())
+}
+
+fn task_dispatch_context(task: &Task) -> Option<String> {
+    let mut lines = Vec::new();
+    if let Some(budget_secs) = task_extra_u64(task, "budget_secs") {
+        lines.push(format!("Budget: {budget_secs} seconds"));
+    }
+    if !task.read_set.is_empty() {
+        lines.push(format!("Read set: {}", task.read_set.join(", ")));
+    }
+    if !task.write_set.is_empty() {
+        lines.push(format!("Write set: {}", task.write_set.join(", ")));
+    }
+
+    (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
 impl TeamRunner {
     /// Create a single seed task from a high-level description.
     pub fn seed_task(&mut self, description: &str) {
@@ -109,6 +141,7 @@ impl TeamRunner {
                 .with_payload(serde_json::json!({
                     "task_id": task_id,
                     "worker_id": worker.name,
+                    "budget_secs": task_extra_u64(&task, "budget_secs"),
                 }))?;
             self.event_writer.append(&started_event).await?;
             self.claim_store.start(&task_id, &worker.name);
@@ -116,8 +149,8 @@ impl TeamRunner {
             let worker_task = crate::runtime::worker::WorkerTask {
                 id: task_id.clone(),
                 task: task.description.clone(),
-                acceptance_criteria: Vec::new(),
-                context: None,
+                acceptance_criteria: task_extra_string_list(&task, "acceptance"),
+                context: task_dispatch_context(&task),
             };
             worker.send_task(&worker_task).await?;
 

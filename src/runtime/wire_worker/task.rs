@@ -53,10 +53,26 @@ impl WireWorkerAdapter {
             }))?;
         self.event_writer.append(&init_event).await?;
 
-        let prompt = format!(
-            "You are a {} agent named {}.\n\nTask: {}\n\nWhen complete, summarize what you did in 1-2 sentences.",
+        let mut prompt = format!(
+            "You are a {} agent named {}.\n\nTask: {}",
             self.spec.role, self.spec.name, task.task
         );
+        if !task.acceptance_criteria.is_empty() {
+            prompt.push_str("\n\nAcceptance criteria:");
+            for item in &task.acceptance_criteria {
+                prompt.push_str("\n- ");
+                prompt.push_str(item);
+            }
+        }
+        if let Some(context) = task
+            .context
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            prompt.push_str("\n\nController context:\n");
+            prompt.push_str(context);
+        }
+        prompt.push_str("\n\nWhen complete, summarize what you did in 1-2 sentences.");
         client.start_prompt(&prompt).await?;
 
         let mut summary_parts: Vec<String> = Vec::new();

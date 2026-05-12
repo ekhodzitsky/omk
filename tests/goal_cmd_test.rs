@@ -81,6 +81,15 @@ fn git(project_dir: &std::path::Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
+fn read_jsonl(path: &std::path::Path) -> Vec<Value> {
+    fs::read_to_string(path)
+        .expect("missing jsonl file")
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("jsonl line should parse"))
+        .collect()
+}
+
 #[test]
 fn test_goal_help_lists_goal_runtime_commands() {
     let (_tmp, envs) = isolated_env();
@@ -578,6 +587,130 @@ fn test_goal_execute_runs_mock_wire_agent_and_records_agent_task_evidence() {
         .unwrap()
         .iter()
         .any(|gap| gap.as_str().unwrap().contains("review evidence")));
+}
+
+#[test]
+fn test_goal_execute_dispatches_policy_validated_multi_task_agent_wave() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args([
+            "goal",
+            "run",
+            "Dispatch a bounded policy-validated controller wave",
+            "--max-agents",
+            "2",
+        ])
+        .assert()
+        .success();
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("goal-agent-execute: done"));
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let goal_dir = &dirs[0];
+    let policy_path = goal_dir.join("artifacts/agent-runs/goal-agent-execute/task-policy.json");
+    assert!(policy_path.exists(), "missing task policy artifact");
+    let policy: Value = serde_json::from_str(
+        &fs::read_to_string(&policy_path).expect("missing task policy artifact"),
+    )
+    .expect("task policy should be JSON");
+
+    let accepted = policy["accepted_tasks"].as_array().unwrap();
+    assert_eq!(
+        accepted.len(),
+        2,
+        "expected two accepted bounded agent tasks: {policy:#?}"
+    );
+    assert!(accepted.iter().any(|task| {
+        task["id"] == "goal-agent-implement"
+            && task["budget_secs"].as_u64().unwrap_or_default() > 0
+            && task["acceptance"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item.as_str().unwrap().contains("bounded project change"))
+    }));
+    assert!(accepted.iter().any(|task| {
+        task["id"] == "goal-agent-verify"
+            && task["budget_secs"].as_u64().unwrap_or_default() > 0
+            && task["dependencies"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|dep| dep == "goal-agent-implement")
+    }));
+
+    let rejected = policy["rejected_tasks"].as_array().unwrap();
+    assert!(rejected.iter().any(|decision| {
+        decision["task"]["id"] == "goal-agent-publish-crates-io"
+            && decision["reason"]
+                .as_str()
+                .unwrap()
+                .contains("publishing is disabled")
+    }));
+
+    let events = read_jsonl(&goal_dir.join("events.jsonl"));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "task_proposed" && event["payload"]["task_id"] == "goal-agent-implement"
+    }));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "task_accepted"
+            && event["payload"]["task_id"] == "goal-agent-implement"
+            && event["payload"]["budget_secs"].as_u64().unwrap_or_default() > 0
+    }));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "task_rejected"
+            && event["payload"]["task_id"] == "goal-agent-publish-crates-io"
+            && event["payload"]["reason"]
+                .as_str()
+                .unwrap()
+                .contains("publishing is disabled")
+    }));
+
+    let outbox_path = goal_dir
+        .join("artifacts/agent-runs/goal-agent-execute/workers/goal-agent-worker-0/outbox.jsonl");
+    let outbox = read_jsonl(&outbox_path);
+    assert!(outbox
+        .iter()
+        .any(|result| result["task_id"] == "goal-agent-implement"));
+    assert!(outbox
+        .iter()
+        .any(|result| result["task_id"] == "goal-agent-verify"));
+    assert!(!outbox
+        .iter()
+        .any(|result| result["task_id"] == "goal-agent-publish-crates-io"));
+
+    let task_graph: Value = serde_json::from_str(
+        &fs::read_to_string(goal_dir.join("task-graph.json")).expect("missing task graph"),
+    )
+    .expect("task graph should be JSON");
+    let agent_execute = task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|task| task["id"] == "goal-agent-execute")
+        .expect("missing goal-agent-execute task");
+    let evidence = agent_execute["evidence"].as_array().unwrap();
+    assert!(evidence.iter().any(|evidence| {
+        evidence["kind"] == "task_policy"
+            && evidence["path"] == "artifacts/agent-runs/goal-agent-execute/task-policy.json"
+            && evidence["summary"]
+                .as_str()
+                .unwrap()
+                .contains("accepted=2, rejected=1")
+    }));
 }
 
 #[test]
