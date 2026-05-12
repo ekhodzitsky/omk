@@ -79,6 +79,6 @@ Run:
 - `cargo doc --no-deps`
 - `cargo deny --all-features check advisories licenses`
 
-- [ ] **Step 8: Commit, push, and watch CI**
+- [x] **Step 8: Commit, push, and watch CI**
 
 Use the Lore commit protocol, push to `master`, and wait for GitHub CI/Coverage.
