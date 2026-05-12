@@ -74,6 +74,8 @@ current beta MVP instead of inventing a parallel runtime:
 - `omk goal plan/run/list/status/show/proof/verify/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`, and
   `task-graph.json`;
+- controller-owned planning task completion evidence in the task graph and
+  goal event log;
 - honest goal-level `proof.json` with `not_ready` status until execution
   evidence exists;
 - local verification gate execution through `omk goal verify`, with gate output
@@ -197,6 +199,7 @@ Each goal writes `.omk/goals/<goal-id>/proof.json` with:
 - goal summary;
 - accepted and rejected assumptions;
 - task graph summary;
+- controller-owned task evidence and remaining pending execution work;
 - changed files;
 - commits or branches produced;
 - gates run and outputs;

@@ -53,7 +53,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Track read sets and write sets.
 - [x] Track risk level.
 - [x] Track acceptance criteria.
-- [ ] Track owner role.
+- [x] Track owner role.
 - [ ] Track retries and lease expiration.
 - [ ] Add graph validation.
 - [ ] Add graph mutation events.

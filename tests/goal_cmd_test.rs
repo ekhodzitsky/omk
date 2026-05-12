@@ -154,7 +154,37 @@ fn test_goal_run_writes_task_graph_and_not_ready_proof() {
     .expect("task graph should be JSON");
     assert!(task_graph["goal_id"].as_str().unwrap().starts_with("goal-"));
     assert_eq!(task_graph["tasks"].as_array().unwrap().len(), 3);
-    assert_eq!(task_graph["tasks"][0]["status"], "pending");
+    assert_eq!(task_graph["tasks"][0]["id"], "goal-intake");
+    assert_eq!(task_graph["tasks"][0]["status"], "done");
+    assert_eq!(task_graph["tasks"][0]["owner_role"], "goal-controller");
+    assert!(task_graph["tasks"][0]["completed_at"].as_str().is_some());
+    assert!(task_graph["tasks"][0]["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|evidence| evidence["path"] == "prd.md"));
+    assert_eq!(task_graph["tasks"][1]["id"], "goal-plan");
+    assert_eq!(task_graph["tasks"][1]["status"], "done");
+    assert!(task_graph["tasks"][1]["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|evidence| evidence["path"] == "technical-plan.md"));
+    assert!(task_graph["tasks"][1]["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|evidence| evidence["path"] == "test-spec.md"));
+    assert_eq!(task_graph["tasks"][2]["id"], "goal-execute-verify");
+    assert_eq!(task_graph["tasks"][2]["status"], "pending");
+    assert!(task_graph["tasks"][2]["evidence"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    let events = fs::read_to_string(dirs[0].join("events.jsonl")).expect("missing events");
+    assert!(events.contains("\"kind\":\"task_completed\""));
+    assert!(events.contains("\"actor\":\"goal-controller\""));
 
     let proof_output = omk_cmd(&envs)
         .args(["goal", "proof", "latest", "--json"])
@@ -170,6 +200,8 @@ fn test_goal_run_writes_task_graph_and_not_ready_proof() {
         serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
     assert_eq!(proof_json["status"], "not_ready");
     assert_eq!(proof_json["task_graph_summary"]["total_tasks"], 3);
+    assert_eq!(proof_json["task_graph_summary"]["done_tasks"], 2);
+    assert_eq!(proof_json["task_graph_summary"]["pending_tasks"], 1);
     assert!(proof_json["known_gaps"]
         .as_array()
         .unwrap()

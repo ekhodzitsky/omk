@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, GateId, RunId};
+use crate::runtime::events::{
+    Event, EventBuilder, EventKind, EventWriter, GateId, RunId, TaskId, WorkerId,
+};
 use crate::runtime::gates::{
     detect_changed_files, gates_passed, load_or_detect_gates, run_gates_with_evidence, GateResult,
 };
@@ -19,6 +21,7 @@ pub const GOAL_TASK_GRAPH_FILE: &str = "task-graph.json";
 pub const GOAL_PROOF_FILE: &str = "proof.json";
 pub const GOAL_ARTIFACTS_DIR: &str = "artifacts";
 pub const GOAL_GATE_ARTIFACTS_DIR: &str = "gates";
+const GOAL_CONTROLLER_ACTOR: &str = "goal-controller";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -111,11 +114,24 @@ pub enum GoalTaskStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GoalTaskEvidence {
+    pub kind: String,
+    pub path: PathBuf,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoalTask {
     pub id: String,
     pub title: String,
     pub description: String,
     pub status: GoalTaskStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub evidence: Vec<GoalTaskEvidence>,
     pub dependencies: Vec<String>,
     pub read_set: Vec<String>,
     pub write_set: Vec<String>,
@@ -316,6 +332,7 @@ async fn run_controller_scaffold(mut state: GoalState) -> Result<GoalState> {
     state.phase = GoalPhase::VerificationDesign;
     write_test_spec(&state, &task_graph, now).await?;
     record_artifact(&mut state, "test_spec", GOAL_TEST_SPEC_FILE, now);
+    append_controller_task_events(&state, &task_graph).await?;
 
     state.phase = GoalPhase::Proof;
     let proof = build_scaffold_proof(&state, &task_graph, now);
@@ -498,7 +515,7 @@ async fn write_technical_plan(state: &GoalState, generated_at: DateTime<Utc>) ->
          4. Verification design writes a test specification.\n\
          5. Proof writes an honest not-ready proof until execution is implemented.\n\n\
          ## Execution Boundary\n\n\
-         The current controller does not launch agents, mutate project files, or run verification gates.\n\n\
+         The current controller records controller-owned planning task evidence but does not launch agents or mutate project files. `omk goal verify` runs local gates as a separate proof step.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -526,7 +543,7 @@ async fn write_test_spec(
          ## Scaffold Task Acceptance\n\n\
          {task_lines}\n\n\
          ## Current Status\n\n\
-         `omk goal` remains `not_ready` because the controller has not executed the task graph.\n\n\
+         `omk goal` remains `not_ready` because controller-owned planning work is recorded, but the agent execution task has not run.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -543,7 +560,14 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
                 id: "goal-intake".to_string(),
                 title: "Clarify durable goal intent".to_string(),
                 description: "Preserve the original request, normalized goal, assumptions, and current execution boundary.".to_string(),
-                status: GoalTaskStatus::Pending,
+                status: GoalTaskStatus::Done,
+                owner_role: Some(GOAL_CONTROLLER_ACTOR.to_string()),
+                completed_at: Some(generated_at),
+                evidence: vec![GoalTaskEvidence {
+                    kind: "artifact".to_string(),
+                    path: PathBuf::from(GOAL_PRD_FILE),
+                    summary: "Goal brief records the original and normalized goal.".to_string(),
+                }],
                 dependencies: Vec::new(),
                 read_set: vec!["goal.json".to_string()],
                 write_set: vec![GOAL_PRD_FILE.to_string()],
@@ -557,7 +581,26 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
                 id: "goal-plan".to_string(),
                 title: "Design controller work plan".to_string(),
                 description: "Persist a technical plan and explicit verification expectations for the goal controller.".to_string(),
-                status: GoalTaskStatus::Pending,
+                status: GoalTaskStatus::Done,
+                owner_role: Some(GOAL_CONTROLLER_ACTOR.to_string()),
+                completed_at: Some(generated_at),
+                evidence: vec![
+                    GoalTaskEvidence {
+                        kind: "artifact".to_string(),
+                        path: PathBuf::from(GOAL_TECHNICAL_PLAN_FILE),
+                        summary: "Technical plan records controller phases and execution boundary.".to_string(),
+                    },
+                    GoalTaskEvidence {
+                        kind: "artifact".to_string(),
+                        path: PathBuf::from(GOAL_TASK_GRAPH_FILE),
+                        summary: "Task graph records the first controller-owned work graph.".to_string(),
+                    },
+                    GoalTaskEvidence {
+                        kind: "artifact".to_string(),
+                        path: PathBuf::from(GOAL_TEST_SPEC_FILE),
+                        summary: "Test spec records readiness expectations.".to_string(),
+                    },
+                ],
                 dependencies: vec!["goal-intake".to_string()],
                 read_set: vec![GOAL_PRD_FILE.to_string()],
                 write_set: vec![
@@ -575,6 +618,9 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
                 title: "Execute, verify, and prove readiness".to_string(),
                 description: "Run the future task graph through agents, gates, reviews, and proof generation.".to_string(),
                 status: GoalTaskStatus::Pending,
+                owner_role: None,
+                completed_at: None,
+                evidence: Vec::new(),
                 dependencies: vec!["goal-plan".to_string()],
                 read_set: vec![
                     GOAL_PRD_FILE.to_string(),
@@ -592,6 +638,56 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
     };
     write_json_artifact(&state.state_dir.join(GOAL_TASK_GRAPH_FILE), &graph).await?;
     Ok(graph)
+}
+
+async fn append_controller_task_events(
+    state: &GoalState,
+    task_graph: &GoalTaskGraph,
+) -> Result<()> {
+    let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
+    let builder = EventBuilder::new(RunId(state.goal_id.clone()));
+    let worker_id = WorkerId(GOAL_CONTROLLER_ACTOR.to_string());
+    let mut events = Vec::new();
+
+    for task in task_graph
+        .tasks
+        .iter()
+        .filter(|task| task.status == GoalTaskStatus::Done)
+    {
+        let task_id = TaskId(task.id.clone());
+        events.push(
+            Event::new(RunId(state.goal_id.clone()), EventKind::TaskStarted)
+                .with_actor(GOAL_CONTROLLER_ACTOR)
+                .with_payload(serde_json::json!({
+                    "task_id": task.id,
+                    "worker_id": GOAL_CONTROLLER_ACTOR,
+                    "title": task.title,
+                }))?,
+        );
+        events.push(builder.task_completed(
+            task_id,
+            worker_id.clone(),
+            Some(&controller_task_summary(task)),
+        )?);
+    }
+
+    if events.is_empty() {
+        return Ok(());
+    }
+    writer.append_many(&events).await
+}
+
+fn controller_task_summary(task: &GoalTask) -> String {
+    let artifacts = task
+        .evidence
+        .iter()
+        .map(|evidence| evidence.path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "{} completed with artifact evidence: {}",
+        task.id, artifacts
+    )
 }
 
 fn build_scaffold_proof(

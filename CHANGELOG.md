@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`omk goal verify` proof wall**: added local verification gate execution for goals, full gate output artifacts under `artifacts/gates/`, gate events, changed-file capture, and proof refreshes that stay `not_ready` until execution evidence exists.
+- **`omk goal` task evidence**: task graphs now mark controller-owned planning work as `done`, record owner/evidence metadata, and append task events from the `goal-controller` actor while leaving future agent execution pending.
 - **`omk goal` controller scaffold**: `run` and new `plan` now write `prd.md`, `technical-plan.md`, `test-spec.md`, `task-graph.json`, and an honest `proof.json`; new `omk goal proof` renders the goal proof as text, JSON, or Markdown.
 - **`omk goal` state scaffold**: added durable `goals/<goal-id>/goal.json` state under the OMK state directory, goal event logs, `run/list/status/show/cancel` CLI commands, JSON/Markdown/text output, and cancellation `failure.json` artifacts.
 
