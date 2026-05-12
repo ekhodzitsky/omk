@@ -26,6 +26,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         let status = tokio::process::Command::new("tail")
             .args(["-f", "-n", &args.lines.to_string()])
             .arg(&log_file)
+            .kill_on_drop(true)
             .status()
             .await
             .context("Failed to run tail command")?;
@@ -34,12 +35,16 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             anyhow::bail!("tail command failed");
         }
     } else {
-        let output = tokio::process::Command::new("tail")
-            .args(["-n", &args.lines.to_string()])
-            .arg(&log_file)
-            .output()
-            .await
-            .context("Failed to run tail command")?;
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            tokio::process::Command::new("tail")
+                .args(["-n", &args.lines.to_string()])
+                .arg(&log_file)
+                .output(),
+        )
+        .await
+        .context("tail command timed out")?
+        .context("Failed to run tail command")?;
 
         if !output.status.success() {
             anyhow::bail!("tail command failed");

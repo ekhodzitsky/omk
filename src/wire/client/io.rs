@@ -65,7 +65,7 @@ impl WireClient {
                 let msg = self
                     .pending_messages
                     .remove(idx)
-                    .expect("pending response index should be valid");
+                    .ok_or_else(|| anyhow::anyhow!("pending response index should be valid"))?;
                 return decode_response(msg, expected_id);
             }
 

@@ -167,11 +167,13 @@ pub(crate) async fn run(_args: Args) -> Result<()> {
 }
 
 async fn check_cmd(cmd: &str, args: &[&str]) -> Result<String> {
-    let output = Command::new(cmd)
-        .args(args)
-        .output()
-        .await
-        .map_err(|e| anyhow::anyhow!("{} not found ({e})", cmd))?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        Command::new(cmd).args(args).output(),
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("{cmd} timed out ({e})"))?
+    .map_err(|e| anyhow::anyhow!("{cmd} not found ({e})"))?;
 
     if !output.status.success() {
         anyhow::bail!("{} exited with error", cmd);

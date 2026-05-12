@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 /// Escape a string for safe inclusion in a POSIX shell command.
 ///
 /// This uses the `shlex` crate to properly handle:
@@ -10,14 +12,14 @@
 /// # Example
 /// ```
 /// use omk::runtime::shell::shell_escape;
-/// assert_eq!(shell_escape("hello"), "hello");
-/// assert_eq!(shell_escape("it's"), "\"it's\"");
-/// assert_eq!(shell_escape("$HOME"), "'$HOME'");
+/// assert_eq!(shell_escape("hello").unwrap(), "hello");
+/// assert_eq!(shell_escape("it's").unwrap(), "\"it's\"");
+/// assert_eq!(shell_escape("$HOME").unwrap(), "'$HOME'");
 /// ```
-pub fn shell_escape(s: &str) -> String {
-    shlex::try_quote(s)
-        .expect("validate_safe should have filtered out null bytes")
-        .into_owned()
+pub fn shell_escape(s: &str) -> Result<String> {
+    Ok(shlex::try_quote(s)
+        .map_err(|e| anyhow::anyhow!("failed to quote shell string: {e}"))?
+        .into_owned())
 }
 
 /// Validate that a string does not contain null bytes or other
@@ -50,49 +52,49 @@ mod tests {
 
     #[test]
     fn test_shell_escape_basic() {
-        assert_eq!(shell_escape("hello"), "hello");
+        assert_eq!(shell_escape("hello").unwrap(), "hello");
     }
 
     #[test]
     fn test_shell_escape_single_quote() {
         // shlex uses double quotes when single quote is present
-        assert_eq!(shell_escape("it's"), "\"it's\"");
+        assert_eq!(shell_escape("it's").unwrap(), "\"it's\"");
     }
 
     #[test]
     fn test_shell_escape_dollar() {
         // shlex uses single quotes for $ to prevent expansion
-        assert_eq!(shell_escape("$HOME"), "'$HOME'");
+        assert_eq!(shell_escape("$HOME").unwrap(), "'$HOME'");
     }
 
     #[test]
     fn test_shell_escape_backtick() {
-        assert_eq!(shell_escape("`rm -rf /`"), "'`rm -rf /`'");
+        assert_eq!(shell_escape("`rm -rf /`").unwrap(), "'`rm -rf /`'");
     }
 
     #[test]
     fn test_shell_escape_semicolon() {
-        assert_eq!(shell_escape("foo; rm -rf /"), "'foo; rm -rf /'");
+        assert_eq!(shell_escape("foo; rm -rf /").unwrap(), "'foo; rm -rf /'");
     }
 
     #[test]
     fn test_shell_escape_pipe() {
         assert_eq!(
-            shell_escape("foo | cat /etc/passwd"),
+            shell_escape("foo | cat /etc/passwd").unwrap(),
             "'foo | cat /etc/passwd'"
         );
     }
 
     #[test]
     fn test_shell_escape_newline() {
-        let escaped = shell_escape("line1\nline2");
+        let escaped = shell_escape("line1\nline2").unwrap();
         assert!(escaped.contains("line1"));
         assert!(escaped.contains("line2"));
     }
 
     #[test]
     fn test_shell_escape_empty() {
-        assert_eq!(shell_escape(""), "''");
+        assert_eq!(shell_escape("").unwrap(), "''");
     }
 
     #[test]
@@ -135,7 +137,7 @@ mod tests {
         ];
 
         for s in cases {
-            let escaped = shell_escape(s);
+            let escaped = shell_escape(s).unwrap();
             let parsed = shlex::split(&format!("cmd {escaped}"));
             assert_eq!(parsed, Some(vec!["cmd".to_string(), s.to_string()]));
         }

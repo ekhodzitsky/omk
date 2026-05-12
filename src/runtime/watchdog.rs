@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use super::config::WORKERS_DIR;
@@ -130,7 +130,7 @@ impl Watchdog {
 
                 let new_state = match health.status {
                     HealthStatus::Healthy => {
-                        let current = self.worker_states.lock().unwrap().get(&spec.name);
+                        let current = self.worker_states.lock().await.get(&spec.name);
                         match current {
                             WorkerState::Stalled | WorkerState::Dead => WorkerState::Ready,
                             _ => current,
@@ -142,7 +142,7 @@ impl Watchdog {
                 };
 
                 let event_to_emit = {
-                    let mut states = self.worker_states.lock().unwrap();
+                    let mut states = self.worker_states.lock().await;
                     states
                         .transition(&spec.name, new_state)
                         .and_then(|old_state| {

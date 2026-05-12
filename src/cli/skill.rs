@@ -72,12 +72,16 @@ async fn install_skill(url: &str, name_override: Option<String>) -> Result<()> {
         info!(url = %url, name = %skill_name, "Cloning skill from git");
         println!("Installing skill '{}' from {}...", skill_name, url);
 
-        let output = tokio::process::Command::new("git")
-            .args(["clone", "--depth", "1", url])
-            .arg(&target_dir)
-            .output()
-            .await
-            .context("git is required to install skills from URLs")?;
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            tokio::process::Command::new("git")
+                .args(["clone", "--depth", "1", url])
+                .arg(&target_dir)
+                .output(),
+        )
+        .await
+        .context("git clone timed out")?
+        .context("git is required to install skills from URLs")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

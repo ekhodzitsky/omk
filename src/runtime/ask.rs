@@ -20,17 +20,20 @@ pub async fn available_providers() -> Vec<&'static str> {
 
 /// Check whether a provider CLI is installed.
 pub async fn is_provider_installed(provider: &str) -> bool {
-    tokio::process::Command::new("which")
-        .arg(provider)
-        .output()
-        .await
-        .map(|out| out.status.success())
-        .unwrap_or(false)
+    match tokio::time::timeout(
+        Duration::from_secs(5),
+        tokio::process::Command::new("which").arg(provider).output(),
+    )
+    .await
+    {
+        Ok(Ok(out)) => out.status.success(),
+        _ => false,
+    }
 }
 
 /// Return the shell command string for a given provider and prompt.
 pub fn provider_command(provider: &str, prompt: &str) -> Result<String> {
-    let escaped = shell_escape(prompt);
+    let escaped = shell_escape(prompt)?;
     match provider {
         "claude" => Ok(format!("claude -p {escaped}")),
         "codex" => Ok(format!("codex -p {escaped}")),
@@ -90,6 +93,7 @@ pub async fn run_advisor_direct(provider: &str, prompt: &str, timeout_secs: u64)
         .arg(&cmd)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
         .spawn()
         .with_context(|| format!("Failed to spawn {}", provider))?;
 
@@ -276,7 +280,7 @@ pub fn is_known_provider(name: &str) -> bool {
 }
 
 /// Escape a string for safe inclusion in a single-quoted shell context.
-fn shell_escape(s: &str) -> String {
+fn shell_escape(s: &str) -> Result<String> {
     crate::runtime::shell::shell_escape(s)
 }
 

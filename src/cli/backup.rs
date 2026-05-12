@@ -54,15 +54,19 @@ async fn create_backup(name: Option<String>) -> Result<()> {
     info!(source = %state_dir.display(), target = %backup_path.display(), "Creating backup");
     println!("Creating backup: {}", backup_path.display());
 
-    let status = Command::new("tar")
-        .args(["-czf"])
-        .arg(&backup_path)
-        .arg("-C")
-        .arg(state_dir.parent().unwrap_or(std::path::Path::new(".")))
-        .arg(state_dir.file_name().unwrap_or_default())
-        .status()
-        .await
-        .context("Failed to run tar command")?;
+    let status = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        Command::new("tar")
+            .args(["-czf"])
+            .arg(&backup_path)
+            .arg("-C")
+            .arg(state_dir.parent().unwrap_or(std::path::Path::new(".")))
+            .arg(state_dir.file_name().unwrap_or_default())
+            .status(),
+    )
+    .await
+    .context("tar command timed out")?
+    .context("Failed to run tar command")?;
 
     if !status.success() {
         anyhow::bail!("tar command failed");
@@ -150,14 +154,18 @@ async fn restore_backup(name: &str) -> Result<()> {
     }
 
     // Extract backup
-    let status = Command::new("tar")
-        .args(["-xzf"])
-        .arg(&backup_path)
-        .arg("-C")
-        .arg(state_dir.parent().unwrap_or(std::path::Path::new(".")))
-        .status()
-        .await
-        .context("Failed to run tar command")?;
+    let status = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        Command::new("tar")
+            .args(["-xzf"])
+            .arg(&backup_path)
+            .arg("-C")
+            .arg(state_dir.parent().unwrap_or(std::path::Path::new(".")))
+            .status(),
+    )
+    .await
+    .context("tar command timed out")?
+    .context("Failed to run tar command")?;
 
     if !status.success() {
         anyhow::bail!("tar extraction failed");

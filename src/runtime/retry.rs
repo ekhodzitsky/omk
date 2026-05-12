@@ -81,7 +81,9 @@ pub async fn retry_command(
     let mut delay_ms = config.base_delay_ms;
 
     loop {
-        let output = cmd.output().await?;
+        let output = tokio::time::timeout(Duration::from_secs(60), cmd.output())
+            .await
+            .map_err(|_| anyhow::anyhow!("Command timed out after 60s"))??;
         if output.status.success() {
             return Ok(String::from_utf8_lossy(&output.stdout).to_string());
         }

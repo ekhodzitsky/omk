@@ -63,6 +63,6 @@ pub(crate) async fn run_command(dir: &Path, cmd: &str, args: &[&str]) -> Result<
     Ok(())
 }
 
-pub(crate) fn shell_escape(s: &str) -> String {
+pub(crate) fn shell_escape(s: &str) -> anyhow::Result<String> {
     crate::runtime::shell::shell_escape(s)
 }

@@ -3,7 +3,7 @@ use axum::{response::Html, routing::get, Json, Router};
 use serde_json::Value;
 use std::net::SocketAddr;
 use tokio::signal;
-use tracing::info;
+use tracing::{error, info};
 
 pub async fn run_server(port: u16) -> Result<()> {
     let app = Router::new()
@@ -30,17 +30,21 @@ pub async fn run_server(port: u16) -> Result<()> {
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
+        if let Err(e) = signal::ctrl_c().await {
+            error!("failed to install Ctrl+C handler: {e}");
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
+        match signal::unix::signal(signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(e) => {
+                error!("failed to install signal handler: {e}");
+            }
+        }
     };
 
     #[cfg(not(unix))]
@@ -467,7 +471,8 @@ fn normalize_metrics_value(mut metrics: Value) -> Value {
     metrics
 }
 
-async fn prometheus_metrics_handler() -> axum::response::Response<String> {
+async fn prometheus_metrics_handler(
+) -> std::result::Result<axum::response::Response<String>, axum::http::StatusCode> {
     let metrics_path = crate::runtime::config::state_dir().join("metrics.json");
     let mut output = String::new();
 
@@ -511,5 +516,5 @@ async fn prometheus_metrics_handler() -> axum::response::Response<String> {
     axum::response::Response::builder()
         .header("Content-Type", "text/plain; version=0.0.4")
         .body(output)
-        .unwrap()
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)
 }

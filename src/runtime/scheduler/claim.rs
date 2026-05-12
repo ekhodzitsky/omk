@@ -85,7 +85,9 @@ impl ClaimStore {
             return false;
         }
 
-        let task = self.tasks.get_mut(task_id).unwrap();
+        let Some(task) = self.tasks.get_mut(task_id) else {
+            return false;
+        };
         task.state = TaskState::Claimed;
         task.owner = Some(worker.to_string());
         task.lease_expires = Some(Utc::now() + chrono::Duration::seconds(self.lease_seconds));

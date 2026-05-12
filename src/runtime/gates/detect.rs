@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Duration;
 use tokio::process::Command;
 use tracing::{info, warn};
 
@@ -69,14 +70,17 @@ pub fn format_gate_summary(results: &[GateResult]) -> String {
 
 /// Detect changed files using git status, including untracked files.
 pub async fn detect_changed_files(dir: &Path) -> Vec<String> {
-    let output = Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(dir)
-        .output()
-        .await;
+    let output = tokio::time::timeout(
+        Duration::from_secs(10),
+        Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(dir)
+            .output(),
+    )
+    .await;
 
     let mut files = match output {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+        Ok(Ok(o)) if o.status.success() => String::from_utf8_lossy(&o.stdout)
             .lines()
             .filter_map(parse_porcelain_changed_file)
             .collect::<Vec<_>>(),

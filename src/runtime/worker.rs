@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::info;
@@ -17,7 +17,11 @@ pub struct WorkerSpec {
 
 impl WorkerSpec {
     pub async fn save(&self) -> Result<()> {
-        let path = self.inbox.parent().unwrap().join("worker-spec.json");
+        let path = self
+            .inbox
+            .parent()
+            .context("inbox path has no parent")?
+            .join("worker-spec.json");
         let json = serde_json::to_string_pretty(self)?;
         crate::runtime::atomic::atomic_write(&path, json.as_bytes()).await?;
         info!(path = %path.display(), name = %self.name, "Saved worker spec");

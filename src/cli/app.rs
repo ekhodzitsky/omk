@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{error, info};
 
 use super::kimi_native_cmd;
 use super::{
@@ -113,7 +113,10 @@ pub async fn run() -> Result<()> {
 
     tokio::select! {
         res = &mut run_fut => res,
-        _ = wait_for_signal() => {
+        sig = wait_for_signal() => {
+            if let Err(e) = sig {
+                error!("failed to install signal handler: {e}");
+            }
             eprintln!("\nReceived shutdown signal, cancelling...");
             cancel.cancel();
             let _ = tokio::time::timeout(
@@ -211,20 +214,20 @@ async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
 }
 
 #[cfg(unix)]
-async fn wait_for_signal() {
+async fn wait_for_signal() -> std::io::Result<()> {
     use tokio::signal::unix::{signal, SignalKind};
 
-    let mut sigint = signal(SignalKind::interrupt()).expect("SIGINT handler");
-    let mut sigterm = signal(SignalKind::terminate()).expect("SIGTERM handler");
+    let mut sigint = signal(SignalKind::interrupt())?;
+    let mut sigterm = signal(SignalKind::terminate())?;
     tokio::select! {
-        _ = sigint.recv() => {},
-        _ = sigterm.recv() => {},
+        _ = sigint.recv() => Ok(()),
+        _ = sigterm.recv() => Ok(()),
     }
 }
 
 #[cfg(not(unix))]
-async fn wait_for_signal() {
-    let _ = tokio::signal::ctrl_c().await;
+async fn wait_for_signal() -> std::io::Result<()> {
+    tokio::signal::ctrl_c().await
 }
 
 async fn run_setup() -> Result<()> {
@@ -300,17 +303,20 @@ async fn run_update(args: UpdateArgs) -> Result<()> {
     };
 
     println!("Checking for latest release...");
-    let latest = match Command::new("curl")
-        .args([
-            "-fsSL",
-            "-H",
-            "Accept: application/vnd.github+json",
-            "https://api.github.com/repos/ekhodzitsky/oh-my-kimi/releases/latest",
-        ])
-        .output()
-        .await
+    let latest = match tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        Command::new("curl")
+            .args([
+                "-fsSL",
+                "-H",
+                "Accept: application/vnd.github+json",
+                "https://api.github.com/repos/ekhodzitsky/oh-my-kimi/releases/latest",
+            ])
+            .output(),
+    )
+    .await
     {
-        Ok(out) if out.status.success() => {
+        Ok(Ok(out)) if out.status.success() => {
             let json: serde_json::Value = serde_json::from_slice(&out.stdout)?;
             json["tag_name"].as_str().unwrap_or("").to_string()
         }
@@ -346,25 +352,31 @@ async fn run_update(args: UpdateArgs) -> Result<()> {
     let tmp_dir = tempfile::tempdir()?;
     let tar_path = tmp_dir.path().join("omk.tar.gz");
 
-    let download = Command::new("curl")
-        .args(["-fsSL", "-o"])
-        .arg(&tar_path)
-        .arg(&url)
-        .status()
-        .await?;
+    let download = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        Command::new("curl")
+            .args(["-fsSL", "-o"])
+            .arg(&tar_path)
+            .arg(&url)
+            .status(),
+    )
+    .await??;
 
     if !download.success() {
         anyhow::bail!("Download failed. Prebuilt binary may not be available for {target}.");
     }
 
     println!("Extracting...");
-    let extract = Command::new("tar")
-        .args(["-xzf"])
-        .arg(&tar_path)
-        .arg("-C")
-        .arg(tmp_dir.path())
-        .status()
-        .await?;
+    let extract = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        Command::new("tar")
+            .args(["-xzf"])
+            .arg(&tar_path)
+            .arg("-C")
+            .arg(tmp_dir.path())
+            .status(),
+    )
+    .await??;
 
     if !extract.success() {
         anyhow::bail!("Failed to extract archive");
@@ -400,18 +412,27 @@ async fn run_update(args: UpdateArgs) -> Result<()> {
     println!("  Binary: {}", current_exe.display());
 
     println!("Updating shell completions...");
-    let _ = Command::new(&current_exe)
-        .args(["completions", "bash"])
-        .output()
-        .await;
-    let _ = Command::new(&current_exe)
-        .args(["completions", "zsh"])
-        .output()
-        .await;
-    let _ = Command::new(&current_exe)
-        .args(["completions", "fish"])
-        .output()
-        .await;
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        Command::new(&current_exe)
+            .args(["completions", "bash"])
+            .output(),
+    )
+    .await;
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        Command::new(&current_exe)
+            .args(["completions", "zsh"])
+            .output(),
+    )
+    .await;
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        Command::new(&current_exe)
+            .args(["completions", "fish"])
+            .output(),
+    )
+    .await;
 
     println!("Run `omk doctor` to verify the installation.");
     Ok(())

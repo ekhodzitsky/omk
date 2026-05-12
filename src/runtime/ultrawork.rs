@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::process::Command;
 use tracing::{info, warn};
 
@@ -158,11 +159,14 @@ pub async fn run_ultrawork(
 }
 
 async fn run_kimi(prompt: &str, dir: &Path) -> Result<String> {
-    let output = Command::new("kimi")
-        .args(["-p", prompt])
-        .current_dir(dir)
-        .output()
-        .await?;
+    let output = tokio::time::timeout(
+        Duration::from_secs(120),
+        Command::new("kimi")
+            .args(["-p", prompt])
+            .current_dir(dir)
+            .output(),
+    )
+    .await??;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);

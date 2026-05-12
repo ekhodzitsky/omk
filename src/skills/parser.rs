@@ -49,13 +49,9 @@ pub async fn parse_skill(path: &Path) -> Result<Skill> {
 }
 
 fn extract_frontmatter(content: &str) -> Result<(String, String)> {
-    lazy_static::lazy_static! {
-        static ref RE: Regex = Regex::new(
-            r"(?s)^---\s*\n(.*?)\n---\s*\n?(.*)$"
-        ).unwrap();
-    }
+    let re = Regex::new(r"(?s)^---\s*\n(.*?)\n---\s*\n?(.*)$")?;
 
-    if let Some(caps) = RE.captures(content) {
+    if let Some(caps) = re.captures(content) {
         let fm = caps.get(1).map(|m| m.as_str()).unwrap_or("").to_string();
         let body = caps.get(2).map(|m| m.as_str()).unwrap_or("").to_string();
         Ok((fm, body))

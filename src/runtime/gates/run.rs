@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Duration;
 use tokio::process::Command;
 use tracing::{info, warn};
 
@@ -49,6 +50,7 @@ pub async fn run_gates_with_evidence(
             let mut child = match cmd
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
+                .kill_on_drop(true)
                 .spawn()
             {
                 Ok(c) => c,
@@ -118,9 +120,9 @@ pub async fn run_gates_with_evidence(
                 }
             }
         } else {
-            match cmd.output().await {
-                Ok(o) => o,
-                Err(e) => {
+            match tokio::time::timeout(Duration::from_secs(60), cmd.output()).await {
+                Ok(Ok(o)) => o,
+                Ok(Err(e)) => {
                     warn!(gate = %gate.name, error = %e, "Failed to spawn gate command");
                     results.push(make_gate_error(
                         gate,
@@ -128,6 +130,26 @@ pub async fn run_gates_with_evidence(
                         start,
                         &format!("Spawn error: {e}"),
                     ));
+                    continue;
+                }
+                Err(_) => {
+                    let timeout_message = "Timed out after 60s (default)".to_string();
+                    warn!(gate = %gate.name, timeout = 60, "Gate timed out");
+                    results.push(GateResult {
+                        name: gate.name.clone(),
+                        passed: false,
+                        stdout: String::new(),
+                        stderr: timeout_message.clone(),
+                        duration_ms: start.elapsed().as_millis() as u64,
+                        required: gate.required,
+                        command_line: command_line.clone(),
+                        exit_code: None,
+                        timed_out: true,
+                        stdout_summary: None,
+                        stderr_summary: Some(timeout_message),
+                        output_path: None,
+                        timeout_secs: gate.timeout_secs,
+                    });
                     continue;
                 }
             }

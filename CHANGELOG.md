@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refactored `runtime::goal` into a module directory for SRP and AGENTS.md 400-line compliance. No behavior change.
+
+### Fixed
+
+- Replaced `std::sync::Mutex` with `tokio::sync::Mutex` in `runtime::watchdog` to eliminate executor-blocking in async context. Removed associated `.unwrap()` calls.
+- Added `tokio::time::timeout` guards to `git` `Command::output().await` calls in `runtime::goal::evidence` to prevent indefinite hangs.
+- Removed production `.unwrap()` calls from `runtime::worker` and `runtime::scheduler::claim`.
+- Removed production `.expect()` calls from `cli::app` and `vis::server` signal/metrics handlers; errors now log gracefully instead of panicking.
+- Refactored `notifications::webhook` into a module directory for AGENTS.md 400-line compliance. No behavior change.
+- Refactored `cli::kimi_native_cmd` into a module directory for AGENTS.md 400-line compliance. No behavior change.
+- Added `tokio::time::timeout` guards to `Command::output().await` and `Command::status().await` calls across `runtime/` (`ask`, `ralph`, `gates`, `retry`, `ultrawork`, `autopilot`) and `cli/` (`app`, `backup`, `doctor`, `logs`, `skill`) to prevent indefinite hangs from rogue child processes.
+- Verified `runtime::ask` and `runtime::gates::run` `Command::spawn()` calls already carry `.kill_on_drop(true)` — no zombie-process risk.
+
 ## [0.3.7] - 2026-05-12
 
 ### Added

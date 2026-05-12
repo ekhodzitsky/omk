@@ -2,9 +2,9 @@
 #![allow(dead_code)] // API surface for future features (verify_story, story escalation)
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::Result;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use tokio::process::Command;
 use tracing::{error, info, warn};
@@ -15,15 +15,14 @@ use crate::runtime::gates::{
 };
 use crate::runtime::state::{Prd, RalphState, StoryStatus, UserStory};
 
-static WORD_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b\w+\b").unwrap());
-
-fn slugify_task(task: &str) -> String {
-    let words: Vec<&str> = WORD_RE.find_iter(task).map(|m| m.as_str()).collect();
+fn slugify_task(task: &str) -> Result<String> {
+    let word_re = Regex::new(r"\b\w+\b")?;
+    let words: Vec<&str> = word_re.find_iter(task).map(|m| m.as_str()).collect();
     let slug = words[..words.len().min(5)].join("-").to_lowercase();
     if slug.is_empty() {
-        "untitled".to_string()
+        Ok("untitled".to_string())
     } else {
-        slug
+        Ok(slug)
     }
 }
 
@@ -80,11 +79,14 @@ pub fn generate_prd(task: &str) -> Prd {
 
 /// Spawn `kimi -p` and capture its combined output.
 pub async fn run_kimi(prompt: &str, dir: &Path) -> Result<String> {
-    let output = Command::new("kimi")
-        .args(["-p", prompt])
-        .current_dir(dir)
-        .output()
-        .await?;
+    let output = tokio::time::timeout(
+        Duration::from_secs(120),
+        Command::new("kimi")
+            .args(["-p", prompt])
+            .current_dir(dir)
+            .output(),
+    )
+    .await??;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -98,11 +100,14 @@ pub async fn run_kimi(prompt: &str, dir: &Path) -> Result<String> {
 
 /// Run `cargo test` in the given directory and return whether it succeeded.
 pub async fn run_tests(dir: &Path) -> Result<bool> {
-    let output = Command::new("cargo")
-        .args(["test", "--quiet"])
-        .current_dir(dir)
-        .output()
-        .await?;
+    let output = tokio::time::timeout(
+        Duration::from_secs(300),
+        Command::new("cargo")
+            .args(["test", "--quiet"])
+            .current_dir(dir)
+            .output(),
+    )
+    .await??;
 
     Ok(output.status.success())
 }
@@ -113,10 +118,10 @@ fn verify_story(_story: &UserStory, _kimi_output: &str, tests_pass: bool) -> boo
 }
 
 /// Compute the Ralph state directory for a task.
-pub fn state_dir_for(_dir: &Path, task: &str) -> PathBuf {
-    crate::runtime::config::state_dir()
+pub fn state_dir_for(_dir: &Path, task: &str) -> Result<PathBuf> {
+    Ok(crate::runtime::config::state_dir()
         .join("ralph")
-        .join(slugify_task(task))
+        .join(slugify_task(task)?))
 }
 
 /// Run the Ralph persistent loop.
@@ -135,7 +140,7 @@ pub async fn run_ralph(
         _ => None,
     };
     let gate_config = load_or_detect_gates(dir).await;
-    let state_dir = state_dir_for(dir, task);
+    let state_dir = state_dir_for(dir, task)?;
     tokio::fs::create_dir_all(&state_dir).await?;
 
     let mut state = if resume {
@@ -252,7 +257,7 @@ pub async fn run_ralph(
 
                 // Save done contract
                 let mut contract = DoneContract::new(
-                    &format!("ralph-{}", slugify_task(task)),
+                    &format!("ralph-{}", slugify_task(task)?),
                     "ralph",
                     started_at,
                 );
@@ -406,7 +411,7 @@ pub async fn run_ralph(
                 state.save().await?;
                 // Save done contract before bail
                 let mut contract = DoneContract::new(
-                    &format!("ralph-{}", slugify_task(task)),
+                    &format!("ralph-{}", slugify_task(task)?),
                     "ralph",
                     started_at,
                 );
@@ -445,7 +450,7 @@ pub async fn run_ralph(
 
     // Save done contract
     let mut contract = DoneContract::new(
-        &format!("ralph-{}", slugify_task(task)),
+        &format!("ralph-{}", slugify_task(task)?),
         "ralph",
         started_at,
     );
