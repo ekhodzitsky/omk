@@ -27,6 +27,8 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Add `omk goal show [goal-id|latest] --format text|json|md`.
 - [x] Add `omk goal list`.
 - [x] Add `omk goal cancel [goal-id|latest]`.
+- [x] Add `omk goal plan <goal>`.
+- [x] Add `omk goal proof [goal-id|latest] --format text|json|md`.
 - [ ] Add `omk goal pause [goal-id|latest]`.
 - [ ] Add `omk goal resume [goal-id|latest]`.
 - [x] Add command help smoke tests.
@@ -34,22 +36,22 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 ## Phase 3 - Planning Artifacts
 
-- [ ] Generate `prd.md` or `goal-brief.md`.
-- [ ] Generate `technical-plan.md`.
-- [ ] Generate `test-spec.md`.
-- [ ] Generate `task-graph.json`.
+- [x] Generate `prd.md` or `goal-brief.md`.
+- [x] Generate `technical-plan.md`.
+- [x] Generate `test-spec.md`.
+- [x] Generate `task-graph.json`.
 - [ ] Generate `decisions.jsonl`.
-- [ ] Add a planning-only mode.
+- [x] Add a planning-only mode.
 - [ ] Add `blocked_on_human` when success criteria cannot be made testable.
 - [ ] Add tests for greenfield and rewrite planning fixtures.
 
 ## Phase 4 - Task Graph
 
-- [ ] Define task node schema.
-- [ ] Track dependencies.
-- [ ] Track read sets and write sets.
-- [ ] Track risk level.
-- [ ] Track acceptance criteria.
+- [x] Define task node schema.
+- [x] Track dependencies.
+- [x] Track read sets and write sets.
+- [x] Track risk level.
+- [x] Track acceptance criteria.
 - [ ] Track owner role.
 - [ ] Track retries and lease expiration.
 - [ ] Add graph validation.
@@ -70,14 +72,14 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 ## Phase 6 - Verification and Proof
 
-- [ ] Add goal proof model.
+- [x] Add goal proof model.
 - [ ] Capture gate command evidence.
 - [ ] Capture changed files.
 - [ ] Capture commits/branches.
 - [ ] Capture review results.
-- [ ] Capture known gaps.
+- [x] Capture known gaps.
 - [ ] Block `ready` when required gates fail.
-- [ ] Add `omk goal proof [goal-id|latest]`.
+- [x] Add `omk goal proof [goal-id|latest]`.
 - [ ] Add golden proof tests.
 
 ## Phase 7 - Rewrite Oracle

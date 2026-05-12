@@ -37,7 +37,7 @@ engineering runtime" rather than "Devin clone" or "generic agent workflow app."
 ## Current vs Target (L8) Snapshot
 
 - **Current:** Kimi-only execution, scheduler-backed Wire `team run`, run/proof inspection, and Kimi-native asset sync/doctor/rollback.
-- **Current Scaffold:** `omk goal` state core, web HUD, and secondary dashboard/MCP surfaces are present but still hardening.
+- **Current Scaffold:** `omk goal` controller scaffold, web HUD, and secondary dashboard/MCP surfaces are present but still hardening.
 - **Target:** `omk goal` as the proof-first controller that plans, researches, spawns agents, verifies, and stops with a truthful terminal status.
 
 When writing docs or implementation notes, mark maturity explicitly (`Current`, `Current MVP`, `Current Scaffold`, `Next`, `Later`) to avoid mixing shipped behavior with roadmap intent.
@@ -84,7 +84,7 @@ Legacy/no-handshake fallback remains valid when upstream does not support `initi
 | Kimi Wire integration | `src/wire/`, `src/runtime/wire_worker.rs` | `tests/wire_protocol_test.rs`, official Wire docs |
 | Kimi assets and sync | `src/kimi_native/`, `.kimi/` | `tests/kimi_native_test.rs`, Kimi docs |
 | Proof/readiness output | `src/runtime/proof.rs`, `src/cli/proof_cmd.rs` | `tests/proof_cmd_test.rs`, `tests/proof_golden_test.rs` |
-| `omk goal` state and planned controller work | `src/runtime/goal.rs`, `src/cli/goal.rs`, `SPEC.md`, `ROADMAP.md`, `TODO.md` | `tests/goal_cmd_test.rs`, future goal proof tests |
+| `omk goal` controller scaffold and planned execution work | `src/runtime/goal.rs`, `src/cli/goal.rs`, `SPEC.md`, `ROADMAP.md`, `TODO.md` | `tests/goal_cmd_test.rs`, future goal proof tests |
 | HUD or event timeline | `src/vis/`, `src/runtime/events.rs` | `tests/hud_test.rs` |
 | Cost estimates | `src/cost/`, `src/cli/cost_cmd.rs` | cost tests when added |
 | Skills or marketplace | `src/skills/`, `src/marketplace/` | `tests/skill_test.rs`, `tests/marketplace_test.rs` |

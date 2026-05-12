@@ -63,7 +63,7 @@ What is ready enough to use now:
 | Proof reports | Beta MVP: `omk proof show latest`, cached/regenerated proof, Markdown/text/JSON formats. |
 | Verification gates | Ready for local gates and `.omk/gates.toml` customization. |
 | HUD | Text, JSON, and TUI are usable; web dashboard is still scaffold-level. |
-| `omk goal` state core | Current scaffold: creates durable goal state, lists/shows status, writes cancellation failure artifacts. |
+| `omk goal` controller scaffold | Current scaffold: creates durable goal state, planning artifacts, task graph, not-ready proof, and cancellation failure artifacts. |
 | Autopilot, Ralph, Ultrawork | Power-user MVP: useful, but less polished than the Kimi asset + team/proof path. |
 | MCP server, marketplace, web dashboard | Secondary/scaffold surfaces. |
 
@@ -89,12 +89,13 @@ assign tasks, verify results, recover from failures, and stop only with a
 truthful terminal status such as `ready`, `not_ready`, `blocked_on_human`, or
 `needs_more_budget`.
 
-The goal state core is implemented as a scaffold: it creates records under the
-OMK state directory's `goals/` tree and supports list/status/show/cancel. Agent
-execution, planning, verification, and proof generation are still planned. The
-current `team run`, event log, gates, and proof systems remain the execution
-foundation. The design is tracked in [SPEC.md](SPEC.md), the delivery path in
-[ROADMAP.md](ROADMAP.md), and the task backlog in [TODO.md](TODO.md).
+The goal controller scaffold is implemented: it creates records under the OMK
+state directory's `goals/` tree, writes `prd.md`, `technical-plan.md`,
+`test-spec.md`, `task-graph.json`, and an honest `proof.json`, and supports
+list/status/show/proof/cancel. Agent execution and verification gates are still
+planned. The current `team run`, event log, gates, and proof systems remain the
+execution foundation. The design is tracked in [SPEC.md](SPEC.md), the delivery
+path in [ROADMAP.md](ROADMAP.md), and the task backlog in [TODO.md](TODO.md).
 
 ## Positioning
 
@@ -233,14 +234,17 @@ These commands are the main answer to "what actually happened?" after an agent r
 
 ```bash
 omk goal run "fix this repository until tests and proof pass" --until-ready
+omk goal plan "prepare a migration proof plan"
 omk goal list
 omk goal status latest
 omk goal show latest --format json
+omk goal proof latest --format json
 omk goal cancel latest
 ```
 
-`omk goal` currently creates durable goal state and honest not-ready/cancelled
-artifacts. It does not launch agents yet.
+`omk goal` currently creates durable goal state, planning artifacts, a task
+graph, and honest not-ready/cancelled proof artifacts. It does not launch agents
+yet.
 
 ### Power-user modes
 
@@ -265,7 +269,7 @@ These modes are available and useful, but the strongest MVP path today is still:
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
 | HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
 | Cleanup and recovery | Team cleanup, backups, rollback, watchdog events, and interrupted-run failure artifacts. | Current |
-| Goal runtime | Durable goal state, list/status/show/cancel, and cancellation failure artifacts. Planning, agent execution, and proof generation are next. | Current Scaffold |
+| Goal runtime | Durable goal state, plan/run/list/status/show/proof/cancel, planning artifacts, task graph, not-ready proof, and cancellation failure artifacts. Agent execution and gate evidence are next. | Current Scaffold |
 | Autopilot | Single-lead autonomous execution with verification gates and resume/yolo options. | Power-user MVP |
 | Ralph | Persistent verify/fix loop with iteration limits and completion evidence. | Power-user MVP |
 | Ultrawork | Parallel burst prompts from args, files, or globs, with JSON output support. | Power-user MVP |

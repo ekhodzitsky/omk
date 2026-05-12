@@ -23,6 +23,11 @@ pub(crate) enum GoalCommands {
         #[arg(long)]
         max_agents: Option<usize>,
     },
+    /// Create a durable plan/proof scaffold without future execution intent
+    Plan {
+        /// High-level engineering goal
+        goal: String,
+    },
     /// List recorded goals
     List,
     /// Show compact status for a goal
@@ -33,6 +38,18 @@ pub(crate) enum GoalCommands {
     },
     /// Show goal state
     Show {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest")]
+        goal_id: String,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: OutputFormat,
+        /// Output JSON (shortcut for --format json)
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the goal proof artifact
+    Proof {
         /// Goal ID or "latest"
         #[arg(default_value = "latest")]
         goal_id: String,
@@ -76,6 +93,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             )
             .await
         }
+        GoalCommands::Plan { goal } => cmd_plan(&goal).await,
         GoalCommands::List => cmd_list().await,
         GoalCommands::Status { goal_id } => cmd_status(&goal_id).await,
         GoalCommands::Show {
@@ -83,6 +101,11 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             format,
             json,
         } => cmd_show(&goal_id, format, json).await,
+        GoalCommands::Proof {
+            goal_id,
+            format,
+            json,
+        } => cmd_proof(&goal_id, format, json).await,
         GoalCommands::Cancel { goal_id } => cmd_cancel(&goal_id).await,
     }
 }
@@ -92,9 +115,34 @@ async fn cmd_run(goal: &str, options: crate::runtime::goal::CreateGoalOptions) -
 
     println!("Goal scaffold created: {}", state.goal_id);
     println!("Status: {}", state.status);
+    println!("Phase: {}", state.phase);
     println!("State: {}", state.state_dir.display());
-    println!("Note: agent execution is not implemented in this scaffold yet.");
+    println!(
+        "Proof: {}",
+        state
+            .state_dir
+            .join(crate::runtime::goal::GOAL_PROOF_FILE)
+            .display()
+    );
+    println!("Note: agent execution is not implemented in this controller scaffold yet.");
     println!("Next: omk goal show latest");
+    Ok(())
+}
+
+async fn cmd_plan(goal: &str) -> Result<()> {
+    let state = crate::runtime::goal::plan_goal(goal).await?;
+
+    println!("Goal plan created: {}", state.goal_id);
+    println!("Status: {}", state.status);
+    println!("Phase: {}", state.phase);
+    println!("State: {}", state.state_dir.display());
+    println!(
+        "Proof: {}",
+        state
+            .state_dir
+            .join(crate::runtime::goal::GOAL_PROOF_FILE)
+            .display()
+    );
     Ok(())
 }
 
@@ -119,6 +167,7 @@ async fn cmd_status(goal_id: &str) -> Result<()> {
     let goal = crate::runtime::goal::resolve_goal(goal_id).await?;
     println!("Goal status — {}", goal.goal_id);
     println!("Status: {}", goal.status);
+    println!("Phase: {}", goal.phase);
     println!("Goal: {}", goal.original_goal);
     println!("Updated: {}", goal.updated_at);
     Ok(())
@@ -134,12 +183,25 @@ async fn cmd_show(goal_id: &str, format: OutputFormat, json: bool) -> Result<()>
             println!("# Goal {}", goal.goal_id);
             println!();
             println!("- Status: `{}`", goal.status);
+            println!("- Phase: `{}`", goal.phase);
             println!("- Goal: {}", goal.original_goal);
             println!("- State: `{}`", goal.state_dir.display());
+            println!(
+                "- Proof: `{}`",
+                goal.state_dir
+                    .join(crate::runtime::goal::GOAL_PROOF_FILE)
+                    .display()
+            );
+            println!();
+            println!("## Artifacts");
+            for artifact in &goal.artifacts {
+                println!("- `{}`: `{}`", artifact.kind, artifact.path.display());
+            }
         }
         OutputFormat::Text => {
             println!("Goal {}", goal.goal_id);
             println!("Status: {}", goal.status);
+            println!("Phase: {}", goal.phase);
             println!("Goal: {}", goal.original_goal);
             println!("Until ready: {}", goal.until_ready);
             if let Some(budget_time) = &goal.budget_time {
@@ -151,7 +213,56 @@ async fn cmd_show(goal_id: &str, format: OutputFormat, json: bool) -> Result<()>
             if let Some(failure) = &goal.failure {
                 println!("Failure: {}", failure.reason);
             }
+            if !goal.artifacts.is_empty() {
+                println!("Artifacts:");
+                for artifact in &goal.artifacts {
+                    println!("  {}: {}", artifact.kind, artifact.path.display());
+                }
+            }
+            println!(
+                "Proof: {}",
+                goal.state_dir
+                    .join(crate::runtime::goal::GOAL_PROOF_FILE)
+                    .display()
+            );
             println!("State: {}", goal.state_dir.display());
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_proof(goal_id: &str, format: OutputFormat, json: bool) -> Result<()> {
+    let proof = crate::runtime::goal::resolve_goal_proof(goal_id).await?;
+    let output_format = if json { OutputFormat::Json } else { format };
+
+    match output_format {
+        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&proof)?),
+        OutputFormat::Md => {
+            println!("# Goal Proof {}", proof.goal_id);
+            println!();
+            println!("- Status: `{}`", proof.status);
+            println!("- Readiness: {}", proof.readiness);
+            println!("- Tasks: {}", proof.task_graph_summary.total_tasks);
+            if !proof.known_gaps.is_empty() {
+                println!();
+                println!("## Known Gaps");
+                for gap in &proof.known_gaps {
+                    println!("- {gap}");
+                }
+            }
+        }
+        OutputFormat::Text => {
+            println!("Goal proof {}", proof.goal_id);
+            println!("Status: {}", proof.status);
+            println!("Readiness: {}", proof.readiness);
+            println!("Tasks: {}", proof.task_graph_summary.total_tasks);
+            if !proof.known_gaps.is_empty() {
+                println!("Known gaps:");
+                for gap in &proof.known_gaps {
+                    println!("  - {gap}");
+                }
+            }
         }
     }
 

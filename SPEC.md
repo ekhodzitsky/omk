@@ -67,11 +67,15 @@ correct outcome is `blocked_on_human`, not a fake success.
 
 ## Current Foundation
 
-`omk goal` now has a current state-core scaffold, but it should reuse the
+`omk goal` now has a current controller scaffold, but it should reuse the
 current beta MVP instead of inventing a parallel runtime:
 
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
-- `omk goal list/status/show/cancel`;
+- `omk goal plan/run/list/status/show/proof/cancel`;
+- scaffold `prd.md`, `technical-plan.md`, `test-spec.md`, and
+  `task-graph.json`;
+- honest goal-level `proof.json` with `not_ready` status until execution
+  evidence exists;
 - goal-level `events.jsonl`;
 - cancellation `failure.json` artifacts;
 - Kimi-native asset sync, doctor, install, and rollback;
