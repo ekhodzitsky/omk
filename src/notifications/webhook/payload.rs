@@ -1,14 +1,4 @@
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
-
-/// Supported webhook destinations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebhookConfig {
-    pub discord: Option<String>,
-    pub slack: Option<String>,
-    pub telegram: Option<String>,
-}
+use serde::Serialize;
 
 /// Events that trigger notifications.
 #[derive(Debug, Clone, Serialize)]
@@ -65,82 +55,7 @@ pub enum NotificationEvent {
     },
 }
 
-/// Send a notification to all configured webhooks.
-pub async fn send_notification(config: &WebhookConfig, event: &NotificationEvent) {
-    let payload = serde_json::to_string(event).unwrap_or_default();
-
-    if let Some(url) = &config.discord {
-        if let Err(e) = send_discord(url, event).await {
-            warn!(url = %url, error = %e, "Failed to send Discord notification");
-        }
-    }
-
-    if let Some(url) = &config.slack {
-        if let Err(e) = send_slack(url, event).await {
-            warn!(url = %url, error = %e, "Failed to send Slack notification");
-        }
-    }
-
-    if let Some(url) = &config.telegram {
-        if let Err(e) = send_telegram(url, event).await {
-            warn!(url = %url, error = %e, "Failed to send Telegram notification");
-        }
-    }
-
-    debug!(event = %payload, "Notification sent");
-}
-
-async fn send_discord(url: &str, event: &NotificationEvent) -> Result<()> {
-    let (content, embeds) = format_discord(event);
-    let body = serde_json::json!({
-        "content": content,
-        "embeds": embeds,
-    });
-
-    reqwest::Client::new()
-        .post(url)
-        .timeout(std::time::Duration::from_secs(30))
-        .json(&body)
-        .send()
-        .await
-        .context("Discord webhook request failed")?;
-
-    Ok(())
-}
-
-async fn send_slack(url: &str, event: &NotificationEvent) -> Result<()> {
-    let text = format_slack(event);
-    let body = serde_json::json!({ "text": text });
-
-    reqwest::Client::new()
-        .post(url)
-        .timeout(std::time::Duration::from_secs(30))
-        .json(&body)
-        .send()
-        .await
-        .context("Slack webhook request failed")?;
-
-    Ok(())
-}
-
-async fn send_telegram(url: &str, event: &NotificationEvent) -> Result<()> {
-    // Telegram bot API: url is like https://api.telegram.org/bot<token>/sendMessage
-    // with chat_id in the URL or we require the full URL with chat_id query param
-    let text = format_telegram(event);
-    let body = serde_json::json!({ "text": text, "parse_mode": "Markdown" });
-
-    reqwest::Client::new()
-        .post(url)
-        .timeout(std::time::Duration::from_secs(30))
-        .json(&body)
-        .send()
-        .await
-        .context("Telegram webhook request failed")?;
-
-    Ok(())
-}
-
-fn format_discord(event: &NotificationEvent) -> (String, Vec<serde_json::Value>) {
+pub(super) fn format_discord(event: &NotificationEvent) -> (String, Vec<serde_json::Value>) {
     match event {
         NotificationEvent::TeamSpawned {
             name,
@@ -253,7 +168,7 @@ fn format_discord(event: &NotificationEvent) -> (String, Vec<serde_json::Value>)
     }
 }
 
-fn format_slack(event: &NotificationEvent) -> String {
+pub(super) fn format_slack(event: &NotificationEvent) -> String {
     match event {
         NotificationEvent::TeamSpawned {
             name,
@@ -328,7 +243,7 @@ fn format_slack(event: &NotificationEvent) -> String {
     }
 }
 
-fn format_telegram(event: &NotificationEvent) -> String {
+pub(super) fn format_telegram(event: &NotificationEvent) -> String {
     match event {
         NotificationEvent::TeamSpawned {
             name,
