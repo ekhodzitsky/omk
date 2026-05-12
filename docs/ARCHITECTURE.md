@@ -71,7 +71,7 @@ omk CLI (Rust)
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
-| `runtime/goal.rs` | Goal controller scaffold, task graph, local gates, policy-validated bounded agent waves, agent-proposed follow-up tasks, and proof state. |
+| `runtime/goal.rs` | Goal controller scaffold, task graph, local gates, policy-validated bounded agent waves, agent-proposed follow-up dispatch, and proof state. |
 
 ## Data Flow
 
@@ -109,8 +109,11 @@ Current `omk goal` scaffold data flow:
    evidence under `artifacts/agent-runs/`. Workers may return structured
    `OMK_TASK_PROPOSAL: {...}` follow-up work; the controller records
    `agent-task-proposals.json` and appends accepted safe proposals as pending
-   task graph nodes. If the worker changes project files, `execute` reruns
-   gates under `artifacts/gates/post-mutation/` before writing the final proof.
+   task graph nodes. Later `execute` invocations dispatch ready pending
+   follow-ups through `artifacts/agent-runs/goal-agent-followups/` and mark
+   those nodes done or blocked from worker results. If the worker changes
+   project files, `execute` reruns gates under `artifacts/gates/post-mutation/`
+   before writing the final proof.
 9. `omk goal review` writes controller review/security artifacts under
    `artifacts/reviews/` and closes `goal-review` / `goal-security-review`
    when evidence is sufficient.
@@ -131,7 +134,7 @@ specialist review loops, integration acceptance, and ready proof generation.
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, task graph with controller-owned, local verification, policy-validated multi-task Wire agent mutation, accepted agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
+| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, task graph with controller-owned, local verification, policy-validated multi-task Wire agent mutation, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
 
 ## MCP Integration
 

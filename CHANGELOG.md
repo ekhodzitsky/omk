@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-05-12
+
+### Added
+
+- **`omk goal execute` follow-up dispatch**: accepted agent-proposed tasks no longer just sit in `task-graph.json`. A later `goal execute` now selects ready pending executor-owned follow-up tasks, runs them through a separate `goal-agent-followups` Wire wave, records worker/run evidence, and marks the durable graph nodes done or blocked from actual worker results.
+
 ## [0.3.6] - 2026-05-12
 
 ### Added

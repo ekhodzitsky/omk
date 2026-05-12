@@ -803,6 +803,88 @@ fn test_goal_execute_accepts_agent_proposed_task_graph_mutation() {
 }
 
 #[test]
+fn test_goal_execute_dispatches_accepted_agent_followup_on_next_execute() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args([
+            "goal",
+            "run",
+            "Let the controller continue accepted follow-up work",
+        ])
+        .assert()
+        .success();
+
+    let proposal = r#"OMK_TASK_PROPOSAL: {"id":"goal-agent-docs-followup","title":"Document follow-up readiness","description":"Document the remaining readiness follow-up found by the agent wave.","dependencies":["goal-agent-execute"],"read_set":["README.md"],"write_set":["README.md"],"risk":"low","acceptance":["README captures the follow-up readiness gap."],"budget_secs":120}"#;
+    let mut first_execute = omk_cmd(&envs);
+    first_execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WIRE_TEXT_WHEN_CONTAINS", "goal-agent-implement")
+        .env("MOCK_KIMI_WIRE_TEXT", proposal)
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success();
+
+    let mut second_execute = omk_cmd(&envs);
+    second_execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success();
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let goal_dir = &dirs[0];
+    let followup_outbox = goal_dir
+        .join("artifacts/agent-runs/goal-agent-followups/workers/goal-agent-worker-0/outbox.jsonl");
+    let outbox = read_jsonl(&followup_outbox);
+    assert!(outbox
+        .iter()
+        .any(|result| result["task_id"] == "goal-agent-docs-followup"));
+
+    let task_graph: Value = serde_json::from_str(
+        &fs::read_to_string(goal_dir.join("task-graph.json")).expect("missing task graph"),
+    )
+    .expect("task graph should be JSON");
+    let followup = task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|task| task["id"] == "goal-agent-docs-followup")
+        .expect("missing accepted agent-proposed task");
+    assert_eq!(followup["status"], "done");
+    assert!(followup["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|evidence| {
+            evidence["kind"] == "agent_run"
+                && evidence["path"] == "artifacts/agent-runs/goal-agent-followups"
+        }));
+
+    let proof_output = {
+        let mut cmd = omk_cmd(&envs);
+        cmd.current_dir(project.path())
+            .args(["goal", "proof", "latest", "--json"])
+            .output()
+            .expect("omk goal proof failed")
+    };
+    assert!(proof_output.status.success());
+    let proof_json: Value =
+        serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
+    assert_eq!(proof_json["task_graph_summary"]["total_tasks"], 7);
+    assert_eq!(proof_json["task_graph_summary"]["pending_tasks"], 2);
+    assert_eq!(proof_json["task_graph_summary"]["done_tasks"], 5);
+}
+
+#[test]
 fn test_goal_review_records_controller_review_and_security_evidence_after_agent_execution() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");

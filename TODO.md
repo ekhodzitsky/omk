@@ -70,6 +70,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Add controller-proposed multi-task dispatch for `goal-agent-execute`.
 - [x] Allow agents to propose new tasks back to the controller.
 - [x] Validate proposed tasks against policy and per-task budgets.
+- [x] Dispatch accepted agent-proposed follow-up tasks on later `goal execute` invocations.
 - [ ] Enforce max concurrency.
 - [x] Track heartbeat artifacts for the first goal worker wave.
 - [ ] Recover stale tasks.
