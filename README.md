@@ -247,7 +247,9 @@ omk goal cancel latest
 
 `omk goal` currently creates durable goal state, planning artifacts, a task
 graph with controller-owned task evidence, local gate evidence, and honest
-not-ready/cancelled proof artifacts. It does not launch agents yet.
+not-ready/cancelled proof artifacts. Goal proofs also capture best-effort git
+branch, HEAD commit, and dirty-state evidence when run inside a git worktree. It
+does not launch agents yet.
 
 ### Power-user modes
 
@@ -272,7 +274,7 @@ These modes are available and useful, but the strongest MVP path today is still:
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
 | HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
 | Cleanup and recovery | Team cleanup, backups, rollback, watchdog events, and interrupted-run failure artifacts. | Current |
-| Goal runtime | Durable goal state, plan/run/list/status/show/proof/verify/cancel, planning artifacts, task graph with controller-owned task evidence, local gate evidence, not-ready proof, and cancellation failure artifacts. Agent execution is next. | Current Scaffold |
+| Goal runtime | Durable goal state, plan/run/list/status/show/proof/verify/cancel, planning artifacts, task graph with controller-owned task evidence, git evidence, local gate evidence, not-ready proof, and cancellation failure artifacts. Agent execution is next. | Current Scaffold |
 | Autopilot | Single-lead autonomous execution with verification gates and resume/yolo options. | Power-user MVP |
 | Ralph | Persistent verify/fix loop with iteration limits and completion evidence. | Power-user MVP |
 | Ultrawork | Parallel burst prompts from args, files, or globs, with JSON output support. | Power-user MVP |

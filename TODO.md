@@ -76,7 +76,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Add goal proof model.
 - [x] Capture gate command evidence.
 - [x] Capture changed files.
-- [ ] Capture commits/branches.
+- [x] Capture commits/branches.
 - [ ] Capture review results.
 - [x] Capture known gaps.
 - [x] Block `ready` when required gates fail.

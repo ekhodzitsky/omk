@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use tokio::process::Command;
 use uuid::Uuid;
 
 use crate::runtime::events::{
@@ -168,6 +169,13 @@ pub struct GoalTaskGraphSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GoalGitEvidence {
+    pub branch: String,
+    pub head: String,
+    pub dirty: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoalProof {
     pub version: u32,
     pub goal_id: String,
@@ -179,6 +187,8 @@ pub struct GoalProof {
     pub task_graph_summary: GoalTaskGraphSummary,
     pub changed_files: Vec<String>,
     pub commits: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git: Option<GoalGitEvidence>,
     pub gates: Vec<GateResult>,
     pub known_gaps: Vec<String>,
     pub human_decisions_required: Vec<String>,
@@ -335,7 +345,8 @@ async fn run_controller_scaffold(mut state: GoalState) -> Result<GoalState> {
     append_controller_task_events(&state, &task_graph).await?;
 
     state.phase = GoalPhase::Proof;
-    let proof = build_scaffold_proof(&state, &task_graph, now);
+    let git = detect_git_evidence(&cwd).await;
+    let proof = build_scaffold_proof(&state, &task_graph, git, now);
     write_json_artifact(&state.state_dir.join(GOAL_PROOF_FILE), &proof).await?;
     record_artifact(&mut state, "proof", GOAL_PROOF_FILE, now);
 
@@ -418,6 +429,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     let now = Utc::now();
 
     append_gate_events(&state, &gates).await?;
+    let git = detect_git_evidence(project_dir).await;
 
     state.status = GoalStatus::NotReady;
     state.phase = GoalPhase::Proof;
@@ -425,7 +437,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     state.completed_at = Some(now);
     state.save().await?;
 
-    let proof = build_verified_proof(&state, &task_graph, gates, changed_files, now);
+    let proof = build_verified_proof(&state, &task_graph, gates, changed_files, git, now);
     write_json_artifact(&state.state_dir.join(GOAL_PROOF_FILE), &proof).await?;
 
     let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
@@ -690,11 +702,42 @@ fn controller_task_summary(task: &GoalTask) -> String {
     )
 }
 
+async fn detect_git_evidence(project_dir: &Path) -> Option<GoalGitEvidence> {
+    let inside = git_stdout(project_dir, &["rev-parse", "--is-inside-work-tree"]).await?;
+    if inside != "true" {
+        return None;
+    }
+    let branch = git_stdout(project_dir, &["rev-parse", "--abbrev-ref", "HEAD"]).await?;
+    let head = git_stdout(project_dir, &["rev-parse", "HEAD"]).await?;
+    let status = git_stdout(project_dir, &["status", "--porcelain"]).await?;
+
+    Some(GoalGitEvidence {
+        branch,
+        head,
+        dirty: !status.is_empty(),
+    })
+}
+
+async fn git_stdout(project_dir: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(project_dir)
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 fn build_scaffold_proof(
     state: &GoalState,
     task_graph: &GoalTaskGraph,
+    git: Option<GoalGitEvidence>,
     generated_at: DateTime<Utc>,
 ) -> GoalProof {
+    let commits = proof_commits(&git);
     GoalProof {
         version: 1,
         goal_id: state.goal_id.clone(),
@@ -709,7 +752,8 @@ fn build_scaffold_proof(
         artifacts: state.artifacts.clone(),
         task_graph_summary: summarize_task_graph(task_graph),
         changed_files: Vec::new(),
-        commits: Vec::new(),
+        commits,
+        git,
         gates: Vec::new(),
         known_gaps: vec![
             "agent execution is not implemented for omk goal yet".to_string(),
@@ -725,9 +769,11 @@ fn build_verified_proof(
     task_graph: &GoalTaskGraph,
     gates: Vec<GateResult>,
     changed_files: Vec<String>,
+    git: Option<GoalGitEvidence>,
     generated_at: DateTime<Utc>,
 ) -> GoalProof {
     let gates_ok = !gates.is_empty() && gates_passed(&gates);
+    let commits = proof_commits(&git);
     let mut known_gaps = vec![
         "agent execution is not implemented for omk goal yet".to_string(),
         "proof cannot claim readiness until task execution evidence exists".to_string(),
@@ -758,11 +804,18 @@ fn build_verified_proof(
         artifacts: state.artifacts.clone(),
         task_graph_summary: summarize_task_graph(task_graph),
         changed_files,
-        commits: Vec::new(),
+        commits,
+        git,
         gates,
         known_gaps,
         human_decisions_required: Vec::new(),
     }
+}
+
+fn proof_commits(git: &Option<GoalGitEvidence>) -> Vec<String> {
+    git.as_ref()
+        .map(|evidence| vec![evidence.head.clone()])
+        .unwrap_or_default()
 }
 
 async fn append_gate_events(state: &GoalState, gates: &[GateResult]) -> Result<()> {

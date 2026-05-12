@@ -3,6 +3,7 @@ use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command as StdCommand;
 
 fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, PathBuf)>) {
     omk::test_helpers::isolated_xdg_env()
@@ -57,6 +58,23 @@ required = true
         ),
     )
     .expect("failed to write gates.toml");
+}
+
+fn git(project_dir: &std::path::Path, args: &[&str]) -> String {
+    let output = StdCommand::new("git")
+        .arg("-C")
+        .arg(project_dir)
+        .args(args)
+        .output()
+        .expect("failed to run git");
+    assert!(
+        output.status.success(),
+        "git {:?} failed: stdout={} stderr={}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
 #[test]
@@ -345,6 +363,63 @@ fn test_goal_verify_records_required_gate_failure() {
             .as_str()
             .unwrap()
             .contains("required verification gates failed")));
+}
+
+#[test]
+fn test_goal_verify_records_git_evidence() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    git(project.path(), &["init"]);
+    git(project.path(), &["checkout", "-b", "proof-branch"]);
+    fs::write(project.path().join("README.md"), "# tiny\n").expect("failed to write readme");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+    git(project.path(), &["add", "README.md", ".omk/gates.toml"]);
+    git(
+        project.path(),
+        &[
+            "-c",
+            "user.name=OMK Test",
+            "-c",
+            "user.email=omk@example.invalid",
+            "commit",
+            "-m",
+            "init",
+        ],
+    );
+    let head = git(project.path(), &["rev-parse", "HEAD"]);
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args(["goal", "run", "Capture git evidence"])
+        .assert()
+        .success();
+
+    let mut verify = omk_cmd(&envs);
+    verify
+        .current_dir(project.path())
+        .args(["goal", "verify", "latest"])
+        .assert()
+        .success();
+
+    let proof_output = {
+        let mut cmd = omk_cmd(&envs);
+        cmd.current_dir(project.path())
+            .args(["goal", "proof", "latest", "--json"])
+            .output()
+            .expect("omk goal proof failed")
+    };
+    assert!(proof_output.status.success());
+    let proof_json: Value =
+        serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
+    assert_eq!(proof_json["git"]["branch"], "proof-branch");
+    assert_eq!(proof_json["git"]["head"], head);
+    assert_eq!(proof_json["git"]["head"].as_str().unwrap().len(), 40);
+    assert_eq!(proof_json["git"]["dirty"], false);
+    assert!(proof_json["commits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|commit| commit.as_str() == Some(head.as_str())));
 }
 
 #[test]

@@ -80,6 +80,7 @@ current beta MVP instead of inventing a parallel runtime:
   evidence exists;
 - local verification gate execution through `omk goal verify`, with gate output
   artifacts and gate results embedded in the goal proof;
+- best-effort git branch, HEAD commit, and dirty-state capture in goal proofs;
 - goal-level `events.jsonl`;
 - cancellation `failure.json` artifacts;
 - Kimi-native asset sync, doctor, install, and rollback;
@@ -202,6 +203,7 @@ Each goal writes `.omk/goals/<goal-id>/proof.json` with:
 - controller-owned task evidence and remaining pending execution work;
 - changed files;
 - commits or branches produced;
+- current git HEAD, branch, and dirty state when available;
 - gates run and outputs;
 - test results;
 - reviews performed;
