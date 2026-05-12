@@ -41,6 +41,24 @@ fn assert_goal_controller_artifacts(goal_dir: &std::path::Path) {
     assert!(goal_dir.join("proof.json").exists());
 }
 
+fn write_gate_config(project_dir: &std::path::Path, gate_name: &str, script: &str) {
+    let omk_dir = project_dir.join(".omk");
+    fs::create_dir_all(&omk_dir).expect("failed to create .omk dir");
+    fs::write(
+        omk_dir.join("gates.toml"),
+        format!(
+            r#"
+[[gates]]
+name = "{gate_name}"
+command = "/bin/sh"
+args = ["-c", "{script}"]
+required = true
+"#
+        ),
+    )
+    .expect("failed to write gates.toml");
+}
+
 #[test]
 fn test_goal_help_lists_goal_runtime_commands() {
     let (_tmp, envs) = isolated_env();
@@ -53,6 +71,7 @@ fn test_goal_help_lists_goal_runtime_commands() {
         .stdout(predicate::str::contains("run"))
         .stdout(predicate::str::contains("plan"))
         .stdout(predicate::str::contains("proof"))
+        .stdout(predicate::str::contains("verify"))
         .stdout(predicate::str::contains("status"))
         .stdout(predicate::str::contains("cancel"));
 }
@@ -182,6 +201,118 @@ fn test_goal_plan_creates_controller_scaffold_without_execution() {
         .success()
         .stdout(predicate::str::contains("# Goal Proof"))
         .stdout(predicate::str::contains("not_ready"));
+}
+
+#[test]
+fn test_goal_verify_records_passing_gate_evidence_but_stays_not_ready() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args(["goal", "run", "Verify a tiny project"])
+        .assert()
+        .success();
+
+    let mut verify = omk_cmd(&envs);
+    verify
+        .current_dir(project.path())
+        .args(["goal", "verify", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Verification: not_ready"))
+        .stdout(predicate::str::contains("smoke"))
+        .stdout(predicate::str::contains("passed"));
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let gate_artifacts = dirs[0].join("artifacts").join("gates");
+    assert!(gate_artifacts.exists());
+    assert!(fs::read_dir(gate_artifacts)
+        .expect("gate artifacts should be readable")
+        .any(|entry| entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .contains("smoke")));
+
+    let proof_output = {
+        let mut cmd = omk_cmd(&envs);
+        cmd.current_dir(project.path())
+            .args(["goal", "proof", "latest", "--json"])
+            .output()
+            .expect("omk goal proof failed")
+    };
+    assert!(proof_output.status.success());
+    let proof_json: Value =
+        serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
+    assert_eq!(proof_json["status"], "not_ready");
+    assert_eq!(proof_json["gates"].as_array().unwrap().len(), 1);
+    assert_eq!(proof_json["gates"][0]["name"], "smoke");
+    assert_eq!(proof_json["gates"][0]["passed"], true);
+    assert!(!proof_json["known_gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gap| gap
+            .as_str()
+            .unwrap()
+            .contains("verification gates have not run")));
+    assert!(proof_json["known_gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gap| gap
+            .as_str()
+            .unwrap()
+            .contains("agent execution is not implemented")));
+}
+
+#[test]
+fn test_goal_verify_records_required_gate_failure() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-fail >&2; exit 7");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args(["goal", "run", "Verify a failing tiny project"])
+        .assert()
+        .success();
+
+    let mut verify = omk_cmd(&envs);
+    verify
+        .current_dir(project.path())
+        .args(["goal", "verify", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Verification: not_ready"))
+        .stdout(predicate::str::contains("smoke"))
+        .stdout(predicate::str::contains("failed"));
+
+    let proof_output = {
+        let mut cmd = omk_cmd(&envs);
+        cmd.current_dir(project.path())
+            .args(["goal", "proof", "latest", "--json"])
+            .output()
+            .expect("omk goal proof failed")
+    };
+    assert!(proof_output.status.success());
+    let proof_json: Value =
+        serde_json::from_slice(&proof_output.stdout).expect("proof output should be JSON");
+    assert_eq!(proof_json["status"], "not_ready");
+    assert_eq!(proof_json["gates"][0]["name"], "smoke");
+    assert_eq!(proof_json["gates"][0]["passed"], false);
+    assert_eq!(proof_json["gates"][0]["exit_code"], 7);
+    assert!(proof_json["known_gaps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|gap| gap
+            .as_str()
+            .unwrap()
+            .contains("required verification gates failed")));
 }
 
 #[test]

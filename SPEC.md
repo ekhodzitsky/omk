@@ -71,11 +71,13 @@ correct outcome is `blocked_on_human`, not a fake success.
 current beta MVP instead of inventing a parallel runtime:
 
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
-- `omk goal plan/run/list/status/show/proof/cancel`;
+- `omk goal plan/run/list/status/show/proof/verify/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`, and
   `task-graph.json`;
 - honest goal-level `proof.json` with `not_ready` status until execution
   evidence exists;
+- local verification gate execution through `omk goal verify`, with gate output
+  artifacts and gate results embedded in the goal proof;
 - goal-level `events.jsonl`;
 - cancellation `failure.json` artifacts;
 - Kimi-native asset sync, doctor, install, and rollback;
@@ -218,6 +220,7 @@ omk goal pause [goal-id|latest]
 omk goal resume [goal-id|latest]
 omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
+omk goal verify [goal-id|latest]
 ```
 
 Later command surface:

@@ -37,7 +37,7 @@ engineering runtime" rather than "Devin clone" or "generic agent workflow app."
 ## Current vs Target (L8) Snapshot
 
 - **Current:** Kimi-only execution, scheduler-backed Wire `team run`, run/proof inspection, and Kimi-native asset sync/doctor/rollback.
-- **Current Scaffold:** `omk goal` controller scaffold, web HUD, and secondary dashboard/MCP surfaces are present but still hardening.
+- **Current Scaffold:** `omk goal` controller scaffold with local gate evidence, web HUD, and secondary dashboard/MCP surfaces are present but still hardening.
 - **Target:** `omk goal` as the proof-first controller that plans, researches, spawns agents, verifies, and stops with a truthful terminal status.
 
 When writing docs or implementation notes, mark maturity explicitly (`Current`, `Current MVP`, `Current Scaffold`, `Next`, `Later`) to avoid mixing shipped behavior with roadmap intent.

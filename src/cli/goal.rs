@@ -60,6 +60,12 @@ pub(crate) enum GoalCommands {
         #[arg(long)]
         json: bool,
     },
+    /// Run local verification gates and update the goal proof
+    Verify {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest")]
+        goal_id: String,
+    },
     /// Cancel a goal
     Cancel {
         /// Goal ID or "latest"
@@ -106,6 +112,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             format,
             json,
         } => cmd_proof(&goal_id, format, json).await,
+        GoalCommands::Verify { goal_id } => cmd_verify(&goal_id).await,
         GoalCommands::Cancel { goal_id } => cmd_cancel(&goal_id).await,
     }
 }
@@ -266,6 +273,25 @@ async fn cmd_proof(goal_id: &str, format: OutputFormat, json: bool) -> Result<()
         }
     }
 
+    Ok(())
+}
+
+async fn cmd_verify(goal_id: &str) -> Result<()> {
+    let project_dir = std::env::current_dir()?;
+    let proof = crate::runtime::goal::verify_goal(goal_id, &project_dir).await?;
+
+    println!("Verification: {}", proof.status);
+    println!("Readiness: {}", proof.readiness);
+    if proof.gates.is_empty() {
+        println!("Gates: none");
+    } else {
+        println!("Gates:");
+        for gate in &proof.gates {
+            let status = if gate.passed { "passed" } else { "failed" };
+            println!("  {}: {}", gate.name, status);
+        }
+    }
+    println!("Proof: {}", crate::runtime::goal::GOAL_PROOF_FILE);
     Ok(())
 }
 

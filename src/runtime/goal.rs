@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, RunId};
+use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, GateId, RunId};
+use crate::runtime::gates::{
+    detect_changed_files, gates_passed, load_or_detect_gates, run_gates_with_evidence, GateResult,
+};
 
 pub const GOALS_DIR: &str = "goals";
 pub const GOAL_STATE_FILE: &str = "goal.json";
@@ -14,6 +17,8 @@ pub const GOAL_TECHNICAL_PLAN_FILE: &str = "technical-plan.md";
 pub const GOAL_TEST_SPEC_FILE: &str = "test-spec.md";
 pub const GOAL_TASK_GRAPH_FILE: &str = "task-graph.json";
 pub const GOAL_PROOF_FILE: &str = "proof.json";
+pub const GOAL_ARTIFACTS_DIR: &str = "artifacts";
+pub const GOAL_GATE_ARTIFACTS_DIR: &str = "gates";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -126,6 +131,18 @@ pub struct GoalTaskGraph {
     pub tasks: Vec<GoalTask>,
 }
 
+impl GoalTaskGraph {
+    pub async fn load(goal_dir: &Path) -> Result<Self> {
+        let path = goal_dir.join(GOAL_TASK_GRAPH_FILE);
+        let json = tokio::fs::read_to_string(&path)
+            .await
+            .with_context(|| format!("Failed to read goal task graph: {}", path.display()))?;
+        let graph = serde_json::from_str(&json)
+            .with_context(|| format!("Failed to parse goal task graph: {}", path.display()))?;
+        Ok(graph)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoalTaskGraphSummary {
     pub total_tasks: usize,
@@ -146,7 +163,7 @@ pub struct GoalProof {
     pub task_graph_summary: GoalTaskGraphSummary,
     pub changed_files: Vec<String>,
     pub commits: Vec<String>,
-    pub gates: Vec<String>,
+    pub gates: Vec<GateResult>,
     pub known_gaps: Vec<String>,
     pub human_decisions_required: Vec<String>,
 }
@@ -371,6 +388,41 @@ pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
     GoalProof::load(&goal.state_dir).await
 }
 
+pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
+    let mut state = resolve_goal(goal_id).await?;
+    let task_graph = GoalTaskGraph::load(&state.state_dir).await?;
+    let gate_config = load_or_detect_gates(project_dir).await;
+    let gate_artifacts = state
+        .state_dir
+        .join(GOAL_ARTIFACTS_DIR)
+        .join(GOAL_GATE_ARTIFACTS_DIR);
+    let gates = run_gates_with_evidence(&gate_config, project_dir, Some(&gate_artifacts)).await;
+    let changed_files = detect_changed_files(project_dir).await;
+    let now = Utc::now();
+
+    append_gate_events(&state, &gates).await?;
+
+    state.status = GoalStatus::NotReady;
+    state.phase = GoalPhase::Proof;
+    state.updated_at = now;
+    state.completed_at = Some(now);
+    state.save().await?;
+
+    let proof = build_verified_proof(&state, &task_graph, gates, changed_files, now);
+    write_json_artifact(&state.state_dir.join(GOAL_PROOF_FILE), &proof).await?;
+
+    let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
+    let builder = EventBuilder::new(RunId(state.goal_id.clone()));
+    writer
+        .append(&builder.proof_written(
+            &state.state_dir.join(GOAL_PROOF_FILE),
+            &proof.status.to_string(),
+        )?)
+        .await?;
+
+    Ok(proof)
+}
+
 pub async fn cancel_goal(goal_id: &str) -> Result<GoalState> {
     let mut state = resolve_goal(goal_id).await?;
     let now = Utc::now();
@@ -570,6 +622,105 @@ fn build_scaffold_proof(
         ],
         human_decisions_required: Vec::new(),
     }
+}
+
+fn build_verified_proof(
+    state: &GoalState,
+    task_graph: &GoalTaskGraph,
+    gates: Vec<GateResult>,
+    changed_files: Vec<String>,
+    generated_at: DateTime<Utc>,
+) -> GoalProof {
+    let gates_ok = !gates.is_empty() && gates_passed(&gates);
+    let mut known_gaps = vec![
+        "agent execution is not implemented for omk goal yet".to_string(),
+        "proof cannot claim readiness until task execution evidence exists".to_string(),
+    ];
+
+    if gates.is_empty() {
+        known_gaps.push("no verification gates were detected or configured".to_string());
+    } else if !gates_ok {
+        known_gaps.push("required verification gates failed".to_string());
+    }
+
+    GoalProof {
+        version: 1,
+        goal_id: state.goal_id.clone(),
+        status: GoalStatus::NotReady,
+        readiness: if gates_ok {
+            "not ready: verification gates passed, but task execution evidence is missing"
+                .to_string()
+        } else {
+            "not ready: required verification evidence is incomplete or failing".to_string()
+        },
+        summary: format!(
+            "Goal '{}' has {} gate result(s) and remains not ready until execution evidence exists.",
+            state.normalized_goal,
+            gates.len()
+        ),
+        generated_at,
+        artifacts: state.artifacts.clone(),
+        task_graph_summary: summarize_task_graph(task_graph),
+        changed_files,
+        commits: Vec::new(),
+        gates,
+        known_gaps,
+        human_decisions_required: Vec::new(),
+    }
+}
+
+async fn append_gate_events(state: &GoalState, gates: &[GateResult]) -> Result<()> {
+    let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
+    let builder = EventBuilder::new(RunId(state.goal_id.clone()));
+    let mut events = Vec::new();
+
+    for gate in gates {
+        let gate_id = GateId(gate.name.clone());
+        events.push(builder.command_finished(
+            gate_id.clone(),
+            &gate.name,
+            &gate.command_line,
+            gate.exit_code,
+            gate.timed_out,
+            gate.stdout_summary.as_deref(),
+            gate.stderr_summary.as_deref(),
+            gate.output_path.as_deref(),
+        )?);
+
+        let gate_event = if gate.passed {
+            builder.gate_passed_with_evidence(
+                gate_id,
+                &gate.name,
+                gate.required,
+                Some(&gate.command_line),
+                gate.exit_code,
+                gate.timed_out,
+                gate.stdout_summary.as_deref(),
+                gate.stderr_summary.as_deref(),
+                gate.output_path.as_deref(),
+                Some(gate.timeout_secs),
+            )
+        } else {
+            builder.gate_failed_with_evidence(
+                gate_id,
+                &gate.name,
+                gate.required,
+                Some(&gate.command_line),
+                gate.exit_code,
+                gate.timed_out,
+                gate.stdout_summary.as_deref(),
+                gate.stderr_summary.as_deref(),
+                gate.output_path.as_deref(),
+                Some(gate.timeout_secs),
+            )
+        }?;
+        events.push(gate_event);
+    }
+
+    if events.is_empty() {
+        return Ok(());
+    }
+    writer.append_many(&events).await
 }
 
 fn summarize_task_graph(task_graph: &GoalTaskGraph) -> GoalTaskGraphSummary {

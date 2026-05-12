@@ -29,6 +29,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Add `omk goal cancel [goal-id|latest]`.
 - [x] Add `omk goal plan <goal>`.
 - [x] Add `omk goal proof [goal-id|latest] --format text|json|md`.
+- [x] Add `omk goal verify [goal-id|latest]`.
 - [ ] Add `omk goal pause [goal-id|latest]`.
 - [ ] Add `omk goal resume [goal-id|latest]`.
 - [x] Add command help smoke tests.
@@ -73,12 +74,12 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 ## Phase 6 - Verification and Proof
 
 - [x] Add goal proof model.
-- [ ] Capture gate command evidence.
-- [ ] Capture changed files.
+- [x] Capture gate command evidence.
+- [x] Capture changed files.
 - [ ] Capture commits/branches.
 - [ ] Capture review results.
 - [x] Capture known gaps.
-- [ ] Block `ready` when required gates fail.
+- [x] Block `ready` when required gates fail.
 - [x] Add `omk goal proof [goal-id|latest]`.
 - [ ] Add golden proof tests.
 
