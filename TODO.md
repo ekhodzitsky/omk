@@ -68,7 +68,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Reuse scheduler-backed team runner for the first bounded execution task.
 - [x] Capture mutation diff and changed-file evidence from the first execution wave.
 - [x] Add controller-proposed multi-task dispatch for `goal-agent-execute`.
-- [ ] Allow agents to propose new tasks back to the controller.
+- [x] Allow agents to propose new tasks back to the controller.
 - [x] Validate proposed tasks against policy and per-task budgets.
 - [ ] Enforce max concurrency.
 - [x] Track heartbeat artifacts for the first goal worker wave.

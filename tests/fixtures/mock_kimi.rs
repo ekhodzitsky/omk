@@ -223,7 +223,7 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
                 thread::sleep(event_delay);
                 maybe_write_mock_project_file();
 
-                let text = format!("Mock wire response for: {}", preview);
+                let text = mock_wire_response_text(user_input, &preview);
                 emit_event(
                     &mut stdout,
                     "content_part",
@@ -293,6 +293,22 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
             }
         }
     }
+}
+
+fn mock_wire_response_text(user_input: &str, preview: &str) -> String {
+    let default = format!("Mock wire response for: {}", preview);
+    let Ok(extra) = env::var("MOCK_KIMI_WIRE_TEXT") else {
+        return default;
+    };
+    if extra.trim().is_empty() {
+        return default;
+    }
+    if let Ok(needle) = env::var("MOCK_KIMI_WIRE_TEXT_WHEN_CONTAINS") {
+        if !needle.trim().is_empty() && !user_input.contains(&needle) {
+            return default;
+        }
+    }
+    format!("{default}\n{extra}")
 }
 
 fn maybe_write_mock_project_file() {

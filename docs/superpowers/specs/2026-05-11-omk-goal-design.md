@@ -4,8 +4,8 @@ Date: 2026-05-11
 
 Status: design approved; early scaffold implemented with state, planning
 artifacts, gates, git evidence, a policy-validated multi-task Wire-backed
-execution wave with mutation evidence, post-mutation gate reruns, and
-controller review/security evidence.
+execution wave with mutation evidence, accepted agent-proposed follow-up tasks,
+post-mutation gate reruns, and controller review/security evidence.
 
 Related docs:
 
@@ -175,7 +175,9 @@ Current slice: `goal-agent-execute` is internally expanded into bounded
 controller-proposed tasks with per-task budgets. The controller writes
 `task-policy.json`, emits `task_proposed`, `task_accepted`, and
 `task_rejected`, and keeps external publishing disabled for the GitHub-only
-release lane.
+release lane. Workers can also return structured `OMK_TASK_PROPOSAL: {...}`
+follow-up work; the controller writes `agent-task-proposals.json`, applies the
+same validation, and appends accepted safe proposals as pending graph nodes.
 
 ### Verification Wall
 

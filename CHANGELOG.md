@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-05-12
+
+### Added
+
+- **`omk goal execute` agent-proposed tasks**: Wire workers can now return structured `OMK_TASK_PROPOSAL: {...}` follow-up work. The goal controller extracts those proposals, validates them through the same policy/budget/path checks, writes `agent-task-proposals.json`, emits proposal/decision events, and appends accepted safe follow-up tasks to `task-graph.json` as pending graph nodes instead of letting agents mutate the graph directly.
+
 ## [0.3.5] - 2026-05-12
 
 ### Added
