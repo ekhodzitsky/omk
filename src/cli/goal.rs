@@ -66,6 +66,12 @@ pub(crate) enum GoalCommands {
         #[arg(default_value = "latest")]
         goal_id: String,
     },
+    /// Run the current local controller execution step
+    Execute {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest")]
+        goal_id: String,
+    },
     /// Cancel a goal
     Cancel {
         /// Goal ID or "latest"
@@ -113,6 +119,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             json,
         } => cmd_proof(&goal_id, format, json).await,
         GoalCommands::Verify { goal_id } => cmd_verify(&goal_id).await,
+        GoalCommands::Execute { goal_id } => cmd_execute(&goal_id).await,
         GoalCommands::Cancel { goal_id } => cmd_cancel(&goal_id).await,
     }
 }
@@ -293,6 +300,30 @@ async fn cmd_verify(goal_id: &str) -> Result<()> {
     }
     println!("Proof: {}", crate::runtime::goal::GOAL_PROOF_FILE);
     Ok(())
+}
+
+async fn cmd_execute(goal_id: &str) -> Result<()> {
+    let project_dir = std::env::current_dir()?;
+    let proof = crate::runtime::goal::execute_goal(goal_id, &project_dir).await?;
+    let goal = crate::runtime::goal::resolve_goal(goal_id).await?;
+    let task_graph = crate::runtime::goal::GoalTaskGraph::load(&goal.state_dir).await?;
+
+    println!("Execution: {}", proof.status);
+    println!("Readiness: {}", proof.readiness);
+    println!(
+        "Done tasks: {}/{}",
+        proof.task_graph_summary.done_tasks, proof.task_graph_summary.total_tasks
+    );
+    print_task_status(&task_graph, "goal-local-verify");
+    print_task_status(&task_graph, "goal-agent-execute");
+    println!("Proof: {}", crate::runtime::goal::GOAL_PROOF_FILE);
+    Ok(())
+}
+
+fn print_task_status(task_graph: &crate::runtime::goal::GoalTaskGraph, task_id: &str) {
+    if let Some(task) = task_graph.tasks.iter().find(|task| task.id == task_id) {
+        println!("{}: {}", task.id, task.status);
+    }
 }
 
 async fn cmd_cancel(goal_id: &str) -> Result<()> {

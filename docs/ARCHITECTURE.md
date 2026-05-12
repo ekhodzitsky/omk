@@ -93,16 +93,19 @@ Current `omk goal` scaffold data flow:
 2. OMK writes `goals/<goal-id>/goal.json` under the OMK state directory.
 3. OMK writes `prd.md`, `technical-plan.md`, `test-spec.md`, and
    `task-graph.json`.
-4. OMK writes an honest `proof.json` with `not_ready` until execution evidence
-   exists.
+4. OMK writes an honest `proof.json` with `not_ready` until agent execution
+   evidence exists.
 5. OMK marks controller-owned planning tasks as done with artifact evidence and
    writes goal-level task events to `events.jsonl`.
 6. OMK captures best-effort git branch, HEAD commit, dirty-state, and changed
    files for the proof bundle.
 7. `omk goal verify` runs local gates, writes full gate output under
    `artifacts/gates/`, appends gate events, and refreshes `proof.json`.
-8. Operators inspect with `omk goal list/status/show/proof`.
-9. `omk goal cancel` writes `failure.json`.
+8. `omk goal execute` performs the current local controller step, marking
+   `goal-local-verify` done when required gates pass while leaving
+   `goal-agent-execute` pending.
+9. Operators inspect with `omk goal list/status/show/proof`.
+10. `omk goal cancel` writes `failure.json`.
 
 Planned later flow adds execution waves through team/runtime primitives, review
 loops, and ready proof generation.
@@ -118,7 +121,7 @@ loops, and ready proof generation.
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, task graph with controller-owned task evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
+| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, task graph with controller-owned and local verification task evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
 
 ## MCP Integration
 

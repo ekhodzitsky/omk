@@ -30,6 +30,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Add `omk goal plan <goal>`.
 - [x] Add `omk goal proof [goal-id|latest] --format text|json|md`.
 - [x] Add `omk goal verify [goal-id|latest]`.
+- [x] Add `omk goal execute [goal-id|latest]`.
 - [ ] Add `omk goal pause [goal-id|latest]`.
 - [ ] Add `omk goal resume [goal-id|latest]`.
 - [x] Add command help smoke tests.
@@ -62,6 +63,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 ## Phase 5 - Agent Orchestration
 
 - [ ] Implement goal controller loop.
+- [x] Add local controller execution step for verification task evidence.
 - [ ] Reuse scheduler-backed team runner for execution tasks.
 - [ ] Allow agents to propose new tasks.
 - [ ] Validate proposed tasks against policy and budgets.

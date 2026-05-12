@@ -228,6 +228,8 @@ omk goal show [goal-id|latest] [--format text|json|md]
 omk goal list
 omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
+omk goal verify [goal-id|latest]
+omk goal execute [goal-id|latest]
 ```
 
 Later:

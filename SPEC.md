@@ -44,6 +44,8 @@ omk goal run "Build a production-ready CLI for managing local LLM costs" --until
 omk goal run "Rewrite this Python project in Rust" --until-ready --budget-time 7d
 omk goal status
 omk goal show latest
+omk goal verify latest
+omk goal execute latest
 omk goal pause latest
 omk goal resume latest
 omk goal cancel latest
@@ -71,15 +73,18 @@ correct outcome is `blocked_on_human`, not a fake success.
 current beta MVP instead of inventing a parallel runtime:
 
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
-- `omk goal plan/run/list/status/show/proof/verify/cancel`;
+- `omk goal plan/run/list/status/show/proof/verify/execute/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`, and
   `task-graph.json`;
 - controller-owned planning task completion evidence in the task graph and
   goal event log;
-- honest goal-level `proof.json` with `not_ready` status until execution
+- honest goal-level `proof.json` with `not_ready` status until agent execution
   evidence exists;
 - local verification gate execution through `omk goal verify`, with gate output
   artifacts and gate results embedded in the goal proof;
+- local controller execution through `omk goal execute`, which marks the
+  `goal-local-verify` task done when required gates pass while keeping
+  `goal-agent-execute` pending;
 - best-effort git branch, HEAD commit, and dirty-state capture in goal proofs;
 - goal-level `events.jsonl`;
 - cancellation `failure.json` artifacts;
@@ -226,6 +231,7 @@ omk goal resume [goal-id|latest]
 omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
 omk goal verify [goal-id|latest]
+omk goal execute [goal-id|latest]
 ```
 
 Later command surface:

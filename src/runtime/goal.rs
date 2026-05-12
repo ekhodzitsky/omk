@@ -23,6 +23,8 @@ pub const GOAL_PROOF_FILE: &str = "proof.json";
 pub const GOAL_ARTIFACTS_DIR: &str = "artifacts";
 pub const GOAL_GATE_ARTIFACTS_DIR: &str = "gates";
 const GOAL_CONTROLLER_ACTOR: &str = "goal-controller";
+const GOAL_LOCAL_VERIFY_TASK_ID: &str = "goal-local-verify";
+const GOAL_AGENT_EXECUTE_TASK_ID: &str = "goal-agent-execute";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -59,6 +61,7 @@ pub enum GoalPhase {
     Intake,
     Planning,
     Decomposition,
+    Execution,
     VerificationDesign,
     Proof,
 }
@@ -69,6 +72,7 @@ impl std::fmt::Display for GoalPhase {
             GoalPhase::Intake => "intake",
             GoalPhase::Planning => "planning",
             GoalPhase::Decomposition => "decomposition",
+            GoalPhase::Execution => "execution",
             GoalPhase::VerificationDesign => "verification_design",
             GoalPhase::Proof => "proof",
         };
@@ -112,6 +116,17 @@ pub enum GoalTaskStatus {
     Pending,
     Blocked,
     Done,
+}
+
+impl std::fmt::Display for GoalTaskStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            GoalTaskStatus::Pending => "pending",
+            GoalTaskStatus::Blocked => "blocked",
+            GoalTaskStatus::Done => "done",
+        };
+        write!(f, "{value}")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -418,7 +433,7 @@ pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
 
 pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = resolve_goal(goal_id).await?;
-    let task_graph = GoalTaskGraph::load(&state.state_dir).await?;
+    let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
     let gate_config = load_or_detect_gates(project_dir).await;
     let gate_artifacts = state
         .state_dir
@@ -430,6 +445,11 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
 
     append_gate_events(&state, &gates).await?;
     let git = detect_git_evidence(project_dir).await;
+    let updated_task = apply_local_verification_task_result(&mut task_graph, &gates, now);
+    if let Some(task) = &updated_task {
+        append_local_verification_task_events(&state, task).await?;
+    }
+    write_json_artifact(&state.state_dir.join(GOAL_TASK_GRAPH_FILE), &task_graph).await?;
 
     state.status = GoalStatus::NotReady;
     state.phase = GoalPhase::Proof;
@@ -450,6 +470,17 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
         .await?;
 
     Ok(proof)
+}
+
+pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
+    let mut state = resolve_goal(goal_id).await?;
+    state.status = GoalStatus::Running;
+    state.phase = GoalPhase::Execution;
+    state.updated_at = Utc::now();
+    state.completed_at = None;
+    state.save().await?;
+
+    verify_goal(goal_id, project_dir).await
 }
 
 pub async fn cancel_goal(goal_id: &str) -> Result<GoalState> {
@@ -525,9 +556,10 @@ async fn write_technical_plan(state: &GoalState, generated_at: DateTime<Utc>) ->
          2. Planning writes this technical plan and the goal brief.\n\
          3. Decomposition writes a task graph.\n\
          4. Verification design writes a test specification.\n\
-         5. Proof writes an honest not-ready proof until execution is implemented.\n\n\
+         5. Local execution runs verification gates and refreshes proof evidence.\n\
+         6. Proof writes an honest not-ready proof until agent execution is implemented.\n\n\
          ## Execution Boundary\n\n\
-         The current controller records controller-owned planning task evidence but does not launch agents or mutate project files. `omk goal verify` runs local gates as a separate proof step.\n\n\
+         The current controller records planning task evidence and local verification task evidence, but does not launch agents or mutate project files. `omk goal execute` runs the current local controller step; future slices will attach agent-owned implementation evidence.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -555,7 +587,7 @@ async fn write_test_spec(
          ## Scaffold Task Acceptance\n\n\
          {task_lines}\n\n\
          ## Current Status\n\n\
-         `omk goal` remains `not_ready` because controller-owned planning work is recorded, but the agent execution task has not run.\n\n\
+         `omk goal` remains `not_ready` because controller-owned planning and local verification can be recorded, but the agent execution task has not run.\n\n\
          Goal ID: `{}`\n",
         state.goal_id
     );
@@ -626,9 +658,9 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
                 ],
             },
             GoalTask {
-                id: "goal-execute-verify".to_string(),
-                title: "Execute, verify, and prove readiness".to_string(),
-                description: "Run the future task graph through agents, gates, reviews, and proof generation.".to_string(),
+                id: GOAL_LOCAL_VERIFY_TASK_ID.to_string(),
+                title: "Run local verification wall".to_string(),
+                description: "Run configured local gates, capture gate evidence, and refresh the goal proof.".to_string(),
                 status: GoalTaskStatus::Pending,
                 owner_role: None,
                 completed_at: None,
@@ -638,11 +670,38 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
                     GOAL_PRD_FILE.to_string(),
                     GOAL_TECHNICAL_PLAN_FILE.to_string(),
                     GOAL_TEST_SPEC_FILE.to_string(),
+                    ".omk/gates.toml".to_string(),
+                ],
+                write_set: vec![
+                    format!("{GOAL_ARTIFACTS_DIR}/{GOAL_GATE_ARTIFACTS_DIR}"),
+                    GOAL_TASK_GRAPH_FILE.to_string(),
+                    GOAL_PROOF_FILE.to_string(),
+                ],
+                risk: "medium".to_string(),
+                acceptance: vec![
+                    "all required gates pass".to_string(),
+                    "proof cites gate evidence".to_string(),
+                ],
+            },
+            GoalTask {
+                id: GOAL_AGENT_EXECUTE_TASK_ID.to_string(),
+                title: "Execute agent-owned implementation tasks".to_string(),
+                description: "Run future agent work through the task graph, reviews, and integration before readiness can be claimed.".to_string(),
+                status: GoalTaskStatus::Pending,
+                owner_role: None,
+                completed_at: None,
+                evidence: Vec::new(),
+                dependencies: vec![GOAL_LOCAL_VERIFY_TASK_ID.to_string()],
+                read_set: vec![
+                    GOAL_PRD_FILE.to_string(),
+                    GOAL_TECHNICAL_PLAN_FILE.to_string(),
+                    GOAL_TEST_SPEC_FILE.to_string(),
+                    GOAL_TASK_GRAPH_FILE.to_string(),
                 ],
                 write_set: vec![GOAL_PROOF_FILE.to_string()],
                 risk: "high".to_string(),
                 acceptance: vec![
-                    "all required gates pass".to_string(),
+                    "agent execution produces task evidence".to_string(),
                     "proof status becomes ready only with evidence".to_string(),
                 ],
             },
@@ -702,6 +761,88 @@ fn controller_task_summary(task: &GoalTask) -> String {
     )
 }
 
+fn apply_local_verification_task_result(
+    task_graph: &mut GoalTaskGraph,
+    gates: &[GateResult],
+    completed_at: DateTime<Utc>,
+) -> Option<GoalTask> {
+    let gates_ok = !gates.is_empty() && gates_passed(gates);
+    let task = task_graph
+        .tasks
+        .iter_mut()
+        .find(|task| task.id == GOAL_LOCAL_VERIFY_TASK_ID)?;
+
+    task.status = if gates_ok {
+        GoalTaskStatus::Done
+    } else {
+        GoalTaskStatus::Blocked
+    };
+    task.owner_role = Some(GOAL_CONTROLLER_ACTOR.to_string());
+    task.completed_at = gates_ok.then_some(completed_at);
+    task.evidence = local_verification_task_evidence(gates, gates_ok);
+    Some(task.clone())
+}
+
+fn local_verification_task_evidence(gates: &[GateResult], gates_ok: bool) -> Vec<GoalTaskEvidence> {
+    let passed = gates.iter().filter(|gate| gate.passed).count();
+    let gate_summary = if gates_ok {
+        format!(
+            "Local verification passed: {passed}/{} gate(s) succeeded.",
+            gates.len()
+        )
+    } else if gates.is_empty() {
+        "Local verification found no configured gates.".to_string()
+    } else {
+        format!(
+            "Local verification is blocked: {passed}/{} gate(s) succeeded.",
+            gates.len()
+        )
+    };
+
+    vec![
+        GoalTaskEvidence {
+            kind: "gate_artifacts".to_string(),
+            path: PathBuf::from(GOAL_ARTIFACTS_DIR).join(GOAL_GATE_ARTIFACTS_DIR),
+            summary: gate_summary,
+        },
+        GoalTaskEvidence {
+            kind: "proof".to_string(),
+            path: PathBuf::from(GOAL_PROOF_FILE),
+            summary: "Goal proof refreshed from local verification evidence.".to_string(),
+        },
+    ]
+}
+
+async fn append_local_verification_task_events(state: &GoalState, task: &GoalTask) -> Result<()> {
+    let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
+    let builder = EventBuilder::new(RunId(state.goal_id.clone()));
+    let worker_id = WorkerId(GOAL_CONTROLLER_ACTOR.to_string());
+    let task_id = TaskId(task.id.clone());
+    let summary = controller_task_summary(task);
+
+    let started = Event::new(RunId(state.goal_id.clone()), EventKind::TaskStarted)
+        .with_actor(GOAL_CONTROLLER_ACTOR)
+        .with_payload(serde_json::json!({
+            "task_id": task.id,
+            "worker_id": GOAL_CONTROLLER_ACTOR,
+            "title": task.title,
+        }))?;
+
+    let finished = if task.status == GoalTaskStatus::Done {
+        builder.task_completed(task_id, worker_id, Some(&summary))?
+    } else {
+        Event::new(RunId(state.goal_id.clone()), EventKind::TaskFailed)
+            .with_actor(GOAL_CONTROLLER_ACTOR)
+            .with_payload(serde_json::json!({
+                "task_id": task.id,
+                "worker_id": GOAL_CONTROLLER_ACTOR,
+                "summary": summary,
+            }))?
+    };
+
+    writer.append_many(&[started, finished]).await
+}
+
 async fn detect_git_evidence(project_dir: &Path) -> Option<GoalGitEvidence> {
     let inside = git_stdout(project_dir, &["rev-parse", "--is-inside-work-tree"]).await?;
     if inside != "true" {
@@ -745,7 +886,7 @@ fn build_scaffold_proof(
         readiness: "not ready: controller scaffold has not executed agents or verification gates"
             .to_string(),
         summary: format!(
-            "Goal '{}' has durable planning artifacts, but no execution evidence yet.",
+            "Goal '{}' has durable planning artifacts, but no local verification or agent execution evidence yet.",
             state.normalized_goal
         ),
         generated_at,
@@ -758,7 +899,7 @@ fn build_scaffold_proof(
         known_gaps: vec![
             "agent execution is not implemented for omk goal yet".to_string(),
             "verification gates have not run for this goal".to_string(),
-            "proof cannot claim readiness until task execution evidence exists".to_string(),
+            "proof cannot claim readiness until agent-owned execution evidence exists".to_string(),
         ],
         human_decisions_required: Vec::new(),
     }
@@ -776,7 +917,7 @@ fn build_verified_proof(
     let commits = proof_commits(&git);
     let mut known_gaps = vec![
         "agent execution is not implemented for omk goal yet".to_string(),
-        "proof cannot claim readiness until task execution evidence exists".to_string(),
+        "proof cannot claim readiness until agent-owned execution evidence exists".to_string(),
     ];
 
     if gates.is_empty() {
@@ -790,13 +931,13 @@ fn build_verified_proof(
         goal_id: state.goal_id.clone(),
         status: GoalStatus::NotReady,
         readiness: if gates_ok {
-            "not ready: verification gates passed, but task execution evidence is missing"
+            "not ready: verification gates passed, but agent execution evidence is missing"
                 .to_string()
         } else {
             "not ready: required verification evidence is incomplete or failing".to_string()
         },
         summary: format!(
-            "Goal '{}' has {} gate result(s) and remains not ready until execution evidence exists.",
+            "Goal '{}' has {} gate result(s) and remains not ready until agent execution evidence exists.",
             state.normalized_goal,
             gates.len()
         ),
