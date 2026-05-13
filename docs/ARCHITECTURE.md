@@ -109,9 +109,10 @@ Current `omk goal` scaffold data flow:
    evidence under `artifacts/agent-runs/`. Workers may return structured
    `OMK_TASK_PROPOSAL: {...}` follow-up work; the controller records
    `agent-task-proposals.json` and appends accepted safe proposals as pending
-   task graph nodes. Task graphs are validated on load for duplicate ids,
-   missing dependencies, self-dependencies, and dependency cycles before
-   controller execution proceeds. Later `execute` invocations dispatch ready
+   task graph nodes while emitting `task_graph_mutated` events for accepted
+   graph additions. Task graphs are validated on load for duplicate ids, missing
+   dependencies, self-dependencies, and dependency cycles before controller
+   execution proceeds. Later `execute` invocations dispatch ready
    pending follow-ups through `artifacts/agent-runs/goal-agent-followups/`,
    honor the goal `max_agents` cap with a bounded Wire worker pool, recover
    expired task leases with `retry_scheduled` evidence, and mark those nodes
@@ -124,8 +125,8 @@ Current `omk goal` scaffold data flow:
 10. Operators inspect with `omk goal list/status/show/proof`.
 11. `omk goal cancel` writes `failure.json`.
 
-Planned later flow adds graph mutation events, specialist review loops,
-integration acceptance, and ready proof generation.
+Planned later flow adds specialist review loops, integration acceptance, and
+ready proof generation.
 
 ## CLI Surfaces
 

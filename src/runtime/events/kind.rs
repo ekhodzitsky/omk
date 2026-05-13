@@ -69,6 +69,7 @@ pub enum EventKind {
     TaskProposed,
     TaskAccepted,
     TaskRejected,
+    TaskGraphMutated,
     TaskClaimed,
     TaskStarted,
     TaskOutput,
@@ -125,6 +126,16 @@ pub struct TaskCompletedPayload {
     pub task_id: TaskId,
     pub worker_id: WorkerId,
     pub output_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskGraphMutationPayload {
+    pub action: String,
+    pub source: String,
+    pub task_id: TaskId,
+    pub task_graph_path: PathBuf,
+    pub proposal_path: PathBuf,
+    pub total_tasks_after: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -45,7 +45,7 @@ Wire-backed scheduler.
 - `cargo test runtime::goal::task_graph::tests::validate_`
 - `cargo test --test goal_cmd_test`
 
-## Follow-Up
+## Completed Follow-Up
 
-- Persist first-class graph mutation events beyond the current task
-  proposal/accept/reject event stream.
+- [x] Persist first-class graph mutation events beyond the current task
+      proposal/accept/reject event stream.

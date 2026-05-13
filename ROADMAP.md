@@ -31,8 +31,9 @@ Status: current beta MVP.
   verification task evidence, git evidence, policy-validated bounded
   Wire-backed agent waves, accepted follow-up tasks, `max_agents` worker-pool
   caps, stale-lease recovery evidence, load-time task graph validation,
-  mutation diff/changed-file evidence, post-mutation gate reruns, controller
-  review/security evidence, and not-ready proof.
+  first-class graph mutation events, mutation diff/changed-file evidence,
+  post-mutation gate reruns, controller review/security evidence, and not-ready
+  proof.
 - GitHub CI and coverage.
 
 ## Stage 1 - Goal State Core

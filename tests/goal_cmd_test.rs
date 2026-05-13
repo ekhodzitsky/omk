@@ -787,6 +787,16 @@ fn test_goal_execute_accepts_agent_proposed_task_graph_mutation() {
             && event["actor"] == "goal-controller"
             && event["payload"]["task_id"] == "goal-agent-docs-followup"
     }));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "task_graph_mutated"
+            && event["actor"] == "goal-controller"
+            && event["payload"]["action"] == "task_added"
+            && event["payload"]["source"] == "agent_proposal"
+            && event["payload"]["task_id"] == "goal-agent-docs-followup"
+            && event["payload"]["task_graph_path"] == "task-graph.json"
+            && event["payload"]["proposal_path"]
+                == "artifacts/agent-runs/goal-agent-execute/agent-task-proposals.json"
+    }));
 
     let proof_output = {
         let mut cmd = omk_cmd(&envs);

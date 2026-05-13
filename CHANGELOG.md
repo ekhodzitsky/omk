@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-05-13
+
+### Added
+
+- **`omk goal` graph mutation events**: accepted agent-proposed task graph additions now emit first-class `task_graph_mutated` events with the task id, source, artifact paths, and resulting task count, making durable graph changes auditable beyond proposal/acceptance decisions.
+
 ## [0.3.10] - 2026-05-13
 
 ### Added

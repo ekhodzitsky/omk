@@ -334,6 +334,7 @@ pub(crate) async fn apply_agent_proposed_task_mutations(
     .await?;
     append_agent_proposed_task_events(state, evidence, &policy).await?;
 
+    let previous_task_count = task_graph.tasks.len();
     for proposal in &policy.accepted_tasks {
         task_graph.tasks.push(goal_task_from_agent_proposal(
             proposal,
@@ -341,6 +342,7 @@ pub(crate) async fn apply_agent_proposed_task_mutations(
             recorded_at,
         ));
     }
+    append_task_graph_mutation_events(state, evidence, &policy, previous_task_count).await?;
 
     Ok(())
 }
@@ -416,6 +418,37 @@ async fn append_agent_proposed_task_events(
             &decision.task,
             Some(&decision.reason),
         ))?;
+        writer.append(&event).await?;
+    }
+
+    Ok(())
+}
+
+async fn append_task_graph_mutation_events(
+    state: &GoalState,
+    evidence: &GoalAgentRunEvidence,
+    policy: &GoalAgentTaskPolicy,
+    previous_task_count: usize,
+) -> Result<()> {
+    let writer = crate::runtime::events::EventWriter::new(
+        state.state_dir.join(crate::runtime::config::EVENTS_FILE),
+    );
+    let run_id = &evidence.summary.run_id;
+
+    for (index, proposal) in policy.accepted_tasks.iter().enumerate() {
+        let event = crate::runtime::events::Event::new(
+            crate::runtime::events::RunId(run_id.to_string()),
+            crate::runtime::events::EventKind::TaskGraphMutated,
+        )
+        .with_actor(super::state::GOAL_CONTROLLER_ACTOR)
+        .with_payload(crate::runtime::events::TaskGraphMutationPayload {
+            action: "task_added".to_string(),
+            source: "agent_proposal".to_string(),
+            task_id: crate::runtime::events::TaskId(proposal.id.clone()),
+            task_graph_path: PathBuf::from(super::state::GOAL_TASK_GRAPH_FILE),
+            proposal_path: evidence.agent_task_proposals_path.clone(),
+            total_tasks_after: previous_task_count + index + 1,
+        })?;
         writer.append(&event).await?;
     }
 

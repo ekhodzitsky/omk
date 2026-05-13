@@ -347,6 +347,7 @@ fn event_serde_roundtrip_across_kinds_and_actor_shapes() {
         EventKind::TaskProposed,
         EventKind::TaskAccepted,
         EventKind::TaskRejected,
+        EventKind::TaskGraphMutated,
         EventKind::TaskClaimed,
         EventKind::TaskStarted,
         EventKind::TaskOutput,
