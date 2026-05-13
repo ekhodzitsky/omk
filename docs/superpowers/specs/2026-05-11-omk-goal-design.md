@@ -196,6 +196,8 @@ available worker for the recovered task before falling back to the stale owner.
 When an operator pauses or cancels a goal during a Wire-backed wave, the active
 execute process observes durable goal state, cancels workers, prevents any
 additional scheduler dispatch, and preserves the interrupted goal/proof status.
+Replay output is deterministic across separate CLI invocations: `generated_at`
+is derived from persisted event evidence rather than the current process clock.
 Task graphs are validated on load for duplicate ids, missing dependencies,
 self-dependencies, required field presence, and dependency cycles before the
 controller executes them.

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.21] - 2026-05-13
+
+### Added
+
+- **Deterministic `omk goal replay` output**: goal replay now derives `generated_at` from persisted goal event evidence instead of the current process clock, making repeated replay JSON stable across separate CLI invocations for crash-recovery inspection.
+
 ## [0.3.20] - 2026-05-13
 
 ### Added

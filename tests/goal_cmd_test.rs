@@ -1774,6 +1774,55 @@ fn test_goal_replay_reconstructs_timeline_after_restart() {
 }
 
 #[test]
+fn test_goal_replay_json_is_deterministic_after_restart() {
+    let (_tmp, envs) = isolated_env();
+
+    omk_cmd(&envs)
+        .args(["goal", "run", "Replay deterministically after restart"])
+        .assert()
+        .success();
+
+    omk_cmd(&envs)
+        .args(["goal", "pause", "latest"])
+        .assert()
+        .success();
+
+    omk_cmd(&envs)
+        .args(["goal", "resume", "latest"])
+        .assert()
+        .success();
+
+    let first = omk_cmd(&envs)
+        .args(["goal", "replay", "latest", "--json"])
+        .output()
+        .expect("first replay failed");
+    assert!(
+        first.status.success(),
+        "first replay failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
+    thread::sleep(Duration::from_millis(25));
+    let second = omk_cmd(&envs)
+        .args(["goal", "replay", "latest", "--json"])
+        .output()
+        .expect("second replay failed");
+    assert!(
+        second.status.success(),
+        "second replay failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&second.stdout),
+        String::from_utf8_lossy(&second.stderr)
+    );
+
+    let first_json: Value = serde_json::from_slice(&first.stdout).expect("first replay JSON");
+    let second_json: Value = serde_json::from_slice(&second.stdout).expect("second replay JSON");
+    assert_eq!(
+        first_json, second_json,
+        "replay JSON should be stable across separate CLI invocations"
+    );
+}
+
+#[test]
 fn test_goal_budget_records_checkpoints_after_restart() {
     let (tmp, envs) = isolated_env();
     let project = tmp.path().join("project");

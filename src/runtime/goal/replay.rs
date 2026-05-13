@@ -45,13 +45,17 @@ pub async fn replay_goal(goal_id: &str) -> Result<GoalReplay> {
             summary: event_summary(event.payload.as_ref()),
         })
         .collect::<Vec<_>>();
+    let generated_at = timeline
+        .last()
+        .map(|entry| entry.ts)
+        .unwrap_or(state.updated_at);
 
     Ok(GoalReplay {
         version: 1,
         goal_id: state.goal_id,
         status: state.status,
         phase: state.phase,
-        generated_at: Utc::now(),
+        generated_at,
         event_count: timeline.len(),
         task_graph_summary: summarize_task_graph(&task_graph),
         timeline,

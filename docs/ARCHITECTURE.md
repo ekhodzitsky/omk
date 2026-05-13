@@ -71,7 +71,7 @@ omk CLI (Rust)
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
-| `runtime/goal/` | Goal controller scaffold, task graph, local gates, policy-validated bounded agent waves, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, replayable event timelines, budget checkpoints, wall-clock budget enforcement and recovery, and proof state. |
+| `runtime/goal/` | Goal controller scaffold, task graph, local gates, policy-validated bounded agent waves, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, deterministic replayable event timelines, budget checkpoints, wall-clock budget enforcement and recovery, and proof state. |
 
 ## Data Flow
 

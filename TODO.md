@@ -149,7 +149,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [ ] Add notification hooks.
 - [ ] Add stale worker cleanup.
 - [x] Add goal replay.
-- [ ] Harden goal replay into deterministic crash-recovery replay.
+- [x] Harden goal replay into deterministic crash-recovery replay.
 
 ## Documentation Tasks
 

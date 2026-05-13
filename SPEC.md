@@ -110,7 +110,8 @@ current beta MVP instead of inventing a parallel runtime:
   bounded changed-file secret scan finds no high-confidence findings;
 - best-effort git branch, HEAD commit, and dirty-state capture in goal proofs;
 - bounded agent wave evidence under `artifacts/agent-runs/`;
-- goal-level `events.jsonl`;
+- goal-level `events.jsonl` plus deterministic `omk goal replay` output derived
+  from persisted event/task state instead of the current process clock;
 - cancellation `failure.json` artifacts;
 - Kimi-native asset sync, doctor, install, and rollback;
 - scheduler-backed `omk team run`;
