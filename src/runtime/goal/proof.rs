@@ -22,6 +22,8 @@ pub struct GoalProof {
     pub generated_at: DateTime<Utc>,
     pub artifacts: Vec<super::state::GoalArtifact>,
     pub task_graph_summary: GoalTaskGraphSummary,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub review_artifacts: Vec<super::GoalReviewArtifact>,
     pub changed_files: Vec<String>,
     pub commits: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -104,6 +106,7 @@ pub(crate) fn build_scaffold_proof(
         generated_at,
         artifacts: state.artifacts.clone(),
         task_graph_summary: summarize_task_graph(task_graph),
+        review_artifacts: Vec::new(),
         changed_files: Vec::new(),
         commits,
         git,
@@ -136,6 +139,7 @@ pub(crate) fn build_verified_proof(
         .tasks
         .iter()
         .any(|task| task.id == GOAL_SECURITY_REVIEW_TASK_ID && task.status == GoalTaskStatus::Done);
+    let review_artifacts = super::review_artifacts::collect_goal_review_artifacts(task_graph);
     let commits = proof_commits(&git);
     let mut known_gaps = Vec::new();
     if !agent_execution_done {
@@ -149,6 +153,11 @@ pub(crate) fn build_verified_proof(
     }
     if agent_execution_done && !security_review_done {
         known_gaps.push("security review evidence has not run for this goal yet".to_string());
+    }
+    if review_done || security_review_done {
+        known_gaps.extend(super::review_artifacts::missing_review_artifact_gaps(
+            &review_artifacts,
+        ));
     }
     if agent_execution_done && !changed_files.is_empty() && !post_mutation_gates_ran {
         known_gaps
@@ -222,6 +231,7 @@ pub(crate) fn build_verified_proof(
         generated_at,
         artifacts: state.artifacts.clone(),
         task_graph_summary: summarize_task_graph(task_graph),
+        review_artifacts,
         changed_files,
         commits,
         git,

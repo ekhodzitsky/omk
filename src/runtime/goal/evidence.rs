@@ -10,6 +10,7 @@ use super::state::{
     GoalArtifact, GoalState, GOAL_ARTIFACTS_DIR, GOAL_GATE_ARTIFACTS_DIR, GOAL_PROOF_FILE,
 };
 use super::task_graph::GoalTaskEvidence;
+use super::GoalReviewArtifact;
 use crate::runtime::gates::detect_changed_files;
 use crate::runtime::scheduler::runner::RunSummary;
 use crate::runtime::worker::WorkerResult;
@@ -44,8 +45,7 @@ pub(crate) struct GoalAgentRunEvidence {
 pub(crate) struct GoalReviewEvidence {
     pub(crate) review_path: PathBuf,
     pub(crate) security_review_path: PathBuf,
-    pub(crate) review_summary: String,
-    pub(crate) security_summary: String,
+    pub(crate) review_artifacts: Vec<GoalReviewArtifact>,
     pub(crate) security_findings: Vec<String>,
 }
 
