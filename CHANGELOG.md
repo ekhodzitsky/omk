@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.30] - 2026-05-13
+
+### Added
+
+- **Multi-agent Beads/PR workflow**: documented Beads as the durable coordination layer for Codex/Kimi/Claude/human collaboration, locked `master`/`main` as read-only baselines, refreshed the PR template with bead/write-scope/verification fields, and added goal roadmap/spec items for bead-backed PR delivery.
+
+### Changed
+
+- **Generated docs ignore rules**: `.gitignore` now excludes generated documentation/site outputs and coverage reports while keeping source documentation tracked.
+
 ## [0.3.29] - 2026-05-13
 
 ### Added

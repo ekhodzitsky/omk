@@ -4,11 +4,73 @@ Thank you for your interest in contributing! We follow spec-driven development a
 
 ## Development Workflow
 
-1. **Read the spec**: Check `SPEC.md` before implementing.
-2. **Write tests first**: Add tests in `tests/` or inline `#[cfg(test)]` modules.
-3. **Implement**: Make the tests pass.
-4. **Update docs**: If you change behavior, update `README.md`, `SPEC.md`, and `CHANGELOG.md`.
-5. **Run checks**: `make check` (fmt + clippy + test).
+`master` / `main` are read-only. All development goes through a bead-scoped
+branch and a pull request.
+
+1. **Find or create the bead**: use `bd ready --json`, `bd show <id> --long`,
+   or `bd create ...` for new work.
+2. **Claim before editing**: `bd update <id> --claim --json`.
+3. **Create a branch**: use `agent/<bead-id>-<slug>`,
+   `codex/<bead-id>-<slug>`, `kimi/<bead-id>-<slug>`, or
+   `claude/<bead-id>-<slug>`.
+4. **Read the spec**: check `SPEC.md`, `ROADMAP.md`, `TODO.md`, and relevant
+   docs before implementing.
+5. **Write tests first**: add tests in `tests/` or inline `#[cfg(test)]`
+   modules for behavior changes.
+6. **Implement inside the claimed write scope**: if another agent owns the same
+   files, create a dependency or integrator bead instead of racing the edit.
+7. **Update docs**: if behavior changes, update `README.md`, `SPEC.md`,
+   `CHANGELOG.md`, and focused docs in the same PR.
+8. **Run checks**: use the verification wall below.
+9. **Open a PR**: include bead id, write scope, risks, and verification
+   evidence. Close the bead only after the PR is merged or explicitly abandoned.
+
+### Agent Beads Protocol
+
+Use Beads as the project control plane for concurrent agents:
+
+```bash
+bd ready --json
+bd show <id> --long
+bd update <id> --claim --json
+git switch -c agent/<id>-<slug>
+```
+
+If `bd ready` reports that no database exists, do not let an agent initialize
+one silently. A maintainer should choose the storage/sync mode first, for
+example project-local Beads, a Dolt remote, or a protected metadata branch:
+
+```bash
+bd init --branch beads-metadata
+```
+
+During work, add important context to the bead so another agent can resume after
+compaction or handoff. If a blocker appears, mark it in Beads and create a
+dependent bead rather than leaving hidden state in a chat transcript.
+
+### Pull Request Rule
+
+Direct pushes to `master` / `main` are not part of the development workflow.
+Use GitHub branch protection to require PRs, green CI, and review before merge.
+PR branches should be small, reviewable, and tied to one bead or one explicitly
+named group of dependent beads.
+
+## Verification Wall
+
+Before opening a PR for code changes, run:
+
+```bash
+cargo fmt -- --check
+cargo check --all-targets
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+cargo doc --no-deps
+cargo deny --all-features check advisories licenses
+```
+
+For documentation-only changes, at minimum run `cargo fmt -- --check` and
+`git diff --check`; run broader gates when docs describe generated command
+output, public API, or release behavior.
 
 ## Project Structure
 
@@ -29,18 +91,12 @@ src/
   mcp/        # MCP server (scaffolded)
 ```
 
-## Conventional Commits
+## Commit Messages
 
-We use [Conventional Commits](https://www.conventionalcommits.org/):
-
-- `feat:` new feature
-- `fix:` bug fix
-- `docs:` documentation only
-- `test:` adding or correcting tests
-- `refactor:` code change that neither fixes a bug nor adds a feature
-- `chore:` build process or auxiliary tool changes
-- `ci:` CI/CD changes
-- `config:` configuration or path resolution changes
+Use the Lore protocol from `AGENTS.md`: an intent-first subject line plus
+useful git trailers such as `Constraint:`, `Rejected:`, `Confidence:`,
+`Scope-risk:`, `Directive:`, `Tested:`, and `Not-tested:`. Commit messages are
+part of the project memory for future agents.
 
 ## Versioning
 

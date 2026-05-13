@@ -64,6 +64,39 @@ engineering runtime, not as a Devin clone, generic app builder, or IDE chat.
     MCP output, and debug dumps must pass through centralized redaction when
     carrying token/key/secret/auth-like data.
 
+## Multi-Agent Development Protocol (Hard Constraints)
+
+OMK is expected to be edited by multiple agents and humans at the same time
+(Codex, Kimi, Claude, and future `omk goal` workers). Coordination is part of
+correctness, not ceremony.
+
+1. **`master` / `main` are read-only.** Do not commit or push feature work
+   directly to protected base branches. All changes land through PRs.
+2. **One durable task per work item.** Use Beads (`bd`) for any multi-session,
+   multi-agent, or goal-related work. Each PR must reference the bead it closes
+   or advances.
+3. **Do not silently initialize Beads.** If `bd ready` reports that no database
+   exists, stop and ask a maintainer to run `bd init` / configure the Beads
+   remote. Agents may use an existing database; first initialization is a human
+   repository decision.
+4. **Claim before editing.** Start with `bd ready`, inspect with
+   `bd show <id> --long`, then claim with `bd update <id> --claim` before
+   changing files.
+5. **One owner per bead.** If another agent has claimed the bead, do not edit
+   its scope. Add a note, create a dependent bead, or ask for handoff.
+6. **Branches are bead-scoped.** Use branch names such as
+   `agent/<bead-id>-<slug>`, `codex/<bead-id>-<slug>`,
+   `kimi/<bead-id>-<slug>`, or `claude/<bead-id>-<slug>`.
+7. **Write scopes are explicit.** The bead or PR must list owned files/modules.
+   If two agents need overlapping files, serialize with dependencies or create
+   an integrator bead.
+8. **PRs carry evidence.** PR bodies must include bead id, scope, risks, and
+   verification output. A bead is closed only after merge or an explicit
+   not-planned decision.
+9. **Goal workers inherit the same rule.** Future `omk goal` execution must
+   create/claim beads or sub-beads for accepted tasks and deliver through PRs
+   before treating repository changes as integrated.
+
 ## Rust Safety Rules (Hard Constraints)
 
 These rules apply to **new or modified production code** under `src/` (outside
