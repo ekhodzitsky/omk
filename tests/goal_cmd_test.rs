@@ -322,6 +322,11 @@ fn test_goal_run_writes_task_graph_and_not_ready_proof() {
     .expect("task graph should be JSON");
     assert!(task_graph["goal_id"].as_str().unwrap().starts_with("goal-"));
     assert_eq!(task_graph["tasks"].as_array().unwrap().len(), 6);
+    for task in task_graph["tasks"].as_array().unwrap() {
+        assert_eq!(task["retry_count"], 0);
+        assert_eq!(task["max_retries"], 0);
+        assert!(task["lease_expires_at"].is_null());
+    }
     assert_eq!(task_graph["tasks"][0]["id"], "goal-intake");
     assert_eq!(task_graph["tasks"][0]["status"], "done");
     assert_eq!(task_graph["tasks"][0]["owner_role"], "goal-controller");
@@ -1352,6 +1357,9 @@ fn test_goal_pause_interrupts_active_agent_execution() {
         .find(|task| task["id"] == "goal-agent-execute")
         .expect("missing goal-agent-execute task");
     assert_eq!(agent_task["status"], "blocked");
+    assert_eq!(agent_task["retry_count"], 1);
+    assert_eq!(agent_task["max_retries"], 0);
+    assert!(agent_task["lease_expires_at"].is_null());
     assert!(agent_task["evidence"]
         .as_array()
         .unwrap()

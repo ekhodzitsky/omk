@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.28] - 2026-05-13
+
+### Added
+
+- **`omk goal` task retry/lease metadata**: durable `task-graph.json` nodes now carry `retry_count`, `max_retries`, and `lease_expires_at` fields, load older graphs with safe defaults, and increment retry evidence when a Wire-backed goal task wave blocks.
+
 ## [0.3.27] - 2026-05-13
 
 ### Fixed

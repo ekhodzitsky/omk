@@ -83,6 +83,8 @@ current beta MVP instead of inventing a parallel runtime:
   `task-graph.json`, and `decisions.jsonl`;
 - controller-owned planning task completion evidence in the task graph and
   goal event log;
+- durable task graph retry/lease metadata through `retry_count`, `max_retries`,
+  and `lease_expires_at`, with backward-compatible defaults for older graphs;
 - controller-owned decision records in `decisions.jsonl` for planning,
   decomposition, and execution-boundary rationale;
 - honest goal-level `proof.json` with `not_ready` status until execution,
@@ -184,8 +186,9 @@ Every goal run ends in exactly one terminal status:
 - Produce a PRD or goal brief.
 - Produce a technical plan.
 - Produce a test specification.
-- Build a task graph with dependencies, read sets, write sets, risk level, and
-  acceptance criteria for each task.
+- Build a task graph with dependencies, read sets, write sets, risk level,
+  acceptance criteria, retry counts, retry policy, and lease expiration for
+  each task.
 - Identify the oracle that will decide whether the goal is done.
 - Stop early with `blocked_on_human` if the oracle cannot be defined.
 

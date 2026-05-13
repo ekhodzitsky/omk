@@ -71,7 +71,7 @@ omk CLI (Rust)
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
-| `runtime/goal/` | Goal controller scaffold, backward-compatible goal state loading, task graph, local gates, policy-validated bounded agent waves with per-task budget hard stops, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, deterministic replayable event timelines, budget checkpoints, wall-clock/token/cost budget enforcement and recovery, and proof state. |
+| `runtime/goal/` | Goal controller scaffold, backward-compatible goal state loading, task graph with retry/lease metadata, local gates, policy-validated bounded agent waves with per-task budget hard stops, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, deterministic replayable event timelines, budget checkpoints, wall-clock/token/cost budget enforcement and recovery, and proof state. |
 
 ## Data Flow
 
@@ -115,7 +115,9 @@ Current `omk goal` scaffold data flow:
    `OMK_TASK_PROPOSAL: {...}` follow-up work; the controller records
    `agent-task-proposals.json` and appends accepted safe proposals as pending
    task graph nodes while emitting `task_graph_mutated` events for accepted
-   graph additions. Agent-proposed follow-ups that share a write path,
+   graph additions. Durable task graph nodes carry `retry_count`,
+   `max_retries`, and `lease_expires_at`, defaulting safely for older persisted
+   graphs. Agent-proposed follow-ups that share a write path,
    normalized alias path, parent/child path, or read/write-overlapping path must
    declare dependency ordering; unordered access conflicts are rejected with
    policy evidence before they can mutate the graph. Task graphs are validated
@@ -153,7 +155,7 @@ ready proof generation.
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, validated task graph with controller-owned, local verification, policy-validated multi-task Wire agent mutation, path-normalized dependency-ordered read/write access conflict policy, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
+| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, validated task graph with controller-owned, local verification, retry/lease metadata, policy-validated multi-task Wire agent mutation, path-normalized dependency-ordered read/write access conflict policy, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
 
 ## MCP Integration
 

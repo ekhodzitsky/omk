@@ -47,6 +47,12 @@ pub struct GoalTask {
     pub completed_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub evidence: Vec<GoalTaskEvidence>,
+    #[serde(default)]
+    pub retry_count: u32,
+    #[serde(default)]
+    pub max_retries: u32,
+    #[serde(default)]
+    pub lease_expires_at: Option<DateTime<Utc>>,
     pub dependencies: Vec<String>,
     pub read_set: Vec<String>,
     pub write_set: Vec<String>,
@@ -272,6 +278,7 @@ pub(crate) fn apply_agent_execution_task_result(
     };
     task.owner_role = Some(GOAL_AGENT_WORKER_ROLE.to_string());
     task.completed_at = success.then_some(completed_at);
+    record_goal_task_attempt_result(task, success);
     task.evidence = super::evidence::agent_execution_task_evidence(evidence, success);
     Some(task.clone())
 }
@@ -306,7 +313,15 @@ pub(crate) fn apply_agent_followup_task_results(
             GoalTaskStatus::Blocked
         };
         task.completed_at = success.then_some(completed_at);
+        record_goal_task_attempt_result(task, success);
         task.evidence = super::evidence::agent_followup_task_evidence(evidence, result, success);
+    }
+}
+
+fn record_goal_task_attempt_result(task: &mut GoalTask, success: bool) {
+    task.lease_expires_at = None;
+    if !success {
+        task.retry_count = task.retry_count.saturating_add(1);
     }
 }
 
@@ -367,6 +382,9 @@ fn goal_task_from_agent_proposal(
                 proposal.title
             ),
         }],
+        retry_count: 0,
+        max_retries: 0,
+        lease_expires_at: None,
         dependencies: proposal.dependencies.clone(),
         read_set: proposal.read_set.clone(),
         write_set: proposal.write_set.clone(),
@@ -468,6 +486,9 @@ mod tests {
             owner_role: None,
             completed_at: None,
             evidence: Vec::new(),
+            retry_count: 0,
+            max_retries: 0,
+            lease_expires_at: None,
             dependencies: dependencies
                 .iter()
                 .map(|dependency| dependency.to_string())
@@ -541,5 +562,42 @@ mod tests {
                 .contains("task graph contains a dependency cycle"),
             "{err}"
         );
+    }
+
+    #[tokio::test]
+    async fn load_defaults_retry_and_lease_metadata_for_legacy_graph() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let graph_json = serde_json::json!({
+            "version": 1,
+            "goal_id": "goal-test",
+            "generated_at": Utc::now(),
+            "tasks": [
+                {
+                    "id": "goal-intake",
+                    "title": "Task goal-intake",
+                    "description": "Task goal-intake description",
+                    "status": "pending",
+                    "dependencies": [],
+                    "read_set": [],
+                    "write_set": [],
+                    "risk": "low",
+                    "acceptance": ["Task goal-intake acceptance"]
+                }
+            ]
+        });
+        tokio::fs::write(
+            tmp.path().join(GOAL_TASK_GRAPH_FILE),
+            serde_json::to_vec_pretty(&graph_json).expect("json"),
+        )
+        .await
+        .expect("write legacy graph");
+
+        let graph = GoalTaskGraph::load(tmp.path())
+            .await
+            .expect("legacy graph should load");
+
+        assert_eq!(graph.tasks[0].retry_count, 0);
+        assert_eq!(graph.tasks[0].max_retries, 0);
+        assert!(graph.tasks[0].lease_expires_at.is_none());
     }
 }
