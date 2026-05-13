@@ -156,7 +156,7 @@ Target: let goals run for days safely.
 
 - Harden pause/resume across active worker interruption and machine restarts.
 - Harden goal replay into deterministic crash-recovery replay.
-- Harden token/cost budget sources and hard stops beyond the current wall-clock `--budget-time` guard.
+- Harden token/cost budget sources and hard stops beyond the current wall-clock `--budget-time` guard and `budget-add` recovery path.
 - Add crash recovery tests.
 - Add stale agent cleanup.
 - Add operator notifications.

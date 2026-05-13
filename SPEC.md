@@ -76,7 +76,7 @@ correct outcome is `blocked_on_human`, not a fake success.
 current beta MVP instead of inventing a parallel runtime:
 
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
-- `omk goal plan/run/list/status/show/proof/replay/budget/verify/execute/review/pause/resume/cancel`;
+- `omk goal plan/run/list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`, and
   `task-graph.json`;
 - controller-owned planning task completion evidence in the task graph and
@@ -130,7 +130,7 @@ Every goal run ends in exactly one terminal status:
 | `not_ready` | Work was attempted, but required proof or gates did not pass. |
 | `blocked_on_human` | A human decision is required before progress can continue safely. |
 | `blocked_on_external` | External access, credentials, APIs, or services are missing. |
-| `needs_more_budget` | Time, token, cost, or compute budget was exhausted. Current runtime enforces exhausted wall-clock `--budget-time` before `verify`, `execute`, or `review`; token/cost sources are next. |
+| `needs_more_budget` | Time, token, cost, or compute budget was exhausted. Current runtime enforces exhausted wall-clock `--budget-time` before `verify`, `execute`, or `review`; `omk goal budget-add` records operator-approved recovery. Token/cost sources are next. |
 | `failed_infra` | OMK infrastructure failed in a way the run could not recover from. |
 | `cancelled` | User cancelled the goal. |
 
@@ -252,6 +252,7 @@ omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
 omk goal replay [goal-id|latest] [--format text|json|md]
 omk goal budget [goal-id|latest] [--format text|json|md]
+omk goal budget-add [goal-id|latest] --time <duration>
 omk goal verify [goal-id|latest]
 omk goal execute [goal-id|latest]
 omk goal review [goal-id|latest]

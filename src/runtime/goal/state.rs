@@ -252,6 +252,22 @@ pub(crate) fn parse_goal_duration_secs(value: &str) -> Option<u64> {
     number.trim().parse::<u64>().ok()?.checked_mul(multiplier)
 }
 
+pub(crate) fn format_goal_duration_secs(secs: u64) -> String {
+    const MINUTE: u64 = 60;
+    const HOUR: u64 = 60 * MINUTE;
+    const DAY: u64 = 24 * HOUR;
+
+    if secs != 0 && secs % DAY == 0 {
+        format!("{}d", secs / DAY)
+    } else if secs != 0 && secs % HOUR == 0 {
+        format!("{}h", secs / HOUR)
+    } else if secs != 0 && secs % MINUTE == 0 {
+        format!("{}m", secs / MINUTE)
+    } else {
+        format!("{secs}s")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,5 +293,14 @@ mod tests {
     #[test]
     fn normalize_goal_collapses_whitespace() {
         assert_eq!(normalize_goal("  ship   it\nwell  "), "ship it well");
+    }
+
+    #[test]
+    fn goal_duration_formats_to_stable_compact_units() {
+        assert_eq!(format_goal_duration_secs(0), "0s");
+        assert_eq!(format_goal_duration_secs(59), "59s");
+        assert_eq!(format_goal_duration_secs(60), "1m");
+        assert_eq!(format_goal_duration_secs(3_600), "1h");
+        assert_eq!(format_goal_duration_secs(86_400), "1d");
     }
 }

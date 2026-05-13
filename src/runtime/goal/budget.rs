@@ -1,11 +1,11 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use super::state::{
-    parse_goal_duration_secs, GoalPhase, GoalState, GoalStatus, GOAL_BUDGET_CHECKPOINTS_FILE,
-    GOAL_CONTROLLER_ACTOR,
+    format_goal_duration_secs, parse_goal_duration_secs, GoalPhase, GoalState, GoalStatus,
+    GOAL_BUDGET_CHECKPOINTS_FILE, GOAL_CONTROLLER_ACTOR,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +54,19 @@ struct GoalBudgetExhaustedEvent {
     pub remaining_budget_secs: Option<u64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GoalBudgetExtendedEvent {
+    previous_budget_time: Option<String>,
+    added_budget_time: String,
+    added_budget_secs: u64,
+    new_budget_time: String,
+    new_total_budget_secs: u64,
+    elapsed_since_created_secs: u64,
+    status: GoalStatus,
+    phase: GoalPhase,
+    recorded_at: DateTime<Utc>,
+}
+
 pub async fn goal_budget(goal_id: &str) -> Result<GoalBudgetReport> {
     let state = super::resolve_goal(goal_id).await?;
     let checkpoints = read_budget_checkpoints(&state).await?;
@@ -69,6 +82,62 @@ pub async fn goal_budget(goal_id: &str) -> Result<GoalBudgetReport> {
         latest: checkpoints.last().cloned(),
         checkpoints,
     })
+}
+
+pub async fn add_goal_budget(goal_id: &str, added_budget_time: &str) -> Result<GoalState> {
+    let mut state = super::resolve_goal(goal_id).await?;
+    if matches!(state.status, GoalStatus::Ready | GoalStatus::Cancelled) {
+        anyhow::bail!(
+            "Goal '{}' is terminal ({}) and cannot receive more budget",
+            state.goal_id,
+            state.status
+        );
+    }
+    let added_budget_secs = parse_goal_duration_secs(added_budget_time)
+        .filter(|secs| *secs > 0)
+        .with_context(|| format!("Invalid budget duration: {added_budget_time}"))?;
+    let now = Utc::now();
+    let elapsed_since_created_secs = now
+        .signed_duration_since(state.created_at)
+        .num_seconds()
+        .max(0) as u64;
+    let current_total_budget_secs = state
+        .budget_time
+        .as_deref()
+        .and_then(parse_goal_duration_secs)
+        .unwrap_or(elapsed_since_created_secs);
+    let new_total_budget_secs = current_total_budget_secs
+        .max(elapsed_since_created_secs)
+        .checked_add(added_budget_secs)
+        .context("Goal budget duration overflowed")?;
+    let previous_budget_time = state.budget_time.clone();
+    let new_budget_time = format_goal_duration_secs(new_total_budget_secs);
+
+    state.budget_time = Some(new_budget_time.clone());
+    if state.status == GoalStatus::NeedsMoreBudget {
+        state.status = GoalStatus::NotReady;
+        state.completed_at = None;
+    }
+    state.updated_at = now;
+    state.save().await?;
+
+    append_budget_extended_event(
+        &state,
+        &GoalBudgetExtendedEvent {
+            previous_budget_time,
+            added_budget_time: added_budget_time.to_string(),
+            added_budget_secs,
+            new_budget_time,
+            new_total_budget_secs,
+            elapsed_since_created_secs,
+            status: state.status,
+            phase: state.phase,
+            recorded_at: now,
+        },
+    )
+    .await?;
+    append_budget_checkpoint(&state, "budget_extended").await?;
+    Ok(state)
 }
 
 pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str) -> Result<()> {
@@ -127,6 +196,22 @@ pub(crate) async fn append_budget_checkpoint(
     crate::runtime::atomic::atomic_append(&budget_checkpoints_path(state), &content).await?;
     append_budget_checkpoint_event(state, &checkpoint).await?;
     Ok(checkpoint)
+}
+
+async fn append_budget_extended_event(
+    state: &GoalState,
+    payload: &GoalBudgetExtendedEvent,
+) -> Result<()> {
+    let writer = crate::runtime::events::EventWriter::new(
+        state.state_dir.join(crate::runtime::config::EVENTS_FILE),
+    );
+    let event = crate::runtime::events::Event::new(
+        crate::runtime::events::RunId(state.goal_id.clone()),
+        crate::runtime::events::EventKind::GoalBudgetExtended,
+    )
+    .with_actor(GOAL_CONTROLLER_ACTOR)
+    .with_payload(payload)?;
+    writer.append(&event).await
 }
 
 async fn append_budget_exhausted_event(

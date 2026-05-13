@@ -14,7 +14,7 @@ mod task_graph;
 mod verifier;
 
 // Public API re-exports (preserved for backward compatibility)
-pub use budget::{goal_budget, GoalBudgetCheckpoint, GoalBudgetReport};
+pub use budget::{add_goal_budget, goal_budget, GoalBudgetCheckpoint, GoalBudgetReport};
 pub use evidence::GoalGitEvidence;
 pub use proof::GoalProof;
 pub use replay::{replay_goal, GoalReplay, GoalReplayEntry};

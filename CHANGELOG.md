@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.19] - 2026-05-13
+
+### Added
+
+- **`omk goal budget-add` recovery path**: operators can now add wall-clock budget to a goal, move `needs_more_budget` goals back to `not_ready`, persist `budget_extended` checkpoints, and emit `goal_budget_extended` events so budget-stop recovery is durable and replayable.
+
 ## [0.3.18] - 2026-05-13
 
 ### Added

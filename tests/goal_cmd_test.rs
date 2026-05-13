@@ -107,6 +107,7 @@ fn test_goal_help_lists_goal_runtime_commands() {
         .stdout(predicate::str::contains("review"))
         .stdout(predicate::str::contains("status"))
         .stdout(predicate::str::contains("budget"))
+        .stdout(predicate::str::contains("budget-add"))
         .stdout(predicate::str::contains("pause"))
         .stdout(predicate::str::contains("resume"))
         .stdout(predicate::str::contains("replay"))
@@ -1782,4 +1783,89 @@ fn test_goal_verify_stops_when_wall_clock_budget_is_exhausted() {
     assert!(events
         .iter()
         .any(|event| event["kind"] == "goal_budget_exhausted"));
+}
+
+#[test]
+fn test_goal_budget_add_allows_needs_more_budget_goal_to_continue() {
+    let (tmp, envs) = isolated_env();
+    let project = tmp.path().join("project");
+    fs::create_dir_all(&project).expect("failed to create project dir");
+    write_gate_config(&project, "runs-after-budget-add", "touch budget-gate-ran");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(&project)
+        .args([
+            "goal",
+            "run",
+            "Continue after an operator adds more budget",
+            "--budget-time",
+            "0s",
+        ])
+        .assert()
+        .success();
+
+    let mut exhausted_verify = omk_cmd(&envs);
+    exhausted_verify
+        .current_dir(&project)
+        .args(["goal", "verify", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs more budget"));
+    assert!(
+        !project.join("budget-gate-ran").exists(),
+        "exhausted budget should stop before gates"
+    );
+
+    let mut add_budget = omk_cmd(&envs);
+    add_budget
+        .current_dir(&project)
+        .args(["goal", "budget-add", "latest", "--time", "1h"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Budget added"))
+        .stdout(predicate::str::contains("not_ready"))
+        .stdout(predicate::str::contains("1h"));
+
+    let mut resumed_verify = omk_cmd(&envs);
+    resumed_verify
+        .current_dir(&project)
+        .args(["goal", "verify", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("runs-after-budget-add: passed"));
+    assert!(
+        project.join("budget-gate-ran").exists(),
+        "budget-add should let verify spend gates again"
+    );
+
+    let mut show = omk_cmd(&envs);
+    let show_output = show
+        .current_dir(&project)
+        .args(["goal", "show", "latest", "--json"])
+        .output()
+        .expect("omk goal show failed");
+    assert!(
+        show_output.status.success(),
+        "show failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&show_output.stdout),
+        String::from_utf8_lossy(&show_output.stderr)
+    );
+    let show_json: Value =
+        serde_json::from_slice(&show_output.stdout).expect("show output should be JSON");
+    assert_eq!(show_json["status"], "not_ready");
+    assert_eq!(show_json["budget_time"], "1h");
+
+    let dirs = goal_dirs(&envs);
+    let checkpoints = read_jsonl(&dirs[0].join("budget-checkpoints.jsonl"));
+    assert!(checkpoints
+        .iter()
+        .any(|checkpoint| checkpoint["label"] == "budget_extended"));
+    assert!(checkpoints
+        .iter()
+        .any(|checkpoint| checkpoint["label"] == "verify_completed"));
+
+    let events = read_jsonl(&dirs[0].join("events.jsonl"));
+    assert!(events
+        .iter()
+        .any(|event| event["kind"] == "goal_budget_extended"));
 }

@@ -84,6 +84,15 @@ pub(crate) enum GoalCommands {
         #[arg(long)]
         json: bool,
     },
+    /// Add wall-clock budget to a goal
+    BudgetAdd {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest")]
+        goal_id: String,
+        /// Duration to add, for example 1h or 30m
+        #[arg(long, value_name = "DURATION")]
+        time: String,
+    },
     /// Run local verification gates and update the goal proof
     Verify {
         /// Goal ID or "latest"
@@ -170,6 +179,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             format,
             json,
         } => cmd_budget(&goal_id, format, json).await,
+        GoalCommands::BudgetAdd { goal_id, time } => cmd_budget_add(&goal_id, &time).await,
         GoalCommands::Verify { goal_id } => cmd_verify(&goal_id).await,
         GoalCommands::Execute { goal_id } => cmd_execute(&goal_id).await,
         GoalCommands::Review { goal_id } => cmd_review(&goal_id).await,
@@ -378,6 +388,18 @@ async fn cmd_budget(goal_id: &str, format: OutputFormat, json: bool) -> Result<(
         }
     }
 
+    Ok(())
+}
+
+async fn cmd_budget_add(goal_id: &str, time: &str) -> Result<()> {
+    let goal = crate::runtime::goal::add_goal_budget(goal_id, time).await?;
+    println!("Budget added: {}", goal.goal_id);
+    println!("Status: {}", goal.status);
+    println!(
+        "Budget time: {}",
+        goal.budget_time.as_deref().unwrap_or("unbounded")
+    );
+    println!("Added: {time}");
     Ok(())
 }
 
