@@ -19,6 +19,12 @@ pub(crate) enum GoalCommands {
         /// Time budget label, for example 8h or 7d
         #[arg(long)]
         budget_time: Option<String>,
+        /// Maximum estimated tokens the goal may spend
+        #[arg(long)]
+        budget_tokens: Option<u64>,
+        /// Maximum estimated USD the goal may spend
+        #[arg(long)]
+        budget_usd: Option<f64>,
         /// Maximum number of agents the future controller may use
         #[arg(long)]
         max_agents: Option<usize>,
@@ -91,7 +97,13 @@ pub(crate) enum GoalCommands {
         goal_id: String,
         /// Duration to add, for example 1h or 30m
         #[arg(long, value_name = "DURATION")]
-        time: String,
+        time: Option<String>,
+        /// Estimated token budget to add
+        #[arg(long)]
+        tokens: Option<u64>,
+        /// Estimated USD budget to add
+        #[arg(long)]
+        usd: Option<f64>,
     },
     /// Run local verification gates and update the goal proof
     Verify {
@@ -144,6 +156,8 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             goal,
             until_ready,
             budget_time,
+            budget_tokens,
+            budget_usd,
             max_agents,
         } => {
             cmd_run(
@@ -151,6 +165,8 @@ pub(crate) async fn run(args: Args) -> Result<()> {
                 crate::runtime::goal::CreateGoalOptions {
                     until_ready,
                     budget_time,
+                    budget_tokens,
+                    budget_usd,
                     max_agents,
                 },
             )
@@ -179,7 +195,12 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             format,
             json,
         } => cmd_budget(&goal_id, format, json).await,
-        GoalCommands::BudgetAdd { goal_id, time } => cmd_budget_add(&goal_id, &time).await,
+        GoalCommands::BudgetAdd {
+            goal_id,
+            time,
+            tokens,
+            usd,
+        } => cmd_budget_add(&goal_id, time, tokens, usd).await,
         GoalCommands::Verify { goal_id } => cmd_verify(&goal_id).await,
         GoalCommands::Execute { goal_id } => cmd_execute(&goal_id).await,
         GoalCommands::Review { goal_id } => cmd_review(&goal_id).await,
@@ -286,6 +307,12 @@ async fn cmd_show(goal_id: &str, format: OutputFormat, json: bool) -> Result<()>
             if let Some(budget_time) = &goal.budget_time {
                 println!("Budget time: {budget_time}");
             }
+            if let Some(budget_tokens) = goal.budget_tokens {
+                println!("Budget tokens: {budget_tokens}");
+            }
+            if let Some(budget_usd) = goal.budget_usd {
+                println!("Budget USD: {budget_usd:.6}");
+            }
             if let Some(max_agents) = goal.max_agents {
                 println!("Max agents: {max_agents}");
             }
@@ -391,15 +418,48 @@ async fn cmd_budget(goal_id: &str, format: OutputFormat, json: bool) -> Result<(
     Ok(())
 }
 
-async fn cmd_budget_add(goal_id: &str, time: &str) -> Result<()> {
-    let goal = crate::runtime::goal::add_goal_budget(goal_id, time).await?;
+async fn cmd_budget_add(
+    goal_id: &str,
+    time: Option<String>,
+    tokens: Option<u64>,
+    usd: Option<f64>,
+) -> Result<()> {
+    let goal = crate::runtime::goal::add_goal_budget_limits(
+        goal_id,
+        crate::runtime::goal::GoalBudgetAdd {
+            time: time.clone(),
+            tokens,
+            usd,
+        },
+    )
+    .await?;
     println!("Budget added: {}", goal.goal_id);
     println!("Status: {}", goal.status);
     println!(
         "Budget time: {}",
         goal.budget_time.as_deref().unwrap_or("unbounded")
     );
-    println!("Added: {time}");
+    println!(
+        "Budget tokens: {}",
+        goal.budget_tokens
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unbounded".to_string())
+    );
+    println!(
+        "Budget USD: {}",
+        goal.budget_usd
+            .map(|value| format!("{value:.6}"))
+            .unwrap_or_else(|| "unbounded".to_string())
+    );
+    if let Some(time) = time {
+        println!("Time added: {time}");
+    }
+    if let Some(tokens) = tokens {
+        println!("Tokens added: {tokens}");
+    }
+    if let Some(usd) = usd {
+        println!("USD added: {usd:.6}");
+    }
     Ok(())
 }
 
@@ -409,6 +469,30 @@ fn print_budget_summary_text(report: &crate::runtime::goal::GoalBudgetReport) {
         report.budget_time.as_deref().unwrap_or("unbounded")
     );
     println!("Total: {}", format_optional_secs(report.total_budget_secs));
+    println!(
+        "Tokens: used={} budget={} remaining={}",
+        report.used_tokens,
+        report
+            .budget_tokens
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unbounded".to_string()),
+        report
+            .remaining_budget_tokens
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unbounded".to_string())
+    );
+    println!(
+        "Cost: estimated=${:.6} budget={} remaining={}",
+        report.estimated_cost_usd,
+        report
+            .budget_usd
+            .map(|value| format!("${value:.6}"))
+            .unwrap_or_else(|| "unbounded".to_string()),
+        report
+            .remaining_budget_usd
+            .map(|value| format!("${value:.6}"))
+            .unwrap_or_else(|| "unbounded".to_string())
+    );
     if let Some(latest) = &report.latest {
         println!(
             "Elapsed: {}",
@@ -432,6 +516,30 @@ fn print_budget_summary_md(report: &crate::runtime::goal::GoalBudgetReport) {
     println!(
         "- Total: `{}`",
         format_optional_secs(report.total_budget_secs)
+    );
+    println!(
+        "- Tokens: used=`{}` budget=`{}` remaining=`{}`",
+        report.used_tokens,
+        report
+            .budget_tokens
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unbounded".to_string()),
+        report
+            .remaining_budget_tokens
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unbounded".to_string())
+    );
+    println!(
+        "- Cost: estimated=`${:.6}` budget=`{}` remaining=`{}`",
+        report.estimated_cost_usd,
+        report
+            .budget_usd
+            .map(|value| format!("${value:.6}"))
+            .unwrap_or_else(|| "unbounded".to_string()),
+        report
+            .remaining_budget_usd
+            .map(|value| format!("${value:.6}"))
+            .unwrap_or_else(|| "unbounded".to_string())
     );
     if let Some(latest) = &report.latest {
         println!(

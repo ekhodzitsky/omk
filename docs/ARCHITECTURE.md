@@ -71,7 +71,7 @@ omk CLI (Rust)
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
-| `runtime/goal/` | Goal controller scaffold, task graph, local gates, policy-validated bounded agent waves with per-task budget hard stops, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, deterministic replayable event timelines, budget checkpoints, wall-clock budget enforcement and recovery, and proof state. |
+| `runtime/goal/` | Goal controller scaffold, task graph, local gates, policy-validated bounded agent waves with per-task budget hard stops, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, deterministic replayable event timelines, budget checkpoints, wall-clock/token/cost budget enforcement and recovery, and proof state. |
 
 ## Data Flow
 
@@ -104,7 +104,8 @@ Current `omk goal` scaffold data flow:
 8. `omk goal execute` marks `goal-local-verify` done when required gates pass,
    turns `goal-agent-execute` into a controller-proposed multi-task Wire worker
    wave, validates proposals against policy and per-task budgets, enforces
-   accepted task budgets in Wire workers, emits
+   accepted task budgets in Wire workers, aggregates Wire token/cost budget
+   usage for later hard stops, emits
    `task_proposed`, `task_accepted`, and `task_rejected`, and records
    `task-policy.json`, outbox, Wire event, mutation diff, and changed-file
    evidence under `artifacts/agent-runs/`. Workers may return structured

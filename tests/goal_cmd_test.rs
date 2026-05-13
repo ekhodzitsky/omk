@@ -2088,3 +2088,255 @@ fn test_goal_budget_add_allows_needs_more_budget_goal_to_continue() {
         .iter()
         .any(|event| event["kind"] == "goal_budget_extended"));
 }
+
+#[test]
+fn test_goal_token_budget_stops_after_wire_usage_exceeds_limit() {
+    let (tmp, envs) = isolated_env();
+    let project = tmp.path().join("project");
+    fs::create_dir_all(&project).expect("failed to create project dir");
+    write_gate_config(&project, "quick-token-budget", "exit 0");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(&project)
+        .args([
+            "goal",
+            "run",
+            "Stop this goal after token budget is exhausted",
+            "--budget-tokens",
+            "10",
+        ])
+        .assert()
+        .success();
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .current_dir(&project)
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WIRE_TOKEN_USAGE", "12")
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success();
+
+    let mut review = omk_cmd(&envs);
+    review
+        .current_dir(&project)
+        .args(["goal", "review", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs more budget"))
+        .stderr(predicate::str::contains("tokens"));
+
+    let mut show = omk_cmd(&envs);
+    let show_output = show
+        .current_dir(&project)
+        .args(["goal", "show", "latest", "--json"])
+        .output()
+        .expect("omk goal show failed");
+    assert!(
+        show_output.status.success(),
+        "show failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&show_output.stdout),
+        String::from_utf8_lossy(&show_output.stderr)
+    );
+    let show_json: Value =
+        serde_json::from_slice(&show_output.stdout).expect("show output should be JSON");
+    assert_eq!(show_json["status"], "needs_more_budget");
+    assert_eq!(show_json["budget_tokens"], 10);
+
+    let mut budget = omk_cmd(&envs);
+    let budget_output = budget
+        .current_dir(&project)
+        .args(["goal", "budget", "latest", "--json"])
+        .output()
+        .expect("omk goal budget failed");
+    assert!(
+        budget_output.status.success(),
+        "budget failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&budget_output.stdout),
+        String::from_utf8_lossy(&budget_output.stderr)
+    );
+    let budget_json: Value =
+        serde_json::from_slice(&budget_output.stdout).expect("budget output should be JSON");
+    assert_eq!(budget_json["budget_tokens"], 10);
+    assert!(budget_json["used_tokens"].as_u64().unwrap_or_default() >= 12);
+    assert_eq!(budget_json["remaining_budget_tokens"], 0);
+
+    let dirs = goal_dirs(&envs);
+    let events = read_jsonl(&dirs[0].join("events.jsonl"));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "goal_budget_exhausted"
+            && event["payload"]["budget_source"] == "tokens"
+            && event["payload"]["used_tokens"].as_u64().unwrap_or_default() >= 12
+    }));
+}
+
+#[test]
+fn test_goal_cost_budget_stops_after_wire_usage_estimate_exceeds_limit() {
+    let (tmp, envs) = isolated_env();
+    let project = tmp.path().join("project");
+    fs::create_dir_all(&project).expect("failed to create project dir");
+    write_gate_config(&project, "quick-cost-budget", "exit 0");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(&project)
+        .args([
+            "goal",
+            "run",
+            "Stop this goal after estimated cost budget is exhausted",
+            "--budget-usd",
+            "0.000001",
+        ])
+        .assert()
+        .success();
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .current_dir(&project)
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WIRE_TOKEN_USAGE", "1000")
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success();
+
+    let mut review = omk_cmd(&envs);
+    review
+        .current_dir(&project)
+        .args(["goal", "review", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs more budget"))
+        .stderr(predicate::str::contains("cost"));
+
+    let mut budget = omk_cmd(&envs);
+    let budget_output = budget
+        .current_dir(&project)
+        .args(["goal", "budget", "latest", "--json"])
+        .output()
+        .expect("omk goal budget failed");
+    assert!(
+        budget_output.status.success(),
+        "budget failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&budget_output.stdout),
+        String::from_utf8_lossy(&budget_output.stderr)
+    );
+    let budget_json: Value =
+        serde_json::from_slice(&budget_output.stdout).expect("budget output should be JSON");
+    assert_eq!(budget_json["budget_usd"], 0.000001);
+    assert!(
+        budget_json["estimated_cost_usd"]
+            .as_f64()
+            .unwrap_or_default()
+            > 0.000001,
+        "wire token usage should produce an estimated cost above the budget"
+    );
+    assert_eq!(budget_json["remaining_budget_usd"], 0.0);
+
+    let dirs = goal_dirs(&envs);
+    let events = read_jsonl(&dirs[0].join("events.jsonl"));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "goal_budget_exhausted" && event["payload"]["budget_source"] == "cost"
+    }));
+}
+
+#[test]
+fn test_goal_budget_add_extends_token_and_cost_budgets() {
+    let (tmp, envs) = isolated_env();
+    let project = tmp.path().join("project");
+    fs::create_dir_all(&project).expect("failed to create project dir");
+    write_gate_config(&project, "quick-budget-recovery", "exit 0");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(&project)
+        .args([
+            "goal",
+            "run",
+            "Recover this goal after token and cost budget exhaustion",
+            "--budget-tokens",
+            "10",
+            "--budget-usd",
+            "0.000001",
+        ])
+        .assert()
+        .success();
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .current_dir(&project)
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WIRE_TOKEN_USAGE", "1000")
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success();
+
+    let mut exhausted_review = omk_cmd(&envs);
+    exhausted_review
+        .current_dir(&project)
+        .args(["goal", "review", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs more budget"));
+
+    let mut add_budget = omk_cmd(&envs);
+    add_budget
+        .current_dir(&project)
+        .args([
+            "goal",
+            "budget-add",
+            "latest",
+            "--tokens",
+            "2000",
+            "--usd",
+            "1.0",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Budget added"))
+        .stdout(predicate::str::contains("not_ready"))
+        .stdout(predicate::str::contains("Tokens added: 2000"))
+        .stdout(predicate::str::contains("USD added: 1.000000"));
+
+    let mut resumed_review = omk_cmd(&envs);
+    resumed_review
+        .current_dir(&project)
+        .args(["goal", "review", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Review: not_ready"));
+
+    let mut budget = omk_cmd(&envs);
+    let budget_output = budget
+        .current_dir(&project)
+        .args(["goal", "budget", "latest", "--json"])
+        .output()
+        .expect("omk goal budget failed");
+    assert!(
+        budget_output.status.success(),
+        "budget failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&budget_output.stdout),
+        String::from_utf8_lossy(&budget_output.stderr)
+    );
+    let budget_json: Value =
+        serde_json::from_slice(&budget_output.stdout).expect("budget output should be JSON");
+    assert!(budget_json["budget_tokens"].as_u64().unwrap_or_default() >= 3000);
+    assert!(budget_json["budget_usd"].as_f64().unwrap_or_default() > 1.0);
+    assert!(
+        budget_json["remaining_budget_tokens"]
+            .as_u64()
+            .unwrap_or_default()
+            > 0
+    );
+    assert!(
+        budget_json["remaining_budget_usd"]
+            .as_f64()
+            .unwrap_or_default()
+            > 0.0
+    );
+
+    let dirs = goal_dirs(&envs);
+    let events = read_jsonl(&dirs[0].join("events.jsonl"));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "goal_budget_extended"
+            && event["payload"]["added_budget_tokens"] == 2000
+            && event["payload"]["added_budget_usd"] == 1.0
+    }));
+}

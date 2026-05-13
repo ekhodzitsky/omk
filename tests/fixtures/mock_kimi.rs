@@ -199,6 +199,7 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
                     "turn_begin",
                     serde_json::json!({"user_input": preview}),
                 );
+                emit_mock_token_usage(&mut stdout);
 
                 if is_crash_after_turn_begin {
                     process::abort();
@@ -337,6 +338,23 @@ fn maybe_write_mock_project_file() {
         }
     }
     let _ = fs::write(path, body);
+}
+
+fn emit_mock_token_usage(stdout: &mut io::Stdout) {
+    let Ok(raw_tokens) = env::var("MOCK_KIMI_WIRE_TOKEN_USAGE") else {
+        return;
+    };
+    let Ok(tokens) = raw_tokens.trim().parse::<u64>() else {
+        return;
+    };
+    emit_event(
+        stdout,
+        "status_update",
+        serde_json::json!({
+            "token_usage": tokens,
+            "message_id": "mock-kimi-turn"
+        }),
+    );
 }
 
 fn emit_event(stdout: &mut io::Stdout, event_type: &str, payload: serde_json::Value) {

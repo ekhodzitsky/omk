@@ -55,7 +55,7 @@ them.
 The user can run:
 
 ```bash
-omk goal run "Rewrite this Python service in Rust" --until-ready --budget-time 7d
+omk goal run "Rewrite this Python service in Rust" --until-ready --budget-time 7d --budget-tokens 2000000 --budget-usd 25
 ```
 
 and return later to a reliable answer:
@@ -64,7 +64,7 @@ and return later to a reliable answer:
 - `not_ready`, with failing evidence;
 - `blocked_on_human`, with the exact decision needed;
 - `blocked_on_external`, with missing access or dependency;
-- `needs_more_budget`, with progress and remaining work; current code enforces exhausted wall-clock `--budget-time` before more verify/execute/review work is spent and supports `budget-add` recovery;
+- `needs_more_budget`, with progress and remaining work; current code enforces exhausted wall-clock `--budget-time`, Wire-derived `--budget-tokens`, and estimated `--budget-usd` before more verify/execute/review work is spent and supports `budget-add` recovery for time, tokens, and USD;
 - `paused`, with active Wire workers interrupted and durable progress preserved
   for later resume;
 - `failed_infra`, with recovery guidance.
@@ -256,7 +256,7 @@ User goal
 MVP:
 
 ```bash
-omk goal run <goal> [--until-ready] [--budget-time <duration>] [--max-agents <n>]
+omk goal run <goal> [--until-ready] [--budget-time <duration>] [--budget-tokens <n>] [--budget-usd <usd>] [--max-agents <n>]
 omk goal status [goal-id|latest]
 omk goal show [goal-id|latest] [--format text|json|md]
 omk goal list
@@ -269,6 +269,7 @@ omk goal pause [goal-id|latest]
 omk goal resume [goal-id|latest]
 omk goal replay [goal-id|latest] [--format text|json|md]
 omk goal budget [goal-id|latest] [--format text|json|md]
+omk goal budget-add [goal-id|latest] [--time <duration>] [--tokens <n>] [--usd <usd>]
 ```
 
 Later:

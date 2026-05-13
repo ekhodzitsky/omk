@@ -14,7 +14,10 @@ mod task_graph;
 mod verifier;
 
 // Public API re-exports (preserved for backward compatibility)
-pub use budget::{add_goal_budget, goal_budget, GoalBudgetCheckpoint, GoalBudgetReport};
+pub use budget::{
+    add_goal_budget, add_goal_budget_limits, goal_budget, GoalBudgetAdd, GoalBudgetCheckpoint,
+    GoalBudgetReport,
+};
 pub use evidence::GoalGitEvidence;
 pub use proof::GoalProof;
 pub use replay::{replay_goal, GoalReplay, GoalReplayEntry};
@@ -39,6 +42,8 @@ pub async fn plan_goal(goal: &str) -> Result<GoalState> {
         CreateGoalOptions {
             until_ready: false,
             budget_time: None,
+            budget_tokens: None,
+            budget_usd: None,
             max_agents: None,
         },
     )

@@ -138,6 +138,10 @@ pub struct GoalState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget_time: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_usd: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_agents: Option<usize>,
     pub terminal_criteria: GoalTerminalCriteria,
     #[serde(default)]
@@ -159,6 +163,8 @@ fn default_goal_phase() -> GoalPhase {
 pub struct CreateGoalOptions {
     pub until_ready: bool,
     pub budget_time: Option<String>,
+    pub budget_tokens: Option<u64>,
+    pub budget_usd: Option<f64>,
     pub max_agents: Option<usize>,
 }
 

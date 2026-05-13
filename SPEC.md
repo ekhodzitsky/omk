@@ -41,7 +41,7 @@ proof artifacts.
 
 ```bash
 omk goal run "Build a production-ready CLI for managing local LLM costs" --until-ready
-omk goal run "Rewrite this Python project in Rust" --until-ready --budget-time 7d
+omk goal run "Rewrite this Python project in Rust" --until-ready --budget-time 7d --budget-tokens 2000000 --budget-usd 25
 omk goal status
 omk goal show latest
 omk goal verify latest
@@ -112,6 +112,9 @@ current beta MVP instead of inventing a parallel runtime:
 - bounded agent wave evidence under `artifacts/agent-runs/`;
 - structured per-task budgets carried into Wire worker inboxes and enforced as
   task timeout hard stops with failed-result evidence;
+- Wire-derived token usage and estimated USD cost budget accounting, with
+  `--budget-tokens` / `--budget-usd` hard stops before the next controller step
+  and `budget-add --tokens` / `--usd` recovery;
 - goal-level `events.jsonl` plus deterministic `omk goal replay` output derived
   from persisted event/task state instead of the current process clock;
 - cancellation `failure.json` artifacts;
@@ -137,7 +140,7 @@ Every goal run ends in exactly one terminal status:
 | `not_ready` | Work was attempted, but required proof or gates did not pass. |
 | `blocked_on_human` | A human decision is required before progress can continue safely. |
 | `blocked_on_external` | External access, credentials, APIs, or services are missing. |
-| `needs_more_budget` | Time, token, cost, or compute budget was exhausted. Current runtime enforces exhausted wall-clock `--budget-time` before `verify`, `execute`, or `review`; Wire workers enforce per-task budget timeouts; `omk goal budget-add` records operator-approved recovery. Token/cost sources are next. |
+| `needs_more_budget` | Time, token, cost, or compute budget was exhausted. Current runtime enforces exhausted wall-clock `--budget-time`, Wire-derived `--budget-tokens`, and estimated `--budget-usd` before `verify`, `execute`, or `review`; Wire workers enforce per-task budget timeouts; `omk goal budget-add` records operator-approved recovery for time, tokens, and USD. |
 | `failed_infra` | OMK infrastructure failed in a way the run could not recover from. |
 | `cancelled` | User cancelled the goal. |
 
@@ -250,7 +253,7 @@ Each goal writes `.omk/goals/<goal-id>/proof.json` with:
 Initial command surface:
 
 ```bash
-omk goal run <goal> [--until-ready] [--budget-time <duration>] [--max-agents <n>]
+omk goal run <goal> [--until-ready] [--budget-time <duration>] [--budget-tokens <n>] [--budget-usd <usd>] [--max-agents <n>]
 omk goal status [goal-id|latest]
 omk goal show [goal-id|latest] [--format text|json|md]
 omk goal list
@@ -260,7 +263,7 @@ omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
 omk goal replay [goal-id|latest] [--format text|json|md]
 omk goal budget [goal-id|latest] [--format text|json|md]
-omk goal budget-add [goal-id|latest] --time <duration>
+omk goal budget-add [goal-id|latest] [--time <duration>] [--tokens <n>] [--usd <usd>]
 omk goal verify [goal-id|latest]
 omk goal execute [goal-id|latest]
 omk goal review [goal-id|latest]

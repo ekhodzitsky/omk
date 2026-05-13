@@ -36,6 +36,8 @@ pub(crate) async fn create_goal_with_scaffold(
         completed_at: Some(now),
         until_ready: options.until_ready,
         budget_time: options.budget_time,
+        budget_tokens: options.budget_tokens,
+        budget_usd: options.budget_usd,
         max_agents: options.max_agents,
         terminal_criteria: super::state::GoalTerminalCriteria::default(),
         artifacts: Vec::new(),

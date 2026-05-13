@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.24] - 2026-05-13
+
+### Added
+
+- **Token/cost goal budget hard stops**: `omk goal run` now accepts `--budget-tokens` and `--budget-usd`, goal budget reports include Wire-derived token usage plus estimated USD cost, and `verify`/`execute`/`review` stop with `needs_more_budget` when token or cost budgets are exhausted.
+- **Token/cost budget recovery**: `omk goal budget-add` now accepts `--tokens` and `--usd` in addition to `--time`, extending exhausted budgets relative to already observed usage so operators can safely resume token/cost-blocked goals.
+
 ## [0.3.23] - 2026-05-13
 
 ### Added

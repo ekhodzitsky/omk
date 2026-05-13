@@ -14,6 +14,8 @@ fn state() -> GoalState {
         completed_at: None,
         until_ready: true,
         budget_time: None,
+        budget_tokens: None,
+        budget_usd: None,
         max_agents: Some(2),
         terminal_criteria: super::super::state::GoalTerminalCriteria::default(),
         artifacts: Vec::new(),
