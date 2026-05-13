@@ -163,6 +163,105 @@ If you are validating a new Kimi CLI release, first run `kimi info` and compare 
 
 ---
 
+## Greenfield Goal Demo (MVP Acceptance Artifact)
+
+This is the first narrow greenfield acceptance path for `omk goal`. It starts
+from a fresh Rust CLI fixture so OMK has real gates to run. It proves that a
+small product-shaped request becomes durable engineering artifacts and proof
+evidence; it does **not** claim the result is product-ready without review,
+commit, PR, and release acceptance.
+
+### 1. Create a disposable greenfield project
+
+```bash
+tmpdir="$(mktemp -d)"
+cd "$tmpdir"
+cargo new omk-goal-greenfield-demo
+cd omk-goal-greenfield-demo
+omk setup
+```
+
+If you want git evidence in the final proof, keep the fixture in the Git repo
+created by `cargo new`. A commit is optional; uncommitted agent changes are
+still captured through `git status --porcelain`.
+
+### 2. Create the goal scaffold
+
+```bash
+omk goal run \
+  "Build a tiny local-only Rust CLI named taskline. It should support add <text> and list commands, store tasks in tasks.txt, include tests for both commands, avoid network access, and add no new dependencies." \
+  --budget-time 30m \
+  --budget-tokens 200000 \
+  --max-agents 1
+```
+
+Expected state after this command:
+
+- `omk goal show latest` prints the goal id, status, phase, and state path.
+- The state path contains `goal.json`, `prd.md`, `technical-plan.md`,
+  `test-spec.md`, `task-graph.json`, `decisions.jsonl`, and `proof.json`.
+- `omk goal proof latest --format md` is honest: before execution and review,
+  it should remain `not_ready` with known gaps for missing gate or agent
+  evidence.
+
+### 3. Attach gate and execution evidence
+
+```bash
+omk goal verify latest
+omk goal execute latest
+omk goal review latest
+omk goal proof latest --format md
+omk goal replay latest --format text
+```
+
+`verify` auto-detects the Rust fixture and records required gate results for
+format, check, lint, and tests. `execute` runs the bounded goal-agent wave;
+that step requires an authenticated `kimi` CLI, or `MOCK_KIMI` pointing at an
+executable wire-compatible mock. `review` adds controller review and security
+review artifacts after execution evidence exists.
+
+### Expected Goal Artifacts
+
+The exact state root is printed by `omk goal show latest`. By default it is
+under `~/.local/state/omk/goals/<goal-id>/`, or under
+`~/.omk/state/goals/<goal-id>/` when the legacy OMK state root exists.
+
+| Artifact | Why it matters |
+|----------|----------------|
+| `goal.json` | Durable original goal, normalized goal, budgets, terminal criteria, and current status |
+| `prd.md` | Human-readable goal brief for the requested product behavior |
+| `technical-plan.md` | Controller phases and execution boundary |
+| `test-spec.md` | Acceptance gates and scaffold task expectations |
+| `task-graph.json` | Controller-owned task graph with dependencies, owners, risk, read/write sets, and task evidence |
+| `decisions.jsonl` | Append-only controller decisions for planning, decomposition, and execution boundaries |
+| `events.jsonl` | Goal lifecycle, task, gate, proof, and interruption events |
+| `artifacts/gates/` | Command output evidence for each verification gate |
+| `artifacts/agent-runs/` | Bounded Wire worker inbox/outbox, task policy, and mutation evidence |
+| `artifacts/reviews/` | Controller review and security review summaries |
+| `proof.json` | Machine-readable readiness proof with gates, changed files, known gaps, and git evidence when available |
+| `failure.json` | Written for cancelled or blocked/failure outcomes |
+
+### Gates and Readiness
+
+For this Rust fixture, the default required gates are:
+
+- `format`: `cargo fmt --check`
+- `check`: `cargo check --all-targets`
+- `lint`: `cargo clippy -- -D warnings`
+- `tests`: `cargo test`
+
+The demo reaches an **engineering-ready handoff candidate** when the proof shows
+passing required gates, changed-file evidence, bounded agent execution evidence,
+controller review evidence, and no blocking security findings.
+
+The demo is **not product-ready** until a human or integrator accepts the diff,
+commits it, opens or merges a PR, updates release-level docs when appropriate,
+and decides that the local CLI behavior is useful enough for users. Current
+`omk goal` proof output intentionally remains `not_ready` when that integration
+acceptance is missing.
+
+---
+
 ## Troubleshooting
 
 ### "No teams found" when running `omk hud` or `omk proof`
