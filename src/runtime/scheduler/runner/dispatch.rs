@@ -68,6 +68,7 @@ impl TeamRunner {
         let mut available_workers: Vec<&WorkerSpec> = worker_specs
             .iter()
             .filter(|w| !busy_workers.contains(&w.name))
+            .filter(|w| !self.dead_workers.contains(&w.name))
             .collect();
 
         if available_workers.is_empty() {

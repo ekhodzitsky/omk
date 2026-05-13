@@ -148,7 +148,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Enforce per-task Wire worker budget hard stops.
 - [x] Add token/cost budget sources and hard stops.
 - [ ] Add notification hooks.
-- [ ] Add stale worker cleanup.
+- [x] Add stale worker cleanup.
 - [x] Add goal replay.
 - [x] Harden goal replay into deterministic crash-recovery replay.
 

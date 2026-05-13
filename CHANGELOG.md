@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.25] - 2026-05-13
+
+### Added
+
+- **Stale worker cleanup**: scheduler runs now quarantine workers that lose an expired task lease, write a durable `stale-worker-cleanup.json` marker, emit `worker_dead` evidence, ignore later stale-worker outbox/heartbeat updates, and fail fast instead of hanging when no live workers remain.
+
 ## [0.3.24] - 2026-05-13
 
 ### Added

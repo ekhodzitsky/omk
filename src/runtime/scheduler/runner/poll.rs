@@ -30,6 +30,9 @@ impl TeamRunner {
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown")
                 .to_string();
+            if self.dead_workers.contains(&worker_name) {
+                continue;
+            }
 
             let file = tokio::fs::OpenOptions::new()
                 .read(true)

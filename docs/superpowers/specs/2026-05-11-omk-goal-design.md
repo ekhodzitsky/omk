@@ -193,6 +193,10 @@ the accepted ready task count or the configured cap. If a scheduler lease expire
 the controller emits
 `retry_scheduled` evidence with the stale worker id and prefers another
 available worker for the recovered task before falling back to the stale owner.
+Recovered stale workers are quarantined with `worker_dead` evidence and a
+durable `stale-worker-cleanup.json` marker; later stale-worker outbox and
+heartbeat updates are ignored so recovered tasks cannot be overwritten by late
+results.
 When an operator pauses or cancels a goal during a Wire-backed wave, the active
 execute process observes durable goal state, cancels workers, prevents any
 additional scheduler dispatch, and preserves the interrupted goal/proof status.

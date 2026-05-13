@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
@@ -31,6 +31,7 @@ pub struct TeamRunner {
     last_outbox_offsets: HashMap<String, u64>,
     last_heartbeat_ts: HashMap<String, DateTime<Utc>>,
     stale_task_owners: HashMap<String, String>,
+    dead_workers: HashSet<String>,
 }
 
 #[cfg(test)]

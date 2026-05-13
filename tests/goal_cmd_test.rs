@@ -1154,7 +1154,7 @@ fn test_goal_execute_recovers_stale_agent_task_on_another_worker() {
     execute
         .env("MOCK_KIMI", mock_kimi_path())
         .env("MOCK_KIMI_WIRE_STALL_WHEN_CONTAINS", "goal-agent-worker-0")
-        .env("OMK_GOAL_AGENT_LEASE_SECS", "1")
+        .env("OMK_GOAL_AGENT_LEASE_SECS", "3")
         .env("OMK_WIRE_TURN_TIMEOUT_SECS", "30")
         .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
         .current_dir(project.path())
@@ -1169,6 +1169,7 @@ fn test_goal_execute_recovers_stale_agent_task_on_another_worker() {
     let agent_run = goal_dir.join("artifacts/agent-runs/goal-agent-execute");
     let worker_0_outbox = agent_run.join("workers/goal-agent-worker-0/outbox.jsonl");
     let worker_1_outbox = agent_run.join("workers/goal-agent-worker-1/outbox.jsonl");
+    let worker_0_cleanup = agent_run.join("workers/goal-agent-worker-0/stale-worker-cleanup.json");
 
     let worker_0_results = read_jsonl(&worker_0_outbox);
     assert!(
@@ -1185,8 +1186,18 @@ fn test_goal_execute_recovers_stale_agent_task_on_another_worker() {
     assert!(worker_1_results
         .iter()
         .any(|result| result["task_id"] == "goal-agent-verify"));
+    assert!(
+        worker_0_cleanup.exists(),
+        "stale worker cleanup marker should be durable"
+    );
 
     let events = read_jsonl(&goal_dir.join("events.jsonl"));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "worker_dead"
+            && event["actor"] == "scheduler"
+            && event["payload"]["worker_id"] == "goal-agent-worker-0"
+            && event["payload"]["action"] == "quarantined"
+    }));
     assert!(events.iter().any(|event| {
         event["kind"] == "retry_scheduled"
             && event["payload"]["task_id"] == "goal-agent-implement"

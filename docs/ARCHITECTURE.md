@@ -121,7 +121,9 @@ Current `omk goal` scaffold data flow:
    invocations dispatch ready
    pending follow-ups through `artifacts/agent-runs/goal-agent-followups/`,
    honor the goal `max_agents` cap with a bounded Wire worker pool, recover
-   expired task leases with `retry_scheduled` evidence, and mark those nodes
+   expired task leases with `retry_scheduled` evidence, quarantine stale workers
+   with `worker_dead` evidence plus durable `stale-worker-cleanup.json` markers,
+   ignore later stale-worker outbox/heartbeat updates, and mark those nodes
    done or blocked from worker results. If an operator pauses or cancels during
    an active Wire-backed wave, the execute process observes the durable state
    change, cancels active workers, stops additional dispatch, and preserves the

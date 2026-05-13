@@ -1,7 +1,8 @@
 use tempfile::TempDir;
+use tokio::time::{timeout, Duration};
 
 use crate::runtime::config::{EVENTS_FILE, WORKERS_DIR};
-use crate::runtime::events::EventWriter;
+use crate::runtime::events::{EventKind, EventReader, EventWriter};
 use crate::runtime::scheduler::runner::TeamRunner;
 use crate::runtime::scheduler::task::{Task, TaskState};
 use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerSpec};
@@ -240,4 +241,86 @@ async fn test_recovered_stale_task_prefers_different_worker() {
             .contains("task-1"),
         "recovered task should be sent to the non-stale worker when available"
     );
+}
+
+#[tokio::test]
+async fn test_recovered_stale_worker_is_quarantined_for_future_dispatch() {
+    let tmp = TempDir::new().unwrap();
+    let mut runner = make_runner(&tmp).await;
+    runner.set_lease_seconds(-1);
+    runner.seed_task("Recover this stale task");
+
+    let worker_a = make_spec(&tmp, "worker-a").await;
+    let worker_b = make_spec(&tmp, "worker-b").await;
+    runner
+        .dispatch_to_workers(&[worker_a.clone(), worker_b.clone()])
+        .await
+        .unwrap();
+
+    runner.recover_stale_leases().await.unwrap();
+    runner.claim_store.insert(
+        Task::new("task-2", "second task")
+            .with_description("must not be sent to quarantined worker"),
+    );
+
+    runner
+        .dispatch_to_workers(&[worker_a.clone(), worker_b.clone()])
+        .await
+        .unwrap();
+
+    let worker_a_inbox = tokio::fs::read_to_string(&worker_a.inbox).await.unwrap();
+    assert!(
+        !worker_a_inbox.contains("task-2"),
+        "quarantined stale worker must not receive future tasks"
+    );
+    assert!(
+        worker_a
+            .inbox
+            .parent()
+            .unwrap()
+            .join("stale-worker-cleanup.json")
+            .exists(),
+        "stale worker cleanup marker should be durable"
+    );
+
+    let events = EventReader::read_all(&tmp.path().join("state").join(EVENTS_FILE))
+        .await
+        .unwrap();
+    assert!(events.iter().any(|event| {
+        event.kind == EventKind::WorkerDead
+            && event.actor.as_deref() == Some("scheduler")
+            && event
+                .payload
+                .as_ref()
+                .and_then(|payload| payload.get("worker_id"))
+                .and_then(|value| value.as_str())
+                == Some("worker-a")
+    }));
+}
+
+#[tokio::test]
+async fn test_run_fails_instead_of_hanging_when_all_workers_go_stale() {
+    let tmp = TempDir::new().unwrap();
+    let mut runner = make_runner(&tmp).await;
+    runner.set_lease_seconds(-1);
+    runner.seed_task("No live worker can finish this");
+
+    let worker = make_spec(&tmp, "worker-only").await;
+    let summary = timeout(
+        Duration::from_secs(5),
+        runner.run(std::slice::from_ref(&worker)),
+    )
+    .await
+    .expect("runner should not hang after all workers go stale")
+    .unwrap();
+
+    assert_eq!(summary.completed, 0);
+    assert_eq!(summary.failed, 1);
+    assert_eq!(summary.total, 1);
+    assert!(worker
+        .inbox
+        .parent()
+        .unwrap()
+        .join("stale-worker-cleanup.json")
+        .exists());
 }

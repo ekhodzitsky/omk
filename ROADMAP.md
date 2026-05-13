@@ -157,8 +157,8 @@ Target: let goals run for days safely.
 - Harden pause/resume across active worker interruption and machine restarts. Current runtime now persists pause/resume across separate CLI invocations and interrupts active Wire-backed goal workers when an operator pauses or cancels a goal.
 - Harden goal replay into deterministic crash-recovery replay. Current replay JSON is stable across separate CLI invocations because replay timestamps come from persisted goal event evidence.
 - Harden remaining multi-day budget controls beyond the current wall-clock `--budget-time`, Wire-derived `--budget-tokens` / `--budget-usd`, `budget-add` recovery path, and Wire worker per-task budget timeout.
+- Quarantine stale workers after expired leases. Current scheduler cleanup writes a durable marker, emits `worker_dead` evidence, prevents later stale-worker dispatch/outbox reuse, and fails fast when all workers are dead.
 - Add crash recovery tests.
-- Add stale agent cleanup.
 - Add operator notifications.
 
 Exit criteria:

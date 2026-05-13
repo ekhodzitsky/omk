@@ -7,9 +7,12 @@ use crate::runtime::scheduler::claim::ClaimStore;
 use crate::runtime::scheduler::manifest::RunManifest;
 use crate::runtime::scheduler::ownership::OwnershipMap;
 use crate::runtime::scheduler::runner::{RunSummary, TeamRunner};
-use crate::runtime::scheduler::task::Task;
+use crate::runtime::scheduler::task::{Task, TaskState};
 use crate::runtime::worker::WorkerSpec;
+use chrono::Utc;
 use tokio_util::sync::CancellationToken;
+
+const STALE_WORKER_CLEANUP_FILE: &str = "stale-worker-cleanup.json";
 
 impl TeamRunner {
     /// Initialize a new team run.
@@ -33,6 +36,7 @@ impl TeamRunner {
             last_outbox_offsets: HashMap::new(),
             last_heartbeat_ts: HashMap::new(),
             stale_task_owners: HashMap::new(),
+            dead_workers: Default::default(),
         })
     }
 
@@ -62,6 +66,7 @@ impl TeamRunner {
             last_outbox_offsets: HashMap::new(),
             last_heartbeat_ts: HashMap::new(),
             stale_task_owners: HashMap::new(),
+            dead_workers: Default::default(),
         })
     }
 
@@ -96,24 +101,9 @@ impl TeamRunner {
                 break;
             }
 
-            let recovered = self.claim_store.recover_stale_leases_with_owners();
-            for recovery in &recovered {
-                if let Some(task) = self.claim_store.get(&recovery.task_id) {
-                    self.ownership.release_task(task);
-                }
-                if let Some(stale_owner) = recovery.stale_owner.as_deref() {
-                    self.stale_task_owners
-                        .insert(recovery.task_id.clone(), stale_owner.to_string());
-                }
-                let event = Event::new(self.run_id.clone(), EventKind::RetryScheduled)
-                    .with_actor("scheduler")
-                    .with_payload(serde_json::json!({
-                        "task_id": recovery.task_id,
-                        "reason": "stale lease recovered",
-                        "stale_worker_id": recovery.stale_owner,
-                    }))?;
-                self.event_writer.append(&event).await?;
-            }
+            self.recover_stale_leases().await?;
+            self.fail_unfinished_tasks_if_no_live_workers(worker_specs)
+                .await?;
 
             self.snapshot().await?;
 
@@ -189,6 +179,119 @@ impl TeamRunner {
         manifest.tasks = self.claim_store.tasks().values().cloned().collect();
         manifest.save().await?;
         manifest.snapshot_tasks().await?;
+        Ok(())
+    }
+
+    pub(crate) async fn recover_stale_leases(&mut self) -> Result<()> {
+        let recovered = self.claim_store.recover_stale_leases_with_owners();
+        for recovery in &recovered {
+            if let Some(task) = self.claim_store.get(&recovery.task_id) {
+                self.ownership.release_task(task);
+            }
+            if let Some(stale_owner) = recovery.stale_owner.as_deref() {
+                self.stale_task_owners
+                    .insert(recovery.task_id.clone(), stale_owner.to_string());
+                self.quarantine_stale_worker(stale_owner, &recovery.task_id)
+                    .await?;
+            }
+            let event = Event::new(self.run_id.clone(), EventKind::RetryScheduled)
+                .with_actor("scheduler")
+                .with_payload(serde_json::json!({
+                    "task_id": recovery.task_id,
+                    "reason": "stale lease recovered",
+                    "stale_worker_id": recovery.stale_owner,
+                }))?;
+            self.event_writer.append(&event).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn quarantine_stale_worker(&mut self, worker_id: &str, task_id: &str) -> Result<()> {
+        if !self.dead_workers.insert(worker_id.to_string()) {
+            return Ok(());
+        }
+
+        let cleaned_at = Utc::now();
+        let marker = serde_json::json!({
+            "worker_id": worker_id,
+            "task_id": task_id,
+            "reason": "stale lease recovered",
+            "action": "quarantined",
+            "cleaned_at": cleaned_at,
+        });
+        let worker_dir = self
+            .state_dir
+            .join(crate::runtime::config::WORKERS_DIR)
+            .join(worker_id);
+        crate::runtime::config::ensure_private_dir(&worker_dir).await?;
+        tokio::fs::write(
+            worker_dir.join(STALE_WORKER_CLEANUP_FILE),
+            serde_json::to_string_pretty(&marker)?,
+        )
+        .await?;
+
+        let event = Event::new(self.run_id.clone(), EventKind::WorkerDead)
+            .with_actor("scheduler")
+            .with_payload(serde_json::json!({
+                "worker_id": worker_id,
+                "task_id": task_id,
+                "reason": "stale lease recovered",
+                "cleanup_marker": format!("{}/{}/{}", crate::runtime::config::WORKERS_DIR, worker_id, STALE_WORKER_CLEANUP_FILE),
+                "action": "quarantined",
+            }))?;
+        self.event_writer.append(&event).await
+    }
+
+    async fn fail_unfinished_tasks_if_no_live_workers(
+        &mut self,
+        worker_specs: &[WorkerSpec],
+    ) -> Result<()> {
+        let has_live_worker = worker_specs
+            .iter()
+            .any(|worker| !self.dead_workers.contains(&worker.name));
+        if has_live_worker {
+            return Ok(());
+        }
+
+        let reason = "no live workers available after stale cleanup";
+        let task_ids: Vec<String> = self
+            .claim_store
+            .tasks()
+            .values()
+            .filter(|task| !task.state.is_terminal())
+            .map(|task| task.id.clone())
+            .collect();
+
+        for task_id in task_ids {
+            let previous_worker = self
+                .claim_store
+                .get(&task_id)
+                .and_then(|task| task.owner.clone());
+
+            if let Some(task) = self.claim_store.get(&task_id) {
+                self.ownership.release_task(task);
+            }
+
+            let Some(task) = self.claim_store.tasks_mut().get_mut(&task_id) else {
+                continue;
+            };
+            task.state = TaskState::Failed;
+            task.owner = None;
+            task.lease_expires = None;
+            task.completed_at = Some(Utc::now());
+            task.started_at = None;
+
+            let event = Event::new(self.run_id.clone(), EventKind::TaskFailed)
+                .with_actor("scheduler")
+                .with_payload(serde_json::json!({
+                    "task_id": task_id,
+                    "worker_id": previous_worker,
+                    "error": reason,
+                }))?;
+            self.event_writer.append(&event).await?;
+        }
+
         Ok(())
     }
 }

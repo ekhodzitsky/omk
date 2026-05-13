@@ -91,8 +91,10 @@ current beta MVP instead of inventing a parallel runtime:
   and changed-file evidence, dispatches accepted agent-proposed follow-up tasks,
   enforces `max_agents` as the worker pool cap, recovers expired task leases
   with `retry_scheduled` evidence while preferring a different available worker
-  over the stale owner, and reruns verification gates when agent work changes
-  project files;
+  over the stale owner, quarantines stale workers with `worker_dead` evidence
+  and durable `stale-worker-cleanup.json` markers, ignores late stale-worker
+  outbox/heartbeat updates, and reruns verification gates when agent work
+  changes project files;
 - active operator interruption during Wire-backed goal execution: `pause` or
   `cancel` updates durable goal state, the active execute process observes the
   state change, cancels workers, prevents additional task dispatch, and
