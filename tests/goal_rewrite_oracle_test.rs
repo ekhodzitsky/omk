@@ -14,7 +14,7 @@ mod runtime_goal {
 }
 
 use runtime_goal::oracle::rewrite::{
-    compare_rewrite_oracle, RewriteOracleField, RewriteOracleObservation,
+    compare_rewrite_oracle, RewriteOracleComparison, RewriteOracleField, RewriteOracleObservation,
 };
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -63,10 +63,27 @@ fn collect_artifacts(root: &Path, dir: &Path, artifacts: &mut Vec<(String, Strin
     }
 }
 
+fn mismatch_summary(comparison: &RewriteOracleComparison) -> Vec<(RewriteOracleField, &str, &str)> {
+    comparison
+        .mismatches
+        .iter()
+        .map(|mismatch| {
+            (
+                mismatch.field.clone(),
+                mismatch.expected.as_str(),
+                mismatch.actual.as_str(),
+            )
+        })
+        .collect()
+}
+
 #[test]
 fn rewrite_oracle_accepts_matching_command_and_file_artifacts() {
     let source_fixture = fixture_path("rewrite_tiny_source_project");
-    assert!(source_fixture.join("src/message.txt").exists());
+    assert_eq!(
+        fs::read_to_string(source_fixture.join("src/message.txt")).expect("source fixture"),
+        "old api says hello\n"
+    );
 
     let expected = rewrite_fixture("rewrite_expected_observation");
     let actual = rewrite_fixture("rewrite_actual_matching_observation");
@@ -85,22 +102,27 @@ fn rewrite_oracle_reports_output_exit_and_file_mismatches() {
     let comparison = compare_rewrite_oracle(&expected, &actual);
 
     assert!(!comparison.compatible);
-    assert!(comparison
-        .mismatches
-        .iter()
-        .any(|mismatch| mismatch.field == RewriteOracleField::Stdout));
-    assert!(comparison
-        .mismatches
-        .iter()
-        .any(|mismatch| mismatch.field == RewriteOracleField::Stderr));
-    assert!(comparison
-        .mismatches
-        .iter()
-        .any(|mismatch| mismatch.field == RewriteOracleField::ExitCode));
-    assert!(comparison.mismatches.iter().any(|mismatch| {
-        mismatch.field
-            == RewriteOracleField::FileArtifact {
-                path: "src/message.txt".to_string(),
-            }
-    }));
+    assert_eq!(
+        mismatch_summary(&comparison),
+        vec![
+            (
+                RewriteOracleField::Stdout,
+                "rewrote src/message.txt\n",
+                "rewrote src/other.txt\n"
+            ),
+            (
+                RewriteOracleField::Stderr,
+                "\n",
+                "warning: partial rewrite\n"
+            ),
+            (RewriteOracleField::ExitCode, "0", "1"),
+            (
+                RewriteOracleField::FileArtifact {
+                    path: "src/message.txt".to_string(),
+                },
+                "new api says hello\n",
+                "new api says goodbye\n"
+            ),
+        ]
+    );
 }
