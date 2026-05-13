@@ -30,9 +30,9 @@ Status: current beta MVP.
 - `omk goal` durable scaffold with planning artifacts, task graph, local
   verification task evidence, git evidence, policy-validated bounded
   Wire-backed agent waves, accepted follow-up tasks, `max_agents` worker-pool
-  caps, stale-lease recovery evidence, mutation diff/changed-file evidence,
-  post-mutation gate reruns, controller review/security evidence, and not-ready
-  proof.
+  caps, stale-lease recovery evidence, load-time task graph validation,
+  mutation diff/changed-file evidence, post-mutation gate reruns, controller
+  review/security evidence, and not-ready proof.
 - GitHub CI and coverage.
 
 ## Stage 1 - Goal State Core

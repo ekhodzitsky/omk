@@ -91,6 +91,8 @@ current beta MVP instead of inventing a parallel runtime:
   with `retry_scheduled` evidence while preferring a different available worker
   over the stale owner, and reruns verification gates when agent work changes
   project files;
+- load-time task graph validation for duplicate task ids, missing dependencies,
+  self-dependencies, empty required task fields, and dependency cycles;
 - controller review through `omk goal review`, which marks `goal-review` and
   `goal-security-review` done only when execution evidence exists and the
   bounded changed-file secret scan finds no high-confidence findings;

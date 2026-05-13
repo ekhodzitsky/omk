@@ -33,6 +33,8 @@ Wire-backed scheduler.
 - [x] Enforce `max_agents` as a bounded Wire worker pool for accepted ready
       tasks.
 - [x] Recover stale task leases and prefer another worker for recovered work.
+- [x] Validate task graphs on load for duplicate ids, missing dependencies, and
+      dependency cycles.
 - [x] Update README, architecture docs, spec, TODO, changelog, and version.
 
 ## Verification
@@ -40,9 +42,10 @@ Wire-backed scheduler.
 - `cargo test --test goal_cmd_test test_goal_execute_dispatches_policy_validated_multi_task_agent_wave`
 - `cargo test --test goal_cmd_test test_goal_execute_uses_max_agents_worker_pool_for_ready_followups`
 - `cargo test --test goal_cmd_test test_goal_execute_recovers_stale_agent_task_on_another_worker`
+- `cargo test runtime::goal::task_graph::tests::validate_`
 - `cargo test --test goal_cmd_test`
 
 ## Follow-Up
 
-- Let agents propose graph mutations back to the controller instead of relying
-  only on built-in controller proposals.
+- Persist first-class graph mutation events beyond the current task
+  proposal/accept/reject event stream.

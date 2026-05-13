@@ -7,6 +7,7 @@ use super::agent::GoalAgentTaskPolicy;
 use super::evidence::GoalAgentRunEvidence;
 use super::proof::write_json_artifact;
 use super::state::{GoalState, GOAL_AGENT_WORKER_ROLE, GOAL_TASK_GRAPH_FILE};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -67,10 +68,116 @@ impl GoalTaskGraph {
         let json = tokio::fs::read_to_string(&path)
             .await
             .with_context(|| format!("Failed to read goal task graph: {}", path.display()))?;
-        let graph = serde_json::from_str(&json)
+        let graph: Self = serde_json::from_str(&json)
             .with_context(|| format!("Failed to parse goal task graph: {}", path.display()))?;
+        graph
+            .validate()
+            .with_context(|| format!("Invalid goal task graph: {}", path.display()))?;
         Ok(graph)
     }
+
+    pub fn validate(&self) -> Result<()> {
+        let mut errors = Vec::new();
+
+        if self.version == 0 {
+            errors.push("task graph version must be greater than zero".to_string());
+        }
+        if self.goal_id.trim().is_empty() {
+            errors.push("task graph goal_id must not be empty".to_string());
+        }
+        if self.tasks.is_empty() {
+            errors.push("task graph must contain at least one task".to_string());
+        }
+
+        let mut task_ids = HashSet::new();
+        for task in &self.tasks {
+            let task_id = task.id.trim();
+            if task_id.is_empty() {
+                errors.push("task id must not be empty".to_string());
+                continue;
+            }
+            if !task_ids.insert(task.id.as_str()) {
+                errors.push(format!("duplicate task id: {}", task.id));
+            }
+            if task.title.trim().is_empty() {
+                errors.push(format!("task {} title must not be empty", task.id));
+            }
+            if task.description.trim().is_empty() {
+                errors.push(format!("task {} description must not be empty", task.id));
+            }
+            if task.acceptance.is_empty() {
+                errors.push(format!(
+                    "task {} must define at least one acceptance criterion",
+                    task.id
+                ));
+            }
+        }
+
+        for task in &self.tasks {
+            for dependency in &task.dependencies {
+                if dependency == &task.id {
+                    errors.push(format!("task {} cannot depend on itself", task.id));
+                } else if !task_ids.contains(dependency.as_str()) {
+                    errors.push(format!(
+                        "task {} depends on missing task {}",
+                        task.id, dependency
+                    ));
+                }
+            }
+        }
+
+        if self.contains_dependency_cycle() {
+            errors.push("task graph contains a dependency cycle".to_string());
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            anyhow::bail!(errors.join("; "))
+        }
+    }
+
+    fn contains_dependency_cycle(&self) -> bool {
+        let tasks_by_id: HashMap<&str, &GoalTask> = self
+            .tasks
+            .iter()
+            .map(|task| (task.id.as_str(), task))
+            .collect();
+        let mut visiting = HashSet::new();
+        let mut visited = HashSet::new();
+
+        self.tasks.iter().any(|task| {
+            dependency_cycle_from(task.id.as_str(), &tasks_by_id, &mut visiting, &mut visited)
+        })
+    }
+}
+
+fn dependency_cycle_from(
+    task_id: &str,
+    tasks_by_id: &HashMap<&str, &GoalTask>,
+    visiting: &mut HashSet<String>,
+    visited: &mut HashSet<String>,
+) -> bool {
+    if visited.contains(task_id) {
+        return false;
+    }
+    if !visiting.insert(task_id.to_string()) {
+        return true;
+    }
+
+    if let Some(task) = tasks_by_id.get(task_id) {
+        for dependency in &task.dependencies {
+            if tasks_by_id.contains_key(dependency.as_str())
+                && dependency_cycle_from(dependency, tasks_by_id, visiting, visited)
+            {
+                return true;
+            }
+        }
+    }
+
+    visiting.remove(task_id);
+    visited.insert(task_id.to_string());
+    false
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,4 +420,93 @@ async fn append_agent_proposed_task_events(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn task(id: &str, dependencies: &[&str]) -> GoalTask {
+        GoalTask {
+            id: id.to_string(),
+            title: format!("Task {id}"),
+            description: format!("Task {id} description"),
+            status: GoalTaskStatus::Pending,
+            owner_role: None,
+            completed_at: None,
+            evidence: Vec::new(),
+            dependencies: dependencies
+                .iter()
+                .map(|dependency| dependency.to_string())
+                .collect(),
+            read_set: Vec::new(),
+            write_set: Vec::new(),
+            risk: "low".to_string(),
+            acceptance: vec![format!("Task {id} acceptance")],
+        }
+    }
+
+    fn graph(tasks: Vec<GoalTask>) -> GoalTaskGraph {
+        GoalTaskGraph {
+            version: 1,
+            goal_id: "goal-test".to_string(),
+            generated_at: Utc::now(),
+            tasks,
+        }
+    }
+
+    #[test]
+    fn validate_accepts_dependency_dag() {
+        let graph = graph(vec![
+            task("goal-intake", &[]),
+            task("goal-plan", &["goal-intake"]),
+            task("goal-verify", &["goal-plan"]),
+        ]);
+
+        graph.validate().expect("valid graph should pass");
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_task_ids() {
+        let graph = graph(vec![task("goal-intake", &[]), task("goal-intake", &[])]);
+
+        let err = graph.validate().expect_err("duplicate ids must fail");
+
+        assert!(
+            err.to_string().contains("duplicate task id: goal-intake"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_unknown_dependencies() {
+        let graph = graph(vec![task("goal-verify", &["goal-plan"])]);
+
+        let err = graph
+            .validate()
+            .expect_err("unknown dependencies must fail");
+
+        assert!(
+            err.to_string()
+                .contains("task goal-verify depends on missing task goal-plan"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_dependency_cycles() {
+        let graph = graph(vec![
+            task("goal-a", &["goal-c"]),
+            task("goal-b", &["goal-a"]),
+            task("goal-c", &["goal-b"]),
+        ]);
+
+        let err = graph.validate().expect_err("dependency cycles must fail");
+
+        assert!(
+            err.to_string()
+                .contains("task graph contains a dependency cycle"),
+            "{err}"
+        );
+    }
 }

@@ -109,19 +109,22 @@ Current `omk goal` scaffold data flow:
    evidence under `artifacts/agent-runs/`. Workers may return structured
    `OMK_TASK_PROPOSAL: {...}` follow-up work; the controller records
    `agent-task-proposals.json` and appends accepted safe proposals as pending
-   task graph nodes. Later `execute` invocations dispatch ready pending
-   follow-ups through `artifacts/agent-runs/goal-agent-followups/`, honor the
-   goal `max_agents` cap with a bounded Wire worker pool, recover expired task
-   leases with `retry_scheduled` evidence, and mark those nodes done or blocked
-   from worker results. If the worker changes project files, `execute` reruns
-   gates under `artifacts/gates/post-mutation/` before writing the final proof.
+   task graph nodes. Task graphs are validated on load for duplicate ids,
+   missing dependencies, self-dependencies, and dependency cycles before
+   controller execution proceeds. Later `execute` invocations dispatch ready
+   pending follow-ups through `artifacts/agent-runs/goal-agent-followups/`,
+   honor the goal `max_agents` cap with a bounded Wire worker pool, recover
+   expired task leases with `retry_scheduled` evidence, and mark those nodes
+   done or blocked from worker results. If the worker changes project files,
+   `execute` reruns gates under `artifacts/gates/post-mutation/` before writing
+   the final proof.
 9. `omk goal review` writes controller review/security artifacts under
    `artifacts/reviews/` and closes `goal-review` / `goal-security-review`
    when evidence is sufficient.
 10. Operators inspect with `omk goal list/status/show/proof`.
 11. `omk goal cancel` writes `failure.json`.
 
-Planned later flow adds stronger graph validation, specialist review loops,
+Planned later flow adds graph mutation events, specialist review loops,
 integration acceptance, and ready proof generation.
 
 ## CLI Surfaces
@@ -135,7 +138,7 @@ integration acceptance, and ready proof generation.
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, task graph with controller-owned, local verification, policy-validated multi-task Wire agent mutation, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
+| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, validated task graph with controller-owned, local verification, policy-validated multi-task Wire agent mutation, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
 
 ## MCP Integration
 

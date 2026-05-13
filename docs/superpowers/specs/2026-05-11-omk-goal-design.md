@@ -186,6 +186,9 @@ policy by creating no more Wire workers than the accepted ready task count or
 the configured cap. If a scheduler lease expires, the controller emits
 `retry_scheduled` evidence with the stale worker id and prefers another
 available worker for the recovered task before falling back to the stale owner.
+Task graphs are validated on load for duplicate ids, missing dependencies,
+self-dependencies, required field presence, and dependency cycles before the
+controller executes them.
 
 ### Verification Wall
 

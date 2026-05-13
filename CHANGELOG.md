@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-05-13
+
+### Added
+
+- **`omk goal` task graph validation**: goal task graphs are now validated on load for duplicate task ids, missing dependencies, self-dependencies, empty required task fields, and dependency cycles before controller execution proceeds.
+
 ## [0.3.9] - 2026-05-13
 
 ### Added

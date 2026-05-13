@@ -57,7 +57,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Track acceptance criteria.
 - [x] Track owner role.
 - [ ] Track retries and lease expiration.
-- [ ] Add graph validation.
+- [x] Add graph validation.
 - [ ] Add graph mutation events.
 - [ ] Add tests for dependency ordering and write-set conflicts.
 
