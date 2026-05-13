@@ -27,8 +27,8 @@ Status: current beta MVP.
 - Proof and failure artifacts.
 - Run/proof/HUD inspection.
 - Verification gates.
-- `omk goal` durable scaffold with planning artifacts, decision log, task
-  graph, local verification task evidence, git evidence, policy-validated bounded
+- `omk goal` durable scaffold with backward-compatible state loading, planning
+  artifacts, decision log, task graph, local verification task evidence, git evidence, policy-validated bounded
   Wire-backed agent waves, accepted follow-up tasks, `max_agents` worker-pool
   caps, stale-lease recovery evidence, load-time task graph validation,
   first-class graph mutation events, path-normalized dependency-ordered
@@ -47,6 +47,7 @@ Target: make goals durable and inspectable.
 - Emit goal lifecycle events.
 - Write `failure.json` for blocked or failed goals.
 - Add JSON and Markdown output for `goal show`.
+- Add backward-compatible reads for restored or older goal state.
 
 Exit criteria:
 

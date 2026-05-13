@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.27] - 2026-05-13
+
+### Fixed
+
+- **Goal state backward-compatible loading**: `GoalState::load` now accepts legacy `goal.json` files that predate `until_ready`, `terminal_criteria`, `phase`, `version`, artifacts, and `state_dir`, and it rehomes stale persisted `state_dir` values to the actual goal directory so moved/restored state stores keep working.
+
 ## [0.3.26] - 2026-05-13
 
 ### Added

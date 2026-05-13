@@ -18,7 +18,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Write `failure.json` for cancelled goals.
 - [x] Add state version field.
 - [x] Add unit tests for serialization.
-- [ ] Add backward-compatible read/migration tests.
+- [x] Add backward-compatible read/migration tests.
 
 ## Phase 2 - CLI Surface
 

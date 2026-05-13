@@ -135,6 +135,7 @@ pub struct GoalState {
     pub updated_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub until_ready: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget_time: Option<String>,
@@ -144,11 +145,13 @@ pub struct GoalState {
     pub budget_usd: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_agents: Option<usize>,
+    #[serde(default)]
     pub terminal_criteria: GoalTerminalCriteria,
     #[serde(default)]
     pub artifacts: Vec<GoalArtifact>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<GoalFailure>,
+    #[serde(default)]
     pub state_dir: PathBuf,
 }
 
@@ -184,8 +187,9 @@ impl GoalState {
         let json = tokio::fs::read_to_string(&path)
             .await
             .with_context(|| format!("Failed to read goal state: {}", path.display()))?;
-        let state = serde_json::from_str(&json)
+        let mut state: Self = serde_json::from_str(&json)
             .with_context(|| format!("Failed to parse goal state: {}", path.display()))?;
+        state.state_dir = goal_dir.to_path_buf();
         Ok(state)
     }
 }
@@ -278,6 +282,7 @@ pub(crate) fn format_goal_duration_secs(secs: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn goal_status_serializes_as_snake_case() {
@@ -309,5 +314,65 @@ mod tests {
         assert_eq!(format_goal_duration_secs(60), "1m");
         assert_eq!(format_goal_duration_secs(3_600), "1h");
         assert_eq!(format_goal_duration_secs(86_400), "1d");
+    }
+
+    #[tokio::test]
+    async fn goal_state_loads_legacy_json_with_safe_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join(GOAL_STATE_FILE),
+            r#"{
+              "goal_id": "goal-legacy",
+              "original_goal": "Ship safely",
+              "normalized_goal": "Ship safely",
+              "status": "not_ready",
+              "created_at": "2026-05-13T00:00:00Z",
+              "updated_at": "2026-05-13T00:00:01Z"
+            }"#,
+        )
+        .unwrap();
+
+        let state = GoalState::load(temp.path()).await.unwrap();
+
+        assert_eq!(state.version, 1);
+        assert_eq!(state.phase, GoalPhase::Intake);
+        assert!(!state.until_ready);
+        assert!(state.terminal_criteria.proof_required);
+        assert!(state.terminal_criteria.gates_required);
+        assert!(state.terminal_criteria.human_blockers_stop);
+        assert!(state.artifacts.is_empty());
+        assert_eq!(state.state_dir, temp.path());
+    }
+
+    #[tokio::test]
+    async fn goal_state_load_rehomes_stale_persisted_state_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join(GOAL_STATE_FILE),
+            r#"{
+              "version": 1,
+              "goal_id": "goal-moved",
+              "original_goal": "Resume after move",
+              "normalized_goal": "Resume after move",
+              "status": "paused",
+              "phase": "proof",
+              "created_at": "2026-05-13T00:00:00Z",
+              "updated_at": "2026-05-13T00:00:01Z",
+              "until_ready": true,
+              "terminal_criteria": {
+                "proof_required": true,
+                "gates_required": true,
+                "human_blockers_stop": true
+              },
+              "state_dir": "/old/machine/.local/state/omk/goals/goal-moved"
+            }"#,
+        )
+        .unwrap();
+
+        let state = GoalState::load(temp.path()).await.unwrap();
+
+        assert_eq!(state.goal_id, "goal-moved");
+        assert_eq!(state.status, GoalStatus::Paused);
+        assert_eq!(state.state_dir, temp.path());
     }
 }

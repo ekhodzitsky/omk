@@ -76,6 +76,8 @@ correct outcome is `blocked_on_human`, not a fake success.
 current beta MVP instead of inventing a parallel runtime:
 
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
+- backward-compatible `goal.json` loading with safe defaults for newer fields
+  and `state_dir` rehoming from the actual goal directory;
 - `omk goal plan/run/list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`,
   `task-graph.json`, and `decisions.jsonl`;

@@ -71,7 +71,7 @@ omk CLI (Rust)
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
-| `runtime/goal/` | Goal controller scaffold, task graph, local gates, policy-validated bounded agent waves with per-task budget hard stops, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, deterministic replayable event timelines, budget checkpoints, wall-clock/token/cost budget enforcement and recovery, and proof state. |
+| `runtime/goal/` | Goal controller scaffold, backward-compatible goal state loading, task graph, local gates, policy-validated bounded agent waves with per-task budget hard stops, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, deterministic replayable event timelines, budget checkpoints, wall-clock/token/cost budget enforcement and recovery, and proof state. |
 
 ## Data Flow
 
@@ -90,7 +90,9 @@ omk CLI (Rust)
 Current `omk goal` scaffold data flow:
 
 1. User runs `omk goal run "large outcome" --until-ready`.
-2. OMK writes `goals/<goal-id>/goal.json` under the OMK state directory.
+2. OMK writes `goals/<goal-id>/goal.json` under the OMK state directory and
+   reloads goal state with safe defaults plus actual-directory `state_dir`
+   rehoming for restored or older records.
 3. OMK writes `prd.md`, `technical-plan.md`, `test-spec.md`,
    `task-graph.json`, and `decisions.jsonl`.
 4. OMK writes an honest `proof.json` with `not_ready` until required
