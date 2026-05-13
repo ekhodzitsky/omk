@@ -22,7 +22,7 @@ fn mock_kimi_path() -> PathBuf {
     assert_cmd::cargo::cargo_bin("mock-kimi")
 }
 
-fn write_gate_config(project_dir: &Path) {
+fn write_smoke_and_performance_gate_config(project_dir: &Path) {
     let omk_dir = project_dir.join(".omk");
     fs::create_dir_all(&omk_dir).expect("failed to create .omk dir");
     fs::write(
@@ -92,32 +92,57 @@ fn proof_json(envs: &[(&'static str, PathBuf)], project_dir: &Path) -> Value {
     serde_json::from_slice(&output.stdout).expect("proof output should be JSON")
 }
 
-#[test]
-fn goal_proof_stays_not_ready_when_required_review_artifacts_are_missing() {
-    let (_tmp, envs) = isolated_env();
-    let project = tempfile::tempdir().expect("temp project");
-    write_gate_config(project.path());
-    git(project.path(), &["init"]);
-    git(project.path(), &["config", "user.email", "omk@example.com"]);
-    git(project.path(), &["config", "user.name", "OMK Test"]);
-    git(project.path(), &["add", "."]);
-    git(project.path(), &["commit", "-m", "baseline"]);
+fn init_git_project(project_dir: &Path) {
+    git(project_dir, &["init"]);
+    git(project_dir, &["config", "user.email", "omk@example.com"]);
+    git(project_dir, &["config", "user.name", "OMK Test"]);
+    git(project_dir, &["add", "."]);
+    git(project_dir, &["commit", "-m", "baseline"]);
+}
 
-    let mut run = omk_cmd(&envs);
-    run.current_dir(project.path())
-        .args(["goal", "run", "Prepare missing review artifact proof"])
+fn execute_goal_with_agent_evidence(
+    envs: &[(&'static str, PathBuf)],
+    project_dir: &Path,
+    goal: &str,
+) {
+    let mut run = omk_cmd(envs);
+    run.current_dir(project_dir)
+        .args(["goal", "run", goal])
         .assert()
         .success();
 
-    let mut execute = omk_cmd(&envs);
+    let mut execute = omk_cmd(envs);
     execute
         .env("MOCK_KIMI", mock_kimi_path())
         .env("MOCK_KIMI_WRITE_FILE", "agent-output.txt")
         .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
-        .current_dir(project.path())
+        .current_dir(project_dir)
         .args(["goal", "execute", "latest"])
         .assert()
         .success();
+}
+
+fn run_goal_review(envs: &[(&'static str, PathBuf)], project_dir: &Path) {
+    let mut review = omk_cmd(envs);
+    review
+        .env_remove("MOCK_KIMI")
+        .current_dir(project_dir)
+        .args(["goal", "review", "latest"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn goal_proof_stays_not_ready_when_required_review_artifacts_are_missing() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_smoke_and_performance_gate_config(project.path());
+    init_git_project(project.path());
+    execute_goal_with_agent_evidence(
+        &envs,
+        project.path(),
+        "Prepare missing review artifact proof",
+    );
 
     let proof = proof_json(&envs, project.path());
     assert_eq!(proof["status"], "not_ready");
@@ -135,36 +160,10 @@ fn goal_proof_stays_not_ready_when_required_review_artifacts_are_missing() {
 fn goal_review_records_typed_reviewer_artifacts_without_model_calls() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");
-    write_gate_config(project.path());
-    git(project.path(), &["init"]);
-    git(project.path(), &["config", "user.email", "omk@example.com"]);
-    git(project.path(), &["config", "user.name", "OMK Test"]);
-    git(project.path(), &["add", "."]);
-    git(project.path(), &["commit", "-m", "baseline"]);
-
-    let mut run = omk_cmd(&envs);
-    run.current_dir(project.path())
-        .args(["goal", "run", "Capture typed review artifacts"])
-        .assert()
-        .success();
-
-    let mut execute = omk_cmd(&envs);
-    execute
-        .env("MOCK_KIMI", mock_kimi_path())
-        .env("MOCK_KIMI_WRITE_FILE", "agent-output.txt")
-        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
-        .current_dir(project.path())
-        .args(["goal", "execute", "latest"])
-        .assert()
-        .success();
-
-    let mut review = omk_cmd(&envs);
-    review
-        .env_remove("MOCK_KIMI")
-        .current_dir(project.path())
-        .args(["goal", "review", "latest"])
-        .assert()
-        .success();
+    write_smoke_and_performance_gate_config(project.path());
+    init_git_project(project.path());
+    execute_goal_with_agent_evidence(&envs, project.path(), "Capture typed review artifacts");
+    run_goal_review(&envs, project.path());
 
     let proof = proof_json(&envs, project.path());
     let artifacts = proof["review_artifacts"]
@@ -193,35 +192,13 @@ fn goal_review_blocks_proof_when_performance_artifact_is_blocked() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");
     write_smoke_only_gate_config(project.path());
-    git(project.path(), &["init"]);
-    git(project.path(), &["config", "user.email", "omk@example.com"]);
-    git(project.path(), &["config", "user.name", "OMK Test"]);
-    git(project.path(), &["add", "."]);
-    git(project.path(), &["commit", "-m", "baseline"]);
-
-    let mut run = omk_cmd(&envs);
-    run.current_dir(project.path())
-        .args(["goal", "run", "Keep blocked performance review visible"])
-        .assert()
-        .success();
-
-    let mut execute = omk_cmd(&envs);
-    execute
-        .env("MOCK_KIMI", mock_kimi_path())
-        .env("MOCK_KIMI_WRITE_FILE", "agent-output.txt")
-        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
-        .current_dir(project.path())
-        .args(["goal", "execute", "latest"])
-        .assert()
-        .success();
-
-    let mut review = omk_cmd(&envs);
-    review
-        .env_remove("MOCK_KIMI")
-        .current_dir(project.path())
-        .args(["goal", "review", "latest"])
-        .assert()
-        .success();
+    init_git_project(project.path());
+    execute_goal_with_agent_evidence(
+        &envs,
+        project.path(),
+        "Keep blocked performance review visible",
+    );
+    run_goal_review(&envs, project.path());
 
     let proof = proof_json(&envs, project.path());
     let artifacts = proof["review_artifacts"]

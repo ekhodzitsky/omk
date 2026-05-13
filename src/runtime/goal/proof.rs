@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{json, Value};
 use std::path::Path;
 
 use super::state::{
@@ -323,24 +323,22 @@ fn review_artifact(
     passed_summary: &str,
     blocked_gap: &str,
 ) -> Value {
-    let mut value = Map::new();
-    value.insert("pass".to_string(), Value::String(pass.to_string()));
-    value.insert(
-        "status".to_string(),
-        Value::String(if passed { "passed" } else { "blocked" }.to_string()),
-    );
-    value.insert("path".to_string(), Value::String(path.to_string()));
-    value.insert(
-        "summary".to_string(),
-        Value::String(if passed { passed_summary } else { blocked_gap }.to_string()),
-    );
-    if !passed {
-        value.insert(
-            "known_gaps".to_string(),
-            Value::Array(vec![Value::String(blocked_gap.to_string())]),
-        );
+    if passed {
+        json!({
+            "pass": pass,
+            "status": "passed",
+            "path": path,
+            "summary": passed_summary,
+        })
+    } else {
+        json!({
+            "pass": pass,
+            "status": "blocked",
+            "path": path,
+            "summary": blocked_gap,
+            "known_gaps": [blocked_gap],
+        })
     }
-    Value::Object(value)
 }
 
 fn review_artifact_known_gaps(artifacts: &[Value]) -> Vec<String> {
