@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "goal_id": "<goal-id>",
+  "status": "not_ready",
+  "readiness": "not ready: verification gates passed, but agent execution evidence is missing",
+  "summary": "Goal 'Verify deterministic goal proof output' has 1 gate result(s) and remains not ready until all required execution and review evidence exists.",
+  "generated_at": "<timestamp>",
+  "artifacts": [
+    {
+      "kind": "prd",
+      "path": "prd.md",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "technical_plan",
+      "path": "technical-plan.md",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "task_graph",
+      "path": "task-graph.json",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "test_spec",
+      "path": "test-spec.md",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "proof",
+      "path": "proof.json",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "decisions",
+      "path": "decisions.jsonl",
+      "created_at": "<timestamp>"
+    }
+  ],
+  "task_graph_summary": {
+    "total_tasks": 6,
+    "pending_tasks": 3,
+    "blocked_tasks": 0,
+    "done_tasks": 3
+  },
+  "changed_files": [],
+  "commits": [],
+  "gates": [
+    {
+      "name": "smoke",
+      "passed": true,
+      "stdout": "smoke-ok\n",
+      "stderr": "",
+      "duration_ms": 0,
+      "required": true,
+      "command_line": "/bin/sh -c echo smoke-ok",
+      "exit_code": 0,
+      "timed_out": false,
+      "stdout_summary": "smoke-ok",
+      "output_path": "<gate-output-path>",
+      "timeout_secs": 0
+    }
+  ],
+  "post_mutation_gates_ran": false,
+  "known_gaps": [
+    "agent execution has not run for this goal yet",
+    "proof cannot claim readiness until agent-owned execution evidence exists"
+  ],
+  "human_decisions_required": []
+}
