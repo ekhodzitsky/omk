@@ -106,6 +106,7 @@ fn test_goal_help_lists_goal_runtime_commands() {
         .stdout(predicate::str::contains("execute"))
         .stdout(predicate::str::contains("review"))
         .stdout(predicate::str::contains("status"))
+        .stdout(predicate::str::contains("budget"))
         .stdout(predicate::str::contains("pause"))
         .stdout(predicate::str::contains("resume"))
         .stdout(predicate::str::contains("replay"))
@@ -1620,4 +1621,86 @@ fn test_goal_replay_reconstructs_timeline_after_restart() {
         .stdout(predicate::str::contains("Goal replay"))
         .stdout(predicate::str::contains("goal_paused"))
         .stdout(predicate::str::contains("goal_resumed"));
+}
+
+#[test]
+fn test_goal_budget_records_checkpoints_after_restart() {
+    let (tmp, envs) = isolated_env();
+    let project = tmp.path().join("project");
+    fs::create_dir_all(&project).expect("failed to create project dir");
+    write_gate_config(&project, "quick-budget", "exit 0");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(&project)
+        .args([
+            "goal",
+            "run",
+            "Track this durable goal budget",
+            "--budget-time",
+            "1h",
+        ])
+        .assert()
+        .success();
+
+    let mut verify = omk_cmd(&envs);
+    verify
+        .current_dir(&project)
+        .args(["goal", "verify", "latest"])
+        .assert()
+        .success();
+
+    let mut budget_cmd = omk_cmd(&envs);
+    let budget = budget_cmd
+        .current_dir(&project)
+        .args(["goal", "budget", "latest", "--json"])
+        .output()
+        .expect("omk goal budget failed");
+    assert!(
+        budget.status.success(),
+        "budget failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&budget.stdout),
+        String::from_utf8_lossy(&budget.stderr)
+    );
+    let budget_json: Value =
+        serde_json::from_slice(&budget.stdout).expect("budget output should be JSON");
+    assert_eq!(budget_json["budget_time"], "1h");
+    assert_eq!(budget_json["total_budget_secs"], 3600);
+    assert!(
+        budget_json["latest"]["remaining_budget_secs"]
+            .as_u64()
+            .unwrap()
+            <= 3600
+    );
+    let labels: Vec<_> = budget_json["checkpoints"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|checkpoint| checkpoint["label"].as_str())
+        .collect();
+    assert!(labels.contains(&"goal_created"));
+    assert!(labels.contains(&"verify_completed"));
+
+    let mut budget_text = omk_cmd(&envs);
+    budget_text
+        .current_dir(&project)
+        .args(["goal", "budget", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Goal budget"))
+        .stdout(predicate::str::contains("Remaining"))
+        .stdout(predicate::str::contains("verify_completed"));
+
+    let dirs = goal_dirs(&envs);
+    let checkpoints = read_jsonl(&dirs[0].join("budget-checkpoints.jsonl"));
+    assert!(checkpoints
+        .iter()
+        .any(|checkpoint| checkpoint["label"] == "goal_created"));
+    assert!(checkpoints
+        .iter()
+        .any(|checkpoint| checkpoint["label"] == "verify_completed"));
+
+    let events = read_jsonl(&dirs[0].join("events.jsonl"));
+    assert!(events
+        .iter()
+        .any(|event| event["kind"] == "budget_checkpoint"));
 }

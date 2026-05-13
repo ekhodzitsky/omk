@@ -261,6 +261,7 @@ omk goal review [goal-id|latest]
 omk goal pause [goal-id|latest]
 omk goal resume [goal-id|latest]
 omk goal replay [goal-id|latest] [--format text|json|md]
+omk goal budget [goal-id|latest] [--format text|json|md]
 ```
 
 Later:

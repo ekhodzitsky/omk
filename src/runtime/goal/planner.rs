@@ -83,6 +83,7 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
     state.updated_at = now;
     state.completed_at = Some(now);
     state.save().await?;
+    super::budget::append_budget_checkpoint(&state, "goal_created").await?;
 
     writer
         .append(

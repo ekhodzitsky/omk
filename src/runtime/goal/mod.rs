@@ -3,6 +3,7 @@ use chrono::Utc;
 use std::path::Path;
 
 mod agent;
+mod budget;
 mod dispatch;
 mod evidence;
 mod planner;
@@ -13,14 +14,16 @@ mod task_graph;
 mod verifier;
 
 // Public API re-exports (preserved for backward compatibility)
+pub use budget::{goal_budget, GoalBudgetCheckpoint, GoalBudgetReport};
 pub use evidence::GoalGitEvidence;
 pub use proof::GoalProof;
 pub use replay::{replay_goal, GoalReplay, GoalReplayEntry};
 pub use state::{
     CreateGoalOptions, GoalArtifact, GoalFailure, GoalPhase, GoalState, GoalStatus,
-    GoalTerminalCriteria, GOALS_DIR, GOAL_AGENT_RUNS_DIR, GOAL_ARTIFACTS_DIR, GOAL_FAILURE_FILE,
-    GOAL_GATE_ARTIFACTS_DIR, GOAL_PRD_FILE, GOAL_PROOF_FILE, GOAL_STATE_FILE, GOAL_TASK_GRAPH_FILE,
-    GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
+    GoalTerminalCriteria, GOALS_DIR, GOAL_AGENT_RUNS_DIR, GOAL_ARTIFACTS_DIR,
+    GOAL_BUDGET_CHECKPOINTS_FILE, GOAL_FAILURE_FILE, GOAL_GATE_ARTIFACTS_DIR, GOAL_PRD_FILE,
+    GOAL_PROOF_FILE, GOAL_STATE_FILE, GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE,
+    GOAL_TEST_SPEC_FILE,
 };
 pub use task_graph::{
     GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
@@ -144,6 +147,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
             &proof.status.to_string(),
         )?)
         .await?;
+    budget::append_budget_checkpoint(&state, "verify_completed").await?;
 
     Ok(proof)
 }
@@ -264,6 +268,7 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
             &proof.status.to_string(),
         )?)
         .await?;
+    budget::append_budget_checkpoint(&state, "execute_completed").await?;
 
     Ok(proof)
 }
@@ -344,6 +349,7 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
             &proof.status.to_string(),
         )?)
         .await?;
+    budget::append_budget_checkpoint(&state, "review_completed").await?;
 
     Ok(proof)
 }
@@ -364,6 +370,7 @@ pub async fn pause_goal(goal_id: &str) -> Result<GoalState> {
     state.completed_at = None;
     state.save().await?;
     append_goal_lifecycle_event(&state, crate::runtime::events::EventKind::GoalPaused).await?;
+    budget::append_budget_checkpoint(&state, "goal_paused").await?;
     Ok(state)
 }
 
@@ -383,6 +390,7 @@ pub async fn resume_goal(goal_id: &str) -> Result<GoalState> {
     state.completed_at = None;
     state.save().await?;
     append_goal_lifecycle_event(&state, crate::runtime::events::EventKind::GoalResumed).await?;
+    budget::append_budget_checkpoint(&state, "goal_resumed").await?;
     Ok(state)
 }
 
@@ -417,6 +425,7 @@ pub async fn cancel_goal(goal_id: &str) -> Result<GoalState> {
     let failed =
         crate::runtime::events::EventBuilder::new(run_id).run_failed("cancelled by user")?;
     writer.append_many(&[interrupted, failed]).await?;
+    budget::append_budget_checkpoint(&state, "goal_cancelled").await?;
 
     Ok(state)
 }

@@ -12,6 +12,7 @@ pub const GOAL_TECHNICAL_PLAN_FILE: &str = "technical-plan.md";
 pub const GOAL_TEST_SPEC_FILE: &str = "test-spec.md";
 pub const GOAL_TASK_GRAPH_FILE: &str = "task-graph.json";
 pub const GOAL_PROOF_FILE: &str = "proof.json";
+pub const GOAL_BUDGET_CHECKPOINTS_FILE: &str = "budget-checkpoints.jsonl";
 pub const GOAL_ARTIFACTS_DIR: &str = "artifacts";
 pub const GOAL_GATE_ARTIFACTS_DIR: &str = "gates";
 pub const GOAL_AGENT_RUNS_DIR: &str = "agent-runs";
@@ -221,7 +222,11 @@ pub(crate) fn default_goal_agent_task_budget_secs() -> u64 {
 }
 
 pub(crate) fn goal_agent_task_budget_secs(state: &GoalState, requested_secs: u64) -> u64 {
-    let Some(total_budget_secs) = state.budget_time.as_deref().and_then(parse_duration_secs) else {
+    let Some(total_budget_secs) = state
+        .budget_time
+        .as_deref()
+        .and_then(parse_goal_duration_secs)
+    else {
         return requested_secs;
     };
     let per_task_ceiling = if total_budget_secs < 60 {
@@ -232,7 +237,7 @@ pub(crate) fn goal_agent_task_budget_secs(state: &GoalState, requested_secs: u64
     requested_secs.min(per_task_ceiling)
 }
 
-fn parse_duration_secs(value: &str) -> Option<u64> {
+pub(crate) fn parse_goal_duration_secs(value: &str) -> Option<u64> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return None;

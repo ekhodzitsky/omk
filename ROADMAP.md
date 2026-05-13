@@ -42,7 +42,7 @@ Status: current beta MVP.
 Target: make goals durable and inspectable.
 
 - Add `.omk/goals/<goal-id>/` state layout.
-- Add `omk goal run/status/show/list/proof/replay/verify/execute/review/pause/resume/cancel`.
+- Add `omk goal run/status/show/list/proof/replay/budget/verify/execute/review/pause/resume/cancel`.
 - Persist normalized goal, constraints, budgets, and terminal criteria.
 - Emit goal lifecycle events.
 - Write `failure.json` for blocked or failed goals.
@@ -50,8 +50,8 @@ Target: make goals durable and inspectable.
 
 Exit criteria:
 
-- A goal can be created, inspected, replayed, verified locally, cancelled, and
-  resumed after process restart.
+- A goal can be created, inspected, replayed, budget-checked, verified locally,
+  cancelled, and resumed after process restart.
 - State transitions have tests.
 
 ## Stage 2 - Planning and Oracle
@@ -156,7 +156,7 @@ Target: let goals run for days safely.
 
 - Harden pause/resume across active worker interruption and machine restarts.
 - Harden goal replay into deterministic crash-recovery replay.
-- Add budget checkpoints.
+- Harden budget checkpoints into enforced cost/token/time stop conditions.
 - Add crash recovery tests.
 - Add stale agent cleanup.
 - Add operator notifications.

@@ -70,6 +70,7 @@ fn event_summary(payload: Option<&Value>) -> Option<String> {
     let mut parts = Vec::new();
     for key in [
         "message",
+        "label",
         "reason",
         "status",
         "phase",

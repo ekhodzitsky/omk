@@ -72,6 +72,18 @@ pub(crate) enum GoalCommands {
         #[arg(long)]
         json: bool,
     },
+    /// Show persisted budget checkpoints for a goal
+    Budget {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest")]
+        goal_id: String,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: OutputFormat,
+        /// Output JSON (shortcut for --format json)
+        #[arg(long)]
+        json: bool,
+    },
     /// Run local verification gates and update the goal proof
     Verify {
         /// Goal ID or "latest"
@@ -153,6 +165,11 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             format,
             json,
         } => cmd_replay(&goal_id, format, json).await,
+        GoalCommands::Budget {
+            goal_id,
+            format,
+            json,
+        } => cmd_budget(&goal_id, format, json).await,
         GoalCommands::Verify { goal_id } => cmd_verify(&goal_id).await,
         GoalCommands::Execute { goal_id } => cmd_execute(&goal_id).await,
         GoalCommands::Review { goal_id } => cmd_review(&goal_id).await,
@@ -319,6 +336,100 @@ async fn cmd_proof(goal_id: &str, format: OutputFormat, json: bool) -> Result<()
     }
 
     Ok(())
+}
+
+async fn cmd_budget(goal_id: &str, format: OutputFormat, json: bool) -> Result<()> {
+    let report = crate::runtime::goal::goal_budget(goal_id).await?;
+    let output_format = if json { OutputFormat::Json } else { format };
+
+    match output_format {
+        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+        OutputFormat::Md => {
+            println!("# Goal Budget {}", report.goal_id);
+            println!();
+            print_budget_summary_md(&report);
+            println!();
+            println!("## Checkpoints");
+            for checkpoint in &report.checkpoints {
+                println!(
+                    "- `{}` `{}` status=`{}` phase=`{}` remaining={}",
+                    checkpoint.recorded_at,
+                    checkpoint.label,
+                    checkpoint.status,
+                    checkpoint.phase,
+                    format_optional_secs(checkpoint.remaining_budget_secs)
+                );
+            }
+        }
+        OutputFormat::Text => {
+            println!("Goal budget {}", report.goal_id);
+            print_budget_summary_text(&report);
+            println!("Checkpoints: {}", report.checkpoints.len());
+            for checkpoint in &report.checkpoints {
+                println!(
+                    "  {}  {:18} status={} phase={} remaining={}",
+                    checkpoint.recorded_at,
+                    checkpoint.label,
+                    checkpoint.status,
+                    checkpoint.phase,
+                    format_optional_secs(checkpoint.remaining_budget_secs)
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn print_budget_summary_text(report: &crate::runtime::goal::GoalBudgetReport) {
+    println!(
+        "Budget time: {}",
+        report.budget_time.as_deref().unwrap_or("unbounded")
+    );
+    println!("Total: {}", format_optional_secs(report.total_budget_secs));
+    if let Some(latest) = &report.latest {
+        println!(
+            "Elapsed: {}",
+            format_optional_secs(Some(latest.elapsed_since_created_secs))
+        );
+        println!(
+            "Remaining: {}",
+            format_optional_secs(latest.remaining_budget_secs)
+        );
+    } else {
+        println!("Elapsed: unknown");
+        println!("Remaining: unknown");
+    }
+}
+
+fn print_budget_summary_md(report: &crate::runtime::goal::GoalBudgetReport) {
+    println!(
+        "- Budget time: `{}`",
+        report.budget_time.as_deref().unwrap_or("unbounded")
+    );
+    println!(
+        "- Total: `{}`",
+        format_optional_secs(report.total_budget_secs)
+    );
+    if let Some(latest) = &report.latest {
+        println!(
+            "- Elapsed: `{}`",
+            format_optional_secs(Some(latest.elapsed_since_created_secs))
+        );
+        println!(
+            "- Remaining: `{}`",
+            format_optional_secs(latest.remaining_budget_secs)
+        );
+    } else {
+        println!("- Elapsed: `unknown`");
+        println!("- Remaining: `unknown`");
+    }
+}
+
+fn format_optional_secs(value: Option<u64>) -> String {
+    value
+        .map(|value| format!("{value}s"))
+        .unwrap_or_else(|| "unbounded".to_string())
 }
 
 async fn cmd_replay(goal_id: &str, format: OutputFormat, json: bool) -> Result<()> {
