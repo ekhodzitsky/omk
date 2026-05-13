@@ -106,6 +106,8 @@ fn test_goal_help_lists_goal_runtime_commands() {
         .stdout(predicate::str::contains("execute"))
         .stdout(predicate::str::contains("review"))
         .stdout(predicate::str::contains("status"))
+        .stdout(predicate::str::contains("pause"))
+        .stdout(predicate::str::contains("resume"))
         .stdout(predicate::str::contains("cancel"));
 }
 
@@ -1485,4 +1487,79 @@ fn test_goal_status_list_and_cancel_latest() {
     let json: Value = serde_json::from_slice(&output.stdout).expect("show output should be JSON");
     assert_eq!(json["status"], "cancelled");
     assert_eq!(json["failure"]["reason"], "cancelled by user");
+}
+
+#[test]
+fn test_goal_pause_resume_latest_survives_process_restart() {
+    let (_tmp, envs) = isolated_env();
+
+    omk_cmd(&envs)
+        .args(["goal", "run", "Pause and resume this durable goal"])
+        .assert()
+        .success();
+
+    omk_cmd(&envs)
+        .args(["goal", "pause", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("paused"))
+        .stdout(predicate::str::contains("paused"));
+
+    let paused = omk_cmd(&envs)
+        .args(["goal", "show", "latest", "--json"])
+        .output()
+        .expect("omk goal show failed after pause");
+    assert!(
+        paused.status.success(),
+        "show failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&paused.stdout),
+        String::from_utf8_lossy(&paused.stderr)
+    );
+    let paused_json: Value =
+        serde_json::from_slice(&paused.stdout).expect("paused show output should be JSON");
+    assert_eq!(paused_json["status"], "paused");
+
+    omk_cmd(&envs)
+        .args(["goal", "verify", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("paused"));
+
+    omk_cmd(&envs)
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("paused"));
+
+    omk_cmd(&envs)
+        .args(["goal", "review", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("paused"));
+
+    omk_cmd(&envs)
+        .args(["goal", "resume", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("resumed"))
+        .stdout(predicate::str::contains("not_ready"));
+
+    let resumed = omk_cmd(&envs)
+        .args(["goal", "show", "latest", "--json"])
+        .output()
+        .expect("omk goal show failed after resume");
+    assert!(
+        resumed.status.success(),
+        "show failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&resumed.stdout),
+        String::from_utf8_lossy(&resumed.stderr)
+    );
+    let resumed_json: Value =
+        serde_json::from_slice(&resumed.stdout).expect("resumed show output should be JSON");
+    assert_eq!(resumed_json["status"], "not_ready");
+
+    let dirs = goal_dirs(&envs);
+    let events = read_jsonl(&dirs[0].join("events.jsonl"));
+    assert!(events.iter().any(|event| event["kind"] == "goal_paused"));
+    assert!(events.iter().any(|event| event["kind"] == "goal_resumed"));
 }

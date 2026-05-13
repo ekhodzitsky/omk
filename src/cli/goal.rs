@@ -78,6 +78,18 @@ pub(crate) enum GoalCommands {
         #[arg(default_value = "latest")]
         goal_id: String,
     },
+    /// Pause a goal until it is resumed
+    Pause {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest")]
+        goal_id: String,
+    },
+    /// Resume a paused goal
+    Resume {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest")]
+        goal_id: String,
+    },
     /// Cancel a goal
     Cancel {
         /// Goal ID or "latest"
@@ -127,6 +139,8 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         GoalCommands::Verify { goal_id } => cmd_verify(&goal_id).await,
         GoalCommands::Execute { goal_id } => cmd_execute(&goal_id).await,
         GoalCommands::Review { goal_id } => cmd_review(&goal_id).await,
+        GoalCommands::Pause { goal_id } => cmd_pause(&goal_id).await,
+        GoalCommands::Resume { goal_id } => cmd_resume(&goal_id).await,
         GoalCommands::Cancel { goal_id } => cmd_cancel(&goal_id).await,
     }
 }
@@ -363,5 +377,23 @@ async fn cmd_cancel(goal_id: &str) -> Result<()> {
             .join(crate::runtime::goal::GOAL_FAILURE_FILE)
             .display()
     );
+    Ok(())
+}
+
+async fn cmd_pause(goal_id: &str) -> Result<()> {
+    let goal = crate::runtime::goal::pause_goal(goal_id).await?;
+    println!("Goal {} paused", goal.goal_id);
+    println!("Status: {}", goal.status);
+    println!("Phase: {}", goal.phase);
+    println!("Updated: {}", goal.updated_at);
+    Ok(())
+}
+
+async fn cmd_resume(goal_id: &str) -> Result<()> {
+    let goal = crate::runtime::goal::resume_goal(goal_id).await?;
+    println!("Goal {} resumed", goal.goal_id);
+    println!("Status: {}", goal.status);
+    println!("Phase: {}", goal.phase);
+    println!("Updated: {}", goal.updated_at);
     Ok(())
 }

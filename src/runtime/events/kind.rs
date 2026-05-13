@@ -83,6 +83,8 @@ pub enum EventKind {
     RetryScheduled,
     ProofWritten,
     ManualInterrupt,
+    GoalPaused,
+    GoalResumed,
 }
 
 // ---------------------------------------------------------------------------

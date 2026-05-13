@@ -7,7 +7,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 ## Phase 1 - Durable Goal State
 
-- [x] Add `src/runtime/goal.rs` module.
+- [x] Add `src/runtime/goal/` module.
 - [x] Define `GoalStatus` and `GoalState`.
 - [ ] Define dedicated `GoalId`, `GoalKind`, and `GoalBudget` types.
 - [x] Define terminal statuses: `ready`, `not_ready`, `blocked_on_human`,
@@ -32,8 +32,8 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Add `omk goal verify [goal-id|latest]`.
 - [x] Add `omk goal execute [goal-id|latest]`.
 - [x] Add `omk goal review [goal-id|latest]`.
-- [ ] Add `omk goal pause [goal-id|latest]`.
-- [ ] Add `omk goal resume [goal-id|latest]`.
+- [x] Add `omk goal pause [goal-id|latest]`.
+- [x] Add `omk goal resume [goal-id|latest]`.
 - [x] Add command help smoke tests.
 - [x] Add JSON output smoke tests.
 
@@ -139,7 +139,8 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 ## Phase 12 - Long-Horizon Reliability
 
-- [ ] Add pause/resume across process restart.
+- [x] Add pause/resume across process restart.
+- [ ] Harden pause/resume against active worker interruption.
 - [ ] Add crash recovery tests.
 - [ ] Add budget checkpoints.
 - [ ] Add notification hooks.

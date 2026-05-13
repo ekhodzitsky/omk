@@ -361,6 +361,8 @@ fn event_serde_roundtrip_across_kinds_and_actor_shapes() {
         EventKind::RetryScheduled,
         EventKind::ProofWritten,
         EventKind::ManualInterrupt,
+        EventKind::GoalPaused,
+        EventKind::GoalResumed,
     ];
     let cases = [
         ("run-a", None),

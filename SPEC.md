@@ -74,7 +74,7 @@ correct outcome is `blocked_on_human`, not a fake success.
 current beta MVP instead of inventing a parallel runtime:
 
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
-- `omk goal plan/run/list/status/show/proof/verify/execute/review/cancel`;
+- `omk goal plan/run/list/status/show/proof/verify/execute/review/pause/resume/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`, and
   `task-graph.json`;
 - controller-owned planning task completion evidence in the task graph and
@@ -273,7 +273,7 @@ It is:
 - PRD, technical plan, and test spec artifacts;
 - task graph persisted as JSON;
 - limited agent execution through the existing team runner;
-- status/resume/cancel;
+- status/pause/resume/cancel;
 - proof bundle;
 - one greenfield demo;
 - one rewrite/refactor demo using a small fixture;

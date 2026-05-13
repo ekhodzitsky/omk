@@ -258,13 +258,13 @@ omk goal proof [goal-id|latest]
 omk goal verify [goal-id|latest]
 omk goal execute [goal-id|latest]
 omk goal review [goal-id|latest]
+omk goal pause [goal-id|latest]
+omk goal resume [goal-id|latest]
 ```
 
 Later:
 
 ```bash
-omk goal pause [goal-id|latest]
-omk goal resume [goal-id|latest]
 omk goal plan <goal>
 omk goal approve-plan <goal-id>
 omk goal open-pr <goal-id>

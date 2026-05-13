@@ -42,7 +42,7 @@ Status: current beta MVP.
 Target: make goals durable and inspectable.
 
 - Add `.omk/goals/<goal-id>/` state layout.
-- Add `omk goal run/status/show/list/proof/verify/execute/review/cancel`.
+- Add `omk goal run/status/show/list/proof/verify/execute/review/pause/resume/cancel`.
 - Persist normalized goal, constraints, budgets, and terminal criteria.
 - Emit goal lifecycle events.
 - Write `failure.json` for blocked or failed goals.
@@ -154,7 +154,7 @@ Exit criteria:
 
 Target: let goals run for days safely.
 
-- Add pause/resume across machine restarts.
+- Harden pause/resume across active worker interruption and machine restarts.
 - Add goal replay.
 - Add budget checkpoints.
 - Add crash recovery tests.

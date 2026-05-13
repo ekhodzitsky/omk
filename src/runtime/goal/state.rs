@@ -43,6 +43,7 @@ pub enum GoalStatus {
     BlockedOnExternal,
     NeedsMoreBudget,
     FailedInfra,
+    Paused,
     Cancelled,
 }
 
@@ -56,6 +57,7 @@ impl std::fmt::Display for GoalStatus {
             GoalStatus::BlockedOnExternal => "blocked_on_external",
             GoalStatus::NeedsMoreBudget => "needs_more_budget",
             GoalStatus::FailedInfra => "failed_infra",
+            GoalStatus::Paused => "paused",
             GoalStatus::Cancelled => "cancelled",
         };
         write!(f, "{value}")
@@ -253,6 +255,12 @@ mod tests {
     fn goal_status_serializes_as_snake_case() {
         let value = serde_json::to_value(GoalStatus::NotReady).unwrap();
         assert_eq!(value, "not_ready");
+    }
+
+    #[test]
+    fn paused_goal_status_serializes_as_snake_case() {
+        let value = serde_json::to_value(GoalStatus::Paused).unwrap();
+        assert_eq!(value, "paused");
     }
 
     #[test]

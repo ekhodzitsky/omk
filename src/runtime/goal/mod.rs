@@ -92,6 +92,7 @@ pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
 
 pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = resolve_goal(goal_id).await?;
+    ensure_goal_not_paused(&state)?;
     let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
     let gate_config = crate::runtime::gates::load_or_detect_gates(project_dir).await;
     let gate_artifacts = state
@@ -147,6 +148,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
 
 pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = resolve_goal(goal_id).await?;
+    ensure_goal_not_paused(&state)?;
     state.status = GoalStatus::Running;
     state.phase = GoalPhase::Execution;
     state.updated_at = Utc::now();
@@ -266,6 +268,7 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
 
 pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = resolve_goal(goal_id).await?;
+    ensure_goal_not_paused(&state)?;
     state.status = GoalStatus::Running;
     state.phase = GoalPhase::VerificationDesign;
     state.updated_at = Utc::now();
@@ -343,6 +346,44 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     Ok(proof)
 }
 
+pub async fn pause_goal(goal_id: &str) -> Result<GoalState> {
+    let mut state = resolve_goal(goal_id).await?;
+    if matches!(state.status, GoalStatus::Ready | GoalStatus::Cancelled) {
+        anyhow::bail!(
+            "Goal '{}' is terminal ({}) and cannot be paused",
+            state.goal_id,
+            state.status
+        );
+    }
+
+    let now = Utc::now();
+    state.status = GoalStatus::Paused;
+    state.updated_at = now;
+    state.completed_at = None;
+    state.save().await?;
+    append_goal_lifecycle_event(&state, crate::runtime::events::EventKind::GoalPaused).await?;
+    Ok(state)
+}
+
+pub async fn resume_goal(goal_id: &str) -> Result<GoalState> {
+    let mut state = resolve_goal(goal_id).await?;
+    if state.status != GoalStatus::Paused {
+        anyhow::bail!(
+            "Goal '{}' is not paused (status: {})",
+            state.goal_id,
+            state.status
+        );
+    }
+
+    let now = Utc::now();
+    state.status = GoalStatus::NotReady;
+    state.updated_at = now;
+    state.completed_at = None;
+    state.save().await?;
+    append_goal_lifecycle_event(&state, crate::runtime::events::EventKind::GoalResumed).await?;
+    Ok(state)
+}
+
 pub async fn cancel_goal(goal_id: &str) -> Result<GoalState> {
     let mut state = resolve_goal(goal_id).await?;
     let now = Utc::now();
@@ -376,4 +417,35 @@ pub async fn cancel_goal(goal_id: &str) -> Result<GoalState> {
     writer.append_many(&[interrupted, failed]).await?;
 
     Ok(state)
+}
+
+fn ensure_goal_not_paused(state: &GoalState) -> Result<()> {
+    if state.status == GoalStatus::Paused {
+        anyhow::bail!(
+            "Goal '{}' is paused; run `omk goal resume {}` before continuing",
+            state.goal_id,
+            state.goal_id
+        );
+    }
+    Ok(())
+}
+
+async fn append_goal_lifecycle_event(
+    state: &GoalState,
+    kind: crate::runtime::events::EventKind,
+) -> Result<()> {
+    let writer = crate::runtime::events::EventWriter::new(
+        state.state_dir.join(crate::runtime::config::EVENTS_FILE),
+    );
+    let event = crate::runtime::events::Event::new(
+        crate::runtime::events::RunId(state.goal_id.clone()),
+        kind,
+    )
+    .with_actor("omk-cli")
+    .with_payload(serde_json::json!({
+        "status": state.status.to_string(),
+        "phase": state.phase.to_string(),
+        "updated_at": state.updated_at,
+    }))?;
+    writer.append(&event).await
 }

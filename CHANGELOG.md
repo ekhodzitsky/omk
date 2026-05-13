@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.15] - 2026-05-13
+
+### Added
+
+- **`omk goal` pause/resume lifecycle**: goals can now be persisted as `paused`, resumed back to `not_ready`, emit `goal_paused`/`goal_resumed` events, and block `verify`/`execute`/`review` while paused until explicitly resumed.
+
 ## [0.3.14] - 2026-05-13
 
 ### Added
