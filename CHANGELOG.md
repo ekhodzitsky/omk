@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-05-13
+
+### Added
+
+- **`omk goal execute` stale-task recovery**: goal agent waves now recover expired scheduler leases, emit `retry_scheduled` evidence with the stale worker id, and prefer a different available worker for the recovered task instead of immediately redispatching to the same stalled worker. Mock Wire tests can now target a single worker with `MOCK_KIMI_WIRE_STALL_WHEN_CONTAINS`.
+
 ## [0.3.8] - 2026-05-12
 
 ### Added

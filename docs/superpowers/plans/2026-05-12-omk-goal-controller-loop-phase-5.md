@@ -32,16 +32,17 @@ Wire-backed scheduler.
 - [x] Record task policy evidence on the aggregate goal task.
 - [x] Enforce `max_agents` as a bounded Wire worker pool for accepted ready
       tasks.
+- [x] Recover stale task leases and prefer another worker for recovered work.
 - [x] Update README, architecture docs, spec, TODO, changelog, and version.
 
 ## Verification
 
 - `cargo test --test goal_cmd_test test_goal_execute_dispatches_policy_validated_multi_task_agent_wave`
 - `cargo test --test goal_cmd_test test_goal_execute_uses_max_agents_worker_pool_for_ready_followups`
+- `cargo test --test goal_cmd_test test_goal_execute_recovers_stale_agent_task_on_another_worker`
 - `cargo test --test goal_cmd_test`
 
 ## Follow-Up
 
 - Let agents propose graph mutations back to the controller instead of relying
   only on built-in controller proposals.
-- Add stale-task recovery coverage for goal execution waves.

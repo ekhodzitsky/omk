@@ -89,20 +89,7 @@ impl TeamRunner {
                 None => continue,
             };
 
-            let mut assigned_idx = None;
-            for (idx, worker) in available_workers.iter().enumerate() {
-                let conflicts = self.ownership.would_conflict(&task, &worker.name);
-                if conflicts.is_empty() {
-                    assigned_idx = Some(idx);
-                    break;
-                }
-                warn!(
-                    task = %task.id,
-                    worker = %worker.name,
-                    conflicts = ?conflicts,
-                    "Ownership conflict detected"
-                );
-            }
+            let assigned_idx = self.pick_worker_for_task(&task, &available_workers);
 
             let Some(idx) = assigned_idx else {
                 warn!(
@@ -117,6 +104,7 @@ impl TeamRunner {
             if !self.claim_store.claim(&task_id, &worker.name) {
                 continue;
             }
+            self.stale_task_owners.remove(&task_id);
 
             if let Some(task_ref) = self.claim_store.get(&task_id) {
                 self.ownership.register_task(task_ref);
@@ -158,5 +146,42 @@ impl TeamRunner {
         }
 
         Ok(())
+    }
+
+    fn pick_worker_for_task(
+        &self,
+        task: &Task,
+        available_workers: &[&WorkerSpec],
+    ) -> Option<usize> {
+        let stale_owner = self.stale_task_owners.get(&task.id);
+        self.pick_non_conflicting_worker(task, available_workers, stale_owner, false)
+            .or_else(|| {
+                self.pick_non_conflicting_worker(task, available_workers, stale_owner, true)
+            })
+    }
+
+    fn pick_non_conflicting_worker(
+        &self,
+        task: &Task,
+        available_workers: &[&WorkerSpec],
+        stale_owner: Option<&String>,
+        allow_stale_owner: bool,
+    ) -> Option<usize> {
+        for (idx, worker) in available_workers.iter().enumerate() {
+            if !allow_stale_owner && stale_owner.is_some_and(|owner| owner == &worker.name) {
+                continue;
+            }
+            let conflicts = self.ownership.would_conflict(task, &worker.name);
+            if conflicts.is_empty() {
+                return Some(idx);
+            }
+            warn!(
+                task = %task.id,
+                worker = %worker.name,
+                conflicts = ?conflicts,
+                "Ownership conflict detected"
+            );
+        }
+        None
     }
 }

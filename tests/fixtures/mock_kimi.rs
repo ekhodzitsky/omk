@@ -176,7 +176,7 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
                     .unwrap_or("mock task");
                 let preview: String = user_input.chars().take(60).collect();
                 let lower = user_input.to_lowercase();
-                let is_stall = stall || lower.contains("stall");
+                let is_stall = mock_wire_should_stall(stall, user_input, &lower);
                 let is_crash_after_turn_begin =
                     crash_after_turn_begin || lower.contains("crash-after-turn-begin");
 
@@ -309,6 +309,16 @@ fn mock_wire_response_text(user_input: &str, preview: &str) -> String {
         }
     }
     format!("{default}\n{extra}")
+}
+
+fn mock_wire_should_stall(stall: bool, user_input: &str, lower: &str) -> bool {
+    if stall || lower.contains("stall") {
+        return true;
+    }
+    let Ok(needle) = env::var("MOCK_KIMI_WIRE_STALL_WHEN_CONTAINS") else {
+        return false;
+    };
+    !needle.trim().is_empty() && user_input.contains(&needle)
 }
 
 fn maybe_write_mock_project_file() {

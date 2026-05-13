@@ -30,6 +30,7 @@ pub struct TeamRunner {
     run_id: RunId,
     last_outbox_offsets: HashMap<String, u64>,
     last_heartbeat_ts: HashMap<String, DateTime<Utc>>,
+    stale_task_owners: HashMap<String, String>,
 }
 
 #[cfg(test)]

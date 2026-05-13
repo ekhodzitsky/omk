@@ -15,6 +15,12 @@ pub struct ClaimStore {
     lease_seconds: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveredLease {
+    pub task_id: TaskId,
+    pub stale_owner: Option<String>,
+}
+
 impl ClaimStore {
     pub fn new() -> Self {
         Self {
@@ -26,6 +32,10 @@ impl ClaimStore {
     pub fn with_lease_seconds(mut self, secs: i64) -> Self {
         self.lease_seconds = secs;
         self
+    }
+
+    pub fn set_lease_seconds(&mut self, secs: i64) {
+        self.lease_seconds = secs;
     }
 
     pub fn insert(&mut self, task: Task) {
@@ -210,6 +220,14 @@ impl ClaimStore {
 
     /// Recover any tasks with expired leases back to Pending.
     pub fn recover_stale_leases(&mut self) -> Vec<TaskId> {
+        self.recover_stale_leases_with_owners()
+            .into_iter()
+            .map(|recovered| recovered.task_id)
+            .collect()
+    }
+
+    /// Recover expired leases and preserve the worker that held the stale claim.
+    pub fn recover_stale_leases_with_owners(&mut self) -> Vec<RecoveredLease> {
         let mut recovered = Vec::new();
         let now = Utc::now();
 
@@ -217,12 +235,16 @@ impl ClaimStore {
             if matches!(task.state, TaskState::Claimed | TaskState::Running) {
                 if let Some(expiry) = task.lease_expires {
                     if now > expiry {
+                        let stale_owner = task.owner.clone();
                         warn!(task = %id, owner = ?task.owner, "Stale lease recovered");
                         task.state = TaskState::Pending;
                         task.owner = None;
                         task.lease_expires = None;
                         task.started_at = None;
-                        recovered.push(id.clone());
+                        recovered.push(RecoveredLease {
+                            task_id: id.clone(),
+                            stale_owner,
+                        });
                     }
                 }
             }

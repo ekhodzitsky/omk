@@ -87,8 +87,10 @@ current beta MVP instead of inventing a parallel runtime:
   `goal-local-verify` task done when required gates pass, launches
   policy-validated bounded Wire-backed agent task waves, records mutation diff
   and changed-file evidence, dispatches accepted agent-proposed follow-up tasks,
-  enforces `max_agents` as the worker pool cap, and reruns verification gates
-  when agent work changes project files;
+  enforces `max_agents` as the worker pool cap, recovers expired task leases
+  with `retry_scheduled` evidence while preferring a different available worker
+  over the stale owner, and reruns verification gates when agent work changes
+  project files;
 - controller review through `omk goal review`, which marks `goal-review` and
   `goal-security-review` done only when execution evidence exists and the
   bounded changed-file secret scan finds no high-confidence findings;

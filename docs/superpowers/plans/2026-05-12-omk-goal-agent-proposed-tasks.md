@@ -30,6 +30,7 @@ close the graph nodes from worker results.
 - [x] Append accepted safe proposals to the goal task graph as pending nodes.
 - [x] Dispatch accepted ready follow-up nodes on a later `goal execute`.
 - [x] Enforce `max_agents` as a bounded worker pool for ready follow-up waves.
+- [x] Recover stale task leases and prefer another worker for recovered work.
 - [x] Update README, architecture docs, spec, TODO, changelog, and version.
 
 ## Verification
@@ -40,4 +41,5 @@ close the graph nodes from worker results.
 
 ## Follow-Up
 
-- Add stale-task recovery coverage for goal execution waves.
+- Add graph validation and write-set conflict coverage for agent-proposed task
+  graph mutations.

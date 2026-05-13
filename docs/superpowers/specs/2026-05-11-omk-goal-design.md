@@ -183,7 +183,9 @@ Later `execute` invocations dispatch ready pending follow-ups through a separate
 `goal-agent-followups` Wire wave and close those durable graph nodes from worker
 results. Both built-in and follow-up agent waves honor the goal `max_agents`
 policy by creating no more Wire workers than the accepted ready task count or
-the configured cap.
+the configured cap. If a scheduler lease expires, the controller emits
+`retry_scheduled` evidence with the stale worker id and prefers another
+available worker for the recovered task before falling back to the stale owner.
 
 ### Verification Wall
 

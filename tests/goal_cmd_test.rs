@@ -970,6 +970,74 @@ fn test_goal_execute_uses_max_agents_worker_pool_for_ready_followups() {
 }
 
 #[test]
+fn test_goal_execute_recovers_stale_agent_task_on_another_worker() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args([
+            "goal",
+            "run",
+            "Recover stale goal-agent work",
+            "--max-agents",
+            "2",
+        ])
+        .assert()
+        .success();
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WIRE_STALL_WHEN_CONTAINS", "goal-agent-worker-0")
+        .env("OMK_GOAL_AGENT_LEASE_SECS", "1")
+        .env("OMK_WIRE_TURN_TIMEOUT_SECS", "30")
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("goal-agent-execute: done"));
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let goal_dir = &dirs[0];
+    let agent_run = goal_dir.join("artifacts/agent-runs/goal-agent-execute");
+    let worker_0_outbox = agent_run.join("workers/goal-agent-worker-0/outbox.jsonl");
+    let worker_1_outbox = agent_run.join("workers/goal-agent-worker-1/outbox.jsonl");
+
+    let worker_0_results = read_jsonl(&worker_0_outbox);
+    assert!(
+        !worker_0_results.iter().any(|result| {
+            result["task_id"] == "goal-agent-implement" && result["status"] == "success"
+        }),
+        "stale worker must not successfully complete the recovered task"
+    );
+
+    let worker_1_results = read_jsonl(&worker_1_outbox);
+    assert!(worker_1_results
+        .iter()
+        .any(|result| result["task_id"] == "goal-agent-implement"));
+    assert!(worker_1_results
+        .iter()
+        .any(|result| result["task_id"] == "goal-agent-verify"));
+
+    let events = read_jsonl(&goal_dir.join("events.jsonl"));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "retry_scheduled"
+            && event["payload"]["task_id"] == "goal-agent-implement"
+            && event["payload"]["reason"] == "stale lease recovered"
+            && event["payload"]["stale_worker_id"] == "goal-agent-worker-0"
+    }));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "task_claimed"
+            && event["payload"]["task_id"] == "goal-agent-implement"
+            && event["payload"]["worker_id"] == "goal-agent-worker-1"
+    }));
+}
+
+#[test]
 fn test_goal_review_records_controller_review_and_security_evidence_after_agent_execution() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");

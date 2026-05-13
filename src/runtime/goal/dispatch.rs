@@ -201,6 +201,9 @@ pub(crate) async fn run_goal_agent_task_wave(
         scheduler_tasks,
     )
     .await?;
+    if let Some(lease_secs) = goal_agent_lease_seconds_override() {
+        runner.set_lease_seconds(lease_secs);
+    }
 
     let run_result = runner.run(&worker_specs).await;
     cancel.cancel();
@@ -249,6 +252,13 @@ fn goal_agent_worker_name(index: usize) -> String {
 
 fn goal_agent_worker_count(max_agents: usize, task_count: usize) -> usize {
     max_agents.max(1).min(task_count.max(1))
+}
+
+fn goal_agent_lease_seconds_override() -> Option<i64> {
+    std::env::var("OMK_GOAL_AGENT_LEASE_SECS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<i64>().ok())
+        .filter(|secs| *secs > 0)
 }
 
 async fn prepare_goal_agent_workers(

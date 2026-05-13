@@ -163,3 +163,47 @@ async fn test_poll_reads_simple_failed_result() {
     assert_eq!(task.state, TaskState::Pending);
     assert_eq!(task.retry_count, 1);
 }
+
+#[tokio::test]
+async fn test_recovered_stale_task_prefers_different_worker() {
+    let tmp = TempDir::new().unwrap();
+    let mut runner = make_runner(&tmp).await;
+    runner.set_lease_seconds(-1);
+    runner.seed_task("Recover this stale task");
+
+    let worker_a = make_spec(&tmp, "worker-a").await;
+    let worker_b = make_spec(&tmp, "worker-b").await;
+    runner
+        .dispatch_to_workers(&[worker_a.clone(), worker_b.clone()])
+        .await
+        .unwrap();
+
+    let recovered = runner.claim_store.recover_stale_leases_with_owners();
+    assert_eq!(recovered.len(), 1);
+    for recovery in &recovered {
+        if let Some(task) = runner.claim_store.get(&recovery.task_id) {
+            runner.ownership.release_task(task);
+        }
+        if let Some(stale_owner) = recovery.stale_owner.as_deref() {
+            runner
+                .stale_task_owners
+                .insert(recovery.task_id.clone(), stale_owner.to_string());
+        }
+    }
+
+    runner
+        .dispatch_to_workers(&[worker_a.clone(), worker_b.clone()])
+        .await
+        .unwrap();
+
+    let task = runner.claim_store.get(&"task-1".to_string()).unwrap();
+    assert_eq!(task.state, TaskState::Running);
+    assert_eq!(task.owner, Some("worker-b".to_string()));
+    assert!(
+        tokio::fs::read_to_string(&worker_b.inbox)
+            .await
+            .unwrap()
+            .contains("task-1"),
+        "recovered task should be sent to the non-stale worker when available"
+    );
+}

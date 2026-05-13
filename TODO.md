@@ -73,7 +73,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Dispatch accepted agent-proposed follow-up tasks on later `goal execute` invocations.
 - [x] Enforce max concurrency.
 - [x] Track heartbeat artifacts for the first goal worker wave.
-- [ ] Recover stale tasks.
+- [x] Recover stale tasks.
 - [x] Emit task proposed/accepted/rejected events.
 - [x] Add tests with a mock Wire agent for the first execution wave.
 

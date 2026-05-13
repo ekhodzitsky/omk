@@ -31,6 +31,7 @@ impl TeamRunner {
             run_id: RunId(run_id.to_string()),
             last_outbox_offsets: HashMap::new(),
             last_heartbeat_ts: HashMap::new(),
+            stale_task_owners: HashMap::new(),
         })
     }
 
@@ -59,7 +60,12 @@ impl TeamRunner {
             run_id: RunId(run_id.to_string()),
             last_outbox_offsets: HashMap::new(),
             last_heartbeat_ts: HashMap::new(),
+            stale_task_owners: HashMap::new(),
         })
+    }
+
+    pub(crate) fn set_lease_seconds(&mut self, secs: i64) {
+        self.claim_store.set_lease_seconds(secs);
     }
 
     /// Run the main loop until all tasks are done.
@@ -68,14 +74,22 @@ impl TeamRunner {
             self.dispatch_to_workers(worker_specs).await?;
             self.poll_workers().await?;
 
-            let recovered = self.claim_store.recover_stale_leases();
-            for task_id in &recovered {
-                if let Some(task) = self.claim_store.get(task_id) {
+            let recovered = self.claim_store.recover_stale_leases_with_owners();
+            for recovery in &recovered {
+                if let Some(task) = self.claim_store.get(&recovery.task_id) {
                     self.ownership.release_task(task);
+                }
+                if let Some(stale_owner) = recovery.stale_owner.as_deref() {
+                    self.stale_task_owners
+                        .insert(recovery.task_id.clone(), stale_owner.to_string());
                 }
                 let event = Event::new(self.run_id.clone(), EventKind::RetryScheduled)
                     .with_actor("scheduler")
-                    .with_message(format!("stale lease recovered for {}", task_id))?;
+                    .with_payload(serde_json::json!({
+                        "task_id": recovery.task_id,
+                        "reason": "stale lease recovered",
+                        "stale_worker_id": recovery.stale_owner,
+                    }))?;
                 self.event_writer.append(&event).await?;
             }
 
