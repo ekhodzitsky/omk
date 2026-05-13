@@ -48,7 +48,7 @@ OMK is independent of Moonshot AI, Kimi CLI, and oh-my-claudecode.
 
 Short answer: **yes, you can use OMK today for local/personal repo automation, but treat it as a beta MVP, not a polished 1.0 product.**
 
-Current source version: **v0.3.13**. We are intentionally **not publishing to crates.io yet**; install from GitHub release assets or from the GitHub repository.
+Current source version: **v0.3.14**. We are intentionally **not publishing to crates.io yet**; install from GitHub release assets or from the GitHub repository.
 
 What is ready enough to use now:
 
@@ -63,7 +63,7 @@ What is ready enough to use now:
 | Proof reports | Beta MVP: `omk proof show latest`, cached/regenerated proof, Markdown/text/JSON formats. |
 | Verification gates | Ready for local gates and `.omk/gates.toml` customization. |
 | HUD | Text, JSON, and TUI are usable; web dashboard is still scaffold-level. |
-| `omk goal` controller scaffold | Current scaffold: creates durable goal state, planning artifacts, validated task graph, local verification task evidence, policy-validated multi-task Wire-backed agent task/mutation evidence, accepted and later-dispatched agent-proposed follow-up tasks with path-normalized dependency-ordered write-set conflict policy, post-mutation gate reruns, controller review/security evidence, not-ready proof, and cancellation failure artifacts. |
+| `omk goal` controller scaffold | Current scaffold: creates durable goal state, planning artifacts, validated task graph, local verification task evidence, policy-validated multi-task Wire-backed agent task/mutation evidence, accepted and later-dispatched agent-proposed follow-up tasks with path-normalized dependency-ordered read/write access conflict policy, post-mutation gate reruns, controller review/security evidence, not-ready proof, and cancellation failure artifacts. |
 | Autopilot, Ralph, Ultrawork | Power-user MVP: useful, but less polished than the Kimi asset + team/proof path. |
 | MCP server, marketplace, web dashboard | Secondary/scaffold surfaces. |
 
@@ -106,9 +106,10 @@ appends accepted safe follow-up tasks as pending graph nodes, and emits
 `task_graph_mutated` events for accepted graph additions. Task graphs are
 validated on load for duplicate ids, missing dependencies, self-dependencies,
 and dependency cycles before controller execution proceeds. Agent-proposed
-follow-ups that write the same path, normalized alias path, or parent/child path
-must be dependency-ordered; unordered write-set conflicts are rejected with
-policy evidence instead of becoming graph nodes. Later `execute`
+follow-ups that write the same path, normalized alias path, parent/child path,
+or read/write-overlapping path must be dependency-ordered; unordered access
+conflicts are rejected with policy evidence instead of becoming graph nodes.
+Later `execute`
 invocations dispatch ready pending follow-ups through a
 `goal-agent-followups` Wire wave and mark those durable graph nodes from worker
 results. Agent waves now honor the goal `--max-agents` cap by creating a bounded
@@ -301,7 +302,7 @@ These modes are available and useful, but the strongest MVP path today is still:
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
 | HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
 | Cleanup and recovery | Team cleanup, backups, rollback, watchdog events, and interrupted-run failure artifacts. | Current |
-| Goal runtime | Durable goal state, plan/run/list/status/show/proof/verify/execute/review/cancel, planning artifacts, validated task graph with controller-owned, local verification, policy-validated multi-task Wire-backed agent mutation, accepted and later-dispatched agent-proposed follow-up tasks, path-normalized dependency-ordered write-set conflict policy, `task_graph_mutated` events, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, not-ready proof, and cancellation failure artifacts. Specialist reviews and integration loops are next. | Current Scaffold |
+| Goal runtime | Durable goal state, plan/run/list/status/show/proof/verify/execute/review/cancel, planning artifacts, validated task graph with controller-owned, local verification, policy-validated multi-task Wire-backed agent mutation, accepted and later-dispatched agent-proposed follow-up tasks, path-normalized dependency-ordered read/write access conflict policy, `task_graph_mutated` events, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, not-ready proof, and cancellation failure artifacts. Specialist reviews and integration loops are next. | Current Scaffold |
 | Autopilot | Single-lead autonomous execution with verification gates and resume/yolo options. | Power-user MVP |
 | Ralph | Persistent verify/fix loop with iteration limits and completion evidence. | Power-user MVP |
 | Ultrawork | Parallel burst prompts from args, files, or globs, with JSON output support. | Power-user MVP |

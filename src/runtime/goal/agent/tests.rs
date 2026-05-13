@@ -49,6 +49,15 @@ fn graph() -> GoalTaskGraph {
 }
 
 fn proposal(id: &str, dependencies: &[&str], write_set: &[&str]) -> GoalAgentTaskProposal {
+    proposal_with_sets(id, dependencies, &[], write_set)
+}
+
+fn proposal_with_sets(
+    id: &str,
+    dependencies: &[&str],
+    read_set: &[&str],
+    write_set: &[&str],
+) -> GoalAgentTaskProposal {
     GoalAgentTaskProposal {
         id: id.to_string(),
         title: format!("Task {id}"),
@@ -57,7 +66,7 @@ fn proposal(id: &str, dependencies: &[&str], write_set: &[&str]) -> GoalAgentTas
             .iter()
             .map(|dependency| dependency.to_string())
             .collect(),
-        read_set: Vec::new(),
+        read_set: read_set.iter().map(|path| path.to_string()).collect(),
         write_set: write_set.iter().map(|path| path.to_string()).collect(),
         risk: "low".to_string(),
         acceptance: vec![format!("Task {id} acceptance")],
@@ -82,6 +91,60 @@ fn policy_accepts_dependency_ordered_tasks_with_shared_write_set() {
                 "goal-agent-docs-b",
                 &[GOAL_AGENT_EXECUTE_TASK_ID, "goal-agent-docs-a"],
                 &["README.md"],
+            ),
+        ],
+        false,
+    );
+
+    assert_eq!(policy.accepted_tasks.len(), 2);
+    assert!(policy.rejected_tasks.is_empty());
+}
+
+#[test]
+fn policy_accepts_dependency_ordered_read_after_write() {
+    let policy = validate_goal_agent_task_proposals(
+        &state(),
+        &graph(),
+        "goal-test-followups",
+        vec![
+            proposal_with_sets(
+                "goal-agent-docs-a",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &[],
+                &["README.md"],
+            ),
+            proposal_with_sets(
+                "goal-agent-docs-b",
+                &[GOAL_AGENT_EXECUTE_TASK_ID, "goal-agent-docs-a"],
+                &["README.md"],
+                &["docs/guide.md"],
+            ),
+        ],
+        false,
+    );
+
+    assert_eq!(policy.accepted_tasks.len(), 2);
+    assert!(policy.rejected_tasks.is_empty());
+}
+
+#[test]
+fn policy_accepts_parallel_tasks_with_shared_read_set() {
+    let policy = validate_goal_agent_task_proposals(
+        &state(),
+        &graph(),
+        "goal-test-followups",
+        vec![
+            proposal_with_sets(
+                "goal-agent-docs-a",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &["README.md"],
+                &["docs/a.md"],
+            ),
+            proposal_with_sets(
+                "goal-agent-docs-b",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &["./README.md"],
+                &["docs/b.md"],
             ),
         ],
         false,
@@ -174,4 +237,64 @@ fn policy_rejects_unordered_tasks_with_parent_child_write_path_conflict() {
     assert!(policy.rejected_tasks[0]
         .reason
         .contains("write-set conflict with accepted task goal-agent-docs-a: docs/guide.md"));
+}
+
+#[test]
+fn policy_rejects_unordered_task_that_reads_accepted_write_set() {
+    let policy = validate_goal_agent_task_proposals(
+        &state(),
+        &graph(),
+        "goal-test-followups",
+        vec![
+            proposal_with_sets(
+                "goal-agent-docs-a",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &[],
+                &["README.md"],
+            ),
+            proposal_with_sets(
+                "goal-agent-docs-b",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &["./README.md"],
+                &["docs/guide.md"],
+            ),
+        ],
+        false,
+    );
+
+    assert_eq!(policy.accepted_tasks.len(), 1);
+    assert_eq!(policy.rejected_tasks.len(), 1);
+    assert!(policy.rejected_tasks[0]
+        .reason
+        .contains("read/write conflict with accepted task goal-agent-docs-a: README.md"));
+}
+
+#[test]
+fn policy_rejects_unordered_task_that_writes_accepted_read_set() {
+    let policy = validate_goal_agent_task_proposals(
+        &state(),
+        &graph(),
+        "goal-test-followups",
+        vec![
+            proposal_with_sets(
+                "goal-agent-docs-a",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &["docs"],
+                &["agent-output.md"],
+            ),
+            proposal_with_sets(
+                "goal-agent-docs-b",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &[],
+                &["docs/guide.md"],
+            ),
+        ],
+        false,
+    );
+
+    assert_eq!(policy.accepted_tasks.len(), 1);
+    assert_eq!(policy.rejected_tasks.len(), 1);
+    assert!(policy.rejected_tasks[0]
+        .reason
+        .contains("write/read conflict with accepted task goal-agent-docs-a: docs/guide.md"));
 }

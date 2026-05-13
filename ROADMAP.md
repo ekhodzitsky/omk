@@ -32,7 +32,7 @@ Status: current beta MVP.
   Wire-backed agent waves, accepted follow-up tasks, `max_agents` worker-pool
   caps, stale-lease recovery evidence, load-time task graph validation,
   first-class graph mutation events, path-normalized dependency-ordered
-  write-set conflict policy for agent-proposed follow-ups, mutation
+  read/write access conflict policy for agent-proposed follow-ups, mutation
   diff/changed-file evidence, post-mutation gate reruns, controller
   review/security evidence, and not-ready proof.
 - GitHub CI and coverage.
@@ -61,7 +61,7 @@ Target: make goals testable before execution.
 - Generate PRD or goal brief.
 - Generate technical plan.
 - Generate test spec.
-- Build task graph with dependencies and write sets.
+- Build task graph with dependencies plus read/write sets.
 - Define the oracle for completion.
 - Block execution when the oracle is missing.
 
@@ -111,16 +111,16 @@ Target: make parallel work safe.
 
 - Create isolated worktrees or branches for independent task slices.
 - Merge accepted slices through an integrator task.
-- Detect write conflicts before dispatch. Initial agent-proposed follow-up
-  conflicts, including normalized and parent/child path overlaps, are now
-  rejected unless dependency ordering serializes the writes.
+- Detect access conflicts before dispatch. Initial agent-proposed follow-up
+  conflicts, including normalized, parent/child, and read/write path overlaps,
+  are now rejected unless dependency ordering serializes the access.
 - Support partial acceptance of completed subgoals.
 - Preserve changelog and docs updates during integration.
 
 Exit criteria:
 
 - Two independent slices can run concurrently and integrate deterministically.
-- Conflicting write sets block dispatch or require a plan change.
+- Conflicting read/write access sets block dispatch or require a plan change.
 
 ## Stage 6 - Self-Review and Hardening
 

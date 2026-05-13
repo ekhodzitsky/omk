@@ -7,7 +7,7 @@ use super::state::{
 use super::task_graph::{
     goal_task_done, pending_goal_agent_followup_proposals, GoalTaskGraph, GoalTaskStatus,
 };
-use path_policy::first_conflicting_write_path;
+use path_policy::first_conflicting_path;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -62,6 +62,19 @@ pub(crate) struct GoalAgentDispatchPlan {
     pub(crate) kind: GoalAgentWaveKind,
     pub(crate) proposals: Vec<GoalAgentTaskProposal>,
     pub(crate) allow_existing_task_ids: bool,
+}
+
+#[derive(Debug, Clone)]
+struct AcceptedGoalAgentAccessSet {
+    task_id: String,
+    read_set: Vec<String>,
+    write_set: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct GoalAgentAccessConflict {
+    kind: &'static str,
+    path: String,
 }
 
 fn default_goal_agent_task_risk() -> String {
@@ -177,7 +190,7 @@ pub(crate) fn validate_goal_agent_task_proposals(
         .map(|task| task.id.clone())
         .collect();
     let mut accepted_dependency_closures: HashMap<String, HashSet<String>> = HashMap::new();
-    let mut accepted_write_sets: Vec<(String, Vec<String>)> = Vec::new();
+    let mut accepted_access_sets: Vec<AcceptedGoalAgentAccessSet> = Vec::new();
     let mut seen_ids = HashSet::new();
     let mut accepted_tasks = Vec::new();
     let mut rejected_tasks = Vec::new();
@@ -190,7 +203,7 @@ pub(crate) fn validate_goal_agent_task_proposals(
             &mut seen_ids,
             &known_dependencies,
             &existing_task_ids,
-            &accepted_write_sets,
+            &accepted_access_sets,
             &dependency_closure,
             allow_existing_task_ids,
         ) {
@@ -202,7 +215,11 @@ pub(crate) fn validate_goal_agent_task_proposals(
         }
 
         known_dependencies.insert(proposal.id.clone());
-        accepted_write_sets.push((proposal.id.clone(), proposal.write_set.clone()));
+        accepted_access_sets.push(AcceptedGoalAgentAccessSet {
+            task_id: proposal.id.clone(),
+            read_set: proposal.read_set.clone(),
+            write_set: proposal.write_set.clone(),
+        });
         accepted_dependency_closures.insert(proposal.id.clone(), dependency_closure);
         accepted_tasks.push(proposal);
     }
@@ -222,7 +239,7 @@ fn reject_goal_agent_task_proposal(
     seen_ids: &mut HashSet<String>,
     known_dependencies: &HashSet<String>,
     existing_task_ids: &HashSet<String>,
-    accepted_write_sets: &[(String, Vec<String>)],
+    accepted_access_sets: &[AcceptedGoalAgentAccessSet],
     dependency_closure: &HashSet<String>,
     allow_existing_task_ids: bool,
 ) -> Option<String> {
@@ -275,12 +292,11 @@ fn reject_goal_agent_task_proposal(
         return Some(format!("dependency is not accepted or completed: {dep}"));
     }
 
-    if let Some((task_id, path)) =
-        first_unordered_write_set_conflict(proposal, accepted_write_sets, dependency_closure)
+    if let Some((task_id, conflict)) =
+        first_unordered_access_conflict(proposal, accepted_access_sets, dependency_closure)
     {
-        return Some(format!(
-            "write-set conflict with accepted task {task_id}: {path}"
-        ));
+        let GoalAgentAccessConflict { kind, path } = conflict;
+        return Some(format!("{kind} with accepted task {task_id}: {path}"));
     }
 
     None
@@ -300,17 +316,41 @@ fn proposal_dependency_closure(
     closure
 }
 
-fn first_unordered_write_set_conflict(
+fn first_unordered_access_conflict(
     proposal: &GoalAgentTaskProposal,
-    accepted_write_sets: &[(String, Vec<String>)],
+    accepted_access_sets: &[AcceptedGoalAgentAccessSet],
     dependency_closure: &HashSet<String>,
-) -> Option<(String, String)> {
-    for (accepted_task_id, accepted_write_set) in accepted_write_sets {
-        if dependency_closure.contains(accepted_task_id) {
+) -> Option<(String, GoalAgentAccessConflict)> {
+    for accepted in accepted_access_sets {
+        if dependency_closure.contains(&accepted.task_id) {
             continue;
         }
-        if let Some(path) = first_conflicting_write_path(&proposal.write_set, accepted_write_set) {
-            return Some((accepted_task_id.clone(), path));
+        if let Some(path) = first_conflicting_path(&proposal.write_set, &accepted.write_set) {
+            return Some((
+                accepted.task_id.clone(),
+                GoalAgentAccessConflict {
+                    kind: "write-set conflict",
+                    path,
+                },
+            ));
+        }
+        if let Some(path) = first_conflicting_path(&proposal.read_set, &accepted.write_set) {
+            return Some((
+                accepted.task_id.clone(),
+                GoalAgentAccessConflict {
+                    kind: "read/write conflict",
+                    path,
+                },
+            ));
+        }
+        if let Some(path) = first_conflicting_path(&proposal.write_set, &accepted.read_set) {
+            return Some((
+                accepted.task_id.clone(),
+                GoalAgentAccessConflict {
+                    kind: "write/read conflict",
+                    path,
+                },
+            ));
         }
     }
     None

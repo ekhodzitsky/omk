@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-05-13
+
+### Added
+
+- **`omk goal` read/write access policy**: agent-proposed follow-up task validation now rejects unordered read/write and write/read path conflicts, while preserving dependency-ordered read-after-write tasks and parallel shared-read tasks.
+
 ## [0.3.13] - 2026-05-13
 
 ### Added

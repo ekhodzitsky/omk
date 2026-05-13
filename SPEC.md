@@ -97,8 +97,8 @@ current beta MVP instead of inventing a parallel runtime:
 - load-time task graph validation for duplicate task ids, missing dependencies,
   self-dependencies, empty required task fields, and dependency cycles;
 - controller policy checks that reject unordered agent-proposed follow-up tasks
-  with conflicting normalized, alias-equivalent, or parent/child write sets
-  while accepting dependency-serialized follow-ups;
+  with conflicting normalized, alias-equivalent, parent/child, or read/write
+  access sets while accepting dependency-serialized follow-ups;
 - controller review through `omk goal review`, which marks `goal-review` and
   `goal-security-review` done only when execution evidence exists and the
   bounded changed-file secret scan finds no high-confidence findings;

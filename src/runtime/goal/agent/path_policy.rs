@@ -2,19 +2,16 @@ use std::path::{Component, Path};
 
 const PROJECT_FILES_ALIAS: &str = "project files";
 
-pub(super) fn first_conflicting_write_path(
-    candidate: &[String],
-    accepted: &[String],
-) -> Option<String> {
+pub(super) fn first_conflicting_path(candidate: &[String], accepted: &[String]) -> Option<String> {
     candidate.iter().find_map(|candidate_path| {
         accepted
             .iter()
-            .find(|accepted_path| write_paths_conflict(candidate_path, accepted_path))
+            .find(|accepted_path| paths_conflict(candidate_path, accepted_path))
             .map(|_| display_goal_write_path(candidate_path))
     })
 }
 
-fn write_paths_conflict(candidate: &str, accepted: &str) -> bool {
+fn paths_conflict(candidate: &str, accepted: &str) -> bool {
     let Some(candidate) = normalize_goal_write_path(candidate) else {
         return false;
     };
@@ -64,7 +61,7 @@ mod tests {
     #[test]
     fn normalizes_curdir_segments() {
         assert_eq!(
-            first_conflicting_write_path(&["./README.md".to_string()], &["README.md".to_string()]),
+            first_conflicting_path(&["./README.md".to_string()], &["README.md".to_string()]),
             Some("README.md".to_string())
         );
     }
@@ -72,7 +69,7 @@ mod tests {
     #[test]
     fn detects_parent_child_conflicts() {
         assert_eq!(
-            first_conflicting_write_path(&["docs/guide.md".to_string()], &["docs".to_string()]),
+            first_conflicting_path(&["docs/guide.md".to_string()], &["docs".to_string()]),
             Some("docs/guide.md".to_string())
         );
     }
@@ -80,7 +77,7 @@ mod tests {
     #[test]
     fn does_not_treat_same_prefix_as_child_path() {
         assert_eq!(
-            first_conflicting_write_path(&["docs2/guide.md".to_string()], &["docs".to_string()]),
+            first_conflicting_path(&["docs2/guide.md".to_string()], &["docs".to_string()]),
             None
         );
     }
