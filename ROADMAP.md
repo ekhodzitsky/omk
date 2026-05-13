@@ -154,7 +154,7 @@ Exit criteria:
 
 Target: let goals run for days safely.
 
-- Harden pause/resume across active worker interruption and machine restarts.
+- Harden pause/resume across active worker interruption and machine restarts. Current runtime now persists pause/resume across separate CLI invocations and interrupts active Wire-backed goal workers when an operator pauses or cancels a goal.
 - Harden goal replay into deterministic crash-recovery replay.
 - Harden token/cost budget sources and hard stops beyond the current wall-clock `--budget-time` guard and `budget-add` recovery path.
 - Add crash recovery tests.

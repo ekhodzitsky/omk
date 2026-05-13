@@ -71,7 +71,7 @@ omk CLI (Rust)
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
-| `runtime/goal/` | Goal controller scaffold, task graph, local gates, policy-validated bounded agent waves, agent-proposed follow-up dispatch, pause/resume lifecycle, replayable event timelines, budget checkpoints, wall-clock budget enforcement and recovery, and proof state. |
+| `runtime/goal/` | Goal controller scaffold, task graph, local gates, policy-validated bounded agent waves, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, replayable event timelines, budget checkpoints, wall-clock budget enforcement and recovery, and proof state. |
 
 ## Data Flow
 
@@ -120,7 +120,10 @@ Current `omk goal` scaffold data flow:
    pending follow-ups through `artifacts/agent-runs/goal-agent-followups/`,
    honor the goal `max_agents` cap with a bounded Wire worker pool, recover
    expired task leases with `retry_scheduled` evidence, and mark those nodes
-   done or blocked from worker results. If the worker changes project files,
+   done or blocked from worker results. If an operator pauses or cancels during
+   an active Wire-backed wave, the execute process observes the durable state
+   change, cancels active workers, stops additional dispatch, and preserves the
+   interrupted status in goal/proof state. If the worker changes project files,
    `execute` reruns gates under `artifacts/gates/post-mutation/` before writing
    the final proof.
 9. `omk goal review` writes controller review/security artifacts under

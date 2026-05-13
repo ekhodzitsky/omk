@@ -164,7 +164,7 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     state.save().await?;
 
     let verification_proof = verify_goal(goal_id, project_dir).await?;
-    let mut state = resolve_goal(goal_id).await?;
+    let state = resolve_goal(goal_id).await?;
     let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
     let local_verify_done = task_graph.tasks.iter().any(|task| {
         task.id == state::GOAL_LOCAL_VERIFY_TASK_ID && task.status == GoalTaskStatus::Done
@@ -201,6 +201,11 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     let agent_execution_succeeded = agent_evidence.summary.completed
         == agent_evidence.summary.total
         && agent_evidence.summary.failed == 0;
+    let latest_state = resolve_goal(&state.goal_id).await?;
+    let preserve_interrupted_status = matches!(
+        latest_state.status,
+        GoalStatus::Paused | GoalStatus::Cancelled | GoalStatus::NeedsMoreBudget
+    );
     let mut proof_gates = verification_proof.gates;
     let mut proof_git = verification_proof.git;
     let mut proof_changed_files = agent_evidence.changed_files;
@@ -235,16 +240,23 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     )
     .await?;
 
+    let mut state = if preserve_interrupted_status {
+        latest_state
+    } else {
+        state
+    };
     evidence::record_artifact_path_once(
         &mut state,
         "agent_run",
         agent_evidence.run_path.clone(),
         now,
     );
-    state.status = GoalStatus::NotReady;
-    state.phase = GoalPhase::Proof;
+    if !preserve_interrupted_status {
+        state.status = GoalStatus::NotReady;
+        state.phase = GoalPhase::Proof;
+        state.completed_at = Some(now);
+    }
     state.updated_at = now;
-    state.completed_at = Some(now);
     state.save().await?;
 
     let proof = proof::build_verified_proof(

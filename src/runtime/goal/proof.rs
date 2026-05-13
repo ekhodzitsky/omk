@@ -138,35 +138,47 @@ pub(crate) fn build_verified_proof(
         known_gaps.push("required verification gates failed".to_string());
     }
 
+    let proof_status = match state.status {
+        GoalStatus::Paused | GoalStatus::Cancelled | GoalStatus::NeedsMoreBudget => state.status,
+        _ => GoalStatus::NotReady,
+    };
+    let readiness = if state.status == GoalStatus::Paused {
+        "paused: execution was interrupted by operator request and can resume later".to_string()
+    } else if state.status == GoalStatus::Cancelled {
+        "cancelled: execution was interrupted by operator cancellation".to_string()
+    } else if state.status == GoalStatus::NeedsMoreBudget {
+        "needs more budget: execution stopped before spending beyond the configured budget"
+            .to_string()
+    } else if gates_ok
+        && agent_execution_done
+        && review_done
+        && security_review_done
+        && !changed_files.is_empty()
+        && post_mutation_gates_ran
+    {
+        "not ready: agent changes passed verification, review, and security evidence, but integration acceptance is missing".to_string()
+    } else if gates_ok
+        && agent_execution_done
+        && review_done
+        && security_review_done
+        && !changed_files.is_empty()
+    {
+        "not ready: agent changes exist, but verification and integration have not rerun after the mutation".to_string()
+    } else if gates_ok && agent_execution_done && review_done && security_review_done {
+        "not ready: verification, agent execution, review, and security evidence passed, but no project mutation was captured".to_string()
+    } else if gates_ok && agent_execution_done {
+        "not ready: verification gates and bounded agent execution passed, but review/security evidence is missing".to_string()
+    } else if gates_ok {
+        "not ready: verification gates passed, but agent execution evidence is missing".to_string()
+    } else {
+        "not ready: required verification evidence is incomplete or failing".to_string()
+    };
+
     GoalProof {
         version: 1,
         goal_id: state.goal_id.clone(),
-        status: GoalStatus::NotReady,
-        readiness: if gates_ok
-            && agent_execution_done
-            && review_done
-            && security_review_done
-            && !changed_files.is_empty()
-            && post_mutation_gates_ran
-        {
-            "not ready: agent changes passed verification, review, and security evidence, but integration acceptance is missing".to_string()
-        } else if gates_ok
-            && agent_execution_done
-            && review_done
-            && security_review_done
-            && !changed_files.is_empty()
-        {
-            "not ready: agent changes exist, but verification and integration have not rerun after the mutation".to_string()
-        } else if gates_ok && agent_execution_done && review_done && security_review_done {
-            "not ready: verification, agent execution, review, and security evidence passed, but no project mutation was captured".to_string()
-        } else if gates_ok && agent_execution_done {
-            "not ready: verification gates and bounded agent execution passed, but review/security evidence is missing".to_string()
-        } else if gates_ok {
-            "not ready: verification gates passed, but agent execution evidence is missing"
-                .to_string()
-        } else {
-            "not ready: required verification evidence is incomplete or failing".to_string()
-        },
+        status: proof_status,
+        readiness,
         summary: format!(
             "Goal '{}' has {} gate result(s) and remains not ready until all required execution and review evidence exists.",
             state.normalized_goal,

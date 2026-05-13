@@ -3,7 +3,9 @@ use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command as StdCommand;
+use std::process::{Command as StdCommand, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, PathBuf)>) {
     omk::test_helpers::isolated_xdg_env()
@@ -11,6 +13,14 @@ fn isolated_env() -> (tempfile::TempDir, Vec<(&'static str, PathBuf)>) {
 
 fn omk_cmd(envs: &[(&'static str, PathBuf)]) -> Command {
     let mut cmd = Command::cargo_bin("omk").unwrap();
+    for (key, value) in envs {
+        cmd.env(key, value);
+    }
+    cmd
+}
+
+fn omk_std_cmd(envs: &[(&'static str, PathBuf)]) -> StdCommand {
+    let mut cmd = StdCommand::new(assert_cmd::cargo::cargo_bin("omk"));
     for (key, value) in envs {
         cmd.env(key, value);
     }
@@ -88,6 +98,48 @@ fn read_jsonl(path: &std::path::Path) -> Vec<Value> {
         .filter(|line| !line.trim().is_empty())
         .map(|line| serde_json::from_str(line).expect("jsonl line should parse"))
         .collect()
+}
+
+fn wait_for_path(path: &std::path::Path, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if path.exists() {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    path.exists()
+}
+
+fn wait_for_child_output(
+    mut child: std::process::Child,
+    timeout: Duration,
+) -> std::process::Output {
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                return child
+                    .wait_with_output()
+                    .expect("failed to collect child output");
+            }
+            Ok(None) if Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(50));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let output = child
+                    .wait_with_output()
+                    .expect("failed to collect timed-out child output");
+                panic!(
+                    "child did not exit before timeout; stdout={} stderr={}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            Err(err) => panic!("failed to poll child: {err}"),
+        }
+    }
 }
 
 #[test]
@@ -1130,6 +1182,103 @@ fn test_goal_execute_recovers_stale_agent_task_on_another_worker() {
         event["kind"] == "task_claimed"
             && event["payload"]["task_id"] == "goal-agent-implement"
             && event["payload"]["worker_id"] == "goal-agent-worker-1"
+    }));
+}
+
+#[test]
+fn test_goal_pause_interrupts_active_agent_execution() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args(["goal", "run", "Pause active goal-agent work"])
+        .assert()
+        .success();
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let goal_dir = &dirs[0];
+    let heartbeat = goal_dir
+        .join("artifacts/agent-runs/goal-agent-execute/workers/goal-agent-worker-0/heartbeat.json");
+
+    let mut execute = omk_std_cmd(&envs);
+    execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WIRE_STALL_WHEN_CONTAINS", "goal-agent-worker-0")
+        .env("OMK_GOAL_INTERRUPT_POLL_MS", "50")
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let child = execute.spawn().expect("failed to spawn goal execute");
+
+    assert!(
+        wait_for_path(&heartbeat, Duration::from_secs(10)),
+        "active goal worker heartbeat did not appear"
+    );
+
+    omk_cmd(&envs)
+        .args(["goal", "pause", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("paused"));
+
+    let output = wait_for_child_output(child, Duration::from_secs(8));
+    assert!(
+        output.status.success(),
+        "execute failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Execution: paused"),
+        "execute should preserve paused proof status, got: {stdout}"
+    );
+
+    let show = omk_cmd(&envs)
+        .args(["goal", "show", "latest", "--json"])
+        .output()
+        .expect("omk goal show failed after active pause");
+    assert!(
+        show.status.success(),
+        "show failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&show.stdout),
+        String::from_utf8_lossy(&show.stderr)
+    );
+    let show_json: Value = serde_json::from_slice(&show.stdout).expect("show output should parse");
+    assert_eq!(show_json["status"], "paused");
+
+    let task_graph: Value = serde_json::from_str(
+        &fs::read_to_string(goal_dir.join("task-graph.json")).expect("missing task graph"),
+    )
+    .expect("task graph should parse");
+    let agent_task = task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|task| task["id"] == "goal-agent-execute")
+        .expect("missing goal-agent-execute task");
+    assert_eq!(agent_task["status"], "blocked");
+    assert!(agent_task["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|evidence| {
+            evidence["summary"]
+                .as_str()
+                .is_some_and(|summary| summary.contains("cancelled by user"))
+        }));
+
+    let events = read_jsonl(&goal_dir.join("events.jsonl"));
+    assert!(events.iter().any(|event| event["kind"] == "goal_paused"));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "task_failed"
+            && event["payload"]["task_id"] == "goal-agent-implement"
+            && event["payload"]["error"] == "cancelled by user"
     }));
 }
 

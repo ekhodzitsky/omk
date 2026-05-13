@@ -93,6 +93,10 @@ current beta MVP instead of inventing a parallel runtime:
   with `retry_scheduled` evidence while preferring a different available worker
   over the stale owner, and reruns verification gates when agent work changes
   project files;
+- active operator interruption during Wire-backed goal execution: `pause` or
+  `cancel` updates durable goal state, the active execute process observes the
+  state change, cancels workers, prevents additional task dispatch, and
+  preserves the interrupted goal/proof status;
 - first-class `task_graph_mutated` events for accepted agent-proposed graph
   additions, including the task id, source, proposal artifact, graph path, and
   resulting task count;
@@ -181,7 +185,8 @@ Every goal run ends in exactly one terminal status:
 - Allow agents to propose follow-up tasks.
 - Require the goal controller to approve task graph mutations.
 - Track worker leases, heartbeats, retries, and failure evidence.
-- Support long-running execution with resume after interruption.
+- Support long-running execution with resume after process and active-worker
+  interruption.
 
 ### Research
 

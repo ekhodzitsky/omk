@@ -65,6 +65,8 @@ and return later to a reliable answer:
 - `blocked_on_human`, with the exact decision needed;
 - `blocked_on_external`, with missing access or dependency;
 - `needs_more_budget`, with progress and remaining work; current code enforces exhausted wall-clock `--budget-time` before more verify/execute/review work is spent and supports `budget-add` recovery;
+- `paused`, with active Wire workers interrupted and durable progress preserved
+  for later resume;
 - `failed_infra`, with recovery guidance.
 
 ## Non-Goals
@@ -191,6 +193,9 @@ the accepted ready task count or the configured cap. If a scheduler lease expire
 the controller emits
 `retry_scheduled` evidence with the stale worker id and prefers another
 available worker for the recovered task before falling back to the stale owner.
+When an operator pauses or cancels a goal during a Wire-backed wave, the active
+execute process observes durable goal state, cancels workers, prevents any
+additional scheduler dispatch, and preserves the interrupted goal/proof status.
 Task graphs are validated on load for duplicate ids, missing dependencies,
 self-dependencies, required field presence, and dependency cycles before the
 controller executes them.

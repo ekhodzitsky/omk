@@ -140,7 +140,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 ## Phase 12 - Long-Horizon Reliability
 
 - [x] Add pause/resume across process restart.
-- [ ] Harden pause/resume against active worker interruption.
+- [x] Harden pause/resume against active worker interruption.
 - [ ] Add crash recovery tests.
 - [x] Add budget checkpoints.
 - [x] Enforce exhausted wall-clock `--budget-time` before goal verify/execute/review.

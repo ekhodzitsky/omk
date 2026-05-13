@@ -9,6 +9,7 @@ use crate::runtime::scheduler::ownership::OwnershipMap;
 use crate::runtime::scheduler::runner::{RunSummary, TeamRunner};
 use crate::runtime::scheduler::task::Task;
 use crate::runtime::worker::WorkerSpec;
+use tokio_util::sync::CancellationToken;
 
 impl TeamRunner {
     /// Initialize a new team run.
@@ -70,9 +71,30 @@ impl TeamRunner {
 
     /// Run the main loop until all tasks are done.
     pub async fn run(&mut self, worker_specs: &[WorkerSpec]) -> Result<RunSummary> {
+        let cancel = CancellationToken::new();
+        self.run_with_cancel(worker_specs, &cancel).await
+    }
+
+    pub(crate) async fn run_with_cancel(
+        &mut self,
+        worker_specs: &[WorkerSpec],
+        cancel: &CancellationToken,
+    ) -> Result<RunSummary> {
         loop {
+            if cancel.is_cancelled() {
+                self.cancel_unfinished_tasks("controller interrupt").await?;
+                self.snapshot().await?;
+                break;
+            }
+
             self.dispatch_to_workers(worker_specs).await?;
             self.poll_workers().await?;
+
+            if cancel.is_cancelled() {
+                self.cancel_unfinished_tasks("controller interrupt").await?;
+                self.snapshot().await?;
+                break;
+            }
 
             let recovered = self.claim_store.recover_stale_leases_with_owners();
             for recovery in &recovered {
@@ -99,10 +121,13 @@ impl TeamRunner {
                 break;
             }
 
-            tokio::time::sleep(std::time::Duration::from_secs(
-                crate::runtime::scheduler::runner::RUNNER_POLL_INTERVAL_SECS,
-            ))
-            .await;
+            tokio::select! {
+                biased;
+                _ = cancel.cancelled() => {}
+                _ = tokio::time::sleep(std::time::Duration::from_secs(
+                    crate::runtime::scheduler::runner::RUNNER_POLL_INTERVAL_SECS,
+                )) => {}
+            }
         }
 
         let summary = self.claim_store.summary();
@@ -124,6 +149,38 @@ impl TeamRunner {
             cancelled: summary.cancelled,
             total: summary.total(),
         })
+    }
+
+    async fn cancel_unfinished_tasks(&mut self, reason: &str) -> Result<()> {
+        let task_ids: Vec<String> = self
+            .claim_store
+            .tasks()
+            .values()
+            .filter(|task| !task.state.is_terminal())
+            .map(|task| task.id.clone())
+            .collect();
+
+        for task_id in task_ids {
+            let worker_id = self
+                .claim_store
+                .get(&task_id)
+                .and_then(|task| task.owner.clone());
+            if self.claim_store.cancel(&task_id)? {
+                if let Some(task) = self.claim_store.get(&task_id) {
+                    self.ownership.release_task(task);
+                }
+                let event = Event::new(self.run_id.clone(), EventKind::TaskFailed)
+                    .with_actor("scheduler")
+                    .with_payload(serde_json::json!({
+                        "task_id": task_id,
+                        "worker_id": worker_id,
+                        "error": reason,
+                    }))?;
+                self.event_writer.append(&event).await?;
+            }
+        }
+
+        Ok(())
     }
 
     /// Save current state to manifest.

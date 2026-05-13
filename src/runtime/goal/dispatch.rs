@@ -13,7 +13,7 @@ use super::evidence::{
 };
 use super::proof::write_json_artifact;
 use super::state::{
-    GoalState, GOAL_AGENT_RUNS_DIR, GOAL_AGENT_TASK_POLICY_FILE, GOAL_AGENT_WORKER_ID,
+    GoalState, GoalStatus, GOAL_AGENT_RUNS_DIR, GOAL_AGENT_TASK_POLICY_FILE, GOAL_AGENT_WORKER_ID,
     GOAL_AGENT_WORKER_ROLE, GOAL_ARTIFACTS_DIR,
 };
 use super::task_graph::{GoalTaskGraph, GoalTaskStatus};
@@ -28,6 +28,37 @@ use crate::runtime::worker::WorkerSpec;
 
 pub(crate) fn goal_agent_wire_runtime_available() -> bool {
     std::env::var_os("MOCK_KIMI").is_some() || which::which("kimi").is_ok()
+}
+
+fn goal_interrupt_poll_interval() -> Duration {
+    std::env::var("OMK_GOAL_INTERRUPT_POLL_MS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .filter(|millis| *millis > 0)
+        .map(Duration::from_millis)
+        .unwrap_or_else(|| Duration::from_millis(500))
+}
+
+async fn watch_goal_control_interrupt(
+    goal_dir: PathBuf,
+    worker_cancel: CancellationToken,
+    monitor_cancel: CancellationToken,
+) -> Option<GoalStatus> {
+    loop {
+        tokio::select! {
+            biased;
+            _ = monitor_cancel.cancelled() => return None,
+            _ = tokio::time::sleep(goal_interrupt_poll_interval()) => {
+                let Ok(state) = GoalState::load(&goal_dir).await else {
+                    continue;
+                };
+                if matches!(state.status, GoalStatus::Paused | GoalStatus::Cancelled) {
+                    worker_cancel.cancel();
+                    return Some(state.status);
+                }
+            }
+        }
+    }
 }
 
 pub(crate) async fn stop_wire_worker(handle: &mut JoinHandle<()>) {
@@ -205,7 +236,16 @@ pub(crate) async fn run_goal_agent_task_wave(
         runner.set_lease_seconds(lease_secs);
     }
 
-    let run_result = runner.run(&worker_specs).await;
+    let monitor_cancel = CancellationToken::new();
+    let monitor_handle = tokio::spawn(watch_goal_control_interrupt(
+        state.state_dir.clone(),
+        cancel.clone(),
+        monitor_cancel.clone(),
+    ));
+
+    let run_result = runner.run_with_cancel(&worker_specs, &cancel).await;
+    monitor_cancel.cancel();
+    let _ = monitor_handle.await;
     cancel.cancel();
     for handle in &mut handles {
         stop_wire_worker(handle).await;
