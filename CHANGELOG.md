@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.16] - 2026-05-13
+
+### Added
+
+- **`omk goal replay` timeline reconstruction**: goals can now replay their persisted `events.jsonl` plus task graph summary as text, Markdown, or JSON, making long-running goal history inspectable after separate CLI invocations and process restarts.
+
 ## [0.3.15] - 2026-05-13
 
 ### Added

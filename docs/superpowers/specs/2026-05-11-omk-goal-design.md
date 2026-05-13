@@ -260,6 +260,7 @@ omk goal execute [goal-id|latest]
 omk goal review [goal-id|latest]
 omk goal pause [goal-id|latest]
 omk goal resume [goal-id|latest]
+omk goal replay [goal-id|latest] [--format text|json|md]
 ```
 
 Later:
@@ -268,7 +269,6 @@ Later:
 omk goal plan <goal>
 omk goal approve-plan <goal-id>
 omk goal open-pr <goal-id>
-omk goal replay <goal-id>
 ```
 
 ## Goal Kinds

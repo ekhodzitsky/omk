@@ -60,6 +60,18 @@ pub(crate) enum GoalCommands {
         #[arg(long)]
         json: bool,
     },
+    /// Replay the persisted goal timeline
+    Replay {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest")]
+        goal_id: String,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "text")]
+        format: OutputFormat,
+        /// Output JSON (shortcut for --format json)
+        #[arg(long)]
+        json: bool,
+    },
     /// Run local verification gates and update the goal proof
     Verify {
         /// Goal ID or "latest"
@@ -136,6 +148,11 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             format,
             json,
         } => cmd_proof(&goal_id, format, json).await,
+        GoalCommands::Replay {
+            goal_id,
+            format,
+            json,
+        } => cmd_replay(&goal_id, format, json).await,
         GoalCommands::Verify { goal_id } => cmd_verify(&goal_id).await,
         GoalCommands::Execute { goal_id } => cmd_execute(&goal_id).await,
         GoalCommands::Review { goal_id } => cmd_review(&goal_id).await,
@@ -296,6 +313,55 @@ async fn cmd_proof(goal_id: &str, format: OutputFormat, json: bool) -> Result<()
                 println!("Known gaps:");
                 for gap in &proof.known_gaps {
                     println!("  - {gap}");
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_replay(goal_id: &str, format: OutputFormat, json: bool) -> Result<()> {
+    let replay = crate::runtime::goal::replay_goal(goal_id).await?;
+    let output_format = if json { OutputFormat::Json } else { format };
+
+    match output_format {
+        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&replay)?),
+        OutputFormat::Md => {
+            println!("# Goal Replay {}", replay.goal_id);
+            println!();
+            println!("- Status: `{}`", replay.status);
+            println!("- Phase: `{}`", replay.phase);
+            println!("- Events: {}", replay.event_count);
+            println!(
+                "- Tasks: {}/{} done",
+                replay.task_graph_summary.done_tasks, replay.task_graph_summary.total_tasks
+            );
+            println!();
+            println!("## Timeline");
+            for entry in &replay.timeline {
+                if let Some(summary) = &entry.summary {
+                    println!("- `{}` `{}` {}", entry.ts, entry.kind, summary);
+                } else {
+                    println!("- `{}` `{}`", entry.ts, entry.kind);
+                }
+            }
+        }
+        OutputFormat::Text => {
+            println!("Goal replay {}", replay.goal_id);
+            println!("Status: {}", replay.status);
+            println!("Phase: {}", replay.phase);
+            println!("Events: {}", replay.event_count);
+            println!(
+                "Tasks: {}/{} done",
+                replay.task_graph_summary.done_tasks, replay.task_graph_summary.total_tasks
+            );
+            println!("Timeline:");
+            for entry in &replay.timeline {
+                if let Some(summary) = &entry.summary {
+                    println!("  {}  {:22} {}", entry.ts, entry.kind, summary);
+                } else {
+                    println!("  {}  {}", entry.ts, entry.kind);
                 }
             }
         }

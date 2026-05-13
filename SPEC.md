@@ -47,6 +47,7 @@ omk goal show latest
 omk goal verify latest
 omk goal execute latest
 omk goal review latest
+omk goal replay latest
 omk goal pause latest
 omk goal resume latest
 omk goal cancel latest
@@ -74,7 +75,7 @@ correct outcome is `blocked_on_human`, not a fake success.
 current beta MVP instead of inventing a parallel runtime:
 
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
-- `omk goal plan/run/list/status/show/proof/verify/execute/review/pause/resume/cancel`;
+- `omk goal plan/run/list/status/show/proof/replay/verify/execute/review/pause/resume/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`, and
   `task-graph.json`;
 - controller-owned planning task completion evidence in the task graph and
@@ -248,6 +249,7 @@ omk goal pause [goal-id|latest]
 omk goal resume [goal-id|latest]
 omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
+omk goal replay [goal-id|latest] [--format text|json|md]
 omk goal verify [goal-id|latest]
 omk goal execute [goal-id|latest]
 omk goal review [goal-id|latest]
@@ -260,7 +262,6 @@ omk goal plan <goal>
 omk goal approve-plan <goal-id>
 omk goal add-task <goal-id> <task>
 omk goal open-pr <goal-id>
-omk goal replay <goal-id>
 ```
 
 ## MVP Definition

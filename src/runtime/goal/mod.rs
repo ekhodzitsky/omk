@@ -7,6 +7,7 @@ mod dispatch;
 mod evidence;
 mod planner;
 mod proof;
+mod replay;
 mod state;
 mod task_graph;
 mod verifier;
@@ -14,6 +15,7 @@ mod verifier;
 // Public API re-exports (preserved for backward compatibility)
 pub use evidence::GoalGitEvidence;
 pub use proof::GoalProof;
+pub use replay::{replay_goal, GoalReplay, GoalReplayEntry};
 pub use state::{
     CreateGoalOptions, GoalArtifact, GoalFailure, GoalPhase, GoalState, GoalStatus,
     GoalTerminalCriteria, GOALS_DIR, GOAL_AGENT_RUNS_DIR, GOAL_ARTIFACTS_DIR, GOAL_FAILURE_FILE,

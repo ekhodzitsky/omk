@@ -145,7 +145,8 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [ ] Add budget checkpoints.
 - [ ] Add notification hooks.
 - [ ] Add stale worker cleanup.
-- [ ] Add goal replay.
+- [x] Add goal replay.
+- [ ] Harden goal replay into deterministic crash-recovery replay.
 
 ## Documentation Tasks
 

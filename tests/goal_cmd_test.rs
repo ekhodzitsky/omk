@@ -108,6 +108,7 @@ fn test_goal_help_lists_goal_runtime_commands() {
         .stdout(predicate::str::contains("status"))
         .stdout(predicate::str::contains("pause"))
         .stdout(predicate::str::contains("resume"))
+        .stdout(predicate::str::contains("replay"))
         .stdout(predicate::str::contains("cancel"));
 }
 
@@ -1562,4 +1563,61 @@ fn test_goal_pause_resume_latest_survives_process_restart() {
     let events = read_jsonl(&dirs[0].join("events.jsonl"));
     assert!(events.iter().any(|event| event["kind"] == "goal_paused"));
     assert!(events.iter().any(|event| event["kind"] == "goal_resumed"));
+}
+
+#[test]
+fn test_goal_replay_reconstructs_timeline_after_restart() {
+    let (_tmp, envs) = isolated_env();
+
+    omk_cmd(&envs)
+        .args(["goal", "run", "Replay this durable goal timeline"])
+        .assert()
+        .success();
+
+    omk_cmd(&envs)
+        .args(["goal", "pause", "latest"])
+        .assert()
+        .success();
+
+    omk_cmd(&envs)
+        .args(["goal", "resume", "latest"])
+        .assert()
+        .success();
+
+    let replay = omk_cmd(&envs)
+        .args(["goal", "replay", "latest", "--json"])
+        .output()
+        .expect("omk goal replay failed");
+    assert!(
+        replay.status.success(),
+        "replay failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&replay.stdout),
+        String::from_utf8_lossy(&replay.stderr)
+    );
+    let replay_json: Value =
+        serde_json::from_slice(&replay.stdout).expect("replay output should be JSON");
+    assert_eq!(replay_json["status"], "not_ready");
+    assert!(replay_json["event_count"].as_u64().unwrap() >= 2);
+    assert!(
+        replay_json["task_graph_summary"]["total_tasks"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    let kinds: Vec<_> = replay_json["timeline"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|entry| entry["kind"].as_str())
+        .collect();
+    assert!(kinds.contains(&"goal_paused"));
+    assert!(kinds.contains(&"goal_resumed"));
+
+    omk_cmd(&envs)
+        .args(["goal", "replay", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Goal replay"))
+        .stdout(predicate::str::contains("goal_paused"))
+        .stdout(predicate::str::contains("goal_resumed"));
 }
