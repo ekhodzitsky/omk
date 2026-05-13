@@ -93,20 +93,27 @@ async fn reader_skips_unknown_event_kind() {
     // If the schema gains a fallback kind, update this test alongside it.
     let tmp = TempDir::new().unwrap();
     let path = tmp.path().join("events.jsonl");
-    let valid = Event::new(RunId("r".into()), EventKind::RunStarted);
-    let unknown = serde_json::json!({
-        "id": "future-id",
-        "run_id": "r",
-        "ts": "2026-01-01T00:00:00Z",
-        "schema_version": EVENT_SCHEMA_VERSION,
-        "kind": "future_unknown_kind",
-        "actor": null,
-    });
-    let body = format!("{}\n{}\n", serde_json::to_string(&valid).unwrap(), unknown);
-    tokio::fs::write(&path, body).await.unwrap();
+    // Twin envelopes — identical shape, only `kind` differs. This proves the
+    // discriminant is the kind field and not some other missing/malformed
+    // part of the hand-crafted envelope.
+    let envelope = |id: &str, kind: &str| {
+        serde_json::json!({
+            "id": id,
+            "run_id": "r",
+            "ts": "2026-01-01T00:00:00Z",
+            "schema_version": EVENT_SCHEMA_VERSION,
+            "kind": kind,
+            "actor": null,
+        })
+    };
+    let known = envelope("known-id", "run_started");
+    let unknown = envelope("future-id", "future_unknown_kind");
+    tokio::fs::write(&path, format!("{known}\n{unknown}\n"))
+        .await
+        .unwrap();
 
     let events = EventReader::read_all(&path).await.unwrap();
-    assert_eq!(events.len(), 1);
+    assert_eq!(events.len(), 1, "only the known-kind envelope must parse");
     assert!(matches!(events[0].kind, EventKind::RunStarted));
     let s = EventReader::summary(&path).await.unwrap();
     assert_eq!((s.total_lines, s.valid_events, s.parse_failures), (2, 1, 1));
@@ -203,9 +210,9 @@ async fn reader_range_inclusive_at_endpoints() {
 
     let events = [
         make(EventKind::RunStarted, -10),
-        make(EventKind::WorkerStarted, 0), // lower endpoint
+        make(EventKind::WorkerStarted, 0),
         make(EventKind::TaskStarted, 5),
-        make(EventKind::TaskCompleted, 10), // upper endpoint
+        make(EventKind::TaskCompleted, 10),
         make(EventKind::RunCompleted, 20),
     ];
     EventWriter::new(&path).append_many(&events).await.unwrap();
@@ -235,4 +242,23 @@ fn payload_string_handles_missing_payload_or_key() {
         payload_string(&with_payload, "count").is_none(),
         "non-string payload values must yield None"
     );
+}
+
+#[test]
+fn payload_string_handles_zero_key_indirection() {
+    // `payload_string` falls back to value.get("0") when the value is not
+    // itself a string. Pin this branch — used for wrapped identifier objects —
+    // and verify a non-string inner value still yields None.
+    let wrapped = Event::new(RunId("r".into()), EventKind::TaskStarted)
+        .with_payload(serde_json::json!({ "task_id": { "0": "wrapped-id" } }))
+        .unwrap();
+    assert_eq!(
+        payload_string(&wrapped, "task_id").as_deref(),
+        Some("wrapped-id")
+    );
+
+    let non_string_inner = Event::new(RunId("r".into()), EventKind::TaskStarted)
+        .with_payload(serde_json::json!({ "task_id": { "0": 42 } }))
+        .unwrap();
+    assert!(payload_string(&non_string_inner, "task_id").is_none());
 }
