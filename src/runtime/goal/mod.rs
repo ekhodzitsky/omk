@@ -11,7 +11,6 @@ mod oracle;
 mod planner;
 mod proof;
 mod replay;
-mod review_artifacts;
 mod state;
 mod task_graph;
 mod verifier;
@@ -24,7 +23,6 @@ pub use budget::{
 pub use evidence::GoalGitEvidence;
 pub use proof::GoalProof;
 pub use replay::{replay_goal, GoalReplay, GoalReplayEntry};
-pub use review_artifacts::{GoalReviewArtifact, GoalReviewArtifactStatus, GoalReviewPass};
 pub use state::{
     CreateGoalOptions, GoalArtifact, GoalFailure, GoalPhase, GoalState, GoalStatus,
     GoalTerminalCriteria, GOALS_DIR, GOAL_AGENT_RUNS_DIR, GOAL_ARTIFACTS_DIR,

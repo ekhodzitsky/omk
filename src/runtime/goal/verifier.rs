@@ -190,17 +190,6 @@ pub(crate) async fn write_goal_review_evidence(
     let agent_execution_done = goal_task_done(task_graph, GOAL_AGENT_EXECUTE_TASK_ID);
     let gates_ok = !proof.gates.is_empty() && gates_passed(&proof.gates);
     let security_findings = scan_goal_security_findings(project_dir, &proof.changed_files).await?;
-    let review_artifacts = super::review_artifacts::build_goal_review_artifacts(
-        &review_path,
-        &security_review_path,
-        local_verify_done,
-        agent_execution_done,
-        &proof.gates,
-        &proof.changed_files,
-        &security_findings,
-    );
-    let review_artifact_lines =
-        super::review_artifacts::review_artifacts_markdown(&review_artifacts);
 
     let review_summary = if local_verify_done && agent_execution_done && gates_ok {
         "Controller review passed: local gate evidence and agent execution evidence are present."
@@ -257,8 +246,6 @@ pub(crate) async fn write_goal_review_evidence(
          Goal ID: `{}`\n\n\
          ## Result\n\n\
          {review_summary}\n\n\
-         ## Review Artifacts\n\n\
-         {review_artifact_lines}\n\n\
          ## Task Evidence\n\n\
          {task_lines}\n\n\
          ## Gate Evidence\n\n\
@@ -301,7 +288,8 @@ pub(crate) async fn write_goal_review_evidence(
     Ok(GoalReviewEvidence {
         review_path,
         security_review_path,
-        review_artifacts,
+        review_summary,
+        security_summary,
         security_findings,
     })
 }
@@ -325,7 +313,11 @@ pub(crate) fn apply_goal_review_task_result(
     };
     task.owner_role = Some(GOAL_CONTROLLER_ACTOR.to_string());
     task.completed_at = review_ok.then_some(completed_at);
-    task.evidence = super::review_artifacts::review_task_evidence(evidence);
+    task.evidence = vec![super::task_graph::GoalTaskEvidence {
+        kind: "review".to_string(),
+        path: evidence.review_path.clone(),
+        summary: evidence.review_summary.clone(),
+    }];
     Some(task.clone())
 }
 
@@ -348,7 +340,11 @@ pub(crate) fn apply_goal_security_review_task_result(
     };
     task.owner_role = Some(GOAL_CONTROLLER_ACTOR.to_string());
     task.completed_at = security_ok.then_some(completed_at);
-    task.evidence = super::review_artifacts::security_review_task_evidence(evidence);
+    task.evidence = vec![super::task_graph::GoalTaskEvidence {
+        kind: "security_review".to_string(),
+        path: evidence.security_review_path.clone(),
+        summary: evidence.security_summary.clone(),
+    }];
     Some(task.clone())
 }
 

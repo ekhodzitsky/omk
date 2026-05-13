@@ -22,23 +22,6 @@ fn mock_kimi_path() -> PathBuf {
     assert_cmd::cargo::cargo_bin("mock-kimi")
 }
 
-fn xdg_state(envs: &[(&'static str, PathBuf)]) -> PathBuf {
-    envs.iter()
-        .find_map(|(key, value)| (*key == "XDG_STATE_HOME").then(|| value.clone()))
-        .expect("missing XDG_STATE_HOME")
-}
-
-fn goal_dirs(envs: &[(&'static str, PathBuf)]) -> Vec<PathBuf> {
-    let goals_dir = xdg_state(envs).join("omk").join("goals");
-    let mut dirs: Vec<_> = fs::read_dir(goals_dir)
-        .expect("missing goals dir")
-        .map(|entry| entry.expect("failed to read goal entry").path())
-        .filter(|path| path.is_dir())
-        .collect();
-    dirs.sort();
-    dirs
-}
-
 fn write_gate_config(project_dir: &Path) {
     let omk_dir = project_dir.join(".omk");
     fs::create_dir_all(&omk_dir).expect("failed to create .omk dir");
@@ -55,6 +38,22 @@ required = true
 name = "performance"
 command = "/bin/sh"
 args = ["-c", "echo perf-ok"]
+required = true
+"#,
+    )
+    .expect("failed to write gates.toml");
+}
+
+fn write_smoke_only_gate_config(project_dir: &Path) {
+    let omk_dir = project_dir.join(".omk");
+    fs::create_dir_all(&omk_dir).expect("failed to create .omk dir");
+    fs::write(
+        omk_dir.join("gates.toml"),
+        r#"
+[[gates]]
+name = "smoke"
+command = "/bin/sh"
+args = ["-c", "echo smoke-ok"]
 required = true
 "#,
     )
@@ -187,12 +186,64 @@ fn goal_review_records_typed_reviewer_artifacts_without_model_calls() {
     assert_eq!(by_pass.get("test"), Some(&"passed"));
     assert_eq!(by_pass.get("security"), Some(&"passed"));
     assert_eq!(by_pass.get("performance"), Some(&"passed"));
+}
 
-    let dirs = goal_dirs(&envs);
-    assert_eq!(dirs.len(), 1);
-    let review_markdown = fs::read_to_string(dirs[0].join("artifacts/reviews/goal-review.md"))
-        .expect("missing goal review artifact");
-    assert!(review_markdown.contains("## Review Artifacts"));
-    assert!(review_markdown.contains("| architect | passed |"));
-    assert!(review_markdown.contains("| performance | passed |"));
+#[test]
+fn goal_review_blocks_proof_when_performance_artifact_is_blocked() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_smoke_only_gate_config(project.path());
+    git(project.path(), &["init"]);
+    git(project.path(), &["config", "user.email", "omk@example.com"]);
+    git(project.path(), &["config", "user.name", "OMK Test"]);
+    git(project.path(), &["add", "."]);
+    git(project.path(), &["commit", "-m", "baseline"]);
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args(["goal", "run", "Keep blocked performance review visible"])
+        .assert()
+        .success();
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WRITE_FILE", "agent-output.txt")
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success();
+
+    let mut review = omk_cmd(&envs);
+    review
+        .env_remove("MOCK_KIMI")
+        .current_dir(project.path())
+        .args(["goal", "review", "latest"])
+        .assert()
+        .success();
+
+    let proof = proof_json(&envs, project.path());
+    let artifacts = proof["review_artifacts"]
+        .as_array()
+        .expect("proof should include typed review artifacts");
+    let performance = artifacts
+        .iter()
+        .find(|artifact| artifact["pass"] == "performance")
+        .expect("missing performance review artifact");
+    assert_eq!(performance["status"], "blocked");
+
+    let gaps = proof["known_gaps"].as_array().unwrap();
+    assert!(gaps.iter().any(|gap| gap
+        .as_str()
+        .unwrap()
+        .contains("performance review is blocked")));
+    assert!(
+        !proof["readiness"]
+            .as_str()
+            .unwrap()
+            .contains("review, and security evidence"),
+        "proof readiness must not claim blocked review evidence passed: {}",
+        proof["readiness"]
+    );
 }
