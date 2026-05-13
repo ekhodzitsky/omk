@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::process::Command;
 use tracing::{info, warn};
 
-use crate::runtime::gates::types::{GateDef, GateResult, VerificationConfig};
+use crate::runtime::gates::types::{GateDef, GateResult, VerificationConfig, SKIPPED_GATE_COMMAND};
 
 /// Run all configured gates and return results.
 pub async fn run_gates(config: &VerificationConfig, dir: &Path) -> Vec<GateResult> {
@@ -16,7 +16,6 @@ pub async fn run_gates_with_evidence(
     dir: &Path,
     output_dir: Option<&Path>,
 ) -> Vec<GateResult> {
-    const SKIPPED_GATE_COMMAND: &str = "__omk_internal_skipped_gate__";
     let mut results = Vec::with_capacity(config.gates.len());
 
     for (index, gate) in config.gates.iter().enumerate() {

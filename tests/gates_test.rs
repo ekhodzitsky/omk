@@ -550,3 +550,228 @@ timeout_secs = 5
     assert!(skipped.command_line.contains("skipped"));
     assert!(omk::runtime::gates::gates_passed(&results));
 }
+
+#[tokio::test]
+async fn test_run_gates_empty_config_returns_no_results() {
+    let tmp = tempfile::tempdir().unwrap();
+    let config = omk::runtime::gates::VerificationConfig { gates: vec![] };
+    let results = omk::runtime::gates::run_gates(&config, tmp.path()).await;
+    assert!(
+        results.is_empty(),
+        "empty gate config should yield no results, got {results:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_run_gates_missing_command_reports_spawn_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let config = omk::runtime::gates::VerificationConfig {
+        gates: vec![omk::runtime::gates::GateDef {
+            name: "missing".to_string(),
+            command: "this-binary-definitely-does-not-exist-omk-test".to_string(),
+            args: vec!["--probe".to_string()],
+            required: true,
+            timeout_secs: 5,
+        }],
+    };
+
+    let results = omk::runtime::gates::run_gates(&config, dir).await;
+    assert_eq!(results.len(), 1);
+    let g = &results[0];
+    assert!(!g.passed);
+    assert_eq!(g.exit_code, None);
+    assert!(!g.timed_out);
+    assert!(g.output_path.is_none());
+    assert!(g.required);
+    assert_eq!(g.timeout_secs, 5);
+    assert!(
+        g.command_line
+            .contains("this-binary-definitely-does-not-exist-omk-test"),
+        "command_line should preserve the command: {}",
+        g.command_line
+    );
+    assert!(
+        g.command_line.contains("--probe"),
+        "command_line should include args: {}",
+        g.command_line
+    );
+    let stderr_summary = g.stderr_summary.as_deref().unwrap_or_default();
+    assert!(
+        stderr_summary.to_ascii_lowercase().contains("error"),
+        "stderr_summary should describe an error, got {stderr_summary:?}"
+    );
+    assert!(
+        g.stderr.to_ascii_lowercase().contains("error"),
+        "stderr should describe an error, got {:?}",
+        g.stderr
+    );
+    assert!(g.stdout.is_empty(), "stdout should be empty on spawn error");
+}
+
+#[tokio::test]
+async fn test_run_gates_skipped_gate_has_stable_result_shape() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let omk_dir = dir.join(".omk");
+    tokio::fs::create_dir_all(&omk_dir).await.unwrap();
+    tokio::fs::write(
+        omk_dir.join("gates.toml"),
+        r#"
+[[gates]]
+name = "skipped-only"
+command = "echo"
+skip = true
+required = true
+timeout_secs = 3
+"#,
+    )
+    .await
+    .unwrap();
+
+    let config = omk::runtime::gates::load_or_detect_gates(dir).await;
+    let results = omk::runtime::gates::run_gates(&config, dir).await;
+    assert_eq!(results.len(), 1);
+    let gate = &results[0];
+    assert_eq!(gate.name, "skipped-only");
+    assert!(gate.passed, "skipped gate must report passed=true");
+    assert!(!gate.required, "skip forces required=false");
+    assert!(gate.stdout.is_empty());
+    assert_eq!(gate.stderr, "Skipped by gate config");
+    assert_eq!(gate.command_line, "<skipped by config>");
+    assert!(!gate.timed_out);
+    assert_eq!(gate.exit_code, None);
+    assert!(gate.output_path.is_none());
+    assert_eq!(gate.timeout_secs, 3);
+    assert!(gate.stdout_summary.is_none());
+    assert_eq!(
+        gate.stderr_summary.as_deref(),
+        Some("Skipped by gate config")
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn test_run_gates_captures_exit_code_stdout_stderr_and_args() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+
+    let script = dir.join("nonzero.sh");
+    tokio::fs::write(
+        &script,
+        "#!/bin/sh\necho \"out:$1\"\necho \"err:$2\" >&2\nexit 42\n",
+    )
+    .await
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let config = omk::runtime::gates::VerificationConfig {
+        gates: vec![omk::runtime::gates::GateDef {
+            name: "nonzero".to_string(),
+            command: script.to_str().unwrap().to_string(),
+            args: vec!["alpha".to_string(), "beta".to_string()],
+            required: true,
+            timeout_secs: 5,
+        }],
+    };
+
+    let results = omk::runtime::gates::run_gates(&config, dir).await;
+    assert_eq!(results.len(), 1);
+    let g = &results[0];
+    assert!(!g.passed);
+    assert_eq!(g.exit_code, Some(42));
+    assert!(!g.timed_out);
+    assert!(g.required);
+    assert_eq!(g.timeout_secs, 5);
+    assert!(
+        g.stdout.contains("out:alpha"),
+        "stdout should capture script output verbatim, got {:?}",
+        g.stdout
+    );
+    assert!(
+        g.stderr.contains("err:beta"),
+        "stderr should capture script stderr verbatim, got {:?}",
+        g.stderr
+    );
+    assert!(
+        g.stdout_summary
+            .as_deref()
+            .unwrap_or_default()
+            .contains("out:alpha"),
+        "stdout_summary should reflect the first lines"
+    );
+    assert!(
+        g.stderr_summary
+            .as_deref()
+            .unwrap_or_default()
+            .contains("err:beta"),
+        "stderr_summary should reflect the first lines"
+    );
+    assert!(
+        g.command_line.contains("alpha") && g.command_line.contains("beta"),
+        "command_line should include all args: {}",
+        g.command_line
+    );
+    assert!(g.output_path.is_none(), "no artifact dir → no output_path");
+}
+
+#[tokio::test]
+async fn test_gate_result_json_roundtrip_preserves_fields() {
+    let original = omk::runtime::gates::GateResult {
+        name: "fmt".to_string(),
+        passed: false,
+        stdout: "out-line-1\nout-line-2".to_string(),
+        stderr: "err-line-1".to_string(),
+        duration_ms: 1234,
+        required: true,
+        command_line: "cargo fmt --check".to_string(),
+        exit_code: Some(101),
+        timed_out: false,
+        stdout_summary: Some("out-line-1".to_string()),
+        stderr_summary: Some("err-line-1".to_string()),
+        output_path: Some("/tmp/log".to_string()),
+        timeout_secs: 60,
+    };
+    let json = serde_json::to_string(&original).expect("serialize GateResult");
+    let parsed: omk::runtime::gates::GateResult =
+        serde_json::from_str(&json).expect("deserialize GateResult");
+
+    assert_eq!(parsed.name, original.name);
+    assert_eq!(parsed.passed, original.passed);
+    assert_eq!(parsed.stdout, original.stdout);
+    assert_eq!(parsed.stderr, original.stderr);
+    assert_eq!(parsed.duration_ms, original.duration_ms);
+    assert_eq!(parsed.required, original.required);
+    assert_eq!(parsed.command_line, original.command_line);
+    assert_eq!(parsed.exit_code, original.exit_code);
+    assert_eq!(parsed.timed_out, original.timed_out);
+    assert_eq!(parsed.stdout_summary, original.stdout_summary);
+    assert_eq!(parsed.stderr_summary, original.stderr_summary);
+    assert_eq!(parsed.output_path, original.output_path);
+    assert_eq!(parsed.timeout_secs, original.timeout_secs);
+}
+
+#[tokio::test]
+async fn test_gate_result_deserializes_with_legacy_minimal_fields() {
+    let json = r#"{
+        "name": "legacy",
+        "passed": true,
+        "stdout": "",
+        "stderr": "",
+        "duration_ms": 17,
+        "required": true
+    }"#;
+    let parsed: omk::runtime::gates::GateResult =
+        serde_json::from_str(json).expect("legacy GateResult JSON must deserialize");
+    assert_eq!(parsed.name, "legacy");
+    assert!(parsed.passed);
+    assert!(parsed.required);
+    assert_eq!(parsed.duration_ms, 17);
+    assert_eq!(parsed.command_line, "");
+    assert_eq!(parsed.exit_code, None);
+    assert!(!parsed.timed_out);
+    assert!(parsed.stdout_summary.is_none());
+    assert!(parsed.stderr_summary.is_none());
+    assert!(parsed.output_path.is_none());
+    assert_eq!(parsed.timeout_secs, 0);
+}
