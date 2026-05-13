@@ -1,32 +1,43 @@
-## Description
+## Bead
 
-<!-- Describe your changes in detail -->
+<!-- Required for multi-agent work. Example: Closes bd:omk-123 -->
 
-## Motivation and Context
+- Bead:
+- Owner:
+- Branch:
 
-<!-- Why is this change required? What problem does it solve? -->
+## Summary
 
-## How Has This Been Tested?
+<!-- What changed, and why? -->
 
-<!-- Please describe the tests that you ran to verify your changes -->
-- [ ] `cargo test` passes
-- [ ] `cargo clippy` passes
-- [ ] `cargo fmt` passes
+## Scope
 
-## Types of changes
+<!-- List owned files/modules. Call out overlaps with other active work. -->
 
-<!-- What types of changes does your code introduce? -->
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update
+- Write scope:
+- Dependencies / blockers:
+
+## Verification
+
+<!-- Paste exact commands and result. Mark intentionally skipped gates. -->
+
+- [ ] `cargo fmt -- --check`
+- [ ] `git diff --check`
+- [ ] `cargo check --all-targets`
+- [ ] `cargo clippy --all-targets --all-features -- -D warnings`
+- [ ] `cargo test --all-features`
+- [ ] `cargo doc --no-deps`
+- [ ] `cargo deny --all-features check advisories licenses`
+
+## Risk
+
+- Scope risk: <!-- narrow / moderate / broad -->
+- Rollback plan:
+- Known gaps:
 
 ## Checklist
 
-- [ ] My code follows the project's style guidelines
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] I have made corresponding changes to the documentation
-- [ ] My changes generate no new warnings
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] New and existing unit tests pass locally with my changes
+- [ ] This PR is not targeting direct work on `master` / `main` outside the PR flow.
+- [ ] The bead has been claimed or this PR explains why no bead applies.
+- [ ] Docs/changelog/version were updated when behavior or release metadata changed.
+- [ ] New behavior has tests or an explicit `Not-tested:` rationale.

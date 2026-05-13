@@ -2,3 +2,21 @@
 Cargo.lock
 *.log
 .omk/
+
+# Local Beads/worktree state. Sync Beads through bd/Dolt, not feature PRs.
+/.beads/
+/.beads-wisp/
+/.worktrees/
+
+# Generated documentation/site outputs. Keep source docs tracked.
+/book/
+/docs/book/
+/docs/.vitepress/cache/
+/docs/.vitepress/dist/
+/docs/.docusaurus/
+
+# Generated reports linked from docs or release notes.
+/coverage/
+/tarpaulin-report.html
+/cobertura.xml
+/lcov.info
