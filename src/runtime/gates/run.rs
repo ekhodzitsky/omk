@@ -47,45 +47,9 @@ pub async fn run_gates_with_evidence(
         cmd.args(&gate.args).current_dir(dir);
 
         let output = if gate.timeout_secs > 0 {
-            let mut child = match cmd
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .kill_on_drop(true)
-                .spawn()
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    warn!(gate = %gate.name, error = %e, "Failed to spawn gate command");
-                    results.push(make_gate_error(
-                        gate,
-                        &command_line,
-                        start,
-                        &format!("Spawn error: {e}"),
-                    ));
-                    continue;
-                }
-            };
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(gate.timeout_secs),
-                child.wait(),
-            )
-            .await
-            {
-                Ok(Ok(status)) => {
-                    let mut stdout = Vec::new();
-                    let mut stderr = Vec::new();
-                    if let Some(mut out) = child.stdout.take() {
-                        let _ = tokio::io::AsyncReadExt::read_to_end(&mut out, &mut stdout).await;
-                    }
-                    if let Some(mut err) = child.stderr.take() {
-                        let _ = tokio::io::AsyncReadExt::read_to_end(&mut err, &mut stderr).await;
-                    }
-                    std::process::Output {
-                        status,
-                        stdout,
-                        stderr,
-                    }
-                }
+            cmd.kill_on_drop(true);
+            match tokio::time::timeout(Duration::from_secs(gate.timeout_secs), cmd.output()).await {
+                Ok(Ok(output)) => output,
                 Ok(Err(e)) => {
                     warn!(gate = %gate.name, error = %e, "Failed to run gate command");
                     results.push(make_gate_error(
@@ -97,8 +61,6 @@ pub async fn run_gates_with_evidence(
                     continue;
                 }
                 Err(_) => {
-                    let _ = child.kill().await;
-                    let _ = child.wait().await;
                     let timeout_message = format!("Timed out after {}s", gate.timeout_secs);
                     warn!(gate = %gate.name, timeout = gate.timeout_secs, "Gate timed out");
                     results.push(GateResult {

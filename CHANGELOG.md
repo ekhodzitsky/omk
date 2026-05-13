@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.22] - 2026-05-13
+
+### Fixed
+
+- **Verification gate output draining**: timeout-bounded gates now use process output collection that drains stdout/stderr while waiting for process exit, preventing large-output gates from being killed by the timeout path and losing their real exit code/evidence artifact metadata.
+
 ## [0.3.21] - 2026-05-13
 
 ### Added

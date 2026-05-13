@@ -335,6 +335,54 @@ async fn test_run_gates_with_evidence_writes_output_artifact_and_metadata() {
     assert!(full_output.contains("err-1"));
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn test_run_gates_with_evidence_drains_large_output_before_waiting() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let artifacts = dir.join("artifacts");
+    tokio::fs::create_dir_all(&artifacts).await.unwrap();
+
+    let script = dir.join("large-output.sh");
+    tokio::fs::write(
+        &script,
+        r#"#!/bin/sh
+i=0
+while [ "$i" -lt 20000 ]; do
+  printf 'stdout-line-%05d\n' "$i"
+  printf 'stderr-line-%05d\n' "$i" >&2
+  i=$((i + 1))
+done
+exit 7
+"#,
+    )
+    .await
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let config = omk::runtime::gates::VerificationConfig {
+        gates: vec![omk::runtime::gates::GateDef {
+            name: "large-output".to_string(),
+            command: script.to_str().unwrap().to_string(),
+            args: vec![],
+            required: true,
+            timeout_secs: 2,
+        }],
+    };
+
+    let results =
+        omk::runtime::gates::run_gates_with_evidence(&config, dir, Some(&artifacts)).await;
+    assert_eq!(results.len(), 1);
+    let gate = &results[0];
+    assert!(!gate.passed);
+    assert_eq!(gate.exit_code, Some(7));
+    assert!(!gate.timed_out);
+    let output_path = gate.output_path.as_ref().expect("expected output path");
+    let full_output = std::fs::read_to_string(output_path).unwrap();
+    assert!(full_output.contains("stdout-line-00000"));
+    assert!(full_output.contains("stderr-line-00000"));
+}
+
 #[tokio::test]
 async fn test_run_gates_with_evidence_marks_timeout_without_artifact_dir() {
     let tmp = tempfile::tempdir().unwrap();

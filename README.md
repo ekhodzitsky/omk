@@ -48,7 +48,7 @@ OMK is independent of Moonshot AI, Kimi CLI, and oh-my-claudecode.
 
 Short answer: **yes, you can use OMK today for local/personal repo automation, but treat it as a beta MVP, not a polished 1.0 product.**
 
-Current source version: **v0.3.21**. We are intentionally **not publishing to crates.io yet**; install from GitHub release assets or from the GitHub repository.
+Current source version: **v0.3.22**. We are intentionally **not publishing to crates.io yet**; install from GitHub release assets or from the GitHub repository.
 
 What is ready enough to use now:
 
@@ -61,7 +61,7 @@ What is ready enough to use now:
 | Role packs | Ready: architect, executor, verifier, reviewer, integrator. |
 | Run inspection | Ready: `omk run list`, `omk run show latest`, text/JSON output, filters. |
 | Proof reports | Beta MVP: `omk proof show latest`, cached/regenerated proof, Markdown/text/JSON formats. |
-| Verification gates | Ready for local gates and `.omk/gates.toml` customization. |
+| Verification gates | Ready for local gates and `.omk/gates.toml` customization, including full stdout/stderr evidence capture for large-output gates. |
 | HUD | Text, JSON, and TUI are usable; web dashboard is still scaffold-level. |
 | `omk goal` controller scaffold | Current scaffold: creates durable goal state, planning artifacts, validated task graph, deterministic replayable event timeline, budget checkpoints with wall-clock budget enforcement and `budget-add` recovery, local verification task evidence, policy-validated multi-task Wire-backed agent task/mutation evidence, accepted and later-dispatched agent-proposed follow-up tasks with path-normalized dependency-ordered read/write access conflict policy, pause/resume lifecycle state with active worker interruption, post-mutation gate reruns, controller review/security evidence, not-ready proof, and cancellation failure artifacts. |
 | Autopilot, Ralph, Ultrawork | Power-user MVP: useful, but less polished than the Kimi asset + team/proof path. |
@@ -312,7 +312,7 @@ These modes are available and useful, but the strongest MVP path today is still:
 | Role packs | Curated Kimi-native roles for architecture, execution, verification, review, and integration. | Current |
 | Scheduler-backed teams | Task claims, leases, retries, write-set conflict detection, event logs, and proof/failure artifacts. | Beta MVP |
 | Wire protocol integration | Kimi Wire client, tolerant parser, mock fixture, and Wire evidence in run/proof output. | Current |
-| Verification gates | Rust/Node/Python/Go presets, custom `.omk/gates.toml`, skipped gates, allow-fail gates, and captured stdout/stderr. | Current |
+| Verification gates | Rust/Node/Python/Go presets, custom `.omk/gates.toml`, skipped gates, allow-fail gates, and robust captured stdout/stderr artifacts. | Current |
 | Proof reports | `proof.json`, `failure.json`, cached/regenerated proof, readiness text, known gaps, and gate evidence. | Beta MVP |
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
 | HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
