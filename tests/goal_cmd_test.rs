@@ -1704,3 +1704,82 @@ fn test_goal_budget_records_checkpoints_after_restart() {
         .iter()
         .any(|event| event["kind"] == "budget_checkpoint"));
 }
+
+#[test]
+fn test_goal_verify_stops_when_wall_clock_budget_is_exhausted() {
+    let (tmp, envs) = isolated_env();
+    let project = tmp.path().join("project");
+    fs::create_dir_all(&project).expect("failed to create project dir");
+    write_gate_config(&project, "must-not-run", "touch budget-gate-should-not-run");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(&project)
+        .args([
+            "goal",
+            "run",
+            "Stop this goal before spending an exhausted budget",
+            "--budget-time",
+            "0s",
+        ])
+        .assert()
+        .success();
+
+    let mut verify = omk_cmd(&envs);
+    verify
+        .current_dir(&project)
+        .args(["goal", "verify", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs more budget"));
+
+    let mut execute = omk_cmd(&envs);
+    execute
+        .current_dir(&project)
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs more budget"));
+
+    let mut review = omk_cmd(&envs);
+    review
+        .current_dir(&project)
+        .args(["goal", "review", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs more budget"));
+
+    assert!(
+        !project.join("budget-gate-should-not-run").exists(),
+        "budget guard should stop before running gates"
+    );
+
+    let mut show = omk_cmd(&envs);
+    let show_output = show
+        .current_dir(&project)
+        .args(["goal", "show", "latest", "--json"])
+        .output()
+        .expect("omk goal show failed");
+    assert!(
+        show_output.status.success(),
+        "show failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&show_output.stdout),
+        String::from_utf8_lossy(&show_output.stderr)
+    );
+    let show_json: Value =
+        serde_json::from_slice(&show_output.stdout).expect("show output should be JSON");
+    assert_eq!(show_json["status"], "needs_more_budget");
+
+    let dirs = goal_dirs(&envs);
+    let checkpoints = read_jsonl(&dirs[0].join("budget-checkpoints.jsonl"));
+    assert!(checkpoints
+        .iter()
+        .any(|checkpoint| checkpoint["label"] == "budget_exhausted"));
+    assert!(!checkpoints
+        .iter()
+        .any(|checkpoint| checkpoint["label"] == "verify_completed"));
+
+    let events = read_jsonl(&dirs[0].join("events.jsonl"));
+    assert!(events
+        .iter()
+        .any(|event| event["kind"] == "goal_budget_exhausted"));
+}

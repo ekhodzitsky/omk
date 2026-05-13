@@ -130,7 +130,7 @@ Every goal run ends in exactly one terminal status:
 | `not_ready` | Work was attempted, but required proof or gates did not pass. |
 | `blocked_on_human` | A human decision is required before progress can continue safely. |
 | `blocked_on_external` | External access, credentials, APIs, or services are missing. |
-| `needs_more_budget` | Time, token, cost, or compute budget was exhausted. |
+| `needs_more_budget` | Time, token, cost, or compute budget was exhausted. Current runtime enforces exhausted wall-clock `--budget-time` before `verify`, `execute`, or `review`; token/cost sources are next. |
 | `failed_infra` | OMK infrastructure failed in a way the run could not recover from. |
 | `cancelled` | User cancelled the goal. |
 

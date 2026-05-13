@@ -143,7 +143,8 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [ ] Harden pause/resume against active worker interruption.
 - [ ] Add crash recovery tests.
 - [x] Add budget checkpoints.
-- [ ] Harden budget checkpoints into enforced cost/token/time stop conditions.
+- [x] Enforce exhausted wall-clock `--budget-time` before goal verify/execute/review.
+- [ ] Add token/cost budget sources and hard stops.
 - [ ] Add notification hooks.
 - [ ] Add stale worker cleanup.
 - [x] Add goal replay.

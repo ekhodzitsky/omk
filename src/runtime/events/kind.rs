@@ -85,6 +85,7 @@ pub enum EventKind {
     ManualInterrupt,
     GoalPaused,
     GoalResumed,
+    GoalBudgetExhausted,
     BudgetCheckpoint,
 }
 

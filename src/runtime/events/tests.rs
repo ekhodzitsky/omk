@@ -363,6 +363,7 @@ fn event_serde_roundtrip_across_kinds_and_actor_shapes() {
         EventKind::ManualInterrupt,
         EventKind::GoalPaused,
         EventKind::GoalResumed,
+        EventKind::GoalBudgetExhausted,
         EventKind::BudgetCheckpoint,
     ];
     let cases = [

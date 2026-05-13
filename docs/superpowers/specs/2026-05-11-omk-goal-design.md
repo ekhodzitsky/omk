@@ -64,7 +64,7 @@ and return later to a reliable answer:
 - `not_ready`, with failing evidence;
 - `blocked_on_human`, with the exact decision needed;
 - `blocked_on_external`, with missing access or dependency;
-- `needs_more_budget`, with progress and remaining work;
+- `needs_more_budget`, with progress and remaining work; current code enforces exhausted wall-clock `--budget-time` before more verify/execute/review work is spent;
 - `failed_infra`, with recovery guidance.
 
 ## Non-Goals

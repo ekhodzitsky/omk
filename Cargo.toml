@@ -1,6 +1,6 @@
 [package]
 name = "omk"
-version = "0.3.17"
+version = "0.3.18"
 default-run = "omk"
 edition = "2021"
 authors = ["oh-my-kimi contributors"]

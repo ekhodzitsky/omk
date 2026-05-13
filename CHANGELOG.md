@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.18] - 2026-05-13
+
+### Added
+
+- **`omk goal` wall-clock budget enforcement**: goals with exhausted `--budget-time` now stop `verify`, `execute`, and `review` before spending more gates or agent work, persist `needs_more_budget`, append `budget_exhausted` checkpoints, and emit `goal_budget_exhausted` timeline events.
+
 ## [0.3.17] - 2026-05-13
 
 ### Added

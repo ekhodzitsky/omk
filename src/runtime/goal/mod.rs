@@ -98,6 +98,7 @@ pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
 pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = resolve_goal(goal_id).await?;
     ensure_goal_not_paused(&state)?;
+    budget::ensure_budget_available(&mut state, "goal verify").await?;
     let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
     let gate_config = crate::runtime::gates::load_or_detect_gates(project_dir).await;
     let gate_artifacts = state
@@ -155,6 +156,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
 pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = resolve_goal(goal_id).await?;
     ensure_goal_not_paused(&state)?;
+    budget::ensure_budget_available(&mut state, "goal execute").await?;
     state.status = GoalStatus::Running;
     state.phase = GoalPhase::Execution;
     state.updated_at = Utc::now();
@@ -276,6 +278,7 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
 pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = resolve_goal(goal_id).await?;
     ensure_goal_not_paused(&state)?;
+    budget::ensure_budget_available(&mut state, "goal review").await?;
     state.status = GoalStatus::Running;
     state.phase = GoalPhase::VerificationDesign;
     state.updated_at = Utc::now();
