@@ -4,16 +4,26 @@
 //! lines, unknown event kinds, stable ordering, and the public read helpers
 //! that previously lacked direct coverage.
 
+use std::path::PathBuf;
+
 use tempfile::TempDir;
 
 use crate::runtime::events::kind::EVENT_SCHEMA_VERSION;
 use crate::runtime::events::reader::payload_string;
 use crate::runtime::events::{Event, EventKind, EventReader, EventWriter, RunId};
 
+/// Allocate a temp dir and return a path for `events.jsonl` inside it.
+/// The returned `TempDir` must be bound (commonly as `_tmp`) so the
+/// directory survives until the test scope ends.
+fn temp_jsonl() -> (TempDir, PathBuf) {
+    let tmp = TempDir::new().unwrap();
+    let path = tmp.path().join("events.jsonl");
+    (tmp, path)
+}
+
 #[tokio::test]
 async fn reader_returns_empty_for_missing_file() {
-    let tmp = TempDir::new().unwrap();
-    let path = tmp.path().join("does-not-exist.jsonl");
+    let (_tmp, path) = temp_jsonl();
     assert!(EventReader::read_all(&path).await.unwrap().is_empty());
     let s = EventReader::summary(&path).await.unwrap();
     assert_eq!(
@@ -29,8 +39,7 @@ async fn reader_returns_empty_for_missing_file() {
 
 #[tokio::test]
 async fn reader_handles_crlf_line_endings() {
-    let tmp = TempDir::new().unwrap();
-    let path = tmp.path().join("events.jsonl");
+    let (_tmp, path) = temp_jsonl();
     let e1 = Event::new(RunId("r".into()), EventKind::RunStarted);
     let e2 = Event::new(RunId("r".into()), EventKind::RunCompleted);
     let body = format!(
@@ -48,8 +57,7 @@ async fn reader_handles_crlf_line_endings() {
 
 #[tokio::test]
 async fn reader_handles_unterminated_final_line() {
-    let tmp = TempDir::new().unwrap();
-    let path = tmp.path().join("events.jsonl");
+    let (_tmp, path) = temp_jsonl();
     let e = Event::new(RunId("r".into()), EventKind::RunStarted);
     tokio::fs::write(&path, serde_json::to_string(&e).unwrap())
         .await
@@ -59,8 +67,7 @@ async fn reader_handles_unterminated_final_line() {
 
 #[tokio::test]
 async fn reader_treats_whitespace_only_lines_as_blank() {
-    let tmp = TempDir::new().unwrap();
-    let path = tmp.path().join("events.jsonl");
+    let (_tmp, path) = temp_jsonl();
     let e = Event::new(RunId("r".into()), EventKind::RunStarted);
     let json = serde_json::to_string(&e).unwrap();
     tokio::fs::write(&path, format!("{json}\n   \n\t\t\n{json}\n"))
@@ -74,8 +81,7 @@ async fn reader_treats_whitespace_only_lines_as_blank() {
 
 #[tokio::test]
 async fn reader_skips_non_object_json_lines() {
-    let tmp = TempDir::new().unwrap();
-    let path = tmp.path().join("events.jsonl");
+    let (_tmp, path) = temp_jsonl();
     let valid = Event::new(RunId("r".into()), EventKind::RunStarted);
     let valid_json = serde_json::to_string(&valid).unwrap();
     let body = format!("[]\n\"plain\"\n42\nnull\n{valid_json}\n[1,2,3]\ntrue\n");
@@ -91,8 +97,7 @@ async fn reader_skips_unknown_event_kind() {
     // Pin current behavior: a future EventKind variant present in the log is
     // skipped (counted as parse failure), not coerced into a known variant.
     // If the schema gains a fallback kind, update this test alongside it.
-    let tmp = TempDir::new().unwrap();
-    let path = tmp.path().join("events.jsonl");
+    let (_tmp, path) = temp_jsonl();
     // Twin envelopes — identical shape, only `kind` differs. This proves the
     // discriminant is the kind field and not some other missing/malformed
     // part of the hand-crafted envelope.
@@ -121,8 +126,7 @@ async fn reader_skips_unknown_event_kind() {
 
 #[tokio::test]
 async fn reader_preserves_insertion_order_with_blanks_and_malformed() {
-    let tmp = TempDir::new().unwrap();
-    let path = tmp.path().join("events.jsonl");
+    let (_tmp, path) = temp_jsonl();
     let run_id = RunId("r".into());
     let e1 = Event::new(run_id.clone(), EventKind::RunStarted);
     let e2 = Event::new(run_id.clone(), EventKind::WorkerStarted).with_actor("w-a");
@@ -145,8 +149,7 @@ async fn reader_preserves_insertion_order_with_blanks_and_malformed() {
 
 #[tokio::test]
 async fn reader_filtered_preserves_insertion_order() {
-    let tmp = TempDir::new().unwrap();
-    let path = tmp.path().join("events.jsonl");
+    let (_tmp, path) = temp_jsonl();
     let run_id = RunId("r".into());
     let started = Event::new(run_id.clone(), EventKind::RunStarted);
     let task_a = Event::new(run_id.clone(), EventKind::TaskStarted).with_actor("a");
@@ -174,8 +177,7 @@ async fn reader_filtered_preserves_insertion_order() {
 
 #[tokio::test]
 async fn reader_filters_by_worker_actor() {
-    let tmp = TempDir::new().unwrap();
-    let path = tmp.path().join("events.jsonl");
+    let (_tmp, path) = temp_jsonl();
     let run_id = RunId("r".into());
 
     EventWriter::new(&path)
@@ -199,8 +201,7 @@ async fn reader_filters_by_worker_actor() {
 
 #[tokio::test]
 async fn reader_range_inclusive_at_endpoints() {
-    let tmp = TempDir::new().unwrap();
-    let path = tmp.path().join("events.jsonl");
+    let (_tmp, path) = temp_jsonl();
     let base = chrono::Utc::now();
     let make = |kind: EventKind, offset_secs: i64| {
         let mut e = Event::new(RunId("r".into()), kind);
