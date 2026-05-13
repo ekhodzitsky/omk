@@ -614,12 +614,38 @@ async fn test_wire_worker_adapter_enforces_task_budget_timeout() {
     .await
     .unwrap();
 
+    let has_timeout_event = |events: &str| {
+        events.lines().any(|line| {
+            let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
+                return false;
+            };
+            let Some(payload) = event.get("payload") else {
+                return false;
+            };
+            payload.get("type").and_then(|v| v.as_str()) == Some("task_budget_timeout")
+                && payload.get("task_id").and_then(|v| v.as_str()) == Some("task-budget-timeout")
+                && payload.get("timeout_secs").and_then(|v| v.as_u64()) == Some(1)
+        })
+    };
+
     let started = Instant::now();
     let mut found = None;
-    while started.elapsed() < Duration::from_secs(4) {
-        let results = spec.read_results().await.unwrap();
-        if let Some(first) = results.first() {
-            found = Some(first.clone());
+    let mut found_timeout_event = false;
+    let mut latest_events = String::new();
+    while started.elapsed() < Duration::from_secs(5) {
+        if found.is_none() {
+            let results = spec.read_results().await.unwrap();
+            if let Some(first) = results.first() {
+                found = Some(first.clone());
+            }
+        }
+        if !found_timeout_event {
+            latest_events = tokio::fs::read_to_string(&events_path)
+                .await
+                .unwrap_or_default();
+            found_timeout_event = has_timeout_event(&latest_events);
+        }
+        if found.is_some() && found_timeout_event {
             break;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -644,10 +670,10 @@ async fn test_wire_worker_adapter_enforces_task_budget_timeout() {
     let result = found.expect("expected failed worker result after task budget timeout");
     assert!(matches!(result.status, ResultStatus::Failed));
     assert!(result.summary.contains("task budget timed out after 1s"));
-
-    let events = tokio::fs::read_to_string(events_path).await.unwrap();
-    assert!(events.contains("\"task_failed\""));
-    assert!(events.contains("\"timeout_secs\":1"));
+    assert!(
+        found_timeout_event,
+        "expected structured task_budget_timeout event with timeout_secs=1, got:\n{latest_events}"
+    );
 }
 
 #[tokio::test]
