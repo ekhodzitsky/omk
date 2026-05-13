@@ -813,6 +813,87 @@ fn test_goal_execute_accepts_agent_proposed_task_graph_mutation() {
 }
 
 #[test]
+fn test_goal_execute_rejects_unordered_agent_followup_write_conflict() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path(), "smoke", "echo smoke-ok");
+
+    let mut run = omk_cmd(&envs);
+    run.current_dir(project.path())
+        .args(["goal", "run", "Reject unsafe follow-up write conflicts"])
+        .assert()
+        .success();
+
+    let proposals = concat!(
+        r#"OMK_TASK_PROPOSAL: {"id":"goal-agent-docs-followup-a","title":"Document follow-up A","description":"Document the first readiness follow-up.","dependencies":["goal-agent-execute"],"read_set":["README.md"],"write_set":["README.md"],"risk":"low","acceptance":["follow-up A is documented"],"budget_secs":120}"#,
+        "\n",
+        r#"OMK_TASK_PROPOSAL: {"id":"goal-agent-docs-followup-b","title":"Document follow-up B","description":"Document the second readiness follow-up.","dependencies":["goal-agent-execute"],"read_set":["README.md"],"write_set":["README.md"],"risk":"low","acceptance":["follow-up B is documented"],"budget_secs":120}"#
+    );
+    let mut execute = omk_cmd(&envs);
+    execute
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WIRE_TEXT_WHEN_CONTAINS", "goal-agent-implement")
+        .env("MOCK_KIMI_WIRE_TEXT", proposals)
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("goal-agent-execute: done"));
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let goal_dir = &dirs[0];
+    let proposals_path =
+        goal_dir.join("artifacts/agent-runs/goal-agent-execute/agent-task-proposals.json");
+    let proposal_policy: Value = serde_json::from_str(
+        &fs::read_to_string(&proposals_path).expect("missing agent proposal policy"),
+    )
+    .expect("agent proposal policy should be JSON");
+    assert_eq!(
+        proposal_policy["accepted_tasks"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        proposal_policy["rejected_tasks"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        proposal_policy["rejected_tasks"][0]["task"]["id"],
+        "goal-agent-docs-followup-b"
+    );
+    assert!(proposal_policy["rejected_tasks"][0]["reason"]
+        .as_str()
+        .unwrap()
+        .contains("write-set conflict with accepted task goal-agent-docs-followup-a: README.md"));
+
+    let task_graph: Value = serde_json::from_str(
+        &fs::read_to_string(goal_dir.join("task-graph.json")).expect("missing task graph"),
+    )
+    .expect("task graph should be JSON");
+    assert!(task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|task| task["id"] == "goal-agent-docs-followup-a"));
+    assert!(!task_graph["tasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|task| task["id"] == "goal-agent-docs-followup-b"));
+
+    let events = read_jsonl(&goal_dir.join("events.jsonl"));
+    assert!(events.iter().any(|event| {
+        event["kind"] == "task_rejected"
+            && event["actor"] == "goal-controller"
+            && event["payload"]["task_id"] == "goal-agent-docs-followup-b"
+            && event["payload"]["reason"].as_str().unwrap().contains(
+                "write-set conflict with accepted task goal-agent-docs-followup-a: README.md",
+            )
+    }));
+}
+
+#[test]
 fn test_goal_execute_dispatches_accepted_agent_followup_on_next_execute() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");

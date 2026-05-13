@@ -31,7 +31,8 @@ Status: current beta MVP.
   verification task evidence, git evidence, policy-validated bounded
   Wire-backed agent waves, accepted follow-up tasks, `max_agents` worker-pool
   caps, stale-lease recovery evidence, load-time task graph validation,
-  first-class graph mutation events, mutation diff/changed-file evidence,
+  first-class graph mutation events, dependency-ordered write-set conflict
+  policy for agent-proposed follow-ups, mutation diff/changed-file evidence,
   post-mutation gate reruns, controller review/security evidence, and not-ready
   proof.
 - GitHub CI and coverage.
@@ -110,7 +111,8 @@ Target: make parallel work safe.
 
 - Create isolated worktrees or branches for independent task slices.
 - Merge accepted slices through an integrator task.
-- Detect write conflicts before dispatch.
+- Detect write conflicts before dispatch. Initial agent-proposed follow-up
+  conflicts are now rejected unless dependency ordering serializes the writes.
 - Support partial acceptance of completed subgoals.
 - Preserve changelog and docs updates during integration.
 

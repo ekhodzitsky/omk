@@ -110,9 +110,12 @@ Current `omk goal` scaffold data flow:
    `OMK_TASK_PROPOSAL: {...}` follow-up work; the controller records
    `agent-task-proposals.json` and appends accepted safe proposals as pending
    task graph nodes while emitting `task_graph_mutated` events for accepted
-   graph additions. Task graphs are validated on load for duplicate ids, missing
-   dependencies, self-dependencies, and dependency cycles before controller
-   execution proceeds. Later `execute` invocations dispatch ready
+   graph additions. Agent-proposed follow-ups that share a write path must
+   declare dependency ordering; unordered write-set conflicts are rejected with
+   policy evidence before they can mutate the graph. Task graphs are validated
+   on load for duplicate ids, missing dependencies, self-dependencies, and
+   dependency cycles before controller execution proceeds. Later `execute`
+   invocations dispatch ready
    pending follow-ups through `artifacts/agent-runs/goal-agent-followups/`,
    honor the goal `max_agents` cap with a bounded Wire worker pool, recover
    expired task leases with `retry_scheduled` evidence, and mark those nodes
@@ -139,7 +142,7 @@ ready proof generation.
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, validated task graph with controller-owned, local verification, policy-validated multi-task Wire agent mutation, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
+| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, validated task graph with controller-owned, local verification, policy-validated multi-task Wire agent mutation, dependency-ordered write-set conflict policy, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
 
 ## MCP Integration
 

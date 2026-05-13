@@ -59,7 +59,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [ ] Track retries and lease expiration.
 - [x] Add graph validation.
 - [x] Add graph mutation events.
-- [ ] Add tests for dependency ordering and write-set conflicts.
+- [x] Add tests for dependency ordering and write-set conflicts.
 
 ## Phase 5 - Agent Orchestration
 

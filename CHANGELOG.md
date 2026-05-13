@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.12] - 2026-05-13
+
+### Added
+
+- **`omk goal` write-set conflict policy**: agent-proposed follow-up tasks that write the same path now require dependency ordering. The controller accepts dependency-serialized mutations, rejects unordered conflicts with `task_rejected` evidence, and avoids appending unsafe graph nodes.
+
 ## [0.3.11] - 2026-05-13
 
 ### Added

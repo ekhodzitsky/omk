@@ -180,11 +180,13 @@ release lane. Workers can also return structured `OMK_TASK_PROPOSAL: {...}`
 follow-up work; the controller writes `agent-task-proposals.json`, applies the
 same validation, appends accepted safe proposals as pending graph nodes, and
 emits `task_graph_mutated` events with the source proposal artifact and
-resulting task count. Later `execute` invocations dispatch ready pending
-follow-ups through a separate `goal-agent-followups` Wire wave and close those
-durable graph nodes from worker results. Both built-in and follow-up agent waves
-honor the goal `max_agents` policy by creating no more Wire workers than the
-accepted ready task count or the configured cap. If a scheduler lease expires,
+resulting task count. Agent-proposed follow-ups that share a write path must be
+dependency-ordered; unordered write-set conflicts are rejected before they can
+mutate the durable task graph. Later `execute` invocations dispatch ready
+pending follow-ups through a separate `goal-agent-followups` Wire wave and close
+those durable graph nodes from worker results. Both built-in and follow-up agent
+waves honor the goal `max_agents` policy by creating no more Wire workers than
+the accepted ready task count or the configured cap. If a scheduler lease expires,
 the controller emits
 `retry_scheduled` evidence with the stale worker id and prefers another
 available worker for the recovered task before falling back to the stale owner.

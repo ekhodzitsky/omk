@@ -8,7 +8,7 @@ use super::task_graph::{
     goal_task_done, pending_goal_agent_followup_proposals, GoalTaskGraph, GoalTaskStatus,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct GoalAgentTaskProposal {
@@ -173,16 +173,22 @@ pub(crate) fn validate_goal_agent_task_proposals(
         .filter(|task| task.status == GoalTaskStatus::Done)
         .map(|task| task.id.clone())
         .collect();
+    let mut accepted_dependency_closures: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut accepted_write_sets: Vec<(String, Vec<String>)> = Vec::new();
     let mut seen_ids = HashSet::new();
     let mut accepted_tasks = Vec::new();
     let mut rejected_tasks = Vec::new();
 
     for proposal in proposals.iter().cloned() {
+        let dependency_closure =
+            proposal_dependency_closure(&proposal, &accepted_dependency_closures);
         if let Some(reason) = reject_goal_agent_task_proposal(
             &proposal,
             &mut seen_ids,
             &known_dependencies,
             &existing_task_ids,
+            &accepted_write_sets,
+            &dependency_closure,
             allow_existing_task_ids,
         ) {
             rejected_tasks.push(GoalAgentRejectedTask {
@@ -193,6 +199,8 @@ pub(crate) fn validate_goal_agent_task_proposals(
         }
 
         known_dependencies.insert(proposal.id.clone());
+        accepted_write_sets.push((proposal.id.clone(), proposal.write_set.clone()));
+        accepted_dependency_closures.insert(proposal.id.clone(), dependency_closure);
         accepted_tasks.push(proposal);
     }
 
@@ -211,6 +219,8 @@ fn reject_goal_agent_task_proposal(
     seen_ids: &mut HashSet<String>,
     known_dependencies: &HashSet<String>,
     existing_task_ids: &HashSet<String>,
+    accepted_write_sets: &[(String, Vec<String>)],
+    dependency_closure: &HashSet<String>,
     allow_existing_task_ids: bool,
 ) -> Option<String> {
     if proposal.id.trim().is_empty() {
@@ -262,7 +272,60 @@ fn reject_goal_agent_task_proposal(
         return Some(format!("dependency is not accepted or completed: {dep}"));
     }
 
+    if let Some((task_id, path)) =
+        first_unordered_write_set_conflict(proposal, accepted_write_sets, dependency_closure)
+    {
+        return Some(format!(
+            "write-set conflict with accepted task {task_id}: {path}"
+        ));
+    }
+
     None
+}
+
+fn proposal_dependency_closure(
+    proposal: &GoalAgentTaskProposal,
+    accepted_dependency_closures: &HashMap<String, HashSet<String>>,
+) -> HashSet<String> {
+    let mut closure = HashSet::new();
+    for dependency in &proposal.dependencies {
+        closure.insert(dependency.clone());
+        if let Some(upstream) = accepted_dependency_closures.get(dependency) {
+            closure.extend(upstream.iter().cloned());
+        }
+    }
+    closure
+}
+
+fn first_unordered_write_set_conflict(
+    proposal: &GoalAgentTaskProposal,
+    accepted_write_sets: &[(String, Vec<String>)],
+    dependency_closure: &HashSet<String>,
+) -> Option<(String, String)> {
+    for (accepted_task_id, accepted_write_set) in accepted_write_sets {
+        if dependency_closure.contains(accepted_task_id) {
+            continue;
+        }
+        if let Some(path) = first_conflicting_write_path(&proposal.write_set, accepted_write_set) {
+            return Some((accepted_task_id.clone(), path));
+        }
+    }
+    None
+}
+
+fn first_conflicting_write_path(candidate: &[String], accepted: &[String]) -> Option<String> {
+    candidate.iter().find_map(|candidate_path| {
+        accepted
+            .iter()
+            .find(|accepted_path| write_paths_conflict(candidate_path, accepted_path))
+            .map(|_| candidate_path.clone())
+    })
+}
+
+fn write_paths_conflict(candidate: &str, accepted: &str) -> bool {
+    let candidate = candidate.trim();
+    let accepted = accepted.trim();
+    candidate == accepted || candidate == "project files" || accepted == "project files"
 }
 
 pub(crate) async fn append_goal_agent_task_policy_events(
@@ -324,3 +387,6 @@ pub(crate) fn goal_agent_task_policy_payload(
         "reason": reason,
     })
 }
+
+#[cfg(test)]
+mod tests;
