@@ -94,6 +94,7 @@ async fn reader_tolerates_partial_trailing_line() {
         .await
         .unwrap();
     file.write_all(b"{\"partial\": true").await.unwrap(); // incomplete JSON
+    file.flush().await.unwrap();
 
     let events = EventReader::read_all(&path).await.unwrap();
     assert_eq!(events.len(), 1);
@@ -113,6 +114,7 @@ async fn reader_tolerates_malformed_lines() {
         .unwrap();
     file.write_all(b"not json at all\n").await.unwrap();
     file.write_all(b"{}\n").await.unwrap(); // empty object - will fail because it lacks required fields
+    file.flush().await.unwrap();
 
     let events = EventReader::read_all(&path).await.unwrap();
     assert_eq!(events.len(), 1);
@@ -131,6 +133,7 @@ async fn reader_summary() {
         .unwrap();
     file.write_all(b"bad\n").await.unwrap();
     file.write_all(b"\n").await.unwrap();
+    file.flush().await.unwrap();
 
     let summary = EventReader::summary(&path).await.unwrap();
     assert_eq!(summary.total_lines, 3);
