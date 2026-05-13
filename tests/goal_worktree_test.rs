@@ -13,12 +13,14 @@ fn test_goal_worktree_plan_is_deterministic_and_bead_scoped() {
     assert_eq!(first, second);
     assert_eq!(first.goal_id, "goal-20260513-155000-deadbeef");
     assert_eq!(first.task_id, "omk-io2.2");
-    assert!(first
-        .branch_name
-        .starts_with("omk/goal/goal-20260513-155000-deadbeef/omk-io2-2-"));
-    assert!(first
-        .worktree_name
-        .starts_with("goal-goal-20260513-155000-deadbeef-omk-io2-2-"));
+    assert_eq!(
+        first.branch_name,
+        "omk/goal/goal-20260513-155000-deadbeef/omk-io2-2-7ec701dc2d4c52a1"
+    );
+    assert_eq!(
+        first.worktree_name,
+        "goal-goal-20260513-155000-deadbeef-omk-io2-2-7ec701dc2d4c52a1"
+    );
     assert_eq!(first.worktree_path, root.join(&first.worktree_name));
 }
 
@@ -46,6 +48,16 @@ fn test_goal_worktree_plan_rejects_components_without_safe_text() {
         .expect_err("path traversal only should not become a component");
 
     assert!(err.to_string().contains("goal id"));
+}
+
+#[test]
+fn test_goal_worktree_plan_rejects_control_characters() {
+    let root = Path::new("/repo/.omk/worktrees");
+
+    let err = plan_goal_worktree(root, "goal-1", "task\n1")
+        .expect_err("control characters should not normalize into identifiers");
+
+    assert!(err.to_string().contains("task id"));
 }
 
 #[test]
