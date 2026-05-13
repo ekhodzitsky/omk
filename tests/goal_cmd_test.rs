@@ -230,7 +230,70 @@ fn test_goal_run_creates_durable_scaffold_and_show_json() {
     assert_eq!(json["max_agents"], 3);
     assert_eq!(json["terminal_criteria"]["proof_required"], true);
     assert_eq!(json["phase"], "proof");
-    assert_eq!(json["artifacts"].as_array().unwrap().len(), 5);
+    assert_eq!(json["artifacts"].as_array().unwrap().len(), 6);
+}
+
+#[test]
+fn test_goal_run_writes_controller_decision_log() {
+    let (_tmp, envs) = isolated_env();
+
+    omk_cmd(&envs)
+        .args([
+            "goal",
+            "run",
+            "Build a decision-audited goal controller scaffold",
+            "--until-ready",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Goal scaffold created"));
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    let decision_path = dirs[0].join("decisions.jsonl");
+    assert!(decision_path.exists(), "missing decision log");
+
+    let decisions = read_jsonl(&decision_path);
+    assert!(
+        decisions.len() >= 3,
+        "expected multiple controller decisions, got {decisions:?}"
+    );
+    assert!(decisions.iter().all(|decision| {
+        decision["goal_id"].as_str().unwrap().starts_with("goal-")
+            && decision["actor"] == "goal-controller"
+            && decision["created_at"].as_str().is_some()
+            && decision["decision"].as_str().is_some()
+            && decision["rationale"].as_str().is_some()
+    }));
+    assert!(decisions
+        .iter()
+        .any(|decision| decision["kind"] == "execution_boundary"));
+    assert!(decisions.iter().any(|decision| {
+        decision["artifacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|artifact| artifact == "task-graph.json")
+    }));
+
+    let output = omk_cmd(&envs)
+        .args(["goal", "show", "latest", "--json"])
+        .output()
+        .expect("omk goal show failed");
+    assert!(
+        output.status.success(),
+        "show failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: Value = serde_json::from_slice(&output.stdout).expect("show output should be JSON");
+    assert!(json["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|artifact| {
+            artifact["kind"] == "decisions" && artifact["path"] == "decisions.jsonl"
+        }));
 }
 
 #[test]

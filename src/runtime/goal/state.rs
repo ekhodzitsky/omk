@@ -11,6 +11,7 @@ pub const GOAL_PRD_FILE: &str = "prd.md";
 pub const GOAL_TECHNICAL_PLAN_FILE: &str = "technical-plan.md";
 pub const GOAL_TEST_SPEC_FILE: &str = "test-spec.md";
 pub const GOAL_TASK_GRAPH_FILE: &str = "task-graph.json";
+pub const GOAL_DECISIONS_FILE: &str = "decisions.jsonl";
 pub const GOAL_PROOF_FILE: &str = "proof.json";
 pub const GOAL_BUDGET_CHECKPOINTS_FILE: &str = "budget-checkpoints.jsonl";
 pub const GOAL_ARTIFACTS_DIR: &str = "artifacts";

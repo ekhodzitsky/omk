@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.26] - 2026-05-13
+
+### Added
+
+- **`omk goal` decision log**: goal run/plan scaffolds now write a durable `decisions.jsonl` artifact with controller-owned planning, task graph, and execution-boundary decisions, making goal rationale inspectable alongside `events.jsonl`, `task-graph.json`, and `proof.json`.
+
 ## [0.3.25] - 2026-05-13
 
 ### Added

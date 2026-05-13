@@ -2,9 +2,9 @@ use super::evidence::{detect_git_evidence, record_artifact};
 use super::proof::{build_scaffold_proof, write_json_artifact};
 use super::state::{
     GoalPhase, GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_AGENT_RUNS_DIR,
-    GOAL_ARTIFACTS_DIR, GOAL_CONTROLLER_ACTOR, GOAL_GATE_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID,
-    GOAL_PRD_FILE, GOAL_PROOF_FILE, GOAL_REVIEW_ARTIFACTS_DIR, GOAL_REVIEW_FILE,
-    GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_FILE, GOAL_SECURITY_REVIEW_TASK_ID,
+    GOAL_ARTIFACTS_DIR, GOAL_CONTROLLER_ACTOR, GOAL_DECISIONS_FILE, GOAL_GATE_ARTIFACTS_DIR,
+    GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PRD_FILE, GOAL_PROOF_FILE, GOAL_REVIEW_ARTIFACTS_DIR,
+    GOAL_REVIEW_FILE, GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_FILE, GOAL_SECURITY_REVIEW_TASK_ID,
     GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
 };
 use super::task_graph::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
@@ -80,6 +80,8 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
     let proof = build_scaffold_proof(&state, &task_graph, git, now);
     write_json_artifact(&state.state_dir.join(GOAL_PROOF_FILE), &proof).await?;
     record_artifact(&mut state, "proof", GOAL_PROOF_FILE, now);
+    super::decision::append_controller_scaffold_decisions(&state, &task_graph, now).await?;
+    record_artifact(&mut state, "decisions", GOAL_DECISIONS_FILE, now);
 
     state.status = GoalStatus::NotReady;
     state.updated_at = now;

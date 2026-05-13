@@ -77,10 +77,12 @@ current beta MVP instead of inventing a parallel runtime:
 
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
 - `omk goal plan/run/list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel`;
-- scaffold `prd.md`, `technical-plan.md`, `test-spec.md`, and
-  `task-graph.json`;
+- scaffold `prd.md`, `technical-plan.md`, `test-spec.md`,
+  `task-graph.json`, and `decisions.jsonl`;
 - controller-owned planning task completion evidence in the task graph and
   goal event log;
+- controller-owned decision records in `decisions.jsonl` for planning,
+  decomposition, and execution-boundary rationale;
 - honest goal-level `proof.json` with `not_ready` status until execution,
   review, and hardening evidence exists;
 - local verification gate execution through `omk goal verify`, with gate output

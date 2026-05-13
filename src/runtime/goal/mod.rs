@@ -4,6 +4,7 @@ use std::path::Path;
 
 mod agent;
 mod budget;
+mod decision;
 mod dispatch;
 mod evidence;
 mod planner;
@@ -24,9 +25,9 @@ pub use replay::{replay_goal, GoalReplay, GoalReplayEntry};
 pub use state::{
     CreateGoalOptions, GoalArtifact, GoalFailure, GoalPhase, GoalState, GoalStatus,
     GoalTerminalCriteria, GOALS_DIR, GOAL_AGENT_RUNS_DIR, GOAL_ARTIFACTS_DIR,
-    GOAL_BUDGET_CHECKPOINTS_FILE, GOAL_FAILURE_FILE, GOAL_GATE_ARTIFACTS_DIR, GOAL_PRD_FILE,
-    GOAL_PROOF_FILE, GOAL_STATE_FILE, GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE,
-    GOAL_TEST_SPEC_FILE,
+    GOAL_BUDGET_CHECKPOINTS_FILE, GOAL_DECISIONS_FILE, GOAL_FAILURE_FILE, GOAL_GATE_ARTIFACTS_DIR,
+    GOAL_PRD_FILE, GOAL_PROOF_FILE, GOAL_STATE_FILE, GOAL_TASK_GRAPH_FILE,
+    GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
 };
 pub use task_graph::{
     GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,

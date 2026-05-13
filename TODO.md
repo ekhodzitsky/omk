@@ -43,7 +43,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Generate `technical-plan.md`.
 - [x] Generate `test-spec.md`.
 - [x] Generate `task-graph.json`.
-- [ ] Generate `decisions.jsonl`.
+- [x] Generate `decisions.jsonl`.
 - [x] Add a planning-only mode.
 - [ ] Add `blocked_on_human` when success criteria cannot be made testable.
 - [ ] Add tests for greenfield and rewrite planning fixtures.

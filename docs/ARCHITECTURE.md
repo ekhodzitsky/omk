@@ -91,12 +91,13 @@ Current `omk goal` scaffold data flow:
 
 1. User runs `omk goal run "large outcome" --until-ready`.
 2. OMK writes `goals/<goal-id>/goal.json` under the OMK state directory.
-3. OMK writes `prd.md`, `technical-plan.md`, `test-spec.md`, and
-   `task-graph.json`.
+3. OMK writes `prd.md`, `technical-plan.md`, `test-spec.md`,
+   `task-graph.json`, and `decisions.jsonl`.
 4. OMK writes an honest `proof.json` with `not_ready` until required
    execution, review, and hardening evidence exists.
-5. OMK marks controller-owned planning tasks as done with artifact evidence and
-   writes goal-level task events to `events.jsonl`.
+5. OMK marks controller-owned planning tasks as done with artifact evidence,
+   writes goal-level task events to `events.jsonl`, and records controller
+   rationale in `decisions.jsonl`.
 6. OMK captures best-effort git branch, HEAD commit, dirty-state, and changed
    files for the proof bundle.
 7. `omk goal verify` runs local gates, writes full gate output under

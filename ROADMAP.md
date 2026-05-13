@@ -27,8 +27,8 @@ Status: current beta MVP.
 - Proof and failure artifacts.
 - Run/proof/HUD inspection.
 - Verification gates.
-- `omk goal` durable scaffold with planning artifacts, task graph, local
-  verification task evidence, git evidence, policy-validated bounded
+- `omk goal` durable scaffold with planning artifacts, decision log, task
+  graph, local verification task evidence, git evidence, policy-validated bounded
   Wire-backed agent waves, accepted follow-up tasks, `max_agents` worker-pool
   caps, stale-lease recovery evidence, load-time task graph validation,
   first-class graph mutation events, path-normalized dependency-ordered
@@ -61,6 +61,7 @@ Target: make goals testable before execution.
 - Generate PRD or goal brief.
 - Generate technical plan.
 - Generate test spec.
+- Generate decision log.
 - Build task graph with dependencies plus read/write sets.
 - Define the oracle for completion.
 - Block execution when the oracle is missing.

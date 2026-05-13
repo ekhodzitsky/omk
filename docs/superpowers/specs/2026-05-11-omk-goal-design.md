@@ -131,7 +131,8 @@ failure.json
 
 ### Planner
 
-Creates a PRD or goal brief, technical plan, and test spec.
+Creates a PRD or goal brief, technical plan, test spec, task graph, and
+controller decision log.
 
 For greenfield goals, it defines acceptance tests and demo flows.
 
