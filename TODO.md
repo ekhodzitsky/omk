@@ -145,6 +145,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Add budget checkpoints.
 - [x] Enforce exhausted wall-clock `--budget-time` before goal verify/execute/review.
 - [x] Add operator recovery for `needs_more_budget` goals with `budget-add`.
+- [x] Enforce per-task Wire worker budget hard stops.
 - [ ] Add token/cost budget sources and hard stops.
 - [ ] Add notification hooks.
 - [ ] Add stale worker cleanup.

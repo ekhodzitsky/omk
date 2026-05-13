@@ -235,6 +235,48 @@ impl WireWorkerAdapter {
             elapsed_secs: elapsed,
         };
 
+        self.write_worker_result(outbox, &result).await?;
+
+        info!(
+            worker = %self.spec.name,
+            task = %task.id,
+            success = success,
+            elapsed = elapsed,
+            "Task finished"
+        );
+
+        Ok(())
+    }
+
+    pub(super) async fn record_task_timeout(
+        &self,
+        task: &WorkerTask,
+        outbox: &PathBuf,
+        timeout_secs: u64,
+    ) -> Result<()> {
+        let result = WorkerResult {
+            task_id: task.id.clone(),
+            status: ResultStatus::Failed,
+            summary: format!("task budget timed out after {timeout_secs}s"),
+            artifacts: vec![],
+            elapsed_secs: timeout_secs,
+        };
+
+        self.write_worker_result(outbox, &result).await?;
+        let timeout_event = Event::new(self.run_id.clone(), EventKind::TaskOutput)
+            .with_actor(&self.spec.name)
+            .with_payload(serde_json::json!({
+                "type": "task_budget_timeout",
+                "task_id": task.id,
+                "worker_id": self.spec.name,
+                "timeout_secs": timeout_secs,
+            }))?;
+        self.event_writer.append(&timeout_event).await?;
+
+        Ok(())
+    }
+
+    async fn write_worker_result(&self, outbox: &PathBuf, result: &WorkerResult) -> Result<()> {
         let outbox_line = format!("{}\n", serde_json::to_string(&result)?);
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
@@ -244,9 +286,9 @@ impl WireWorkerAdapter {
         file.write_all(outbox_line.as_bytes()).await?;
         file.flush().await?;
 
-        if success {
+        if matches!(result.status, ResultStatus::Success) {
             let completed = EventBuilder::new(self.run_id.clone()).task_completed(
-                TaskId(task.id.clone()),
+                TaskId(result.task_id.clone()),
                 WorkerId(self.spec.name.clone()),
                 Some(&result.summary),
             )?;
@@ -255,20 +297,12 @@ impl WireWorkerAdapter {
             let failed = Event::new(self.run_id.clone(), EventKind::TaskFailed)
                 .with_actor(&self.spec.name)
                 .with_payload(serde_json::json!({
-                    "task_id": task.id,
-                    "worker_id": self.spec.name,
-                    "error": result.summary,
+                    "task_id": result.task_id.clone(),
+                    "worker_id": self.spec.name.clone(),
+                    "error": result.summary.clone(),
                 }))?;
             self.event_writer.append(&failed).await?;
         }
-
-        info!(
-            worker = %self.spec.name,
-            task = %task.id,
-            success = success,
-            elapsed = elapsed,
-            "Task finished"
-        );
 
         Ok(())
     }

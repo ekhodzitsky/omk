@@ -110,6 +110,8 @@ current beta MVP instead of inventing a parallel runtime:
   bounded changed-file secret scan finds no high-confidence findings;
 - best-effort git branch, HEAD commit, and dirty-state capture in goal proofs;
 - bounded agent wave evidence under `artifacts/agent-runs/`;
+- structured per-task budgets carried into Wire worker inboxes and enforced as
+  task timeout hard stops with failed-result evidence;
 - goal-level `events.jsonl` plus deterministic `omk goal replay` output derived
   from persisted event/task state instead of the current process clock;
 - cancellation `failure.json` artifacts;
@@ -135,7 +137,7 @@ Every goal run ends in exactly one terminal status:
 | `not_ready` | Work was attempted, but required proof or gates did not pass. |
 | `blocked_on_human` | A human decision is required before progress can continue safely. |
 | `blocked_on_external` | External access, credentials, APIs, or services are missing. |
-| `needs_more_budget` | Time, token, cost, or compute budget was exhausted. Current runtime enforces exhausted wall-clock `--budget-time` before `verify`, `execute`, or `review`; `omk goal budget-add` records operator-approved recovery. Token/cost sources are next. |
+| `needs_more_budget` | Time, token, cost, or compute budget was exhausted. Current runtime enforces exhausted wall-clock `--budget-time` before `verify`, `execute`, or `review`; Wire workers enforce per-task budget timeouts; `omk goal budget-add` records operator-approved recovery. Token/cost sources are next. |
 | `failed_infra` | OMK infrastructure failed in a way the run could not recover from. |
 | `cancelled` | User cancelled the goal. |
 

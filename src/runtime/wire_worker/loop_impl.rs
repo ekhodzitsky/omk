@@ -6,6 +6,12 @@ use tracing::{info, warn};
 use crate::runtime::wire_worker::WireWorkerAdapter;
 use crate::runtime::worker::WorkerTask;
 
+fn task_timeout_secs(task: &WorkerTask) -> u64 {
+    task.budget_secs
+        .filter(|seconds| *seconds > 0)
+        .unwrap_or(crate::runtime::wire_worker::DEFAULT_TASK_TIMEOUT_SECS)
+}
+
 impl WireWorkerAdapter {
     pub(super) async fn run_loop(&self) -> Result<()> {
         let inbox = &self.spec.inbox;
@@ -105,10 +111,9 @@ impl WireWorkerAdapter {
                     }
                     match serde_json::from_str::<WorkerTask>(trimmed) {
                         Ok(task) => {
+                            let timeout_secs = task_timeout_secs(&task);
                             match tokio::time::timeout(
-                                std::time::Duration::from_secs(
-                                    crate::runtime::wire_worker::DEFAULT_TASK_TIMEOUT_SECS,
-                                ),
+                                std::time::Duration::from_secs(timeout_secs),
                                 self.process_task(&task, &kimi_bin, outbox, &wire_events_path),
                             )
                             .await
@@ -125,9 +130,11 @@ impl WireWorkerAdapter {
                                     warn!(
                                         worker = %self.spec.name,
                                         task = %task.id,
-                                        timeout_secs = crate::runtime::wire_worker::DEFAULT_TASK_TIMEOUT_SECS,
+                                        timeout_secs,
                                         "Task processing timed out"
                                     );
+                                    self.record_task_timeout(&task, outbox, timeout_secs)
+                                        .await?;
                                 }
                                 Ok(Ok(())) => {}
                             }

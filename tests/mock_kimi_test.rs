@@ -526,6 +526,7 @@ async fn test_wire_worker_adapter_times_out_stalled_turn_and_writes_failed_resul
         task: "please stall forever".to_string(),
         acceptance_criteria: vec![],
         context: None,
+        budget_secs: None,
     })
     .await
     .unwrap();
@@ -562,6 +563,91 @@ async fn test_wire_worker_adapter_times_out_stalled_turn_and_writes_failed_resul
     assert!(events.contains("\"task_failed\""));
     let events_lower = events.to_lowercase();
     assert!(events_lower.contains("timeout") || events_lower.contains("timed out"));
+}
+
+#[tokio::test]
+async fn test_wire_worker_adapter_enforces_task_budget_timeout() {
+    use omk::runtime::events::{EventWriter, RunId};
+    use omk::runtime::wire_worker::WireWorkerAdapter;
+    use omk::runtime::worker::{ResultStatus, WorkerSpec, WorkerTask};
+    use tempfile::TempDir;
+    use tokio::time::{Duration, Instant};
+
+    let tmp = TempDir::new().unwrap();
+    let worker_dir = tmp.path().join("worker-budget-timeout");
+    let project_dir = tmp.path().join("project");
+    tokio::fs::create_dir_all(&worker_dir).await.unwrap();
+    tokio::fs::create_dir_all(&project_dir).await.unwrap();
+
+    let spec = WorkerSpec {
+        name: "worker-budget-timeout".to_string(),
+        role: "coder".to_string(),
+        inbox: worker_dir.join("inbox.jsonl"),
+        outbox: worker_dir.join("outbox.jsonl"),
+        heartbeat: worker_dir.join("heartbeat.json"),
+        project_dir: Some(project_dir),
+    };
+    spec.save().await.unwrap();
+
+    let events_path = tmp.path().join("events.jsonl");
+    let event_writer = EventWriter::new(&events_path);
+    let run_id = RunId("run-wire-budget-timeout".to_string());
+
+    let bin = mock_kimi_path();
+    let prev_mock = std::env::var("MOCK_KIMI").ok();
+    let prev_turn_timeout_ms = std::env::var("OMK_WIRE_TURN_TIMEOUT_MS").ok();
+    let prev_poll_ms = std::env::var("OMK_WIRE_WORKER_POLL_INTERVAL_MS").ok();
+    std::env::set_var("MOCK_KIMI", bin.as_os_str());
+    std::env::set_var("OMK_WIRE_TURN_TIMEOUT_MS", "10000");
+    std::env::set_var("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50");
+
+    let adapter = WireWorkerAdapter::new(spec.clone(), run_id, event_writer);
+    let handle = adapter.spawn();
+
+    spec.send_task(&WorkerTask {
+        id: "task-budget-timeout".to_string(),
+        task: "please stall forever".to_string(),
+        acceptance_criteria: vec![],
+        context: None,
+        budget_secs: Some(1),
+    })
+    .await
+    .unwrap();
+
+    let started = Instant::now();
+    let mut found = None;
+    while started.elapsed() < Duration::from_secs(4) {
+        let results = spec.read_results().await.unwrap();
+        if let Some(first) = results.first() {
+            found = Some(first.clone());
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    handle.abort();
+    let _ = handle.await;
+
+    match prev_mock {
+        Some(v) => std::env::set_var("MOCK_KIMI", v),
+        None => std::env::remove_var("MOCK_KIMI"),
+    }
+    match prev_turn_timeout_ms {
+        Some(v) => std::env::set_var("OMK_WIRE_TURN_TIMEOUT_MS", v),
+        None => std::env::remove_var("OMK_WIRE_TURN_TIMEOUT_MS"),
+    }
+    match prev_poll_ms {
+        Some(v) => std::env::set_var("OMK_WIRE_WORKER_POLL_INTERVAL_MS", v),
+        None => std::env::remove_var("OMK_WIRE_WORKER_POLL_INTERVAL_MS"),
+    }
+
+    let result = found.expect("expected failed worker result after task budget timeout");
+    assert!(matches!(result.status, ResultStatus::Failed));
+    assert!(result.summary.contains("task budget timed out after 1s"));
+
+    let events = tokio::fs::read_to_string(events_path).await.unwrap();
+    assert!(events.contains("\"task_failed\""));
+    assert!(events.contains("\"timeout_secs\":1"));
 }
 
 #[tokio::test]
@@ -604,6 +690,7 @@ async fn test_wire_worker_adapter_handles_mid_task_crash_after_turn_begin() {
         task: "please crash-after-turn-begin right after turn start".to_string(),
         acceptance_criteria: vec![],
         context: None,
+        budget_secs: None,
     })
     .await
     .unwrap();

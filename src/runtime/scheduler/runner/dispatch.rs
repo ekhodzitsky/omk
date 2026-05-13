@@ -139,6 +139,7 @@ impl TeamRunner {
                 task: task.description.clone(),
                 acceptance_criteria: task_extra_string_list(&task, "acceptance"),
                 context: task_dispatch_context(&task),
+                budget_secs: task_extra_u64(&task, "budget_secs"),
             };
             worker.send_task(&worker_task).await?;
 

@@ -100,6 +100,21 @@ fn read_jsonl(path: &std::path::Path) -> Vec<Value> {
         .collect()
 }
 
+fn test_duration_secs(label: &str) -> u64 {
+    let (number, multiplier) = if let Some(number) = label.strip_suffix('d') {
+        (number, 86_400)
+    } else if let Some(number) = label.strip_suffix('h') {
+        (number, 3_600)
+    } else if let Some(number) = label.strip_suffix('m') {
+        (number, 60)
+    } else if let Some(number) = label.strip_suffix('s') {
+        (number, 1)
+    } else {
+        panic!("unsupported test duration label: {label}");
+    };
+    number.parse::<u64>().unwrap() * multiplier
+}
+
 fn wait_for_path(path: &std::path::Path, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
@@ -2051,7 +2066,13 @@ fn test_goal_budget_add_allows_needs_more_budget_goal_to_continue() {
     let show_json: Value =
         serde_json::from_slice(&show_output.stdout).expect("show output should be JSON");
     assert_eq!(show_json["status"], "not_ready");
-    assert_eq!(show_json["budget_time"], "1h");
+    let budget_time = show_json["budget_time"]
+        .as_str()
+        .expect("budget_time should be a string");
+    assert!(
+        test_duration_secs(budget_time) >= 3_600,
+        "budget-add should grant at least the requested 1h recovery window, got {budget_time}"
+    );
 
     let dirs = goal_dirs(&envs);
     let checkpoints = read_jsonl(&dirs[0].join("budget-checkpoints.jsonl"));

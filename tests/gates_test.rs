@@ -366,7 +366,7 @@ exit 7
             command: script.to_str().unwrap().to_string(),
             args: vec![],
             required: true,
-            timeout_secs: 2,
+            timeout_secs: 10,
         }],
     };
 

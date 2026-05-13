@@ -175,7 +175,7 @@ Agents can request new tasks or subagents, but the controller must approve the
 change against policy.
 
 Current slice: `goal-agent-execute` is internally expanded into bounded
-controller-proposed tasks with per-task budgets. The controller writes
+controller-proposed tasks with worker-enforced per-task budgets. The controller writes
 `task-policy.json`, emits `task_proposed`, `task_accepted`, and
 `task_rejected`, and keeps external publishing disabled for the GitHub-only
 release lane. Workers can also return structured `OMK_TASK_PROPOSAL: {...}`

@@ -156,18 +156,21 @@ edition = "2021"
                 task: "success: implement a simple function".to_string(),
                 acceptance_criteria: vec![],
                 context: None,
+                budget_secs: None,
             },
             WorkerTask {
                 id: "task-fail".to_string(),
                 task: "fail: trigger a verification error".to_string(),
                 acceptance_criteria: vec![],
                 context: None,
+                budget_secs: None,
             },
             WorkerTask {
                 id: "task-stall".to_string(),
                 task: "stall: run an operation that never completes".to_string(),
                 acceptance_criteria: vec![],
                 context: None,
+                budget_secs: None,
             },
         ];
 

@@ -77,6 +77,8 @@ pub struct WorkerTask {
     pub acceptance_criteria: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +140,7 @@ mod tests {
             task: "fix bug".to_string(),
             acceptance_criteria: vec!["tests pass".to_string()],
             context: None,
+            budget_secs: None,
         };
 
         spec.send_task(&task).await.unwrap();

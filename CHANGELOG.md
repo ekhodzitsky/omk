@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.23] - 2026-05-13
+
+### Added
+
+- **Per-task Wire budget hard stops**: scheduler-dispatched worker tasks now carry structured `budget_secs`, and Wire workers enforce that budget as a task timeout with failed-result/event evidence instead of treating per-task budgets as prompt-only guidance.
+
 ## [0.3.22] - 2026-05-13
 
 ### Fixed

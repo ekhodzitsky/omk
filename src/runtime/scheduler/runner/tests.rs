@@ -57,6 +57,40 @@ async fn test_seed_task_and_dispatch_writes_inbox() {
 }
 
 #[tokio::test]
+async fn test_dispatch_includes_structured_task_budget_in_inbox() {
+    let tmp = TempDir::new().unwrap();
+    let state_dir = tmp.path().join("state");
+    let event_log = state_dir.join(EVENTS_FILE);
+    tokio::fs::create_dir_all(&state_dir).await.unwrap();
+
+    let mut task =
+        Task::new("task-budgeted", "budgeted task").with_description("honor this task budget");
+    task.extra
+        .insert("budget_secs".to_string(), serde_json::json!(7));
+
+    let mut runner = TeamRunner::init_with_tasks(
+        "run-test",
+        tmp.path(),
+        &state_dir,
+        EventWriter::new(&event_log),
+        vec![task],
+    )
+    .await
+    .unwrap();
+
+    let spec = make_spec(&tmp, "worker-budget").await;
+    runner
+        .dispatch_to_workers(std::slice::from_ref(&spec))
+        .await
+        .unwrap();
+
+    let inbox = tokio::fs::read_to_string(&spec.inbox).await.unwrap();
+    let task_json: serde_json::Value = serde_json::from_str(inbox.lines().next().unwrap()).unwrap();
+    assert_eq!(task_json["id"], "task-budgeted");
+    assert_eq!(task_json["budget_secs"], 7);
+}
+
+#[tokio::test]
 async fn test_dispatch_blocks_conflicting_write_sets() {
     let tmp = TempDir::new().unwrap();
     let state_dir = tmp.path().join("state");
