@@ -127,6 +127,55 @@ MOCK_KIMI=1 ./scripts/north_star_demo.sh
 The mock path isolates `HOME`/`XDG_*`, creates a tiny failing Rust fixture,
 repairs it deterministically, and expects a ready proof.
 
+## Greenfield Goal Demo
+
+Use this as the first honest `omk goal` greenfield acceptance example. It is a
+small engineering fixture, not a product launch flow.
+
+```bash
+tmpdir="$(mktemp -d)"
+cd "$tmpdir"
+cargo new omk-goal-greenfield-demo
+cd omk-goal-greenfield-demo
+omk setup
+omk goal run \
+  "Build a tiny local-only Rust CLI named taskline. It should support add <text> and list commands, store tasks in tasks.txt, include tests for both commands, avoid network access, and add no new dependencies." \
+  --budget-time 30m \
+  --budget-tokens 200000 \
+  --max-agents 1
+omk goal show latest
+omk goal verify latest
+omk goal execute latest
+omk goal review latest
+omk goal proof latest --format md
+```
+
+`goal run` creates the durable acceptance artifact set: `goal.json`, `prd.md`,
+`technical-plan.md`, `test-spec.md`, `task-graph.json`, `decisions.jsonl`, and
+an initial `proof.json`. `goal verify` adds gate evidence under
+`artifacts/gates/`. `goal execute` adds bounded Wire worker evidence under
+`artifacts/agent-runs/` when Kimi is authenticated, or when `MOCK_KIMI` points
+at an executable wire-compatible mock. `goal review` adds controller review and
+security review artifacts.
+
+For the Rust fixture, OMK auto-detects the default required gates:
+
+- `cargo fmt --check`
+- `cargo check --all-targets`
+- `cargo clippy -- -D warnings`
+- `cargo test`
+
+Treat passing gates plus execution/review evidence as **engineering-ready
+evidence**: the requested behavior has a PRD, plan, test spec, task graph, gate
+outputs, changed-file evidence, and review/security notes. It is
+**product-ready** only after a human accepts the diff, commits it, opens or
+merges a PR, and handles release-level docs or positioning. Until that
+integration acceptance exists, `omk goal proof` is expected to remain
+`not_ready` and name the remaining gap.
+
+For the fuller artifact map and troubleshooting notes, see
+[north_star_tutorial.md](north_star_tutorial.md).
+
 ## Verification Gates
 
 OMK has built-in gate presets for common stacks and supports project overrides:
