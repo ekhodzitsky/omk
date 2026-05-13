@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.13] - 2026-05-13
+
+### Added
+
+- **`omk goal` path-normalized write-set policy**: agent-proposed write-set conflict checks now normalize safe relative paths and reject unordered parent/child path overlaps, such as `./README.md` vs `README.md` and `docs` vs `docs/guide.md`.
+
 ## [0.3.12] - 2026-05-13
 
 ### Added

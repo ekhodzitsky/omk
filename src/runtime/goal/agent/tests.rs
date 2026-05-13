@@ -119,3 +119,59 @@ fn policy_rejects_unordered_tasks_with_conflicting_write_set() {
         .reason
         .contains("write-set conflict with accepted task goal-agent-docs-a: README.md"));
 }
+
+#[test]
+fn policy_rejects_unordered_tasks_with_normalized_write_path_conflict() {
+    let policy = validate_goal_agent_task_proposals(
+        &state(),
+        &graph(),
+        "goal-test-followups",
+        vec![
+            proposal(
+                "goal-agent-docs-a",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &["./README.md"],
+            ),
+            proposal(
+                "goal-agent-docs-b",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &["README.md"],
+            ),
+        ],
+        false,
+    );
+
+    assert_eq!(policy.accepted_tasks.len(), 1);
+    assert_eq!(policy.rejected_tasks.len(), 1);
+    assert!(policy.rejected_tasks[0]
+        .reason
+        .contains("write-set conflict with accepted task goal-agent-docs-a: README.md"));
+}
+
+#[test]
+fn policy_rejects_unordered_tasks_with_parent_child_write_path_conflict() {
+    let policy = validate_goal_agent_task_proposals(
+        &state(),
+        &graph(),
+        "goal-test-followups",
+        vec![
+            proposal(
+                "goal-agent-docs-a",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &["docs"],
+            ),
+            proposal(
+                "goal-agent-docs-b",
+                &[GOAL_AGENT_EXECUTE_TASK_ID],
+                &["docs/guide.md"],
+            ),
+        ],
+        false,
+    );
+
+    assert_eq!(policy.accepted_tasks.len(), 1);
+    assert_eq!(policy.rejected_tasks.len(), 1);
+    assert!(policy.rejected_tasks[0]
+        .reason
+        .contains("write-set conflict with accepted task goal-agent-docs-a: docs/guide.md"));
+}

@@ -7,8 +7,11 @@ use super::state::{
 use super::task_graph::{
     goal_task_done, pending_goal_agent_followup_proposals, GoalTaskGraph, GoalTaskStatus,
 };
+use path_policy::first_conflicting_write_path;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+
+mod path_policy;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct GoalAgentTaskProposal {
@@ -311,21 +314,6 @@ fn first_unordered_write_set_conflict(
         }
     }
     None
-}
-
-fn first_conflicting_write_path(candidate: &[String], accepted: &[String]) -> Option<String> {
-    candidate.iter().find_map(|candidate_path| {
-        accepted
-            .iter()
-            .find(|accepted_path| write_paths_conflict(candidate_path, accepted_path))
-            .map(|_| candidate_path.clone())
-    })
-}
-
-fn write_paths_conflict(candidate: &str, accepted: &str) -> bool {
-    let candidate = candidate.trim();
-    let accepted = accepted.trim();
-    candidate == accepted || candidate == "project files" || accepted == "project files"
 }
 
 pub(crate) async fn append_goal_agent_task_policy_events(
