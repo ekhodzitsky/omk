@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-const SKIPPED_GATE_COMMAND: &str = "__omk_internal_skipped_gate__";
+pub(super) const SKIPPED_GATE_COMMAND: &str = "__omk_internal_skipped_gate__";
 
 fn default_required() -> bool {
     true
