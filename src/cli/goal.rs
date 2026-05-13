@@ -224,8 +224,17 @@ async fn cmd_run(goal: &str, options: crate::runtime::goal::CreateGoalOptions) -
             .join(crate::runtime::goal::GOAL_PROOF_FILE)
             .display()
     );
-    println!("Note: run `omk goal execute latest`, then `omk goal review latest` for evidence.");
-    println!("Next: omk goal show latest");
+    if state.status == crate::runtime::goal::GoalStatus::BlockedOnHuman {
+        if let Some(failure) = &state.failure {
+            println!("Decision needed: {}", failure.reason);
+        }
+        println!("Next: refine the goal with testable success criteria, then run it again.");
+    } else {
+        println!(
+            "Note: run `omk goal execute latest`, then `omk goal review latest` for evidence."
+        );
+        println!("Next: omk goal show latest");
+    }
     Ok(())
 }
 

@@ -30,7 +30,7 @@ Status: current beta MVP.
 - `omk goal` durable scaffold with backward-compatible state loading, planning
   artifacts, decision log, task graph, local verification task evidence, git evidence, policy-validated bounded
   Wire-backed agent waves, accepted follow-up tasks, `max_agents` worker-pool
-  caps, durable task graph retry/lease metadata, stale-lease recovery evidence, load-time task graph validation,
+  caps, human-blocked oracle guard, durable task graph retry/lease metadata, stale-lease recovery evidence, load-time task graph validation,
   first-class graph mutation events, path-normalized dependency-ordered
   read/write access conflict policy for agent-proposed follow-ups, mutation
   diff/changed-file evidence, post-mutation gate reruns, controller

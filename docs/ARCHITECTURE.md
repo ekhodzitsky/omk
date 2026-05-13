@@ -71,7 +71,7 @@ omk CLI (Rust)
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
-| `runtime/goal/` | Goal controller scaffold, backward-compatible goal state loading, task graph with retry/lease metadata, local gates, policy-validated bounded agent waves with per-task budget hard stops, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, deterministic replayable event timelines, budget checkpoints, wall-clock/token/cost budget enforcement and recovery, and proof state. |
+| `runtime/goal/` | Goal controller scaffold, backward-compatible goal state loading, human-blocked oracle guard, task graph with retry/lease metadata, local gates, policy-validated bounded agent waves with per-task budget hard stops, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, deterministic replayable event timelines, budget checkpoints, wall-clock/token/cost budget enforcement and recovery, and proof state. |
 
 ## Data Flow
 
@@ -95,16 +95,18 @@ Current `omk goal` scaffold data flow:
    rehoming for restored or older records.
 3. OMK writes `prd.md`, `technical-plan.md`, `test-spec.md`,
    `task-graph.json`, and `decisions.jsonl`.
-4. OMK writes an honest `proof.json` with `not_ready` until required
+4. Vague goals without testable success criteria stop as `blocked_on_human`,
+   write `failure.json`, and record the required human decision in `proof.json`.
+5. OMK writes an honest `proof.json` with `not_ready` until required
    execution, review, and hardening evidence exists.
-5. OMK marks controller-owned planning tasks as done with artifact evidence,
+6. OMK marks controller-owned planning tasks as done with artifact evidence,
    writes goal-level task events to `events.jsonl`, and records controller
    rationale in `decisions.jsonl`.
-6. OMK captures best-effort git branch, HEAD commit, dirty-state, and changed
+7. OMK captures best-effort git branch, HEAD commit, dirty-state, and changed
    files for the proof bundle.
-7. `omk goal verify` runs local gates, writes full gate output under
+8. `omk goal verify` runs local gates, writes full gate output under
    `artifacts/gates/`, appends gate events, and refreshes `proof.json`.
-8. `omk goal execute` marks `goal-local-verify` done when required gates pass,
+9. `omk goal execute` marks `goal-local-verify` done when required gates pass,
    turns `goal-agent-execute` into a controller-proposed multi-task Wire worker
    wave, validates proposals against policy and per-task budgets, enforces
    accepted task budgets in Wire workers, aggregates Wire token/cost budget
@@ -135,11 +137,11 @@ Current `omk goal` scaffold data flow:
    interrupted status in goal/proof state. If the worker changes project files,
    `execute` reruns gates under `artifacts/gates/post-mutation/` before writing
    the final proof.
-9. `omk goal review` writes controller review/security artifacts under
+10. `omk goal review` writes controller review/security artifacts under
    `artifacts/reviews/` and closes `goal-review` / `goal-security-review`
    when evidence is sufficient.
-10. Operators inspect with `omk goal list/status/show/proof`.
-11. `omk goal cancel` writes `failure.json`.
+11. Operators inspect with `omk goal list/status/show/proof`.
+12. `omk goal cancel` writes `failure.json`.
 
 Planned later flow adds specialist review loops, integration acceptance, and
 ready proof generation.
@@ -155,7 +157,7 @@ ready proof generation.
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, validated task graph with controller-owned, local verification, retry/lease metadata, policy-validated multi-task Wire agent mutation, path-normalized dependency-ordered read/write access conflict policy, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
+| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, human-blocked oracle guard, validated task graph with controller-owned, local verification, retry/lease metadata, policy-validated multi-task Wire agent mutation, path-normalized dependency-ordered read/write access conflict policy, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
 
 ## MCP Integration
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.29] - 2026-05-13
+
+### Added
+
+- **`omk goal` human-blocked oracle guard**: vague goals without testable success criteria now stop as `blocked_on_human`, write `failure.json`, include the required human decision in `proof.json`, and prevent `verify`/`execute`/`review` from continuing until the goal is refined.
+
 ## [0.3.28] - 2026-05-13
 
 ### Added

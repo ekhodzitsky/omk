@@ -234,6 +234,56 @@ fn test_goal_run_creates_durable_scaffold_and_show_json() {
 }
 
 #[test]
+fn test_goal_run_blocks_when_success_criteria_are_not_testable() {
+    let (_tmp, envs) = isolated_env();
+
+    omk_cmd(&envs)
+        .args(["goal", "run", "Make it awesome", "--until-ready"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("blocked_on_human"))
+        .stdout(predicate::str::contains("Decision needed"))
+        .stdout(predicate::str::contains("refine the goal"));
+
+    let dirs = goal_dirs(&envs);
+    assert_eq!(dirs.len(), 1);
+    assert!(dirs[0].join("failure.json").exists());
+
+    let show = omk_cmd(&envs)
+        .args(["goal", "show", "latest", "--json"])
+        .output()
+        .expect("omk goal show failed");
+    assert!(show.status.success());
+    let goal_json: Value = serde_json::from_slice(&show.stdout).expect("goal JSON should parse");
+    assert_eq!(goal_json["status"], "blocked_on_human");
+    assert!(goal_json["failure"]["reason"]
+        .as_str()
+        .is_some_and(|reason| reason.contains("testable success criteria")));
+
+    let proof_output = omk_cmd(&envs)
+        .args(["goal", "proof", "latest", "--json"])
+        .output()
+        .expect("omk goal proof failed");
+    assert!(proof_output.status.success());
+    let proof_json: Value =
+        serde_json::from_slice(&proof_output.stdout).expect("proof JSON should parse");
+    assert_eq!(proof_json["status"], "blocked_on_human");
+    assert!(proof_json["human_decisions_required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|decision| decision
+            .as_str()
+            .is_some_and(|text| text.contains("testable success criteria"))));
+
+    omk_cmd(&envs)
+        .args(["goal", "execute", "latest"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("blocked_on_human"));
+}
+
+#[test]
 fn test_goal_run_writes_controller_decision_log() {
     let (_tmp, envs) = isolated_env();
 

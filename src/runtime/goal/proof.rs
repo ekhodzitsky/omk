@@ -52,16 +52,55 @@ pub(crate) fn build_scaffold_proof(
     generated_at: DateTime<Utc>,
 ) -> GoalProof {
     let commits = proof_commits(&git);
+    let human_decisions_required = if state.status == GoalStatus::BlockedOnHuman {
+        state
+            .failure
+            .as_ref()
+            .map(|failure| vec![failure.reason.clone()])
+            .unwrap_or_else(|| {
+                vec![
+                    "Define testable success criteria before autonomous goal execution."
+                        .to_string(),
+                ]
+            })
+    } else {
+        Vec::new()
+    };
+    let known_gaps = if state.status == GoalStatus::BlockedOnHuman {
+        vec!["goal oracle is not testable without a human decision".to_string()]
+    } else {
+        vec![
+            "agent execution has not run for this goal yet".to_string(),
+            "verification gates have not run for this goal".to_string(),
+            "proof cannot claim readiness until agent-owned execution evidence exists".to_string(),
+        ]
+    };
+    let readiness = if state.status == GoalStatus::BlockedOnHuman {
+        "blocked on human: testable success criteria are required before autonomous execution"
+            .to_string()
+    } else {
+        "not ready: controller scaffold has not executed agents or verification gates".to_string()
+    };
+    let summary = if state.status == GoalStatus::BlockedOnHuman {
+        format!(
+            "Goal '{}' needs a human-defined oracle before autonomous execution can continue.",
+            state.normalized_goal
+        )
+    } else {
+        format!(
+            "Goal '{}' has durable planning artifacts, but no local verification or agent execution evidence yet.",
+            state.normalized_goal
+        )
+    };
     GoalProof {
         version: 1,
         goal_id: state.goal_id.clone(),
-        status: GoalStatus::NotReady,
-        readiness: "not ready: controller scaffold has not executed agents or verification gates"
-            .to_string(),
-        summary: format!(
-            "Goal '{}' has durable planning artifacts, but no local verification or agent execution evidence yet.",
-            state.normalized_goal
-        ),
+        status: match state.status {
+            GoalStatus::BlockedOnHuman => GoalStatus::BlockedOnHuman,
+            _ => GoalStatus::NotReady,
+        },
+        readiness,
+        summary,
         generated_at,
         artifacts: state.artifacts.clone(),
         task_graph_summary: summarize_task_graph(task_graph),
@@ -70,12 +109,8 @@ pub(crate) fn build_scaffold_proof(
         git,
         gates: Vec::new(),
         post_mutation_gates_ran: false,
-        known_gaps: vec![
-            "agent execution has not run for this goal yet".to_string(),
-            "verification gates have not run for this goal".to_string(),
-            "proof cannot claim readiness until agent-owned execution evidence exists".to_string(),
-        ],
-        human_decisions_required: Vec::new(),
+        known_gaps,
+        human_decisions_required,
     }
 }
 

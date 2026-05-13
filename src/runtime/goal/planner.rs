@@ -1,11 +1,12 @@
 use super::evidence::{detect_git_evidence, record_artifact};
 use super::proof::{build_scaffold_proof, write_json_artifact};
 use super::state::{
-    GoalPhase, GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_AGENT_RUNS_DIR,
-    GOAL_ARTIFACTS_DIR, GOAL_CONTROLLER_ACTOR, GOAL_DECISIONS_FILE, GOAL_GATE_ARTIFACTS_DIR,
-    GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PRD_FILE, GOAL_PROOF_FILE, GOAL_REVIEW_ARTIFACTS_DIR,
-    GOAL_REVIEW_FILE, GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_FILE, GOAL_SECURITY_REVIEW_TASK_ID,
-    GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
+    GoalFailure, GoalPhase, GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_AGENT_RUNS_DIR,
+    GOAL_ARTIFACTS_DIR, GOAL_CONTROLLER_ACTOR, GOAL_DECISIONS_FILE, GOAL_FAILURE_FILE,
+    GOAL_GATE_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PRD_FILE, GOAL_PROOF_FILE,
+    GOAL_REVIEW_ARTIFACTS_DIR, GOAL_REVIEW_FILE, GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_FILE,
+    GOAL_SECURITY_REVIEW_TASK_ID, GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE,
+    GOAL_TEST_SPEC_FILE,
 };
 use super::task_graph::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 use crate::runtime::events::{
@@ -24,12 +25,22 @@ pub(crate) async fn create_goal_with_scaffold(
     crate::runtime::config::ensure_private_dir(&goal_dir).await?;
 
     let now = chrono::Utc::now();
+    let normalized_goal = super::state::normalize_goal(goal);
+    let oracle = super::oracle::assess_goal_oracle(&normalized_goal);
+    let failure = (!oracle.testable).then(|| GoalFailure {
+        reason: oracle.human_decisions_required.join("; "),
+        recorded_at: now,
+    });
     let state = super::state::GoalState {
         version: 1,
         goal_id: id.clone(),
         original_goal: goal.to_string(),
-        normalized_goal: super::state::normalize_goal(goal),
-        status: super::state::GoalStatus::NotReady,
+        normalized_goal,
+        status: if oracle.testable {
+            super::state::GoalStatus::NotReady
+        } else {
+            super::state::GoalStatus::BlockedOnHuman
+        },
         phase: super::state::GoalPhase::Intake,
         created_at: now,
         updated_at: now,
@@ -41,7 +52,7 @@ pub(crate) async fn create_goal_with_scaffold(
         max_agents: options.max_agents,
         terminal_criteria: super::state::GoalTerminalCriteria::default(),
         artifacts: Vec::new(),
-        failure: None,
+        failure,
         state_dir: goal_dir.clone(),
     };
     state.save().await?;
@@ -83,21 +94,40 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
     super::decision::append_controller_scaffold_decisions(&state, &task_graph, now).await?;
     record_artifact(&mut state, "decisions", GOAL_DECISIONS_FILE, now);
 
-    state.status = GoalStatus::NotReady;
+    if state.status != GoalStatus::BlockedOnHuman {
+        state.status = GoalStatus::NotReady;
+    }
     state.updated_at = now;
     state.completed_at = Some(now);
     state.save().await?;
+    if state.status == GoalStatus::BlockedOnHuman {
+        write_blocked_goal_failure_artifact(&state).await?;
+    }
     super::budget::append_budget_checkpoint(&state, "goal_created").await?;
 
+    let run_failed_reason = if state.status == GoalStatus::BlockedOnHuman {
+        state
+            .failure
+            .as_ref()
+            .map(|failure| failure.reason.as_str())
+            .unwrap_or("blocked_on_human")
+    } else {
+        "goal controller scaffold created; run omk goal execute to launch the bounded agent wave"
+    };
     writer
-        .append(
-            &builder.run_failed(
-                "goal controller scaffold created; run omk goal execute to launch the bounded agent wave",
-            )?,
-        )
+        .append(&builder.run_failed(run_failed_reason)?)
         .await?;
 
     Ok(state)
+}
+
+async fn write_blocked_goal_failure_artifact(state: &GoalState) -> Result<()> {
+    let failure_json = serde_json::to_string_pretty(state)?;
+    crate::runtime::atomic::atomic_write(
+        &state.state_dir.join(GOAL_FAILURE_FILE),
+        failure_json.as_bytes(),
+    )
+    .await
 }
 
 async fn write_goal_brief(state: &GoalState, generated_at: DateTime<Utc>) -> Result<()> {

@@ -7,6 +7,7 @@ mod budget;
 mod decision;
 mod dispatch;
 mod evidence;
+mod oracle;
 mod planner;
 mod proof;
 mod replay;
@@ -103,7 +104,7 @@ pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
 
 pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = resolve_goal(goal_id).await?;
-    ensure_goal_not_paused(&state)?;
+    ensure_goal_can_continue(&state)?;
     budget::ensure_budget_available(&mut state, "goal verify").await?;
     let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
     let gate_config = crate::runtime::gates::load_or_detect_gates(project_dir).await;
@@ -161,7 +162,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
 
 pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = resolve_goal(goal_id).await?;
-    ensure_goal_not_paused(&state)?;
+    ensure_goal_can_continue(&state)?;
     budget::ensure_budget_available(&mut state, "goal execute").await?;
     state.status = GoalStatus::Running;
     state.phase = GoalPhase::Execution;
@@ -295,7 +296,7 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
 
 pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = resolve_goal(goal_id).await?;
-    ensure_goal_not_paused(&state)?;
+    ensure_goal_can_continue(&state)?;
     budget::ensure_budget_available(&mut state, "goal review").await?;
     state.status = GoalStatus::Running;
     state.phase = GoalPhase::VerificationDesign;
@@ -458,6 +459,19 @@ fn ensure_goal_not_paused(state: &GoalState) -> Result<()> {
             state.goal_id,
             state.goal_id
         );
+    }
+    Ok(())
+}
+
+fn ensure_goal_can_continue(state: &GoalState) -> Result<()> {
+    ensure_goal_not_paused(state)?;
+    if state.status == GoalStatus::BlockedOnHuman {
+        let reason = state
+            .failure
+            .as_ref()
+            .map(|failure| failure.reason.as_str())
+            .unwrap_or("human decision required");
+        anyhow::bail!("Goal '{}' is blocked_on_human: {reason}", state.goal_id);
     }
     Ok(())
 }

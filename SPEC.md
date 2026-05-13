@@ -81,6 +81,8 @@ current beta MVP instead of inventing a parallel runtime:
 - `omk goal plan/run/list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`,
   `task-graph.json`, and `decisions.jsonl`;
+- human-blocked oracle guard that stops vague goals as `blocked_on_human` when
+  success criteria cannot be made testable without a human decision;
 - controller-owned planning task completion evidence in the task graph and
   goal event log;
 - durable task graph retry/lease metadata through `retry_count`, `max_retries`,

@@ -15,7 +15,7 @@
 | `config_cmd.rs` | Config validation and display. |
 | `cost_cmd.rs` | Cost reporting command. |
 | `doctor.rs` | Environment diagnostics. |
-| `goal.rs` | Goal controller scaffold commands: plan/run/list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel, including backward-compatible state loading, local gates, controller decision logs, task graph retry/lease metadata, deterministic replayable event timelines, budget checkpoints, wall-clock/token/cost budget enforcement and recovery, bounded Wire-backed execution waves with mutation evidence, per-task budget hard stops, stale-worker cleanup evidence, pause/resume lifecycle state with active worker interruption, post-mutation gate reruns, and controller review/security evidence. |
+| `goal.rs` | Goal controller scaffold commands: plan/run/list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel, including backward-compatible state loading, human-blocked oracle guard, local gates, controller decision logs, task graph retry/lease metadata, deterministic replayable event timelines, budget checkpoints, wall-clock/token/cost budget enforcement and recovery, bounded Wire-backed execution waves with mutation evidence, per-task budget hard stops, stale-worker cleanup evidence, pause/resume lifecycle state with active worker interruption, post-mutation gate reruns, and controller review/security evidence. |
 | `hud.rs` | Text/JSON/TUI/web HUD command entrypoints. |
 | `kimi_native_cmd.rs` | Kimi-native sync/install/doctor/assets commands. |
 | `logs.rs` | Log inspection. |
