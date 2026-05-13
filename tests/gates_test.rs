@@ -1,6 +1,34 @@
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+fn single_gate_config(
+    name: &str,
+    command: &str,
+    args: Vec<String>,
+    required: bool,
+    timeout_secs: u64,
+) -> omk::runtime::gates::VerificationConfig {
+    omk::runtime::gates::VerificationConfig {
+        gates: vec![omk::runtime::gates::GateDef {
+            name: name.to_string(),
+            command: command.to_string(),
+            args,
+            required,
+            timeout_secs,
+        }],
+    }
+}
+
+#[cfg(unix)]
+fn write_unix_script(path: &std::path::Path, body: &str) {
+    // Synchronous I/O on purpose: a 100-byte test fixture has no benefit from
+    // tokio's blocking-pool indirection, and using std::fs avoids subtle
+    // file-handle / close-ordering interactions with the subsequent spawn
+    // under heavy parallel-test load.
+    std::fs::write(path, body).unwrap();
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
 #[tokio::test]
 async fn test_detect_gates_rust() {
     let tmp = tempfile::tempdir().unwrap();
@@ -204,29 +232,13 @@ async fn test_run_gates_success() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
 
-    // Create a script that always succeeds
     let script = dir.join("success.sh");
     #[cfg(unix)]
-    {
-        tokio::fs::write(&script, "#!/bin/sh\necho ok\n")
-            .await
-            .unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    write_unix_script(&script, "#!/bin/sh\necho ok\n");
     #[cfg(windows)]
-    {
-        tokio::fs::write(&script, "@echo ok\n").await.unwrap();
-    }
+    tokio::fs::write(&script, "@echo ok\n").await.unwrap();
 
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "success".to_string(),
-            command: script.to_str().unwrap().to_string(),
-            args: vec![],
-            required: true,
-            timeout_secs: 5,
-        }],
-    };
+    let config = single_gate_config("success", script.to_str().unwrap(), vec![], true, 5);
 
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
@@ -238,31 +250,15 @@ async fn test_run_gates_failure() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
 
-    // Create a script that always fails
     let script = dir.join("fail.sh");
     #[cfg(unix)]
-    {
-        tokio::fs::write(&script, "#!/bin/sh\necho error >&2\nexit 1\n")
-            .await
-            .unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    write_unix_script(&script, "#!/bin/sh\necho error >&2\nexit 1\n");
     #[cfg(windows)]
-    {
-        tokio::fs::write(&script, "@echo error\nexit /b 1\n")
-            .await
-            .unwrap();
-    }
+    tokio::fs::write(&script, "@echo error\nexit /b 1\n")
+        .await
+        .unwrap();
 
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "fail".to_string(),
-            command: script.to_str().unwrap().to_string(),
-            args: vec![],
-            required: true,
-            timeout_secs: 5,
-        }],
-    };
+    let config = single_gate_config("fail", script.to_str().unwrap(), vec![], true, 5);
 
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
@@ -278,34 +274,19 @@ async fn test_run_gates_with_evidence_writes_output_artifact_and_metadata() {
 
     let script = dir.join("evidence.sh");
     #[cfg(unix)]
-    {
-        tokio::fs::write(
-            &script,
-            "#!/bin/sh\necho line-1\necho line-2\necho err-1 >&2\nexit 7\n",
-        )
-        .await
-        .unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    write_unix_script(
+        &script,
+        "#!/bin/sh\necho line-1\necho line-2\necho err-1 >&2\nexit 7\n",
+    );
     #[cfg(windows)]
-    {
-        tokio::fs::write(
-            &script,
-            "@echo line-1\r\n@echo line-2\r\n@echo err-1 1>&2\r\nexit /b 7\r\n",
-        )
-        .await
-        .unwrap();
-    }
+    tokio::fs::write(
+        &script,
+        "@echo line-1\r\n@echo line-2\r\n@echo err-1 1>&2\r\nexit /b 7\r\n",
+    )
+    .await
+    .unwrap();
 
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "evidence".to_string(),
-            command: script.to_str().unwrap().to_string(),
-            args: vec![],
-            required: true,
-            timeout_secs: 5,
-        }],
-    };
+    let config = single_gate_config("evidence", script.to_str().unwrap(), vec![], true, 5);
 
     let results =
         omk::runtime::gates::run_gates_with_evidence(&config, dir, Some(&artifacts)).await;
@@ -344,7 +325,7 @@ async fn test_run_gates_with_evidence_drains_large_output_before_waiting() {
     tokio::fs::create_dir_all(&artifacts).await.unwrap();
 
     let script = dir.join("large-output.sh");
-    tokio::fs::write(
+    write_unix_script(
         &script,
         r#"#!/bin/sh
 awk 'BEGIN {
@@ -355,20 +336,9 @@ awk 'BEGIN {
   exit 7
 }'
 "#,
-    )
-    .await
-    .unwrap();
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
 
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "large-output".to_string(),
-            command: script.to_str().unwrap().to_string(),
-            args: vec![],
-            required: true,
-            timeout_secs: 10,
-        }],
-    };
+    let config = single_gate_config("large-output", script.to_str().unwrap(), vec![], true, 10);
 
     let results =
         omk::runtime::gates::run_gates_with_evidence(&config, dir, Some(&artifacts)).await;
@@ -389,28 +359,13 @@ async fn test_run_gates_with_evidence_marks_timeout_without_artifact_dir() {
     let dir = tmp.path();
     let script = dir.join("timeout.sh");
     #[cfg(unix)]
-    {
-        tokio::fs::write(&script, "#!/bin/sh\nsleep 2\necho done\n")
-            .await
-            .unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    write_unix_script(&script, "#!/bin/sh\nsleep 2\necho done\n");
     #[cfg(windows)]
-    {
-        tokio::fs::write(&script, "@ping 127.0.0.1 -n 3 > nul\r\n@echo done\r\n")
-            .await
-            .unwrap();
-    }
+    tokio::fs::write(&script, "@ping 127.0.0.1 -n 3 > nul\r\n@echo done\r\n")
+        .await
+        .unwrap();
 
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "timeout".to_string(),
-            command: script.to_str().unwrap().to_string(),
-            args: vec![],
-            required: true,
-            timeout_secs: 1,
-        }],
-    };
+    let config = single_gate_config("timeout", script.to_str().unwrap(), vec![], true, 1);
 
     let results = omk::runtime::gates::run_gates_with_evidence(&config, dir, None).await;
     assert_eq!(results.len(), 1);
@@ -433,26 +388,11 @@ async fn test_run_gates_keeps_compatibility_without_evidence_artifact() {
 
     let script = dir.join("compat.sh");
     #[cfg(unix)]
-    {
-        tokio::fs::write(&script, "#!/bin/sh\necho ok\n")
-            .await
-            .unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    write_unix_script(&script, "#!/bin/sh\necho ok\n");
     #[cfg(windows)]
-    {
-        tokio::fs::write(&script, "@echo ok\n").await.unwrap();
-    }
+    tokio::fs::write(&script, "@echo ok\n").await.unwrap();
 
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "compat".to_string(),
-            command: script.to_str().unwrap().to_string(),
-            args: vec![],
-            required: true,
-            timeout_secs: 5,
-        }],
-    };
+    let config = single_gate_config("compat", script.to_str().unwrap(), vec![], true, 5);
 
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
@@ -498,18 +438,11 @@ async fn test_load_or_detect_gates_supports_allow_fail_and_skip_semantics() {
 
     let fail_script = dir.join("fail.sh");
     #[cfg(unix)]
-    {
-        tokio::fs::write(&fail_script, "#!/bin/sh\nexit 1\n")
-            .await
-            .unwrap();
-        std::fs::set_permissions(&fail_script, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    write_unix_script(&fail_script, "#!/bin/sh\nexit 1\n");
     #[cfg(windows)]
-    {
-        tokio::fs::write(&fail_script, "@exit /b 1\n")
-            .await
-            .unwrap();
-    }
+    tokio::fs::write(&fail_script, "@exit /b 1\n")
+        .await
+        .unwrap();
 
     tokio::fs::write(
         omk_dir.join("gates.toml"),
@@ -566,15 +499,13 @@ async fn test_run_gates_empty_config_returns_no_results() {
 async fn test_run_gates_missing_command_with_timeout_reports_run_error() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "missing".to_string(),
-            command: "this-binary-definitely-does-not-exist-omk-test".to_string(),
-            args: vec!["--probe".to_string()],
-            required: true,
-            timeout_secs: 5,
-        }],
-    };
+    let config = single_gate_config(
+        "missing",
+        "this-binary-definitely-does-not-exist-omk-test",
+        vec!["--probe".to_string()],
+        true,
+        5,
+    );
 
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
@@ -610,15 +541,13 @@ async fn test_run_gates_missing_command_with_timeout_reports_run_error() {
 async fn test_run_gates_missing_command_default_timeout_reports_spawn_error() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "missing-default-timeout".to_string(),
-            command: "this-binary-definitely-does-not-exist-omk-test".to_string(),
-            args: vec![],
-            required: false,
-            timeout_secs: 0,
-        }],
-    };
+    let config = single_gate_config(
+        "missing-default-timeout",
+        "this-binary-definitely-does-not-exist-omk-test",
+        vec![],
+        false,
+        0,
+    );
 
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
@@ -662,6 +591,7 @@ async fn test_run_gates_skipped_gate_has_stable_result_shape() {
 [[gates]]
 name = "skipped-only"
 command = "echo"
+args = ["should-not-appear", "neither-this"]
 skip = true
 required = true
 timeout_secs = 3
@@ -679,7 +609,15 @@ timeout_secs = 3
     assert!(!gate.required, "skip forces required=false");
     assert!(gate.stdout.is_empty());
     assert_eq!(gate.stderr, "Skipped by gate config");
+    // The skipped-gate command_line is a fixed placeholder — configured args
+    // must NOT leak into the rendered command line, or downstream proof
+    // consumers would treat skipped gates as if they had executed.
     assert_eq!(gate.command_line, "<skipped by config>");
+    assert!(
+        !gate.command_line.contains("should-not-appear"),
+        "skipped gate must hide args from command_line, got {:?}",
+        gate.command_line,
+    );
     assert!(!gate.timed_out);
     assert_eq!(gate.exit_code, None);
     assert!(gate.output_path.is_none());
@@ -698,23 +636,18 @@ async fn test_run_gates_captures_exit_code_stdout_stderr_and_args() {
     let dir = tmp.path();
 
     let script = dir.join("nonzero.sh");
-    tokio::fs::write(
+    write_unix_script(
         &script,
         "#!/bin/sh\necho \"out:$1\"\necho \"err:$2\" >&2\nexit 42\n",
-    )
-    .await
-    .unwrap();
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
 
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "nonzero".to_string(),
-            command: script.to_str().unwrap().to_string(),
-            args: vec!["alpha".to_string(), "beta".to_string()],
-            required: true,
-            timeout_secs: 5,
-        }],
-    };
+    let config = single_gate_config(
+        "nonzero",
+        script.to_str().unwrap(),
+        vec!["alpha".to_string(), "beta".to_string()],
+        true,
+        5,
+    );
 
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
@@ -795,26 +728,40 @@ async fn test_gate_result_json_uses_stable_field_names() {
     assert_eq!(parsed.timeout_secs, 30);
 
     let serialized = serde_json::to_string(&parsed).expect("serialize GateResult");
-    for field in [
-        "\"name\":",
-        "\"passed\":",
-        "\"stdout\":",
-        "\"stderr\":",
-        "\"duration_ms\":",
-        "\"required\":",
-        "\"command_line\":",
-        "\"exit_code\":",
-        "\"timed_out\":",
-        "\"stdout_summary\":",
-        "\"stderr_summary\":",
-        "\"output_path\":",
-        "\"timeout_secs\":",
-    ] {
-        assert!(
-            serialized.contains(field),
-            "serialized JSON must include canonical field name {field}, got: {serialized}",
-        );
-    }
+    // The serialized JSON must use exactly this canonical, closed key set. A
+    // rename (e.g. command_line → commandLine) and an *unannounced addition*
+    // (e.g. a new `pub field: T`) are both wire-shape drift that downstream
+    // proof/state consumers cannot absorb silently — assert key set equality,
+    // not just presence.
+    let value: serde_json::Value =
+        serde_json::from_str(&serialized).expect("serialized JSON must reparse");
+    let actual_keys: std::collections::BTreeSet<&str> = value
+        .as_object()
+        .expect("GateResult must serialize as a JSON object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let expected_keys: std::collections::BTreeSet<&str> = [
+        "command_line",
+        "duration_ms",
+        "exit_code",
+        "name",
+        "output_path",
+        "passed",
+        "required",
+        "stderr",
+        "stderr_summary",
+        "stdout",
+        "stdout_summary",
+        "timed_out",
+        "timeout_secs",
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        actual_keys, expected_keys,
+        "GateResult on-disk key set must stay closed; any rename or addition breaks proof/state consumers",
+    );
 }
 
 #[tokio::test]
@@ -848,23 +795,12 @@ async fn test_run_gates_summary_truncates_to_three_lines_with_overflow_marker() 
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
     let script = dir.join("many-lines.sh");
-    tokio::fs::write(
+    write_unix_script(
         &script,
         "#!/bin/sh\nfor i in 1 2 3 4 5; do echo \"out-$i\"; done\nfor i in 1 2 3 4 5; do echo \"err-$i\" >&2; done\nexit 1\n",
-    )
-    .await
-    .unwrap();
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
 
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "many-lines".to_string(),
-            command: script.to_str().unwrap().to_string(),
-            args: vec![],
-            required: true,
-            timeout_secs: 5,
-        }],
-    };
+    let config = single_gate_config("many-lines", script.to_str().unwrap(), vec![], true, 5);
 
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
@@ -913,28 +849,21 @@ async fn test_run_gates_summary_truncates_long_lines_to_240_chars() {
     let dir = tmp.path();
     let script = dir.join("long-line.sh");
     // 300 'x' characters on one line — well past the documented 240-char cap.
-    tokio::fs::write(
-        &script,
-        "#!/bin/sh\nprintf 'x%.0s' $(seq 1 300)\necho\nexit 0\n",
-    )
-    .await
-    .unwrap();
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // The script must not depend on `seq`/`printf` subprocesses so it stays
+    // deterministic when many tests spawn children in parallel.
+    let body = format!("#!/bin/sh\necho '{}'\nexit 0\n", "x".repeat(300));
+    write_unix_script(&script, &body);
 
-    let config = omk::runtime::gates::VerificationConfig {
-        gates: vec![omk::runtime::gates::GateDef {
-            name: "long-line".to_string(),
-            command: script.to_str().unwrap().to_string(),
-            args: vec![],
-            required: true,
-            timeout_secs: 5,
-        }],
-    };
+    let config = single_gate_config("long-line", script.to_str().unwrap(), vec![], true, 5);
 
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
     let g = &results[0];
-    assert!(g.passed);
+    assert!(
+        g.passed,
+        "long-line gate must succeed; exit_code={:?}, stderr={:?}",
+        g.exit_code, g.stderr,
+    );
     let summary = g
         .stdout_summary
         .as_deref()

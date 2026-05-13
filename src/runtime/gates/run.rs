@@ -62,21 +62,12 @@ pub async fn run_gates_with_evidence(
                 Err(_) => {
                     let timeout_message = format!("Timed out after {}s", gate.timeout_secs);
                     warn!(gate = %gate.name, timeout = gate.timeout_secs, "Gate timed out");
-                    results.push(GateResult {
-                        name: gate.name.clone(),
-                        passed: false,
-                        stdout: String::new(),
-                        stderr: timeout_message.clone(),
-                        duration_ms: start.elapsed().as_millis() as u64,
-                        required: gate.required,
-                        command_line: command_line.clone(),
-                        exit_code: None,
-                        timed_out: true,
-                        stdout_summary: None,
-                        stderr_summary: Some(timeout_message),
-                        output_path: None,
-                        timeout_secs: gate.timeout_secs,
-                    });
+                    results.push(make_gate_timeout(
+                        gate,
+                        &command_line,
+                        start,
+                        timeout_message,
+                    ));
                     continue;
                 }
             }
@@ -96,21 +87,12 @@ pub async fn run_gates_with_evidence(
                 Err(_) => {
                     let timeout_message = "Timed out after 60s (default)".to_string();
                     warn!(gate = %gate.name, timeout = 60, "Gate timed out");
-                    results.push(GateResult {
-                        name: gate.name.clone(),
-                        passed: false,
-                        stdout: String::new(),
-                        stderr: timeout_message.clone(),
-                        duration_ms: start.elapsed().as_millis() as u64,
-                        required: gate.required,
-                        command_line: command_line.clone(),
-                        exit_code: None,
-                        timed_out: true,
-                        stdout_summary: None,
-                        stderr_summary: Some(timeout_message),
-                        output_path: None,
-                        timeout_secs: gate.timeout_secs,
-                    });
+                    results.push(make_gate_timeout(
+                        gate,
+                        &command_line,
+                        start,
+                        timeout_message,
+                    ));
                     continue;
                 }
             }
@@ -174,6 +156,29 @@ fn make_gate_error(
         timed_out: false,
         stdout_summary: None,
         stderr_summary: Some(message.to_string()),
+        output_path: None,
+        timeout_secs: gate.timeout_secs,
+    }
+}
+
+fn make_gate_timeout(
+    gate: &GateDef,
+    command_line: &str,
+    start: std::time::Instant,
+    message: String,
+) -> GateResult {
+    GateResult {
+        name: gate.name.clone(),
+        passed: false,
+        stdout: String::new(),
+        stderr: message.clone(),
+        duration_ms: start.elapsed().as_millis() as u64,
+        required: gate.required,
+        command_line: command_line.to_string(),
+        exit_code: None,
+        timed_out: true,
+        stdout_summary: None,
+        stderr_summary: Some(message),
         output_path: None,
         timeout_secs: gate.timeout_secs,
     }
