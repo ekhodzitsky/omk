@@ -38,10 +38,11 @@ git switch -c agent/<id>-<slug>
 
 If `bd ready` reports that no database exists, do not let an agent initialize
 one silently. A maintainer should choose the storage/sync mode first, for
-example project-local Beads, a Dolt remote, or a protected metadata branch:
+example project-local Beads, a Dolt remote, or shared-server mode. The current
+project bootstrap command avoids overwriting repo-maintained agent docs/hooks:
 
 ```bash
-bd init --branch beads-metadata
+bd init --non-interactive --role maintainer --prefix omk --skip-agents --skip-hooks
 ```
 
 During work, add important context to the bead so another agent can resume after

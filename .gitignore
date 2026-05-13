@@ -20,3 +20,8 @@ Cargo.lock
 /tarpaulin-report.html
 /cobertura.xml
 /lcov.info
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

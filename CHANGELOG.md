@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Generated docs ignore rules**: `.gitignore` now excludes generated documentation/site outputs and coverage reports while keeping source documentation tracked.
+- **Beads bootstrap docs**: contributor guidance now uses the current `bd 1.0` initialization flags and keeps Beads-generated agent docs/hooks out of the repo-managed workflow.
 
 ## [0.3.29] - 2026-05-13
 
