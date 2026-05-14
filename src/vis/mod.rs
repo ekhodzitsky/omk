@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 pub mod event_stream;
+pub mod goal_progress;
 pub mod hud;
 
 #[cfg(feature = "tui")]
