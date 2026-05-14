@@ -1,6 +1,42 @@
 use std::path::{Component, Path};
 
+use super::super::state::is_safe_goal_agent_path;
+use super::GoalAgentTaskProposal;
+
 const PROJECT_FILES_ALIAS: &str = "project files";
+
+/// Check whether a single task proposal satisfies path and write-scope policy.
+///
+/// Returns `Some(reason)` if the proposal violates policy.
+pub fn check_task_path_policy(proposal: &GoalAgentTaskProposal) -> Option<String> {
+    if let Some(path) = proposal
+        .read_set
+        .iter()
+        .chain(proposal.write_set.iter())
+        .find(|path| !is_safe_goal_agent_path(path))
+    {
+        return Some(format!(
+            "path is outside the allowed goal policy roots: {path}"
+        ));
+    }
+
+    let policy_text = format!(
+        "{} {} {}",
+        proposal.id,
+        proposal.description,
+        proposal.write_set.join(" ")
+    )
+    .to_ascii_lowercase();
+    if policy_text.contains("crates.io") || policy_text.contains("publish") {
+        return Some("publishing is disabled for GitHub-only goal execution".to_string());
+    }
+
+    if proposal.budget_secs == 0 {
+        return Some("task budget must be greater than zero".to_string());
+    }
+
+    None
+}
 
 pub(super) fn first_conflicting_path(candidate: &[String], accepted: &[String]) -> Option<String> {
     candidate.iter().find_map(|candidate_path| {
