@@ -7,6 +7,7 @@ mod budget;
 mod decision;
 mod dispatch;
 mod evidence;
+mod open_pr;
 mod oracle;
 mod planner;
 mod proof;
@@ -14,24 +15,35 @@ mod replay;
 mod state;
 mod task_graph;
 mod verifier;
+mod worktree;
+
+pub use agent::{check_task_path_policy, GoalAgentTaskProposal};
 
 // Public API re-exports (preserved for backward compatibility)
 pub use budget::{
-    add_goal_budget, add_goal_budget_limits, goal_budget, GoalBudgetAdd, GoalBudgetCheckpoint,
-    GoalBudgetReport,
+    add_goal_budget, add_goal_budget_limits, evaluate_task_budget, goal_budget, GoalBudgetAdd,
+    GoalBudgetCheckpoint, GoalBudgetReport, PerTaskBudgetSnapshot,
 };
 pub use evidence::GoalGitEvidence;
+pub(crate) use open_pr::render_goal_open_pr;
 pub use proof::GoalProof;
 pub use replay::{replay_goal, GoalReplay, GoalReplayEntry};
 pub use state::{
-    CreateGoalOptions, GoalArtifact, GoalFailure, GoalPhase, GoalState, GoalStatus,
+    CreateGoalOptions, GoalArtifact, GoalFailure, GoalPhase, GoalState, GoalStateError, GoalStatus,
     GoalTerminalCriteria, GOALS_DIR, GOAL_AGENT_RUNS_DIR, GOAL_ARTIFACTS_DIR,
     GOAL_BUDGET_CHECKPOINTS_FILE, GOAL_DECISIONS_FILE, GOAL_FAILURE_FILE, GOAL_GATE_ARTIFACTS_DIR,
     GOAL_PRD_FILE, GOAL_PROOF_FILE, GOAL_STATE_FILE, GOAL_TASK_GRAPH_FILE,
     GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
 };
 pub use task_graph::{
-    GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
+    load_goal_task_delivery_records, read_goal_task_delivery_metadata,
+    update_goal_task_delivery_metadata, GoalTask, GoalTaskDeliveryMetadata,
+    GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryRecord, GoalTaskDeliveryStatus,
+    GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
+};
+pub use worktree::{
+    materialize_goal_worktrees, plan_goal_worktree, plan_goal_worktrees,
+    GoalWorktreeMaterializeOutcome, GoalWorktreeMaterializeRequest, GoalWorktreePlan,
 };
 
 pub async fn create_goal(goal: &str, options: CreateGoalOptions) -> Result<GoalState> {
@@ -87,19 +99,63 @@ pub async fn resolve_goal(goal_id: &str) -> Result<GoalState> {
         if let Some(goal) = goals.drain(..).next() {
             return Ok(goal);
         }
-        anyhow::bail!("No goals found");
+        anyhow::bail!(
+            "No goals found in {}\n\nCreate one with:\n  omk goal run \"<engineering goal>\"",
+            state::goals_dir().display()
+        );
     }
 
     let goal_dir = state::goals_dir().join(goal_id);
     if !goal_dir.exists() {
-        anyhow::bail!("Goal '{}' not found", goal_id);
+        anyhow::bail!(
+            "Goal '{goal_id}' not found.\n\nList existing goals:\n  omk goal list\n\nState directory: {}",
+            state::goals_dir().display()
+        );
     }
     GoalState::load(&goal_dir).await
 }
 
+pub(crate) use state::parse_budget_duration;
+
 pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
     let goal = resolve_goal(goal_id).await?;
-    GoalProof::load(&goal.state_dir).await
+    match GoalProof::load(&goal.state_dir).await {
+        Ok(proof) => Ok(proof),
+        Err(error) => {
+            let (task_graph, task_graph_gap) = match GoalTaskGraph::load(&goal.state_dir).await {
+                Ok(graph) => (graph, None),
+                Err(graph_error) => {
+                    let gap = format!(
+                        "Task graph could not be loaded while rebuilding proof: {}",
+                        graph_error.root_cause()
+                    );
+                    (
+                        GoalTaskGraph {
+                            version: 1,
+                            goal_id: goal.goal_id.clone(),
+                            generated_at: Utc::now(),
+                            tasks: Vec::new(),
+                        },
+                        Some(gap),
+                    )
+                }
+            };
+            let git = evidence::detect_git_evidence(&goal.state_dir).await;
+            let mut proof = proof::build_scaffold_proof(&goal, &task_graph, git, Utc::now());
+            proof.known_gaps.push(format!(
+                "Proof file could not be loaded; rebuilt from state: {}",
+                error.root_cause()
+            ));
+            if let Some(gap) = task_graph_gap {
+                proof.known_gaps.push(gap);
+            }
+            proof.recovery_status = Some(format!(
+                "recovered: proof rebuilt from state because load failed: {}",
+                error.root_cause()
+            ));
+            Ok(proof)
+        }
+    }
 }
 
 pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {

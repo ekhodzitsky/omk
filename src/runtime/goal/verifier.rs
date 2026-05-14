@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use regex::Regex;
+use serde_json::Value;
 use std::path::{Component, Path, PathBuf};
 
 use super::evidence::{local_verification_task_evidence, GoalReviewEvidence};
@@ -133,17 +134,38 @@ pub(crate) async fn scan_goal_security_findings(
         Regex::new(r#"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*["'][^"']{16,}["']"#)?;
     let mut findings = Vec::new();
 
+    // Canonicalize the project root once. When the path cannot be
+    // canonicalized (the scanner can be exercised against ephemeral or
+    // synthetic paths in tests) the per-file canonicalize step below also
+    // fails, so the containment check is enforced consistently.
+    let canonical_project_dir = tokio::fs::canonicalize(project_dir).await.ok();
+
     for changed_file in changed_files {
         let Some(path) = safe_project_file_path(project_dir, changed_file) else {
             continue;
         };
-        let Ok(metadata) = tokio::fs::metadata(&path).await else {
+        // Resolve symlinks against the canonical project root before
+        // reading. A changed file that escapes the project tree — for
+        // example via a symlink planted by an upstream merge — must not be
+        // scanned, both to avoid information disclosure through the
+        // security review artifact and to keep findings traceable to repo
+        // paths the reviewer can audit.
+        let resolved = match tokio::fs::canonicalize(&path).await {
+            Ok(canon) => canon,
+            Err(_) => continue,
+        };
+        if let Some(root) = &canonical_project_dir {
+            if !resolved.starts_with(root) {
+                continue;
+            }
+        }
+        let Ok(metadata) = tokio::fs::metadata(&resolved).await else {
             continue;
         };
         if !metadata.is_file() || metadata.len() > 512 * 1024 {
             continue;
         }
-        let Ok(content) = tokio::fs::read_to_string(&path).await else {
+        let Ok(content) = tokio::fs::read_to_string(&resolved).await else {
             continue;
         };
         for (line_index, line) in content.lines().enumerate() {
@@ -173,6 +195,75 @@ fn safe_project_file_path(project_dir: &Path, changed_file: &str) -> Option<Path
     Some(project_dir.join(path))
 }
 
+fn review_wall_markdown(artifacts: &[Value]) -> String {
+    if artifacts.is_empty() {
+        return "No structured review wall artifacts were produced.".to_string();
+    }
+
+    artifacts
+        .iter()
+        .map(review_artifact_markdown)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn review_artifact_markdown(artifact: &Value) -> String {
+    let pass = artifact
+        .get("pass")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let status = artifact
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let recommended_next_step = artifact
+        .get("recommended_next_step")
+        .and_then(Value::as_str)
+        .unwrap_or("No next step recorded.");
+    format!(
+        "## {}\n\n\
+         Status: `{status}`\n\n\
+         Evidence:\n{}\n\n\
+         Risks:\n{}\n\n\
+         Known gaps:\n{}\n\n\
+         Recommended next step: {recommended_next_step}",
+        review_pass_title(pass),
+        markdown_list(artifact, "evidence"),
+        markdown_list(artifact, "risks"),
+        markdown_list(artifact, "known_gaps"),
+    )
+}
+
+fn review_pass_title(pass: &str) -> &'static str {
+    match pass {
+        "architect" => "Architect",
+        "code" => "Code",
+        "test" => "Test",
+        "security" => "Security",
+        "performance" => "Performance",
+        "anti-slop" => "Anti-Slop",
+        _ => "Unknown",
+    }
+}
+
+fn markdown_list(artifact: &Value, field: &str) -> String {
+    let values = artifact
+        .get(field)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    if values.is_empty() {
+        return "- none".to_string();
+    }
+    values
+        .iter()
+        .map(|value| format!("- {value}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub(crate) async fn write_goal_review_evidence(
     state: &GoalState,
     task_graph: &GoalTaskGraph,
@@ -190,6 +281,15 @@ pub(crate) async fn write_goal_review_evidence(
     let agent_execution_done = goal_task_done(task_graph, GOAL_AGENT_EXECUTE_TASK_ID);
     let gates_ok = !proof.gates.is_empty() && gates_passed(&proof.gates);
     let security_findings = scan_goal_security_findings(project_dir, &proof.changed_files).await?;
+    let review_ok = local_verify_done && agent_execution_done;
+    let security_ok = agent_execution_done && security_findings.is_empty();
+    let review_artifacts = super::proof::collect_review_artifacts(
+        review_ok,
+        security_ok,
+        &proof.gates,
+        &proof.changed_files,
+    );
+    let review_wall = review_wall_markdown(&review_artifacts);
 
     let review_summary = if local_verify_done && agent_execution_done && gates_ok {
         "Controller review passed: local gate evidence and agent execution evidence are present."
@@ -246,6 +346,8 @@ pub(crate) async fn write_goal_review_evidence(
          Goal ID: `{}`\n\n\
          ## Result\n\n\
          {review_summary}\n\n\
+         ## Review Wall\n\n\
+         {review_wall}\n\n\
          ## Task Evidence\n\n\
          {task_lines}\n\n\
          ## Gate Evidence\n\n\
@@ -387,4 +489,110 @@ pub(crate) async fn append_goal_review_task_events(
         return Ok(());
     }
     writer.append_many(&events).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn safe_project_file_path_rejects_absolute_paths() {
+        let root = Path::new("/tmp/omk-verifier-tests-nonexistent");
+        assert!(safe_project_file_path(root, "/etc/passwd").is_none());
+        assert!(safe_project_file_path(root, "../escape.txt").is_none());
+    }
+
+    #[test]
+    fn safe_project_file_path_joins_relative_paths() {
+        let root = Path::new("/tmp/omk-verifier-tests-nonexistent");
+        let path = safe_project_file_path(root, "src/lib.rs").unwrap();
+        assert_eq!(path, root.join("src/lib.rs"));
+    }
+
+    #[tokio::test]
+    async fn scan_finds_inline_secret_assignment() {
+        let dir = tempdir().unwrap();
+        let project = dir.path();
+        tokio::fs::write(
+            project.join("creds.txt"),
+            "api_key = \"AAAAAAAAAAAAAAAA-leaked-token-1\"\n",
+        )
+        .await
+        .unwrap();
+
+        let findings = scan_goal_security_findings(project, &["creds.txt".to_string()])
+            .await
+            .unwrap();
+
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].starts_with("creds.txt:1"));
+    }
+
+    #[tokio::test]
+    async fn scan_skips_paths_that_escape_project_root_via_symlink() {
+        // Plant a real secret outside the project root, then symlink to it
+        // from inside the project. The scanner must canonicalize first and
+        // refuse to read content that lives outside the project tree —
+        // otherwise it would silently report a finding for `internal.rs`
+        // that actually came from a file the reviewer cannot reach.
+        let outside_dir = tempdir().unwrap();
+        let outside_secret = outside_dir.path().join("stolen.txt");
+        tokio::fs::write(
+            &outside_secret,
+            "api_key = \"BBBBBBBBBBBBBBBB-stolen-token-2\"\n",
+        )
+        .await
+        .unwrap();
+
+        let project_dir = tempdir().unwrap();
+        let project = project_dir.path();
+        let inside_link = project.join("internal.rs");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside_secret, &inside_link).unwrap();
+        #[cfg(not(unix))]
+        {
+            // Symlinks on non-Unix targets require elevated privileges; we
+            // only need the Unix behaviour to be locked down here.
+            let _ = &inside_link;
+            return;
+        }
+
+        let findings = scan_goal_security_findings(project, &["internal.rs".to_string()])
+            .await
+            .unwrap();
+
+        assert!(
+            findings.is_empty(),
+            "scanner must refuse symlinked files that escape the project root; got {findings:?}",
+        );
+    }
+
+    #[tokio::test]
+    async fn scan_follows_symlink_that_stays_inside_project_root() {
+        // The defense is "must stay inside the project tree", not "no
+        // symlinks at all". A symlink whose target remains under the
+        // project root is benign and the scanner should still inspect it.
+        let project_dir = tempdir().unwrap();
+        let project = project_dir.path();
+        let real = project.join("real.txt");
+        tokio::fs::write(&real, "password = \"CCCCCCCCCCCCCCCC-internal-secret-3\"\n")
+            .await
+            .unwrap();
+        let link = project.join("alias.txt");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        #[cfg(not(unix))]
+        {
+            let _ = &link;
+            return;
+        }
+
+        let findings = scan_goal_security_findings(project, &["alias.txt".to_string()])
+            .await
+            .unwrap();
+
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].starts_with("alias.txt:1"));
+    }
 }

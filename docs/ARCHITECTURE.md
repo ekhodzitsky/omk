@@ -71,7 +71,7 @@ omk CLI (Rust)
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
-| `runtime/goal/` | Goal controller scaffold, backward-compatible goal state loading, human-blocked oracle guard, task graph with retry/lease metadata, local gates, policy-validated bounded agent waves with per-task budget hard stops, agent-proposed follow-up dispatch, pause/resume lifecycle with active worker interruption, deterministic replayable event timelines, budget checkpoints, wall-clock/token/cost budget enforcement and recovery, and proof state. |
+| `runtime/goal/` | Goal controller scaffold: durable state, validated task graph with retry/lease metadata, bounded Wire-backed execution waves with per-task budgets, pause/resume/cancel with worker interruption, budget enforcement and recovery, post-mutation gate reruns, deterministic event replay, and proof state. |
 
 ## Data Flow
 
@@ -106,37 +106,26 @@ Current `omk goal` scaffold data flow:
    files for the proof bundle.
 8. `omk goal verify` runs local gates, writes full gate output under
    `artifacts/gates/`, appends gate events, and refreshes `proof.json`.
-9. `omk goal execute` marks `goal-local-verify` done when required gates pass,
-   turns `goal-agent-execute` into a controller-proposed multi-task Wire worker
-   wave, validates proposals against policy and per-task budgets, enforces
-   accepted task budgets in Wire workers, aggregates Wire token/cost budget
-   usage for later hard stops, emits
-   `task_proposed`, `task_accepted`, and `task_rejected`, and records
-   `task-policy.json`, outbox, Wire event, mutation diff, and changed-file
-   evidence under `artifacts/agent-runs/`. Workers may return structured
-   `OMK_TASK_PROPOSAL: {...}` follow-up work; the controller records
-   `agent-task-proposals.json` and appends accepted safe proposals as pending
-   task graph nodes while emitting `task_graph_mutated` events for accepted
-   graph additions. Durable task graph nodes carry `retry_count`,
-   `max_retries`, and `lease_expires_at`, defaulting safely for older persisted
-   graphs. Agent-proposed follow-ups that share a write path,
-   normalized alias path, parent/child path, or read/write-overlapping path must
-   declare dependency ordering; unordered access conflicts are rejected with
-   policy evidence before they can mutate the graph. Task graphs are validated
-   on load for duplicate ids, missing dependencies, self-dependencies, and
-   dependency cycles before controller execution proceeds. Later `execute`
-   invocations dispatch ready
-   pending follow-ups through `artifacts/agent-runs/goal-agent-followups/`,
-   honor the goal `max_agents` cap with a bounded Wire worker pool, recover
-   expired task leases with `retry_scheduled` evidence, quarantine stale workers
-   with `worker_dead` evidence plus durable `stale-worker-cleanup.json` markers,
-   ignore later stale-worker outbox/heartbeat updates, and mark those nodes
-   done or blocked from worker results. If an operator pauses or cancels during
-   an active Wire-backed wave, the execute process observes the durable state
-   change, cancels active workers, stops additional dispatch, and preserves the
-   interrupted status in goal/proof state. If the worker changes project files,
-   `execute` reruns gates under `artifacts/gates/post-mutation/` before writing
-   the final proof.
+9. `omk goal execute` marks `goal-local-verify` done when required gates pass
+   and runs the bounded `goal-agent-execute` Wire wave:
+   - controller validates each task against policy, write scopes, and per-task
+     budgets, emitting `task_proposed`/`task_accepted`/`task_rejected` events
+     and recording `task-policy.json`, outbox, Wire, mutation diff, and
+     changed-file evidence under `artifacts/agent-runs/`;
+   - Wire workers may return structured `OMK_TASK_PROPOSAL: {...}` follow-up
+     work, which the controller appends to the task graph only when policy and
+     dependency-ordered read/write conflict checks pass, emitting
+     `task_graph_mutated` events for accepted additions;
+   - task graphs are validated on load for duplicate ids, missing or cyclic
+     dependencies, and self-dependencies; nodes carry `retry_count`,
+     `max_retries`, and `lease_expires_at`;
+   - follow-up dispatches honor the goal `max_agents` cap, recover expired
+     leases with `retry_scheduled` evidence, and quarantine stale workers with
+     `worker_dead` evidence plus `stale-worker-cleanup.json` markers;
+   - pause/cancel during an active wave cancels workers, halts dispatch, and
+     preserves the interrupted goal/proof status;
+   - project-file mutations trigger gate reruns under
+     `artifacts/gates/post-mutation/` before the final proof.
 10. `omk goal review` writes controller review/security artifacts under
    `artifacts/reviews/` and closes `goal-review` / `goal-security-review`
    when evidence is sufficient.
@@ -157,7 +146,7 @@ ready proof generation.
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, human-blocked oracle guard, validated task graph with controller-owned, local verification, retry/lease metadata, policy-validated multi-task Wire agent mutation, path-normalized dependency-ordered read/write access conflict policy, accepted and later-dispatched agent-proposed follow-up tasks, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, and not-ready proof; planned controller for long-running proof-backed engineering goals. |
+| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, validated task graph, bounded Wire-backed execution waves, verification gates with post-mutation reruns, controller review/security evidence, budget enforcement, and honest proof artifacts. Planned controller for long-running proof-backed engineering goals. |
 
 ## MCP Integration
 

@@ -72,30 +72,25 @@ correctness, not ceremony.
 
 1. **`master` / `main` are read-only.** Do not commit or push feature work
    directly to protected base branches. All changes land through PRs.
-2. **One durable task per work item.** Use Beads (`bd`) for any multi-session,
-   multi-agent, or goal-related work. Each PR must reference the bead it closes
-   or advances.
-3. **Do not silently initialize Beads.** If `bd ready` reports that no database
-   exists, stop and ask a maintainer to run `bd init` / configure the Beads
-   remote. Agents may use an existing database; first initialization is a human
-   repository decision.
-4. **Claim before editing.** Start with `bd ready`, inspect with
-   `bd show <id> --long`, then claim with `bd update <id> --claim` before
-   changing files.
-5. **One owner per bead.** If another agent has claimed the bead, do not edit
-   its scope. Add a note, create a dependent bead, or ask for handoff.
-6. **Branches are bead-scoped.** Use branch names such as
-   `agent/<bead-id>-<slug>`, `codex/<bead-id>-<slug>`,
-   `kimi/<bead-id>-<slug>`, or `claude/<bead-id>-<slug>`.
-7. **Write scopes are explicit.** The bead or PR must list owned files/modules.
-   If two agents need overlapping files, serialize with dependencies or create
-   an integrator bead.
-8. **PRs carry evidence.** PR bodies must include bead id, scope, risks, and
-   verification output. A bead is closed only after merge or an explicit
-   not-planned decision.
-9. **Goal workers inherit the same rule.** Future `omk goal` execution must
-   create/claim beads or sub-beads for accepted tasks and deliver through PRs
-   before treating repository changes as integrated.
+2. **One owned slice per branch/worktree.** Before editing, pick a concrete
+   task or subgoal, name the owner, and declare the intended write scope.
+3. **Use isolated worktrees for parallel work.** Independent agents should work
+   from separate git worktrees or branches rooted at the protected baseline.
+4. **Branches are task-scoped.** Use branch names such as
+   `agent/<task-slug>`, `codex/<task-slug>`, `kimi/<task-slug>`, or
+   `claude/<task-slug>`.
+5. **Write scopes are explicit.** The PR must list owned files/modules. If two
+   agents need overlapping files, serialize the work or create an integrator
+   PR instead of racing the edit.
+6. **PRs carry evidence.** PR bodies must include task/scope, owner, risks,
+   verification output, known gaps, and any handoff notes.
+7. **External trackers are optional.** Beads, GitHub Issues, or another tracker
+   may be used for long-running coordination, but they are not required for
+   normal development and must not become a hard runtime dependency.
+8. **Goal workers inherit the same rule.** Future `omk goal` execution records
+   task ownership in its local task graph, writes changes in task-scoped
+   worktrees, and delivers repository mutations through PRs before treating
+   them as integrated.
 
 ## Rust Safety Rules (Hard Constraints)
 

@@ -12,26 +12,27 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 mod path_policy;
+pub use path_policy::check_task_path_policy;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct GoalAgentTaskProposal {
-    pub(crate) id: String,
-    pub(crate) title: String,
-    pub(crate) description: String,
+pub struct GoalAgentTaskProposal {
+    pub id: String,
+    pub title: String,
+    pub description: String,
     #[serde(default)]
-    pub(crate) dependencies: Vec<String>,
+    pub dependencies: Vec<String>,
     #[serde(default)]
-    pub(crate) read_set: Vec<String>,
+    pub read_set: Vec<String>,
     #[serde(default)]
-    pub(crate) write_set: Vec<String>,
+    pub write_set: Vec<String>,
     #[serde(default = "default_goal_agent_task_risk")]
-    pub(crate) risk: String,
+    pub risk: String,
     #[serde(default)]
-    pub(crate) acceptance: Vec<String>,
+    pub acceptance: Vec<String>,
     #[serde(default = "default_goal_agent_task_budget_secs")]
-    pub(crate) budget_secs: u64,
+    pub budget_secs: u64,
     #[serde(default)]
-    pub(crate) priority: i32,
+    pub priority: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -354,50 +355,6 @@ fn first_unordered_access_conflict(
         }
     }
     None
-}
-
-pub(crate) async fn append_goal_agent_task_policy_events(
-    writer: &crate::runtime::events::EventWriter,
-    run_id: &str,
-    policy: &GoalAgentTaskPolicy,
-) -> anyhow::Result<()> {
-    for proposal in &policy.proposed_tasks {
-        let event = crate::runtime::events::Event::new(
-            crate::runtime::events::RunId(run_id.to_string()),
-            crate::runtime::events::EventKind::TaskProposed,
-        )
-        .with_actor(super::state::GOAL_CONTROLLER_ACTOR)
-        .with_payload(goal_agent_task_policy_payload(proposal, None))?;
-        writer.append(&event).await?;
-    }
-
-    for proposal in &policy.accepted_tasks {
-        let event = crate::runtime::events::Event::new(
-            crate::runtime::events::RunId(run_id.to_string()),
-            crate::runtime::events::EventKind::TaskAccepted,
-        )
-        .with_actor(super::state::GOAL_CONTROLLER_ACTOR)
-        .with_payload(goal_agent_task_policy_payload(
-            proposal,
-            Some("accepted by goal policy"),
-        ))?;
-        writer.append(&event).await?;
-    }
-
-    for decision in &policy.rejected_tasks {
-        let event = crate::runtime::events::Event::new(
-            crate::runtime::events::RunId(run_id.to_string()),
-            crate::runtime::events::EventKind::TaskRejected,
-        )
-        .with_actor(super::state::GOAL_CONTROLLER_ACTOR)
-        .with_payload(goal_agent_task_policy_payload(
-            &decision.task,
-            Some(&decision.reason),
-        ))?;
-        writer.append(&event).await?;
-    }
-
-    Ok(())
 }
 
 pub(crate) fn goal_agent_task_policy_payload(

@@ -110,12 +110,13 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 ## Phase 9 - Worktree Integration
 
-- [ ] Treat `master` / `main` as read-only baselines in docs, PR templates,
-      and future automation.
-- [ ] Add Beads-backed task ownership for goal task slices.
+- [x] Treat `master` / `main` as read-only baselines in docs, PR templates,
+      and future automation. (Docs and PR template done; CI/branch-protection
+      automation tracked separately.)
+- [ ] Add goal task ownership for parallel goal task slices.
 - [ ] Create isolated worktrees for independent slices.
 - [ ] Track branch per task or subgoal.
-- [ ] Track bead id and PR link per task or subgoal.
+- [ ] Track task id and PR link per task or subgoal.
 - [ ] Add integrator step.
 - [ ] Detect merge conflicts.
 - [ ] Preserve changelog and docs updates.
@@ -137,7 +138,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 - [ ] Add `omk goal open-pr`.
 - [ ] Generate PR body from proof.
-- [ ] Include bead id, owner, write scope, verification wall output, and known
+- [ ] Include task id, owner, write scope, verification wall output, and known
       gaps in generated PR bodies.
 - [ ] Link artifacts and known gaps.
 - [ ] Support draft PRs.
