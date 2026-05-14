@@ -95,14 +95,34 @@ pub async fn resolve_goal(goal_id: &str) -> Result<GoalState> {
         if let Some(goal) = goals.drain(..).next() {
             return Ok(goal);
         }
-        anyhow::bail!("No goals found");
+        anyhow::bail!(
+            "No goals found in {}\n\nCreate one with:\n  omk goal run \"<engineering goal>\"",
+            state::goals_dir().display()
+        );
     }
 
     let goal_dir = state::goals_dir().join(goal_id);
     if !goal_dir.exists() {
-        anyhow::bail!("Goal '{}' not found", goal_id);
+        anyhow::bail!(
+            "Goal '{goal_id}' not found.\n\nList existing goals:\n  omk goal list\n\nState directory: {}",
+            state::goals_dir().display()
+        );
     }
     GoalState::load(&goal_dir).await
+}
+
+/// Validate a budget duration string and return the parsed seconds.
+///
+/// Accepts non-empty values with optional suffix `s`/`m`/`h`/`d`. The runtime
+/// allows `0s` to mean "already exhausted" at goal creation time; callers that
+/// require a strictly positive duration should enforce it separately.
+pub(crate) fn parse_budget_duration(value: &str) -> Result<u64> {
+    state::parse_goal_duration_secs(value).ok_or_else(|| {
+        anyhow::anyhow!(
+            "invalid duration '{value}': expected a number with optional suffix \
+             s/m/h/d (for example: 30s, 15m, 8h, 7d)"
+        )
+    })
 }
 
 pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
