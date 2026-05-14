@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so callers can distinguish missing state from malformed JSON. `GoalProof`
   carries an optional `recovery_status` field that is populated when proof is
   rebuilt from state after a missing or unreadable proof file.
+- **`omk goal open-pr` dry-run output**: goals with proof evidence can now render
+  GitHub PR title/body drafts as Markdown, JSON, or text without network access
+  or GitHub auth; scaffold-only proofs fail with an actionable next step.
 
 ### Changed
 

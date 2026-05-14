@@ -95,7 +95,7 @@ defaults and actual-directory `state_dir` rehoming, blocks vague goals as
 `blocked_on_human` when success criteria cannot be made testable, writes
 `prd.md`, `technical-plan.md`, `test-spec.md`, `task-graph.json`,
 `decisions.jsonl`, and an honest `proof.json`, and supports
-list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel. Exhausted
+list/status/show/proof/open-pr/replay/budget/budget-add/verify/execute/review/pause/resume/cancel. Exhausted
 `--budget-time`, `--budget-tokens`, or `--budget-usd` goals stop before
 `verify`, `execute`, or `review` spends more work and persist
 `needs_more_budget`; `omk goal budget-add latest --time 1h --tokens 50000 --usd 1.0`
@@ -138,8 +138,11 @@ gates against the mutated tree and records post-mutation gate evidence. `omk
 goal review` records controller review and bounded secret-scan security evidence
 under `artifacts/reviews/`, and `proof.json.review_artifacts` exposes a
 deterministic six-pass review wall for architect, code, test, security,
-performance, and anti-slop readiness checks. Integration acceptance and ready
-proof generation are still planned. The current `team run`, event log, gates, and
+performance, and anti-slop readiness checks. `omk goal open-pr latest --dry-run`
+renders a GitHub PR title/body from existing goal proof evidence without network
+access, and refuses scaffold-only goals until proof evidence exists. Integration
+acceptance and ready proof generation are still planned. The current `team run`,
+event log, gates, and
 proof systems remain the execution foundation. The design is tracked in
 [SPEC.md](SPEC.md), the delivery path in [ROADMAP.md](ROADMAP.md), and the task
 backlog in [TODO.md](TODO.md).
@@ -295,6 +298,8 @@ omk goal budget-add latest --tokens 50000 --usd 1.0
 omk goal verify latest
 omk goal execute latest
 omk goal review latest
+omk goal open-pr latest --dry-run --format markdown
+omk goal open-pr latest --dry-run --format json
 omk goal pause latest
 omk goal resume latest
 omk goal cancel latest
@@ -307,6 +312,9 @@ agent task/mutation evidence, accepted and later-dispatched agent-proposed
 follow-up tasks, controller review/security evidence, structured six-pass review
 wall evidence, and honest not-ready/cancelled proof artifacts. Goal proofs also capture best-effort git
 branch, HEAD commit, and dirty-state evidence when run inside a git worktree.
+`omk goal open-pr` turns that proof into a dry-run PR draft with status,
+readiness, task summary, delivery metadata, verification wall, known gaps,
+changed files, and artifacts.
 
 ### Power-user modes
 

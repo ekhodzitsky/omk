@@ -7,6 +7,7 @@ mod budget;
 mod decision;
 mod dispatch;
 mod evidence;
+mod open_pr;
 mod oracle;
 mod planner;
 mod proof;
@@ -22,6 +23,7 @@ pub use budget::{
     GoalBudgetReport,
 };
 pub use evidence::GoalGitEvidence;
+pub(crate) use open_pr::render_goal_open_pr;
 pub use proof::GoalProof;
 pub use replay::{replay_goal, GoalReplay, GoalReplayEntry};
 pub use state::{

@@ -14,6 +14,7 @@ Examples:
   omk goal verify latest
   omk goal execute latest
   omk goal review latest
+  omk goal open-pr latest --dry-run
 
 Goal state is stored under the OMK state directory, one folder per goal:
   <state-dir>/goals/<goal-id>/
@@ -59,6 +60,16 @@ Examples:
   omk goal proof
   omk goal proof latest --json
   omk goal proof latest --format md";
+
+pub(super) const GOAL_OPEN_PR_AFTER_HELP: &str = "\
+Examples:
+  omk goal open-pr latest --dry-run
+  omk goal open-pr latest --dry-run --format json
+  omk goal open-pr goal-20260514-085416-149-ea263039 --dry-run --format md
+
+Renders a local PR title/body draft from persisted goal proof evidence. This
+release does not create GitHub PRs; keep --dry-run explicit until a separate
+creation mode exists.";
 
 pub(super) const GOAL_REPLAY_AFTER_HELP: &str = "\
 Examples:
