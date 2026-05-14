@@ -34,5 +34,8 @@ wildcards = "allow"
 highlight = "all"
 
 [sources]
-unknown-registry = "warn"
-unknown-git = "warn"
+# Supply-chain firewall: the only sanctioned dependency source is crates.io
+# (which cargo-deny accepts implicitly). Any unexpected registry or git URL
+# fails the build so we notice an opaque pull-in before it ships.
+unknown-registry = "deny"
+unknown-git = "deny"

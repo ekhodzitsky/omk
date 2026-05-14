@@ -80,17 +80,30 @@ pub async fn save_artifact(name: &str, content: &str, timestamp: &str) -> Result
 
 /// Run a provider directly and capture its stdout+stderr.
 /// Used for the MVP direct-execution path and for synthesis.
+///
+/// Defense in depth: this path spawns the provider binary directly via
+/// `Command::new(provider).arg("-p").arg(prompt)` instead of routing through
+/// `bash -c`. The prompt is delivered as a single argv element, so a
+/// hostile prompt cannot break out into shell metacharacters even if the
+/// upstream shell-escape helper were to regress. The provider name is
+/// constrained to [`ALL_PROVIDERS`] up front so this argv-mode invocation
+/// can never call an arbitrary binary either.
 pub async fn run_advisor_direct(provider: &str, prompt: &str, timeout_secs: u64) -> Result<String> {
+    if !is_known_provider(provider) {
+        anyhow::bail!("Unknown provider: {}", provider);
+    }
     if !is_provider_installed(provider).await {
         anyhow::bail!("Provider '{}' is not installed", provider);
     }
 
-    let cmd = provider_command(provider, prompt)?;
-    debug!(provider = provider, cmd = %cmd, "Running advisor directly");
+    debug!(
+        provider = provider,
+        "Running advisor directly via argv (no shell)"
+    );
 
-    let mut child = tokio::process::Command::new("bash")
-        .arg("-c")
-        .arg(&cmd)
+    let mut child = tokio::process::Command::new(provider)
+        .arg("-p")
+        .arg(prompt)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)
@@ -382,5 +395,25 @@ mod tests {
         assert!(is_known_provider("claude"));
         assert!(!is_known_provider("gpt4"));
         assert!(!is_known_provider(""));
+    }
+
+    #[tokio::test]
+    async fn test_run_advisor_direct_rejects_unknown_provider() {
+        // The argv-mode runner gates the provider against `ALL_PROVIDERS`
+        // before any spawn happens, so an unexpected binary name — even one
+        // present on PATH — cannot be invoked through this entry point.
+        let cases = ["bash", "rm", "sh", "../etc/passwd", "", "kimi; rm -rf /"];
+        for provider in cases {
+            let result = run_advisor_direct(provider, "any prompt", 5).await;
+            assert!(
+                result.is_err(),
+                "advisor must refuse unknown provider {provider:?}; got {result:?}",
+            );
+            let message = format!("{:#}", result.unwrap_err());
+            assert!(
+                message.contains("Unknown provider"),
+                "advisor must short-circuit before spawn for {provider:?}; got error: {message}",
+            );
+        }
     }
 }
