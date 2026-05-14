@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 
 mod checkpoint;
 mod events;
+mod per_task;
 mod usage;
+
+pub use per_task::{evaluate_task_budget, PerTaskBudgetSnapshot};
 
 pub(crate) use checkpoint::append_budget_checkpoint;
 use checkpoint::read_budget_checkpoints;

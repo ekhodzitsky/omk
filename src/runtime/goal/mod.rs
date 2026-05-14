@@ -16,10 +16,12 @@ mod task_graph;
 mod verifier;
 mod worktree;
 
+pub use agent::{check_task_path_policy, GoalAgentTaskProposal};
+
 // Public API re-exports (preserved for backward compatibility)
 pub use budget::{
-    add_goal_budget, add_goal_budget_limits, goal_budget, GoalBudgetAdd, GoalBudgetCheckpoint,
-    GoalBudgetReport,
+    add_goal_budget, add_goal_budget_limits, evaluate_task_budget, goal_budget, GoalBudgetAdd,
+    GoalBudgetCheckpoint, GoalBudgetReport, PerTaskBudgetSnapshot,
 };
 pub use evidence::GoalGitEvidence;
 pub use proof::GoalProof;

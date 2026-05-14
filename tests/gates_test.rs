@@ -854,7 +854,13 @@ async fn test_run_gates_summary_truncates_long_lines_to_240_chars() {
     let body = format!("#!/bin/sh\necho '{}'\nexit 0\n", "x".repeat(300));
     write_unix_script(&script, &body);
 
-    let config = single_gate_config("long-line", script.to_str().unwrap(), vec![], true, 5);
+    let config = single_gate_config(
+        "long-line",
+        "/bin/sh",
+        vec![script.to_string_lossy().into_owned()],
+        true,
+        5,
+    );
 
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
