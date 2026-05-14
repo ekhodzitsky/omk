@@ -150,14 +150,18 @@ pub async fn materialize_goal_worktrees(
     })
 }
 
-async fn ensure_git_worktree(repo_dir: &Path) -> Result<()> {
+pub(crate) async fn is_git_worktree(repo_dir: &Path) -> Result<bool> {
     let output = git_output(
         repo_dir,
         git_args(&["rev-parse", "--is-inside-work-tree"]),
         "verify git repository",
     )
     .await?;
-    if !output.status.success() || output_stdout(&output).trim() != "true" {
+    Ok(output.status.success() && output_stdout(&output).trim() == "true")
+}
+
+async fn ensure_git_worktree(repo_dir: &Path) -> Result<()> {
+    if !is_git_worktree(repo_dir).await? {
         anyhow::bail!(
             "goal worktree materialization requires a git repository: {}",
             repo_dir.display()

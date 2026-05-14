@@ -3,7 +3,9 @@ use std::path::Path;
 
 use super::super::state::GoalState;
 use super::super::task_graph::{self, GoalTaskGraph};
-use super::super::worktree::{materialize_goal_worktrees, GoalWorktreeMaterializeRequest};
+use super::super::worktree::{
+    is_git_worktree, materialize_goal_worktrees, GoalWorktreeMaterializeRequest,
+};
 
 pub(super) async fn materialize_delivery_slices(
     state: &GoalState,
@@ -13,6 +15,9 @@ pub(super) async fn materialize_delivery_slices(
     let worktrees_root = state.state_dir.join("worktrees");
     let plan = task_graph::plan_goal_delivery_slices(&worktrees_root, task_graph)?;
     if plan.slices.is_empty() {
+        return Ok(());
+    }
+    if !is_git_worktree(project_dir).await? {
         return Ok(());
     }
 
