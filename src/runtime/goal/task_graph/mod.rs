@@ -7,9 +7,11 @@ pub(crate) use delivery::{
     preserve_delivery_metadata_in_value, record_worktree_delivery_metadata,
 };
 pub use delivery::{
-    load_goal_task_delivery_records, read_goal_task_delivery_metadata,
-    update_goal_task_delivery_metadata, GoalTaskDeliveryMetadata, GoalTaskDeliveryMetadataUpdate,
-    GoalTaskDeliveryRecord, GoalTaskDeliveryStatus,
+    load_goal_task_delivery_records, plan_goal_delivery_slices, read_goal_task_delivery_metadata,
+    record_goal_delivery_slice_plan, update_goal_task_delivery_metadata,
+    GoalDeliveryOverlapSerialization, GoalDeliverySlice, GoalDeliverySlicePlan,
+    GoalTaskDeliveryMetadata, GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryRecord,
+    GoalTaskDeliveryStatus,
 };
 pub use model::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 pub use mutation::GoalTaskGraphSummary;
