@@ -6,51 +6,16 @@
 
 mod budget;
 mod integration;
+mod run;
 
 pub(super) use budget::{cmd_budget, cmd_budget_add};
 pub(super) use integration::{cmd_accept, cmd_reject};
+pub(super) use run::cmd_run;
 
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 use super::{OpenPrFormat, OutputFormat};
-
-pub(super) async fn cmd_run(
-    goal: &str,
-    options: crate::runtime::goal::CreateGoalOptions,
-) -> Result<()> {
-    let state = crate::runtime::goal::create_goal(goal, options).await?;
-
-    println!("Goal scaffold created: {}", state.goal_id);
-    println!("  Status: {}", state.status);
-    println!("  Phase:  {}", state.phase);
-    println!("  State:  {}", state.state_dir.display());
-    println!(
-        "  Proof:  {}",
-        state
-            .state_dir
-            .join(crate::runtime::goal::GOAL_PROOF_FILE)
-            .display()
-    );
-    if state.status == crate::runtime::goal::GoalStatus::BlockedOnHuman {
-        if let Some(failure) = &state.failure {
-            println!();
-            println!("Decision needed: {}", failure.reason);
-        }
-        println!();
-        println!("Next: refine the goal with testable success criteria, then run it again.");
-        println!("  Example:");
-        println!("    omk goal run \"Fix all failing cargo tests in src/runtime/goal\"");
-    } else {
-        println!();
-        println!("Next steps:");
-        println!("  1. Inspect the scaffold:  omk goal show latest");
-        println!("  2. Run verification:      omk goal verify latest");
-        println!("  3. Execute agent wave:    omk goal execute latest");
-        println!("  4. Attach reviews:        omk goal review latest");
-    }
-    Ok(())
-}
 
 pub(super) async fn cmd_plan(goal: &str) -> Result<()> {
     let state = crate::runtime::goal::plan_goal(goal).await?;

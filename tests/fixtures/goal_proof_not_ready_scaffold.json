@@ -2,8 +2,8 @@
   "version": 1,
   "goal_id": "<goal-id>",
   "status": "not_ready",
-  "readiness": "not ready: controller scaffold has not executed agents or verification gates",
-  "summary": "Goal 'Build deterministic proof snapshot coverage' has durable planning artifacts, but no local verification or agent execution evidence yet.",
+  "readiness": "not ready: required verification evidence is incomplete or failing",
+  "summary": "Goal 'Build deterministic proof snapshot coverage' has 0 gate result(s) and remains not ready until all required execution and review evidence exists.",
   "generated_at": "<timestamp>",
   "artifacts": [
     {
@@ -40,12 +40,27 @@
       "kind": "greenfield_usage_examples",
       "path": "artifacts/oracles/usage-examples.md",
       "created_at": "<timestamp>"
+    },
+    {
+      "kind": "proof",
+      "path": "proof.json",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "decisions",
+      "path": "decisions.jsonl",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "policy_blocker",
+      "path": "artifacts/policy/until-ready-blocker.json",
+      "created_at": "<timestamp>"
     }
   ],
   "task_graph_summary": {
     "total_tasks": 6,
-    "pending_tasks": 4,
-    "blocked_tasks": 0,
+    "pending_tasks": 3,
+    "blocked_tasks": 1,
     "done_tasks": 2
   },
   "changed_files": [],
@@ -54,8 +69,9 @@
   "post_mutation_gates_ran": false,
   "known_gaps": [
     "agent execution has not run for this goal yet",
-    "verification gates have not run for this goal",
-    "proof cannot claim readiness until agent-owned execution evidence exists"
+    "proof cannot claim readiness until agent-owned execution evidence exists",
+    "no verification gates were detected or configured",
+    "verification blocked: no local gates were detected or configured"
   ],
   "human_decisions_required": []
 }
