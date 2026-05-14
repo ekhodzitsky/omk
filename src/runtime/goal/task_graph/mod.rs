@@ -2,12 +2,15 @@ mod delivery;
 mod model;
 mod mutation;
 
+pub(crate) use delivery::{
+    ensure_worktree_delivery_targets, load_task_delivery_metadata,
+    preserve_delivery_metadata_in_value, record_worktree_delivery_metadata,
+};
 pub use delivery::{
     load_goal_task_delivery_records, read_goal_task_delivery_metadata,
     update_goal_task_delivery_metadata, GoalTaskDeliveryMetadata, GoalTaskDeliveryMetadataUpdate,
     GoalTaskDeliveryRecord, GoalTaskDeliveryStatus,
 };
-pub(crate) use delivery::{load_task_delivery_metadata, preserve_delivery_metadata_in_value};
 pub use model::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 pub use mutation::GoalTaskGraphSummary;
 pub(crate) use mutation::{

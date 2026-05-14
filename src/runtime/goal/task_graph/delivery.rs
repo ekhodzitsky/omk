@@ -2,10 +2,46 @@ use anyhow::{Context, Result};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use super::super::state::GOAL_TASK_GRAPH_FILE;
+use super::super::worktree::GoalWorktreePlan;
+
+pub(crate) async fn ensure_worktree_delivery_targets(
+    goal_dir: &Path,
+    plans: &[GoalWorktreePlan],
+) -> Result<()> {
+    let value = load_task_graph_value(goal_dir).await?;
+    let task_ids = task_ids_in_value(&value);
+    for plan in plans {
+        if !task_ids.contains(plan.task_id.as_str()) {
+            anyhow::bail!(
+                "cannot record goal worktree delivery metadata: task {} not found in {}",
+                plan.task_id,
+                goal_dir.join(GOAL_TASK_GRAPH_FILE).display()
+            );
+        }
+    }
+    Ok(())
+}
+
+pub(crate) async fn record_worktree_delivery_metadata(
+    goal_dir: &Path,
+    plan: &GoalWorktreePlan,
+) -> Result<()> {
+    update_goal_task_delivery_metadata(
+        goal_dir,
+        &plan.task_id,
+        GoalTaskDeliveryMetadataUpdate {
+            branch: Some(plan.branch_name.clone()),
+            worktree_path: Some(plan.worktree_path.clone()),
+            ..GoalTaskDeliveryMetadataUpdate::default()
+        },
+    )
+    .await?;
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GoalTaskDeliveryStatus {
@@ -278,6 +314,25 @@ pub(crate) async fn preserve_delivery_metadata_in_value(
     }
 
     Ok(())
+}
+
+async fn load_task_graph_value(goal_dir: &Path) -> Result<Value> {
+    let path = goal_dir.join(GOAL_TASK_GRAPH_FILE);
+    let json = tokio::fs::read_to_string(&path)
+        .await
+        .with_context(|| format!("Failed to read goal task graph: {}", path.display()))?;
+    serde_json::from_str(&json)
+        .with_context(|| format!("Failed to parse goal task graph: {}", path.display()))
+}
+
+fn task_ids_in_value(value: &Value) -> HashSet<&str> {
+    value
+        .get("tasks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|task| task.get("id").and_then(Value::as_str))
+        .collect()
 }
 
 pub(crate) async fn load_task_delivery_metadata(goal_dir: &Path) -> Result<Vec<Value>> {
