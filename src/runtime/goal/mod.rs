@@ -13,6 +13,7 @@ mod lifecycle;
 mod open_pr;
 mod oracle;
 mod planner;
+mod progress;
 mod proof;
 mod replay;
 mod state;
@@ -41,6 +42,7 @@ pub use lifecycle::{execute_goal, review_goal, verify_goal};
 pub(crate) use open_pr::render_goal_open_pr;
 pub use open_pr::GoalOpenPrDraft;
 pub use oracle::GoalKind;
+pub use progress::{GoalProgressLine, GoalProgressLineKind, GoalProgressSnapshot};
 pub use proof::GoalProof;
 pub use replay::{replay_goal, GoalReplay, GoalReplayEntry};
 pub use state::{
