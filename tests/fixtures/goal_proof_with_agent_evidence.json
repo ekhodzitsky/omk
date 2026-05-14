@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "goal_id": "<goal-id>",
+  "status": "not_ready",
+  "readiness": "not ready: verification gates and bounded agent execution passed, but review/security evidence is missing",
+  "summary": "Goal 'Capture agent evidence in goal proof output' has 1 gate result(s) and remains not ready until all required execution and review evidence exists.",
+  "generated_at": "<timestamp>",
+  "artifacts": [
+    {
+      "kind": "prd",
+      "path": "prd.md",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "technical_plan",
+      "path": "technical-plan.md",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "task_graph",
+      "path": "task-graph.json",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "test_spec",
+      "path": "test-spec.md",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "proof",
+      "path": "proof.json",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "decisions",
+      "path": "decisions.jsonl",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "agent_run",
+      "path": "artifacts/agent-runs/goal-agent-execute",
+      "created_at": "<timestamp>"
+    }
+  ],
+  "task_graph_summary": {
+    "total_tasks": 6,
+    "pending_tasks": 2,
+    "blocked_tasks": 0,
+    "done_tasks": 4
+  },
+  "changed_files": [
+    "agent-output.txt"
+  ],
+  "commits": [
+    "<git-head>"
+  ],
+  "git": {
+    "branch": "proof-branch",
+    "head": "<git-head>",
+    "dirty": true
+  },
+  "gates": [
+    {
+      "name": "smoke",
+      "passed": true,
+      "stdout": "smoke-ok\n",
+      "stderr": "",
+      "duration_ms": 0,
+      "required": true,
+      "command_line": "/bin/sh -c echo smoke-ok",
+      "exit_code": 0,
+      "timed_out": false,
+      "stdout_summary": "smoke-ok",
+      "output_path": "<gate-output-path>",
+      "timeout_secs": 0
+    }
+  ],
+  "post_mutation_gates_ran": true,
+  "known_gaps": [
+    "review evidence has not run for this goal yet",
+    "security review evidence has not run for this goal yet"
+  ],
+  "human_decisions_required": []
+}

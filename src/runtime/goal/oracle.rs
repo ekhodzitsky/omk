@@ -4,6 +4,137 @@ pub(crate) struct GoalOracleAssessment {
     pub(crate) human_decisions_required: Vec<String>,
 }
 
+// Fixture-spike shape only; runtime rewrite execution belongs in a later slice.
+#[allow(dead_code)]
+pub(crate) mod rewrite {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(crate) struct RewriteOracleObservation {
+        pub(crate) stdout: String,
+        pub(crate) stderr: String,
+        pub(crate) exit_code: i32,
+        pub(crate) file_artifacts: Vec<(String, String)>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(crate) struct RewriteOracleComparison {
+        pub(crate) compatible: bool,
+        pub(crate) mismatches: Vec<RewriteOracleMismatch>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(crate) struct RewriteOracleMismatch {
+        pub(crate) field: RewriteOracleField,
+        pub(crate) expected: String,
+        pub(crate) actual: String,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(crate) enum RewriteOracleField {
+        Stdout,
+        Stderr,
+        ExitCode,
+        FileArtifact { path: String },
+    }
+
+    pub(crate) fn compare_rewrite_oracle(
+        expected: &RewriteOracleObservation,
+        actual: &RewriteOracleObservation,
+    ) -> RewriteOracleComparison {
+        let mut mismatches = Vec::new();
+
+        compare_text_field(
+            RewriteOracleField::Stdout,
+            &expected.stdout,
+            &actual.stdout,
+            &mut mismatches,
+        );
+        compare_text_field(
+            RewriteOracleField::Stderr,
+            &expected.stderr,
+            &actual.stderr,
+            &mut mismatches,
+        );
+
+        if expected.exit_code != actual.exit_code {
+            mismatches.push(RewriteOracleMismatch {
+                field: RewriteOracleField::ExitCode,
+                expected: expected.exit_code.to_string(),
+                actual: actual.exit_code.to_string(),
+            });
+        }
+
+        compare_file_artifacts(
+            &expected.file_artifacts,
+            &actual.file_artifacts,
+            &mut mismatches,
+        );
+
+        RewriteOracleComparison {
+            compatible: mismatches.is_empty(),
+            mismatches,
+        }
+    }
+
+    fn compare_text_field(
+        field: RewriteOracleField,
+        expected: &str,
+        actual: &str,
+        mismatches: &mut Vec<RewriteOracleMismatch>,
+    ) {
+        if expected != actual {
+            mismatches.push(RewriteOracleMismatch {
+                field,
+                expected: expected.to_string(),
+                actual: actual.to_string(),
+            });
+        }
+    }
+
+    fn compare_file_artifacts(
+        expected: &[(String, String)],
+        actual: &[(String, String)],
+        mismatches: &mut Vec<RewriteOracleMismatch>,
+    ) {
+        let expected = artifact_map(expected);
+        let actual = artifact_map(actual);
+        let paths: BTreeSet<_> = expected.keys().chain(actual.keys()).copied().collect();
+
+        for path in paths {
+            match (expected.get(path), actual.get(path)) {
+                (Some(expected), Some(actual)) if expected != actual => {
+                    mismatches.push(artifact_mismatch(path, expected, actual));
+                }
+                (Some(expected), None) => {
+                    mismatches.push(artifact_mismatch(path, expected, "<missing>"));
+                }
+                (None, Some(actual)) => {
+                    mismatches.push(artifact_mismatch(path, "<missing>", actual));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn artifact_map(artifacts: &[(String, String)]) -> BTreeMap<&str, &str> {
+        artifacts
+            .iter()
+            .map(|(path, contents)| (path.as_str(), contents.as_str()))
+            .collect()
+    }
+
+    fn artifact_mismatch(path: &str, expected: &str, actual: &str) -> RewriteOracleMismatch {
+        RewriteOracleMismatch {
+            field: RewriteOracleField::FileArtifact {
+                path: path.to_string(),
+            },
+            expected: expected.to_string(),
+            actual: actual.to_string(),
+        }
+    }
+}
+
 impl GoalOracleAssessment {
     fn testable() -> Self {
         Self {
