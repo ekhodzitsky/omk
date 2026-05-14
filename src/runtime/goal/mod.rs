@@ -32,7 +32,10 @@ pub use state::{
     GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
 };
 pub use task_graph::{
-    GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
+    load_goal_task_delivery_records, read_goal_task_delivery_metadata,
+    update_goal_task_delivery_metadata, GoalTask, GoalTaskDeliveryMetadata,
+    GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryRecord, GoalTaskDeliveryStatus,
+    GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
 };
 pub use worktree::{plan_goal_worktree, plan_goal_worktrees, GoalWorktreePlan};
 

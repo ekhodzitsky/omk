@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`omk goal` delivery metadata API**: task delivery sidecars now have typed
+  Rust helpers for owner, write scope, branch, worktree, PR, commit,
+  verification summary, and status metadata while preserving unknown legacy
+  JSON fields for existing task graphs and proof artifacts.
+
 ### Changed
 
 - **Worktree/PR-first development workflow**: Beads is no longer required for
