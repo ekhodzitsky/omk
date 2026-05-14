@@ -61,7 +61,7 @@ walkdir = "2.5"
 which = "7.0"
 
 # TUI (optional for now, enabled by default)
-ratatui = { version = "0.29", optional = true }
+ratatui = { version = "0.30", optional = true }
 crossterm = { version = "0.29", optional = true }
 
 # HTTP (for future MCP/vis server)
