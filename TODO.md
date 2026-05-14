@@ -110,8 +110,9 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 ## Phase 9 - Worktree Integration
 
-- [ ] Treat `master` / `main` as read-only baselines in docs, PR templates,
-      and future automation.
+- [x] Treat `master` / `main` as read-only baselines in docs, PR templates,
+      and future automation. (Docs and PR template done; CI/branch-protection
+      automation tracked separately.)
 - [ ] Add goal task ownership for parallel goal task slices.
 - [ ] Create isolated worktrees for independent slices.
 - [ ] Track branch per task or subgoal.

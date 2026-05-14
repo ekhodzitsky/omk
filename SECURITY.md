@@ -2,12 +2,13 @@
 
 ## Supported Versions
 
+OMK is pre-1.0 and ships from `master` only. The latest tagged GitHub release
+is the supported version; older 0.x tags are not back-ported.
+
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.3.x   | :white_check_mark: |
-| 0.2.x   | :white_check_mark: |
-| 0.1.x   | :white_check_mark: |
-| < 0.1.0 | :x:                |
+| Latest 0.3.x | :white_check_mark: |
+| < latest 0.3.x | :x:           |
 
 ## Reporting a Vulnerability
 

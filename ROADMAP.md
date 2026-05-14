@@ -27,14 +27,12 @@ Status: current beta MVP.
 - Proof and failure artifacts.
 - Run/proof/HUD inspection.
 - Verification gates.
-- `omk goal` durable scaffold with backward-compatible state loading, planning
-  artifacts, decision log, task graph, local verification task evidence, git evidence, policy-validated bounded
-  Wire-backed agent waves, accepted follow-up tasks, `max_agents` worker-pool
-  caps, human-blocked oracle guard, durable task graph retry/lease metadata, stale-lease recovery evidence, load-time task graph validation,
-  first-class graph mutation events, path-normalized dependency-ordered
-  read/write access conflict policy for agent-proposed follow-ups, mutation
-  diff/changed-file evidence, post-mutation gate reruns, controller
-  review/security evidence, and not-ready proof.
+- `omk goal` durable scaffold — state, planning artifacts, validated task
+  graph with retry/lease metadata, bounded Wire-backed agent waves with
+  policy-validated follow-ups and worker-pool caps, post-mutation gate reruns,
+  controller review/security evidence, pause/resume/cancel with worker
+  interruption, budget enforcement and recovery, deterministic replay, and
+  honest not-ready proof.
 - GitHub CI and coverage.
 
 ## Stage 1 - Goal State Core
