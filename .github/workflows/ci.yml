@@ -55,7 +55,7 @@ jobs:
           fi
 
   build-and-test:
-    name: Build & Test
+    name: Build & Test (ubuntu-latest)
     needs: changes
     runs-on: ubuntu-latest
     steps:
@@ -109,7 +109,7 @@ jobs:
         run: cargo doc --no-deps
 
   macos-compatibility:
-    name: macOS Compatibility
+    name: Build & Test (macos-latest)
     needs: changes
     runs-on: macos-latest
     steps:
