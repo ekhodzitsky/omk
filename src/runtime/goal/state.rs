@@ -219,13 +219,42 @@ pub(crate) fn is_safe_goal_agent_path(path: &str) -> bool {
     if trimmed == "project files" {
         return true;
     }
+    // Refuse any control character. Newlines or NULs inside a path are an
+    // intent signal that the proposal is malformed or adversarial.
+    if trimmed.chars().any(char::is_control) {
+        return false;
+    }
+    // Refuse leading `~` so a downstream consumer cannot accidentally expand
+    // a home reference on behalf of the agent.
+    if trimmed.starts_with('~') {
+        return false;
+    }
     let path = Path::new(trimmed);
-    !path.is_absolute()
-        && !path
-            .components()
-            .any(|component| matches!(component, Component::ParentDir))
-        && trimmed != ".git"
-        && !trimmed.starts_with(".git/")
+    if path.is_absolute() {
+        return false;
+    }
+    for component in path.components() {
+        match component {
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return false;
+            }
+            Component::Normal(part) => {
+                let Some(part_str) = part.to_str() else {
+                    return false;
+                };
+                // Reject any directory or file name that begins with `.git`
+                // at any depth: `.git`, `.gitignore`, `.gitmodules`,
+                // `.gitattributes`, `.github/`, `.gitlab-ci.yml`. Each of
+                // these can pivot a benign "data write" proposal into code
+                // execution through tooling that consumes those paths.
+                if part_str.starts_with(".git") {
+                    return false;
+                }
+            }
+            Component::CurDir => {}
+        }
+    }
+    true
 }
 
 pub(crate) fn default_goal_agent_task_budget_secs() -> u64 {
@@ -374,5 +403,87 @@ mod tests {
         assert_eq!(state.goal_id, "goal-moved");
         assert_eq!(state.status, GoalStatus::Paused);
         assert_eq!(state.state_dir, temp.path());
+    }
+
+    #[test]
+    fn is_safe_goal_agent_path_accepts_typical_repo_paths() {
+        for ok in [
+            "project files",
+            "README.md",
+            "src/lib.rs",
+            "tests/fixtures/data.json",
+            "./Cargo.toml",
+            "docs/architecture.md",
+        ] {
+            assert!(
+                is_safe_goal_agent_path(ok),
+                "expected '{ok}' to be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn is_safe_goal_agent_path_rejects_empty_and_absolute() {
+        assert!(!is_safe_goal_agent_path(""));
+        assert!(!is_safe_goal_agent_path("   "));
+        assert!(!is_safe_goal_agent_path("/etc/passwd"));
+        assert!(!is_safe_goal_agent_path("/Users/me/repo/src/lib.rs"));
+    }
+
+    #[test]
+    fn is_safe_goal_agent_path_rejects_traversal_variants() {
+        assert!(!is_safe_goal_agent_path(".."));
+        assert!(!is_safe_goal_agent_path("../etc"));
+        assert!(!is_safe_goal_agent_path("../../escape"));
+        assert!(!is_safe_goal_agent_path("foo/../bar"));
+        assert!(!is_safe_goal_agent_path("src/../../escape"));
+    }
+
+    #[test]
+    fn is_safe_goal_agent_path_rejects_home_expansion_attempts() {
+        // A literal tilde at the start is a strong intent signal that the
+        // agent expects HOME expansion. Refuse it even though Rust file ops
+        // would not expand it on their own.
+        assert!(!is_safe_goal_agent_path("~/.bashrc"));
+        assert!(!is_safe_goal_agent_path("~root/.ssh/authorized_keys"));
+        assert!(!is_safe_goal_agent_path("~"));
+    }
+
+    #[test]
+    fn is_safe_goal_agent_path_rejects_control_characters() {
+        assert!(!is_safe_goal_agent_path("README\n.md"));
+        assert!(!is_safe_goal_agent_path("a\0b"));
+        assert!(!is_safe_goal_agent_path("path\twith\ttabs"));
+        assert!(!is_safe_goal_agent_path("foo\x07bar"));
+    }
+
+    #[test]
+    fn is_safe_goal_agent_path_rejects_dot_git_family_at_any_depth() {
+        // First-component rejection: the historical .git/.git/ check is
+        // preserved and extended to every dotfile a tool might consume.
+        assert!(!is_safe_goal_agent_path(".git"));
+        assert!(!is_safe_goal_agent_path(".git/config"));
+        assert!(!is_safe_goal_agent_path(".gitignore"));
+        assert!(!is_safe_goal_agent_path(".gitmodules"));
+        assert!(!is_safe_goal_agent_path(".gitattributes"));
+        // GitHub Actions metadata is a code-execution surface for CI.
+        assert!(!is_safe_goal_agent_path(".github"));
+        assert!(!is_safe_goal_agent_path(".github/workflows/ci.yml"));
+        // GitLab CI metadata is the analogous surface for GitLab pipelines.
+        assert!(!is_safe_goal_agent_path(".gitlab-ci.yml"));
+        // Sub-component traversal: a path that smuggles `.git` deeper in the
+        // tree (e.g., a submodule clone target) must still be rejected.
+        assert!(!is_safe_goal_agent_path("vendor/.git/HEAD"));
+        assert!(!is_safe_goal_agent_path("apps/web/.github/workflows/x.yml"));
+    }
+
+    #[test]
+    fn is_safe_goal_agent_path_preserves_special_alias() {
+        // The `project files` alias is preserved across whitespace trimming
+        // and stays exempt from per-path validation. Mixed-case variants are
+        // not the alias and instead fall through to the regular path policy
+        // (which accepts them as a literal relative file name).
+        assert!(is_safe_goal_agent_path("project files"));
+        assert!(is_safe_goal_agent_path("  project files  "));
     }
 }
