@@ -82,8 +82,15 @@ fn assert_task_completed(runner: &TeamRunner, task_id: &str) {
         .claim_store
         .get(&task_id.to_string())
         .expect("task must exist");
-    assert_eq!(task.state, TaskState::Completed, "task {task_id} must be completed");
-    assert!(task.completed_at.is_some(), "task {task_id} must have completed_at");
+    assert_eq!(
+        task.state,
+        TaskState::Completed,
+        "task {task_id} must be completed"
+    );
+    assert!(
+        task.completed_at.is_some(),
+        "task {task_id} must have completed_at"
+    );
 }
 
 fn success_result(task_id: &str) -> WorkerResult {
