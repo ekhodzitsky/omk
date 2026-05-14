@@ -262,12 +262,13 @@ fn test_goal_show_json_shortcut_matches_format_json() {
 
 #[test]
 fn test_goal_show_rejects_conflicting_json_and_format_flags() {
+    // Loosened from a clap-version-coupled exact phrase to substring tokens.
     let (_tmp, envs) = isolated_env();
     omk_cmd(&envs)
         .args(["goal", "show", "latest", "--json", "--format", "text"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("cannot be used with"));
+        .stderr(predicate::str::contains("--json").and(predicate::str::contains("--format")));
 }
 
 #[test]
@@ -305,4 +306,98 @@ fn test_goal_pause_includes_resume_hint() {
         .success()
         .stdout(predicate::str::contains("paused"))
         .stdout(predicate::str::contains("omk goal resume"));
+}
+
+// ---------- exit codes ----------
+
+#[test]
+fn test_clap_usage_error_exits_with_code_2() {
+    // clap's standard exit code for usage errors is 2; lock that in so wrapper
+    // scripts can distinguish "user typo" from "runtime failure".
+    let (_tmp, envs) = isolated_env();
+    omk_cmd(&envs)
+        .args(["goal", "show", "latest", "--json", "--format", "text"])
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn test_validation_error_exits_with_code_1() {
+    // anyhow-routed CLI errors exit 1. This is the bucket every actionable
+    // validation hint lives in -- the contract with downstream scripts.
+    let (_tmp, envs) = isolated_env();
+    omk_cmd(&envs)
+        .args(["goal", "run", "", "--budget-tokens", "0"])
+        .assert()
+        .code(1);
+}
+
+// ---------- numeric edge cases ----------
+
+#[test]
+fn test_goal_run_rejects_negative_budget_usd() {
+    // `--budget-usd -5` would be parsed as a flag prefix by clap; use the
+    // `--flag=value` form so the value reaches our validator.
+    let (_tmp, envs) = isolated_env();
+    omk_cmd(&envs)
+        .args(["goal", "run", "Fix tests", "--budget-usd=-5"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--budget-usd must be a positive, finite number",
+        ));
+}
+
+#[test]
+fn test_goal_run_rejects_nan_budget_usd() {
+    let (_tmp, envs) = isolated_env();
+    omk_cmd(&envs)
+        .args(["goal", "run", "Fix tests", "--budget-usd", "NaN"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--budget-usd must be a positive, finite number",
+        ));
+}
+
+#[test]
+fn test_goal_run_rejects_infinite_budget_usd() {
+    let (_tmp, envs) = isolated_env();
+    omk_cmd(&envs)
+        .args(["goal", "run", "Fix tests", "--budget-usd", "inf"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--budget-usd must be a positive, finite number",
+        ));
+}
+
+// ---------- 0s asymmetry between `run` and `budget-add` ----------
+
+#[test]
+fn test_goal_run_accepts_zero_budget_time_for_exhaustion_path() {
+    // `omk goal run --budget-time 0s` is legal: it creates an already-exhausted
+    // goal that runtime exhaustion tests rely on. The CLI must not reject it.
+    let (_tmp, envs) = isolated_env();
+    omk_cmd(&envs)
+        .args([
+            "goal",
+            "run",
+            "Stop immediately when budget is exhausted",
+            "--budget-time",
+            "0s",
+        ])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_goal_budget_add_rejects_zero_time_extension() {
+    // Symmetric counter-case: adding 0s of budget is meaningless.
+    let (_tmp, envs) = isolated_env();
+    omk_cmd(&envs)
+        .args(["goal", "budget-add", "latest", "--time", "0s"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--time must be greater than zero"));
 }

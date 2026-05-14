@@ -263,6 +263,20 @@ pub(crate) fn parse_goal_duration_secs(value: &str) -> Option<u64> {
     number.trim().parse::<u64>().ok()?.checked_mul(multiplier)
 }
 
+/// Validate a budget duration string and return the parsed seconds.
+///
+/// Accepts non-empty values with optional suffix `s`/`m`/`h`/`d`. The runtime
+/// allows `0s` to mean "already exhausted" at goal creation time; callers that
+/// require a strictly positive duration should enforce it separately.
+pub(crate) fn parse_budget_duration(value: &str) -> anyhow::Result<u64> {
+    parse_goal_duration_secs(value).ok_or_else(|| {
+        anyhow::anyhow!(
+            "invalid duration '{value}': expected a number with optional suffix \
+             s/m/h/d (for example: 30s, 15m, 8h, 7d)"
+        )
+    })
+}
+
 pub(crate) fn format_goal_duration_secs(secs: u64) -> String {
     const MINUTE: u64 = 60;
     const HOUR: u64 = 60 * MINUTE;

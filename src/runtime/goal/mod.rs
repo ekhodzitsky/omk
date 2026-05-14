@@ -111,19 +111,7 @@ pub async fn resolve_goal(goal_id: &str) -> Result<GoalState> {
     GoalState::load(&goal_dir).await
 }
 
-/// Validate a budget duration string and return the parsed seconds.
-///
-/// Accepts non-empty values with optional suffix `s`/`m`/`h`/`d`. The runtime
-/// allows `0s` to mean "already exhausted" at goal creation time; callers that
-/// require a strictly positive duration should enforce it separately.
-pub(crate) fn parse_budget_duration(value: &str) -> Result<u64> {
-    state::parse_goal_duration_secs(value).ok_or_else(|| {
-        anyhow::anyhow!(
-            "invalid duration '{value}': expected a number with optional suffix \
-             s/m/h/d (for example: 30s, 15m, 8h, 7d)"
-        )
-    })
-}
+pub(crate) use state::parse_budget_duration;
 
 pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
     let goal = resolve_goal(goal_id).await?;
