@@ -8,8 +8,8 @@ use std::process::Command as StdCommand;
 fn test_goal_north_star_e2e_harness_reaches_open_pr_dry_run_render() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");
-    seed_git_project(project.path());
     write_gate_config(project.path());
+    seed_git_project(project.path());
 
     omk_cmd(&envs)
         .current_dir(project.path())
@@ -49,7 +49,10 @@ fn test_goal_north_star_e2e_harness_reaches_open_pr_dry_run_render() {
     let proof = goal_proof_json(&envs, project.path());
     assert_eq!(proof["status"], "not_ready");
     assert_eq!(proof["post_mutation_gates_ran"], true);
-    assert_json_array_contains_str(&proof["changed_files"], "agent-output.txt");
+    assert_eq!(
+        proof["changed_files"],
+        serde_json::json!(["agent-output.txt"])
+    );
     assert_json_array_contains_str(
         &proof["known_gaps"],
         "integration loop has not committed, opened a PR, or accepted the agent changes yet",
