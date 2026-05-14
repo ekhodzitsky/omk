@@ -26,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Skip PR coverage
         if: github.event_name == 'pull_request'
@@ -58,7 +60,7 @@ jobs:
 
       - name: Install tarpaulin
         if: github.event_name != 'pull_request' && steps.tarpaulin-cache.outputs.cache-hit != 'true'
-        run: cargo install cargo-tarpaulin --version "$TARPAULIN_VERSION"
+        run: cargo install cargo-tarpaulin --locked --version "$TARPAULIN_VERSION"
 
       - name: Show tarpaulin version
         if: github.event_name != 'pull_request'

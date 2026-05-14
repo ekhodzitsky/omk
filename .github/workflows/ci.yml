@@ -28,6 +28,8 @@ jobs:
       deps: ${{ steps.filter.outputs.deps }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Detect Rust-relevant paths
         id: filter
@@ -60,6 +62,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Skip docs-only PR
         if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
@@ -114,6 +118,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Skip docs-only PR
         if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
@@ -154,6 +160,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Skip unchanged dependency graph
         if: github.event_name == 'pull_request' && needs.changes.outputs.deps != 'true'
@@ -162,5 +170,5 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         if: github.event_name != 'pull_request' || needs.changes.outputs.deps == 'true'
         with:
-          command: check advisories licenses
+          command: check advisories licenses sources
           arguments: --all-features
