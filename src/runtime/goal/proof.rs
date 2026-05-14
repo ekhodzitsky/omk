@@ -2,13 +2,14 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize, Serializer};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 use super::state::{
-    GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_PROOF_FILE, GOAL_REVIEW_TASK_ID,
+    GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_ARTIFACTS_DIR, GOAL_PROOF_FILE,
+    GOAL_REVIEW_ARTIFACTS_DIR, GOAL_REVIEW_FILE, GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_FILE,
     GOAL_SECURITY_REVIEW_TASK_ID, GOAL_TASK_GRAPH_FILE,
 };
 use super::task_graph::{
@@ -43,7 +44,11 @@ impl Serialize for GoalProof {
         S: Serializer,
     {
         let delivery_metadata = remembered_goal_proof_delivery_metadata(self);
+        let review_artifacts = remembered_goal_proof_review_artifacts(self);
         let mut field_count = 14;
+        if review_artifacts.is_some() {
+            field_count += 1;
+        }
         if self.git.is_some() {
             field_count += 1;
         }
@@ -62,6 +67,9 @@ impl Serialize for GoalProof {
         state.serialize_field("task_graph_summary", &self.task_graph_summary)?;
         if let Some(delivery_metadata) = delivery_metadata {
             state.serialize_field("delivery_metadata", &delivery_metadata)?;
+        }
+        if let Some(review_artifacts) = review_artifacts {
+            state.serialize_field("review_artifacts", &review_artifacts)?;
         }
         state.serialize_field("changed_files", &self.changed_files)?;
         state.serialize_field("commits", &self.commits)?;
@@ -85,9 +93,11 @@ impl GoalProof {
         let value: Value = serde_json::from_str(&json)
             .with_context(|| format!("Failed to parse goal proof: {}", path.display()))?;
         let delivery_metadata = proof_delivery_metadata_from_value(&value);
+        let review_artifacts = proof_review_artifacts_from_value(&value);
         let proof: Self = serde_json::from_value(value)
             .with_context(|| format!("Failed to parse goal proof: {}", path.display()))?;
         remember_goal_proof_delivery_metadata(&proof, delivery_metadata);
+        remember_goal_proof_review_artifacts(&proof, review_artifacts);
         Ok(proof)
     }
 }
@@ -183,6 +193,9 @@ pub(crate) fn build_verified_proof(
         .tasks
         .iter()
         .any(|task| task.id == GOAL_SECURITY_REVIEW_TASK_ID && task.status == GoalTaskStatus::Done);
+    let review_artifacts =
+        collect_review_artifacts(review_done, security_review_done, &gates, &changed_files);
+    let review_artifacts_ok = review_artifacts_passed(&review_artifacts);
     let commits = proof_commits(&git);
     let mut known_gaps = Vec::new();
     if !agent_execution_done {
@@ -197,6 +210,7 @@ pub(crate) fn build_verified_proof(
     if agent_execution_done && !security_review_done {
         known_gaps.push("security review evidence has not run for this goal yet".to_string());
     }
+    known_gaps.extend(review_artifact_known_gaps(&review_artifacts));
     if agent_execution_done && !changed_files.is_empty() && !post_mutation_gates_ran {
         known_gaps
             .push("verification gates have not rerun after agent execution changes".to_string());
@@ -235,6 +249,7 @@ pub(crate) fn build_verified_proof(
         && agent_execution_done
         && review_done
         && security_review_done
+        && review_artifacts_ok
         && !changed_files.is_empty()
         && post_mutation_gates_ran
     {
@@ -243,11 +258,19 @@ pub(crate) fn build_verified_proof(
         && agent_execution_done
         && review_done
         && security_review_done
+        && review_artifacts_ok
         && !changed_files.is_empty()
     {
         "not ready: agent changes exist, but verification and integration have not rerun after the mutation".to_string()
-    } else if gates_ok && agent_execution_done && review_done && security_review_done {
+    } else if gates_ok
+        && agent_execution_done
+        && review_done
+        && security_review_done
+        && review_artifacts_ok
+    {
         "not ready: verification, agent execution, review, and security evidence passed, but no project mutation was captured".to_string()
+    } else if gates_ok && agent_execution_done && review_done && security_review_done {
+        "not ready: required reviewer artifacts are incomplete or blocked".to_string()
     } else if gates_ok && agent_execution_done {
         "not ready: verification gates and bounded agent execution passed, but review/security evidence is missing".to_string()
     } else if gates_ok {
@@ -256,7 +279,7 @@ pub(crate) fn build_verified_proof(
         "not ready: required verification evidence is incomplete or failing".to_string()
     };
 
-    GoalProof {
+    let proof = GoalProof {
         version: 1,
         goal_id: state.goal_id.clone(),
         status: proof_status,
@@ -276,13 +299,122 @@ pub(crate) fn build_verified_proof(
         post_mutation_gates_ran,
         known_gaps,
         human_decisions_required: Vec::new(),
-    }
+    };
+    remember_goal_proof_review_artifacts(&proof, review_artifacts);
+    proof
 }
 
 fn proof_commits(git: &Option<super::evidence::GoalGitEvidence>) -> Vec<String> {
     git.as_ref()
         .map(|evidence| vec![evidence.head.clone()])
         .unwrap_or_default()
+}
+
+fn collect_review_artifacts(
+    review_done: bool,
+    security_review_done: bool,
+    gates: &[GateResult],
+    changed_files: &[String],
+) -> Vec<Value> {
+    if !review_done && !security_review_done {
+        return Vec::new();
+    }
+
+    let gates_ok = !gates.is_empty() && gates_passed(gates);
+    let performance_ok = gates
+        .iter()
+        .filter(|gate| is_performance_gate(&gate.name))
+        .any(|gate| gate.passed);
+    let review_path =
+        format!("{GOAL_ARTIFACTS_DIR}/{GOAL_REVIEW_ARTIFACTS_DIR}/{GOAL_REVIEW_FILE}");
+    let security_path =
+        format!("{GOAL_ARTIFACTS_DIR}/{GOAL_REVIEW_ARTIFACTS_DIR}/{GOAL_SECURITY_REVIEW_FILE}");
+
+    vec![
+        review_artifact(
+            "architect",
+            review_done,
+            &review_path,
+            "architecture review artifact is present",
+            "architect review artifact is missing",
+        ),
+        review_artifact(
+            "code",
+            review_done && !changed_files.is_empty(),
+            &review_path,
+            "code review has changed-file evidence to inspect",
+            "code review is blocked until changed-file evidence exists",
+        ),
+        review_artifact(
+            "test",
+            gates_ok,
+            &review_path,
+            "test review passed because required verification gates passed",
+            "test review is blocked until required verification gates pass",
+        ),
+        review_artifact(
+            "security",
+            security_review_done,
+            &security_path,
+            "security review artifact is present",
+            "security review artifact is missing",
+        ),
+        review_artifact(
+            "performance",
+            performance_ok,
+            &review_path,
+            "performance review passed because a performance/benchmark gate passed",
+            "performance review is blocked until performance or benchmark gate evidence exists",
+        ),
+    ]
+}
+
+fn review_artifact(
+    pass: &str,
+    passed: bool,
+    path: &str,
+    passed_summary: &str,
+    blocked_gap: &str,
+) -> Value {
+    if passed {
+        json!({
+            "pass": pass,
+            "status": "passed",
+            "path": path,
+            "summary": passed_summary,
+        })
+    } else {
+        json!({
+            "pass": pass,
+            "status": "blocked",
+            "path": path,
+            "summary": blocked_gap,
+            "known_gaps": [blocked_gap],
+        })
+    }
+}
+
+fn review_artifact_known_gaps(artifacts: &[Value]) -> Vec<String> {
+    artifacts
+        .iter()
+        .filter_map(|artifact| artifact.get("known_gaps").and_then(Value::as_array))
+        .flat_map(|gaps| gaps.iter().filter_map(Value::as_str).map(str::to_string))
+        .collect()
+}
+
+fn review_artifacts_passed(artifacts: &[Value]) -> bool {
+    !artifacts.is_empty()
+        && artifacts.iter().all(|artifact| {
+            artifact
+                .get("status")
+                .and_then(Value::as_str)
+                .is_some_and(|status| status == "passed")
+        })
+}
+
+fn is_performance_gate(name: &str) -> bool {
+    let normalized = name.to_ascii_lowercase();
+    normalized.contains("perf") || normalized.contains("bench")
 }
 
 fn proof_delivery_metadata_from_value(value: &Value) -> Vec<Value> {
@@ -295,8 +427,20 @@ fn proof_delivery_metadata_from_value(value: &Value) -> Vec<Value> {
         .collect()
 }
 
+fn proof_review_artifacts_from_value(value: &Value) -> Vec<Value> {
+    value
+        .get("review_artifacts")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect()
+}
+
 // Artifact-only metadata stays out of GoalProof to preserve public struct literals.
 static LOADED_PROOF_METADATA: OnceLock<Mutex<HashMap<String, Vec<Value>>>> = OnceLock::new();
+static LOADED_PROOF_REVIEW_ARTIFACTS: OnceLock<Mutex<HashMap<String, Vec<Value>>>> =
+    OnceLock::new();
 
 fn proof_cache_key(proof: &GoalProof) -> String {
     let version = proof.version.to_string();
@@ -339,6 +483,10 @@ fn remember_goal_proof_delivery_metadata(proof: &GoalProof, delivery_metadata: V
     remember_goal_proof_delivery_metadata_with_key(proof_cache_key(proof), delivery_metadata);
 }
 
+fn remember_goal_proof_review_artifacts(proof: &GoalProof, review_artifacts: Vec<Value>) {
+    remember_goal_proof_review_artifacts_with_key(proof_cache_key(proof), review_artifacts);
+}
+
 fn remember_goal_proof_delivery_metadata_with_key(key: String, delivery_metadata: Vec<Value>) {
     let cache = LOADED_PROOF_METADATA.get_or_init(|| Mutex::new(HashMap::new()));
     let Ok(mut cache) = cache.lock() else {
@@ -351,8 +499,28 @@ fn remember_goal_proof_delivery_metadata_with_key(key: String, delivery_metadata
     }
 }
 
+fn remember_goal_proof_review_artifacts_with_key(key: String, review_artifacts: Vec<Value>) {
+    let cache = LOADED_PROOF_REVIEW_ARTIFACTS.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut cache) = cache.lock() else {
+        return;
+    };
+    if review_artifacts.is_empty() {
+        cache.remove(&key);
+    } else {
+        cache.insert(key, review_artifacts);
+    }
+}
+
 fn remembered_goal_proof_delivery_metadata(proof: &GoalProof) -> Option<Vec<Value>> {
     let cache = LOADED_PROOF_METADATA.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(cache) = cache.lock() else {
+        return None;
+    };
+    cache.get(&proof_cache_key(proof)).cloned()
+}
+
+fn remembered_goal_proof_review_artifacts(proof: &GoalProof) -> Option<Vec<Value>> {
+    let cache = LOADED_PROOF_REVIEW_ARTIFACTS.get_or_init(|| Mutex::new(HashMap::new()));
     let Ok(cache) = cache.lock() else {
         return None;
     };
