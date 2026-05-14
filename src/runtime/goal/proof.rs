@@ -1,18 +1,22 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Serialize, Serializer};
+use serde_json::Value;
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 
 use super::state::{
     GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_PROOF_FILE, GOAL_REVIEW_TASK_ID,
-    GOAL_SECURITY_REVIEW_TASK_ID,
+    GOAL_SECURITY_REVIEW_TASK_ID, GOAL_TASK_GRAPH_FILE,
 };
 use super::task_graph::{
     summarize_task_graph, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
 };
 use crate::runtime::gates::{gates_passed, GateResult};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct GoalProof {
     pub version: u32,
     pub goal_id: String,
@@ -33,14 +37,57 @@ pub struct GoalProof {
     pub human_decisions_required: Vec<String>,
 }
 
+impl Serialize for GoalProof {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let delivery_metadata = remembered_goal_proof_delivery_metadata(self);
+        let mut field_count = 14;
+        if self.git.is_some() {
+            field_count += 1;
+        }
+        if delivery_metadata.is_some() {
+            field_count += 1;
+        }
+
+        let mut state = serializer.serialize_struct("GoalProof", field_count)?;
+        state.serialize_field("version", &self.version)?;
+        state.serialize_field("goal_id", &self.goal_id)?;
+        state.serialize_field("status", &self.status)?;
+        state.serialize_field("readiness", &self.readiness)?;
+        state.serialize_field("summary", &self.summary)?;
+        state.serialize_field("generated_at", &self.generated_at)?;
+        state.serialize_field("artifacts", &self.artifacts)?;
+        state.serialize_field("task_graph_summary", &self.task_graph_summary)?;
+        if let Some(delivery_metadata) = delivery_metadata {
+            state.serialize_field("delivery_metadata", &delivery_metadata)?;
+        }
+        state.serialize_field("changed_files", &self.changed_files)?;
+        state.serialize_field("commits", &self.commits)?;
+        if let Some(git) = &self.git {
+            state.serialize_field("git", git)?;
+        }
+        state.serialize_field("gates", &self.gates)?;
+        state.serialize_field("post_mutation_gates_ran", &self.post_mutation_gates_ran)?;
+        state.serialize_field("known_gaps", &self.known_gaps)?;
+        state.serialize_field("human_decisions_required", &self.human_decisions_required)?;
+        state.end()
+    }
+}
+
 impl GoalProof {
     pub async fn load(goal_dir: &Path) -> Result<Self> {
         let path = goal_dir.join(GOAL_PROOF_FILE);
         let json = tokio::fs::read_to_string(&path)
             .await
             .with_context(|| format!("Failed to read goal proof: {}", path.display()))?;
-        let proof = serde_json::from_str(&json)
+        let value: Value = serde_json::from_str(&json)
             .with_context(|| format!("Failed to parse goal proof: {}", path.display()))?;
+        let delivery_metadata = proof_delivery_metadata_from_value(&value);
+        let proof: Self = serde_json::from_value(value)
+            .with_context(|| format!("Failed to parse goal proof: {}", path.display()))?;
+        remember_goal_proof_delivery_metadata(&proof, delivery_metadata);
         Ok(proof)
     }
 }
@@ -238,7 +285,118 @@ fn proof_commits(git: &Option<super::evidence::GoalGitEvidence>) -> Vec<String> 
         .unwrap_or_default()
 }
 
+fn proof_delivery_metadata_from_value(value: &Value) -> Vec<Value> {
+    value
+        .get("delivery_metadata")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect()
+}
+
+// Artifact-only metadata stays out of GoalProof to preserve public struct literals.
+static LOADED_PROOF_METADATA: OnceLock<Mutex<HashMap<String, Vec<Value>>>> = OnceLock::new();
+
+fn proof_cache_key(proof: &GoalProof) -> String {
+    let version = proof.version.to_string();
+    let status = proof.status.to_string();
+    proof_cache_key_parts(&[
+        &version,
+        &proof.goal_id,
+        &status,
+        &proof.readiness,
+        &proof.summary,
+    ])
+}
+
+fn proof_cache_key_from_value(value: &Value) -> Option<String> {
+    let version = value.get("version")?.as_u64()?.to_string();
+    let goal_id = value.get("goal_id")?.as_str()?;
+    let status = value.get("status")?.as_str()?;
+    let readiness = value.get("readiness")?.as_str()?;
+    let summary = value.get("summary")?.as_str()?;
+    Some(proof_cache_key_parts(&[
+        &version, goal_id, status, readiness, summary,
+    ]))
+}
+
+fn proof_cache_key_parts(parts: &[&str]) -> String {
+    parts.join("\n")
+}
+
+fn remember_goal_proof_delivery_metadata_for_value(
+    proof_value: &Value,
+    delivery_metadata: Vec<Value>,
+) {
+    let Some(key) = proof_cache_key_from_value(proof_value) else {
+        return;
+    };
+    remember_goal_proof_delivery_metadata_with_key(key, delivery_metadata);
+}
+
+fn remember_goal_proof_delivery_metadata(proof: &GoalProof, delivery_metadata: Vec<Value>) {
+    remember_goal_proof_delivery_metadata_with_key(proof_cache_key(proof), delivery_metadata);
+}
+
+fn remember_goal_proof_delivery_metadata_with_key(key: String, delivery_metadata: Vec<Value>) {
+    let cache = LOADED_PROOF_METADATA.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut cache) = cache.lock() else {
+        return;
+    };
+    if delivery_metadata.is_empty() {
+        cache.remove(&key);
+    } else {
+        cache.insert(key, delivery_metadata);
+    }
+}
+
+fn remembered_goal_proof_delivery_metadata(proof: &GoalProof) -> Option<Vec<Value>> {
+    let cache = LOADED_PROOF_METADATA.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(cache) = cache.lock() else {
+        return None;
+    };
+    cache.get(&proof_cache_key(proof)).cloned()
+}
+
 pub(crate) async fn write_json_artifact<T: Serialize>(path: &Path, value: &T) -> Result<()> {
-    let json = serde_json::to_string_pretty(value)?;
+    let mut value = serde_json::to_value(value)?;
+    enrich_goal_json_artifact(path, &mut value).await?;
+    let json = serde_json::to_string_pretty(&value)?;
     crate::runtime::atomic::atomic_write(path, json.as_bytes()).await
+}
+
+async fn enrich_goal_json_artifact(path: &Path, value: &mut Value) -> Result<()> {
+    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return Ok(());
+    };
+    let Some(goal_dir) = path.parent() else {
+        return Ok(());
+    };
+
+    match file_name {
+        GOAL_TASK_GRAPH_FILE => {
+            super::task_graph::preserve_delivery_metadata_in_value(goal_dir, value).await
+        }
+        GOAL_PROOF_FILE => attach_delivery_metadata_to_proof_value(goal_dir, value).await,
+        _ => Ok(()),
+    }
+}
+
+async fn attach_delivery_metadata_to_proof_value(
+    goal_dir: &Path,
+    proof_value: &mut Value,
+) -> Result<()> {
+    let delivery_metadata = super::task_graph::load_task_delivery_metadata(goal_dir).await?;
+    remember_goal_proof_delivery_metadata_for_value(proof_value, delivery_metadata.clone());
+    if delivery_metadata.is_empty() {
+        return Ok(());
+    }
+    if let Some(proof) = proof_value.as_object_mut() {
+        proof.insert(
+            "delivery_metadata".to_string(),
+            Value::Array(delivery_metadata),
+        );
+    }
+    Ok(())
 }
