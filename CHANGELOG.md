@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   multi-agent development or `omk goal` delivery. The canonical coordination
   path is now task-scoped worktrees/branches, explicit write scopes, PR
   evidence, green CI, and review; external trackers remain optional.
+- **CI feedback lanes**: PR checks now use a faster Ubuntu gate plus macOS
+  smoke compatibility, while docs, full macOS build/test, coverage upload, and
+  release artifacts stay on protected-branch, scheduled, manual, or release
+  workflows.
 
 ## [0.3.30] - 2026-05-13
 

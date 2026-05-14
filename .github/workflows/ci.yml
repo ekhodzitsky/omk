@@ -5,6 +5,13 @@ on:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+  schedule:
+    - cron: '18 5 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -13,63 +20,147 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-test:
-    name: Build & Test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+  changes:
+    name: Classify Changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      deps: ${{ steps.filter.outputs.deps }}
     steps:
       - uses: actions/checkout@v6
 
+      - name: Detect Rust-relevant paths
+        id: filter
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+            echo "deps=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git fetch --no-tags --depth=1 origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+          git diff --name-only "refs/remotes/origin/${GITHUB_BASE_REF}" HEAD > changed-files.txt
+
+          if grep -Eq '^(Cargo\.toml|Cargo\.lock|deny\.toml|build\.rs|rust-toolchain(\.toml)?|\.cargo/|src/|tests/|benches/|examples/|\.github/workflows/)' changed-files.txt; then
+            echo "rust=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "rust=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -Eq '^(Cargo\.toml|Cargo\.lock|deny\.toml|\.github/workflows/ci\.yml)$' changed-files.txt; then
+            echo "deps=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deps=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-test:
+    name: Build & Test (ubuntu-latest)
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Skip docs-only PR
+        if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
+        run: echo "No Rust, Cargo, or workflow paths changed; keeping required CI check green with a cheap no-op."
+
       - name: Install Rust
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
-      - name: Cache cargo registry
+      - name: Cache cargo
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         uses: actions/cache@v5
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-${{ github.job }}-
 
       - name: Check formatting
-        run: cargo fmt --check
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo fmt -- --check
 
       - name: Run clippy
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Build
-        run: cargo build --release
+      - name: Check all targets and features
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo check --all-targets --all-features
 
-      - name: Build with server feature
-        run: cargo build --release --features server
+      - name: Check server-only feature set
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo check --no-default-features --features server
 
       - name: Run tests
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         run: cargo test
 
       - name: Build docs
+        if: github.event_name != 'pull_request'
         run: cargo doc --no-deps
 
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@v7
+  macos-compatibility:
+    name: Build & Test (macos-latest)
+    needs: changes
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Skip docs-only PR
+        if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
+        run: echo "No Rust, Cargo, or workflow paths changed; macOS compatibility check is a cheap no-op."
+
+      - name: Install Rust
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        uses: actions/cache@v5
         with:
-          name: omk-${{ matrix.os }}
-          path: target/release/omk
-          retention-days: 7
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-${{ github.job }}-
+
+      - name: Smoke check on PR
+        if: github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
+        run: cargo check --all-targets --all-features
+
+      - name: Full macOS build
+        if: github.event_name != 'pull_request'
+        run: cargo build --all-features
+
+      - name: Full macOS tests
+        if: github.event_name != 'pull_request'
+        run: cargo test --all-features
 
   cargo-deny:
     name: Audit Dependencies
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Skip unchanged dependency graph
+        if: github.event_name == 'pull_request' && needs.changes.outputs.deps != 'true'
+        run: echo "Cargo dependency inputs did not change; dependency audit is a cheap no-op."
+
       - uses: EmbarkStudios/cargo-deny-action@v2
+        if: github.event_name != 'pull_request' || needs.changes.outputs.deps == 'true'
         with:
           command: check advisories licenses
           arguments: --all-features
