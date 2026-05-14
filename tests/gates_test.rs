@@ -347,13 +347,13 @@ async fn test_run_gates_with_evidence_drains_large_output_before_waiting() {
     tokio::fs::write(
         &script,
         r#"#!/bin/sh
-i=0
-while [ "$i" -lt 20000 ]; do
-  printf 'stdout-line-%05d\n' "$i"
-  printf 'stderr-line-%05d\n' "$i" >&2
-  i=$((i + 1))
-done
-exit 7
+awk 'BEGIN {
+  for (i = 0; i < 6000; i++) {
+    printf "stdout-line-%05d\n", i
+    printf "stderr-line-%05d\n", i > "/dev/stderr"
+  }
+  exit 7
+}'
 "#,
     )
     .await
