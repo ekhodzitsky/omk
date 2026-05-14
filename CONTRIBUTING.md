@@ -38,6 +38,16 @@ Use GitHub branch protection to require PRs, green CI, and review before merge.
 PR branches should be small, reviewable, and tied to one task or one explicitly
 named group of dependent tasks.
 
+### CI Policy
+
+PRs use a fast Ubuntu gate for `cargo fmt -- --check`,
+`cargo clippy --all-targets --all-features -- -D warnings`, feature checks, and
+`cargo test`, plus a macOS compatibility smoke check. Heavy validation stays on
+protected branches, scheduled runs, and releases: full macOS build/test runs
+after merge, docs build outside the PR fast path, coverage uploads from
+push/scheduled/manual runs, and release artifacts are produced only by the
+release workflow.
+
 ## Verification Wall
 
 Before opening a PR for code changes, run:
