@@ -5,6 +5,20 @@ on:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  TARPAULIN_VERSION: 0.35.4
 
 jobs:
   coverage:
@@ -13,16 +27,49 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Skip PR coverage
+        if: github.event_name == 'pull_request'
+        run: echo "Coverage is deferred to push, schedule, or manual runs so PR feedback stays fast."
+
       - name: Install Rust
+        if: github.event_name != 'pull_request'
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache cargo
+        if: github.event_name != 'pull_request'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-${{ github.job }}-
+
+      - name: Cache tarpaulin binary
+        id: tarpaulin-cache
+        if: github.event_name != 'pull_request'
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/bin/cargo-tarpaulin
+          key: ${{ runner.os }}-cargo-tarpaulin-${{ env.TARPAULIN_VERSION }}
+
       - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin
+        if: github.event_name != 'pull_request' && steps.tarpaulin-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-tarpaulin --version "$TARPAULIN_VERSION"
+
+      - name: Show tarpaulin version
+        if: github.event_name != 'pull_request'
+        run: cargo tarpaulin --version
 
       - name: Run coverage
+        if: github.event_name != 'pull_request'
         run: cargo tarpaulin --out Xml --all-features
 
       - name: Upload to Codecov
+        if: github.event_name != 'pull_request'
         uses: codecov/codecov-action@v6
         with:
           files: ./cobertura.xml
