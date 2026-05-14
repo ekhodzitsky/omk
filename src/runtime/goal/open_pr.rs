@@ -2,19 +2,23 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use serde_json::Value;
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::{GoalProof, GoalState, GoalTaskGraph, GOAL_PROOF_FILE};
 
 mod release;
+mod sections;
 
 #[derive(Debug, Clone, Serialize)]
-pub(crate) struct GoalOpenPrDraft {
-    pub(crate) goal_id: String,
-    pub(crate) dry_run: bool,
-    pub(crate) draft: bool,
-    pub(crate) title: String,
-    pub(crate) body: String,
+pub struct GoalOpenPrDraft {
+    pub goal_id: String,
+    pub dry_run: bool,
+    pub draft: bool,
+    pub title: String,
+    pub body: String,
+    pub head_branch: Option<String>,
+    pub existing_pr_url: Option<String>,
+    pub proof_path: PathBuf,
 }
 
 pub(crate) async fn render_goal_open_pr(goal_id: &str, draft: bool) -> Result<GoalOpenPrDraft> {
@@ -43,6 +47,8 @@ pub(crate) async fn render_goal_open_pr(goal_id: &str, draft: bool) -> Result<Go
         return missing_evidence(&state, goal_id, "proof evidence is missing");
     }
 
+    let head_branch = select_head_branch(&proof, &delivery_metadata);
+    let existing_pr_url = select_pr_url(&delivery_metadata);
     let title = format!("Goal proof: {}", state.normalized_goal);
     let body = render_pr_body(&state, &proof, &task_graph, &delivery_metadata, draft);
     Ok(GoalOpenPrDraft {
@@ -51,6 +57,9 @@ pub(crate) async fn render_goal_open_pr(goal_id: &str, draft: bool) -> Result<Go
         draft,
         title,
         body,
+        head_branch,
+        existing_pr_url,
+        proof_path,
     })
 }
 
@@ -97,9 +106,9 @@ fn render_pr_body(
     push_proof_summary(&mut body, proof);
     push_verification_wall(&mut body, proof);
     release::push_release_candidate_notes(&mut body, state, proof, draft);
-    push_review_evidence(&mut body, &proof_value);
-    push_integration_evidence(&mut body, &proof_value);
-    push_oracle_evidence(&mut body, &proof_value);
+    sections::push_review_evidence(&mut body, &proof_value);
+    sections::push_integration_evidence(&mut body, &proof_value);
+    sections::push_oracle_evidence(&mut body, &proof_value);
     push_known_gaps(&mut body, proof);
     push_changed_files(&mut body, proof);
     push_artifacts(&mut body, proof);
@@ -113,6 +122,13 @@ fn push_goal_section(body: &mut String, state: &GoalState, proof: &GoalProof, dr
     push_line(body, &format!("- Status: `{}`", proof.status));
     push_line(body, &format!("- Readiness: {}", proof.readiness));
     push_line(body, &format!("- Draft: `{draft}`"));
+    push_line(
+        body,
+        &format!(
+            "- Proof path: `{}`",
+            state.state_dir.join(GOAL_PROOF_FILE).display()
+        ),
+    );
     push_blank(body);
 }
 
@@ -162,11 +178,17 @@ fn push_delivery_metadata(body: &mut String, delivery_metadata: &[Value]) {
         } else {
             push_line(body, "- task: `unknown`");
         }
+        if let Some(slice_id) = value_str(delivery, "slice_id") {
+            push_line(body, &format!("  - slice: {slice_id}"));
+        }
         if let Some(owner) = value_str(delivery, "owner") {
             push_line(body, &format!("  - owner: {owner}"));
         }
         if let Some(branch) = value_str(delivery, "branch") {
             push_line(body, &format!("  - branch: {branch}"));
+        }
+        if let Some(worktree) = value_str(delivery, "worktree_path") {
+            push_line(body, &format!("  - worktree: {worktree}"));
         }
         if let Some(pr_link) =
             value_str(delivery, "pr_url").or_else(|| value_str(delivery, "pr_link"))
@@ -257,76 +279,6 @@ fn push_known_gaps(body: &mut String, proof: &GoalProof) {
     push_blank(body);
 }
 
-fn push_review_evidence(body: &mut String, proof_value: &Value) {
-    push_heading(body, "Review Evidence");
-    let artifacts = proof_value
-        .get("review_artifacts")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-    if artifacts.is_empty() {
-        push_line(body, "- No structured review wall evidence recorded.");
-    } else {
-        for artifact in artifacts {
-            let pass = value_str(artifact, "pass").unwrap_or("unknown");
-            let status = value_str(artifact, "status").unwrap_or("unknown");
-            let summary = value_str(artifact, "summary").unwrap_or("no summary");
-            push_line(body, &format!("- {pass}: {status} - {summary}"));
-        }
-    }
-    push_blank(body);
-}
-
-fn push_integration_evidence(body: &mut String, proof_value: &Value) {
-    push_heading(body, "Integration Evidence");
-    let Some(evidence) = proof_value.get("integration_evidence") else {
-        push_line(body, "- No integration evidence recorded.");
-        push_blank(body);
-        return;
-    };
-    if let Some(status) = value_str(evidence, "status") {
-        push_line(body, &format!("- status: {status}"));
-    }
-    if let Some(summary) = value_str(evidence, "summary") {
-        push_line(body, &format!("- summary: {summary}"));
-    }
-    if let Some(missing) = string_array(evidence.get("missing_evidence")) {
-        if !missing.is_empty() {
-            push_line(body, "- missing evidence:");
-            for gap in missing {
-                push_line(body, &format!("  - {gap}"));
-            }
-        }
-    }
-    push_blank(body);
-}
-
-fn push_oracle_evidence(body: &mut String, proof_value: &Value) {
-    push_heading(body, "Oracle Evidence");
-    let Some(evidence) = proof_value.get("oracle_evidence") else {
-        push_line(body, "- No oracle evidence recorded.");
-        push_blank(body);
-        return;
-    };
-    if let Some(kind) = value_str(evidence, "kind") {
-        push_line(body, &format!("- kind: {kind}"));
-    }
-    if let Some(status) = value_str(evidence, "status") {
-        push_line(body, &format!("- status: {status}"));
-    }
-    if let Some(checks) = evidence.get("checks").and_then(Value::as_array) {
-        push_line(body, "- checks:");
-        for check in checks {
-            let name = value_str(check, "name").unwrap_or("unknown");
-            let status = value_str(check, "status").unwrap_or("unknown");
-            let gate = value_str(check, "gate").unwrap_or("no gate");
-            push_line(body, &format!("  - {name}: {status} ({gate})"));
-        }
-    }
-    push_blank(body);
-}
-
 fn push_changed_files(body: &mut String, proof: &GoalProof) {
     push_heading(body, "Changed Files");
     if proof.changed_files.is_empty() {
@@ -355,11 +307,48 @@ fn push_artifacts(body: &mut String, proof: &GoalProof) {
     }
 }
 
-fn value_str<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+fn display_path(path: &Path) -> String {
+    path.display().to_string()
+}
+
+fn select_head_branch(proof: &GoalProof, delivery_metadata: &[Value]) -> Option<String> {
+    delivery_metadata
+        .iter()
+        .find_map(|delivery| value_str(delivery, "branch").map(str::to_string))
+        .or_else(|| {
+            proof
+                .git
+                .as_ref()
+                .map(|git| git.branch.clone())
+                .filter(|branch| !branch.trim().is_empty())
+        })
+}
+
+fn select_pr_url(delivery_metadata: &[Value]) -> Option<String> {
+    delivery_metadata.iter().find_map(|delivery| {
+        value_str(delivery, "pr_url")
+            .or_else(|| value_str(delivery, "pr_link"))
+            .map(str::to_string)
+    })
+}
+
+pub(super) fn push_heading(body: &mut String, heading: &str) {
+    let _ = writeln!(body, "## {heading}");
+}
+
+pub(super) fn push_line(body: &mut String, line: &str) {
+    let _ = writeln!(body, "{line}");
+}
+
+pub(super) fn push_blank(body: &mut String) {
+    body.push('\n');
+}
+
+pub(super) fn value_str<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key).and_then(Value::as_str)
 }
 
-fn string_array(value: Option<&Value>) -> Option<Vec<String>> {
+pub(super) fn string_array(value: Option<&Value>) -> Option<Vec<String>> {
     let values = value?.as_array()?;
     Some(
         values
@@ -369,20 +358,4 @@ fn string_array(value: Option<&Value>) -> Option<Vec<String>> {
             .collect(),
     )
     .filter(|values: &Vec<String>| !values.is_empty())
-}
-
-fn display_path(path: &Path) -> String {
-    path.display().to_string()
-}
-
-fn push_heading(body: &mut String, heading: &str) {
-    let _ = writeln!(body, "## {heading}");
-}
-
-fn push_line(body: &mut String, line: &str) {
-    let _ = writeln!(body, "{line}");
-}
-
-fn push_blank(body: &mut String) {
-    body.push('\n');
 }

@@ -148,7 +148,7 @@ fn run_goal_to_review(
 ) {
     omk_cmd(envs)
         .current_dir(project_dir)
-        .args(["goal", "run", goal, "--until-ready"])
+        .args(["goal", "run", goal])
         .assert()
         .success();
 

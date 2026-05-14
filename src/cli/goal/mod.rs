@@ -38,13 +38,13 @@ pub(crate) struct Args {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum GoalCommands {
-    /// Create a durable goal scaffold
+    /// Create a scaffold, or run the controller loop with --until-ready
     #[command(after_help = help::GOAL_RUN_AFTER_HELP)]
     Run {
         /// High-level engineering goal (quote it if it contains spaces)
         #[arg(value_name = "GOAL")]
         goal: String,
-        /// Keep working until the goal is proof-backed ready (controller hint)
+        /// Drive plan, verify, execute, and review until ready or blocked
         #[arg(long)]
         until_ready: bool,
         /// Wall-clock budget -- number with suffix s/m/h/d (for example: 8h, 7d)
