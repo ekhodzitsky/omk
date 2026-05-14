@@ -136,7 +136,9 @@ retry policy, and current lease-expiration field. Recovered stale workers are qu
 stale-worker outbox/heartbeat updates are ignored. When the agent changes project files, `execute` reruns verification
 gates against the mutated tree and records post-mutation gate evidence. `omk
 goal review` records controller review and bounded secret-scan security evidence
-under `artifacts/reviews/`. Integration, specialist review loops, and ready
+under `artifacts/reviews/`, and `proof.json.review_artifacts` exposes a
+deterministic six-pass review wall for architect, code, test, security,
+performance, and anti-slop readiness checks. Integration acceptance and ready
 proof generation are still planned. The current `team run`, event log, gates, and
 proof systems remain the execution foundation. The design is tracked in
 [SPEC.md](SPEC.md), the delivery path in [ROADMAP.md](ROADMAP.md), and the task
@@ -301,8 +303,9 @@ omk goal cancel latest
 `omk goal` currently creates durable goal state, planning artifacts, a task
 graph with controller-owned task evidence, local verification task evidence,
 local and post-mutation gate evidence, policy-validated multi-task Wire-backed
-agent task/mutation evidence, accepted and later-dispatched agent-proposed follow-up tasks, controller review/security evidence, and honest
-not-ready/cancelled proof artifacts. Goal proofs also capture best-effort git
+agent task/mutation evidence, accepted and later-dispatched agent-proposed
+follow-up tasks, controller review/security evidence, structured six-pass review
+wall evidence, and honest not-ready/cancelled proof artifacts. Goal proofs also capture best-effort git
 branch, HEAD commit, and dirty-state evidence when run inside a git worktree.
 
 ### Power-user modes

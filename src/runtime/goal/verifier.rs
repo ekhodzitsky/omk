@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use regex::Regex;
+use serde_json::Value;
 use std::path::{Component, Path, PathBuf};
 
 use super::evidence::{local_verification_task_evidence, GoalReviewEvidence};
@@ -194,6 +195,75 @@ fn safe_project_file_path(project_dir: &Path, changed_file: &str) -> Option<Path
     Some(project_dir.join(path))
 }
 
+fn review_wall_markdown(artifacts: &[Value]) -> String {
+    if artifacts.is_empty() {
+        return "No structured review wall artifacts were produced.".to_string();
+    }
+
+    artifacts
+        .iter()
+        .map(review_artifact_markdown)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn review_artifact_markdown(artifact: &Value) -> String {
+    let pass = artifact
+        .get("pass")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let status = artifact
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let recommended_next_step = artifact
+        .get("recommended_next_step")
+        .and_then(Value::as_str)
+        .unwrap_or("No next step recorded.");
+    format!(
+        "## {}\n\n\
+         Status: `{status}`\n\n\
+         Evidence:\n{}\n\n\
+         Risks:\n{}\n\n\
+         Known gaps:\n{}\n\n\
+         Recommended next step: {recommended_next_step}",
+        review_pass_title(pass),
+        markdown_list(artifact, "evidence"),
+        markdown_list(artifact, "risks"),
+        markdown_list(artifact, "known_gaps"),
+    )
+}
+
+fn review_pass_title(pass: &str) -> &'static str {
+    match pass {
+        "architect" => "Architect",
+        "code" => "Code",
+        "test" => "Test",
+        "security" => "Security",
+        "performance" => "Performance",
+        "anti-slop" => "Anti-Slop",
+        _ => "Unknown",
+    }
+}
+
+fn markdown_list(artifact: &Value, field: &str) -> String {
+    let values = artifact
+        .get(field)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    if values.is_empty() {
+        return "- none".to_string();
+    }
+    values
+        .iter()
+        .map(|value| format!("- {value}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub(crate) async fn write_goal_review_evidence(
     state: &GoalState,
     task_graph: &GoalTaskGraph,
@@ -211,6 +281,15 @@ pub(crate) async fn write_goal_review_evidence(
     let agent_execution_done = goal_task_done(task_graph, GOAL_AGENT_EXECUTE_TASK_ID);
     let gates_ok = !proof.gates.is_empty() && gates_passed(&proof.gates);
     let security_findings = scan_goal_security_findings(project_dir, &proof.changed_files).await?;
+    let review_ok = local_verify_done && agent_execution_done;
+    let security_ok = agent_execution_done && security_findings.is_empty();
+    let review_artifacts = super::proof::collect_review_artifacts(
+        review_ok,
+        security_ok,
+        &proof.gates,
+        &proof.changed_files,
+    );
+    let review_wall = review_wall_markdown(&review_artifacts);
 
     let review_summary = if local_verify_done && agent_execution_done && gates_ok {
         "Controller review passed: local gate evidence and agent execution evidence are present."
@@ -267,6 +346,8 @@ pub(crate) async fn write_goal_review_evidence(
          Goal ID: `{}`\n\n\
          ## Result\n\n\
          {review_summary}\n\n\
+         ## Review Wall\n\n\
+         {review_wall}\n\n\
          ## Task Evidence\n\n\
          {task_lines}\n\n\
          ## Gate Evidence\n\n\
