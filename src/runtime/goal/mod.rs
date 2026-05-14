@@ -97,15 +97,23 @@ pub async fn resolve_goal(goal_id: &str) -> Result<GoalState> {
         if let Some(goal) = goals.drain(..).next() {
             return Ok(goal);
         }
-        anyhow::bail!("No goals found");
+        anyhow::bail!(
+            "No goals found in {}\n\nCreate one with:\n  omk goal run \"<engineering goal>\"",
+            state::goals_dir().display()
+        );
     }
 
     let goal_dir = state::goals_dir().join(goal_id);
     if !goal_dir.exists() {
-        anyhow::bail!("Goal '{}' not found", goal_id);
+        anyhow::bail!(
+            "Goal '{goal_id}' not found.\n\nList existing goals:\n  omk goal list\n\nState directory: {}",
+            state::goals_dir().display()
+        );
     }
     GoalState::load(&goal_dir).await
 }
+
+pub(crate) use state::parse_budget_duration;
 
 pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
     let goal = resolve_goal(goal_id).await?;
