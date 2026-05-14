@@ -106,6 +106,84 @@ find ~/.local/state/omk/team -name failure.json -o -name proof.json
 Failed or interrupted runs should produce `failure.json`. Not-ready proof output
 usually means a required verification gate failed or never ran.
 
+### Greenfield goal proof stays `not_ready`
+
+This is expected for the current `omk goal` MVP until all evidence exists. Check
+the proof first:
+
+```bash
+omk goal show latest
+omk goal proof latest --format md
+omk goal replay latest --format text
+```
+
+Common missing evidence:
+
+- no local gates ran;
+- required gates failed;
+- `omk goal execute latest` has not run;
+- `omk goal review latest` has not attached review and security evidence;
+- agent changes exist, but the integration loop has not accepted, committed, or
+  opened a PR for them.
+
+The proof distinguishes **engineering-ready evidence** from **product-ready
+release acceptance**. Passing gates plus agent/review evidence means the result
+is ready for engineering handoff. Product readiness still requires human
+acceptance, PR/release work, and any product or positioning decisions.
+
+### Greenfield goal has no gates
+
+`omk goal verify` auto-detects gates from project files. A blank directory has
+no reliable oracle, so the proof records the gap instead of pretending success.
+For the greenfield acceptance demo, start with a tiny project fixture:
+
+```bash
+cargo new omk-goal-greenfield-demo
+cd omk-goal-greenfield-demo
+omk setup
+omk goal run "Build a tiny local-only Rust CLI with add/list commands and tests" --max-agents 1
+omk goal verify latest
+```
+
+For non-Rust projects, add a project-native manifest (`package.json`,
+`pyproject.toml`, `go.mod`) or define explicit gates in `.omk/gates.toml`.
+
+### `omk goal execute` cannot start workers
+
+Goal execution needs a Wire-capable Kimi runtime:
+
+```bash
+kimi --version
+kimi auth status
+omk goal execute latest
+```
+
+For offline tests, `MOCK_KIMI` must point at an executable wire-compatible mock,
+not just be set to arbitrary text:
+
+```bash
+MOCK_KIMI=/path/to/mock-kimi-wire omk goal execute latest
+```
+
+If Kimi is unavailable, `goal run`, `goal show`, `goal verify`, `goal proof`,
+and `goal replay` still produce useful planning and gate artifacts, but the
+proof should remain `not_ready` because bounded agent execution evidence is
+missing.
+
+### Goal blocked on human oracle
+
+Vague requests such as "make this app great" or "build a product users love"
+can stop as `blocked_on_human`. Rewrite the goal with testable behavior,
+explicit constraints, and gates:
+
+```bash
+omk goal run "Build a local-only Rust CLI named taskline with add/list commands, tasks.txt storage, command tests, no network access, and no new dependencies"
+```
+
+If the goal depends on taste, pricing, legal review, credentials, or external
+business judgment, capture that as a human decision before expecting autonomous
+execution to continue.
+
 ### Kimi assets drift
 
 If agent behavior does not match expected roles/hooks/skills:
