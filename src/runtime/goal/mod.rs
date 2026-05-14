@@ -37,7 +37,10 @@ pub use task_graph::{
     GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryRecord, GoalTaskDeliveryStatus,
     GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
 };
-pub use worktree::{plan_goal_worktree, plan_goal_worktrees, GoalWorktreePlan};
+pub use worktree::{
+    materialize_goal_worktrees, plan_goal_worktree, plan_goal_worktrees,
+    GoalWorktreeMaterializeOutcome, GoalWorktreeMaterializeRequest, GoalWorktreePlan,
+};
 
 pub async fn create_goal(goal: &str, options: CreateGoalOptions) -> Result<GoalState> {
     planner::create_goal_with_scaffold(goal, options).await
