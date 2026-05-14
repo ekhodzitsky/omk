@@ -17,8 +17,6 @@ fn omk_cmd(envs: &[(&'static str, PathBuf)]) -> Command {
     cmd
 }
 
-// ---------- help text ----------
-
 #[test]
 fn test_goal_top_help_describes_runtime_and_lists_examples() {
     let mut cmd = Command::cargo_bin("omk").unwrap();
@@ -41,7 +39,10 @@ fn test_goal_run_help_lists_examples_and_documents_budget_units() {
         .stdout(predicate::str::contains("Examples:"))
         .stdout(predicate::str::contains("Fix all failing cargo tests"))
         .stdout(predicate::str::contains("suffix s/m/h/d"))
-        .stdout(predicate::str::contains("must be > 0"));
+        .stdout(predicate::str::contains("must be > 0"))
+        .stdout(predicate::str::contains("one-command controller"))
+        .stdout(predicate::str::contains("verify -> execute -> review"))
+        .stdout(predicate::str::contains("manual recovery"));
 }
 
 #[test]
@@ -77,8 +78,6 @@ fn test_goal_list_status_show_help_are_present() {
             .stdout(predicate::str::contains("Examples:"));
     }
 }
-
-// ---------- input validation ----------
 
 #[test]
 fn test_goal_run_rejects_empty_goal_with_actionable_error() {
@@ -175,8 +174,6 @@ fn test_goal_budget_add_rejects_invalid_time_eagerly() {
         .stderr(predicate::str::contains("invalid duration 'abc'"));
 }
 
-// ---------- resolve errors ----------
-
 #[test]
 fn test_goal_show_latest_when_no_goals_emits_actionable_hint() {
     let (_tmp, envs) = isolated_env();
@@ -222,8 +219,6 @@ fn test_goal_list_empty_state_is_user_friendly() {
         .stdout(predicate::str::contains("No goals found"))
         .stdout(predicate::str::contains("omk goal run"));
 }
-
-// ---------- output consistency ----------
 
 #[test]
 fn test_goal_show_json_shortcut_matches_format_json() {
@@ -308,8 +303,6 @@ fn test_goal_pause_includes_resume_hint() {
         .stdout(predicate::str::contains("omk goal resume"));
 }
 
-// ---------- exit codes ----------
-
 #[test]
 fn test_clap_usage_error_exits_with_code_2() {
     // clap's standard exit code for usage errors is 2; lock that in so wrapper
@@ -331,8 +324,6 @@ fn test_validation_error_exits_with_code_1() {
         .assert()
         .code(1);
 }
-
-// ---------- numeric edge cases ----------
 
 #[test]
 fn test_goal_run_rejects_negative_budget_usd() {
@@ -371,8 +362,6 @@ fn test_goal_run_rejects_infinite_budget_usd() {
             "--budget-usd must be a positive, finite number",
         ));
 }
-
-// ---------- 0s asymmetry between `run` and `budget-add` ----------
 
 #[test]
 fn test_goal_run_accepts_zero_budget_time_for_exhaustion_path() {

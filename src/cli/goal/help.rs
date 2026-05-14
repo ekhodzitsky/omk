@@ -36,10 +36,10 @@ Examples:
   omk goal run \"Ship CLI UX polish PR\" --until-ready
   omk goal run \"Migrate Python to Rust\" --until-ready --budget-time 7d --budget-tokens 2000000 --budget-usd 25 --max-agents 3
 
-The command always creates a durable goal scaffold and exits. To execute the
-goal, follow up with:
-  omk goal execute latest
-  omk goal review latest";
+Without --until-ready, the command creates a durable scaffold for inspection.
+With --until-ready, it becomes the one-command controller: plan -> verify -> execute -> review.
+Inspection commands remain available for manual recovery, but they are not the
+happy-path driver.";
 
 pub(super) const GOAL_LIST_AFTER_HELP: &str = "\
 Examples:
@@ -149,5 +149,6 @@ pub(super) const GOAL_LONG_ABOUT: &str = "\
 Goal runtime -- durable, proof-driven engineering goals.
 
 Each goal owns a state directory with PRD, technical plan, task graph,
-event log, and proof bundle. Use the subcommands below to create, inspect,
-execute, verify, review, pause, resume, or cancel a goal.";
+event log, and proof bundle. `omk goal run --until-ready` drives the primary
+one-command controller loop; the other subcommands inspect, recover, pause,
+resume, or cancel a goal.";

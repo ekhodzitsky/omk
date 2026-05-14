@@ -4,6 +4,10 @@ use chrono::Utc;
 use super::state::{GoalFailure, GoalState, GoalStatus};
 use super::{budget, state};
 
+mod until_ready;
+
+pub(crate) use until_ready::run_goal_until_ready;
+
 pub async fn pause_goal(goal_id: &str) -> Result<GoalState> {
     let mut state = super::resolve_goal(goal_id).await?;
     if matches!(state.status, GoalStatus::Ready | GoalStatus::Cancelled) {

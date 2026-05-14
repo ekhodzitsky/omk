@@ -5,6 +5,7 @@ mod agent;
 mod budget;
 mod control;
 mod decision;
+mod delivery;
 mod dispatch;
 mod evidence;
 mod integration;
@@ -28,11 +29,18 @@ pub use budget::{
     add_goal_budget, add_goal_budget_limits, evaluate_task_budget, goal_budget, GoalBudgetAdd,
     GoalBudgetCheckpoint, GoalBudgetReport, PerTaskBudgetSnapshot,
 };
+pub(crate) use control::run_goal_until_ready;
 pub use control::{cancel_goal, pause_goal, resume_goal};
+pub use delivery::{
+    deliver_goal_open_pr_with_client, open_goal_pr_with_client, GoalDeliveryPolicy,
+    GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrDeliveryOptions,
+    GoalGithubPrDeliveryOutcome, GoalGithubPrMutation, GoalGithubPrOperation, GoalGithubPrRequest,
+};
 pub use evidence::GoalGitEvidence;
 pub(crate) use integration::{accept_goal, reject_goal};
 pub use lifecycle::{execute_goal, review_goal, verify_goal};
 pub(crate) use open_pr::render_goal_open_pr;
+pub use open_pr::GoalOpenPrDraft;
 pub use oracle::GoalKind;
 pub use progress::{GoalProgressLine, GoalProgressLineKind, GoalProgressSnapshot};
 pub use proof::GoalProof;
@@ -50,6 +58,7 @@ pub use task_graph::{
     GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryRecord, GoalTaskDeliveryStatus,
     GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
 };
+pub(crate) use types::GoalRunUntilReadyOutcome;
 pub use types::{GoalBudget, GoalId};
 pub use worktree::{
     detect_goal_merge_conflicts, materialize_goal_worktrees, plan_goal_worktree,
