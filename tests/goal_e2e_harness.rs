@@ -16,6 +16,7 @@ fn test_goal_run_until_ready_first_user_path_records_progress_and_proof() {
         .args(["setup"])
         .assert()
         .success();
+    commit_all_if_changed(project.path(), "record omk setup");
 
     let run = omk_cmd(&envs)
         .env("MOCK_KIMI", mock_kimi_path())
@@ -211,6 +212,26 @@ fn seed_git_project(project_dir: &Path) {
     git(project_dir, &["config", "user.name", "OMK Test"]);
     git(project_dir, &["add", "."]);
     git(project_dir, &["commit", "-m", "baseline"]);
+}
+
+fn commit_all_if_changed(project_dir: &Path, message: &str) {
+    git(project_dir, &["add", "."]);
+    let output = StdCommand::new("git")
+        .arg("-C")
+        .arg(project_dir)
+        .args(["status", "--porcelain"])
+        .output()
+        .expect("git status should launch");
+    assert!(
+        output.status.success(),
+        "git status failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if output.stdout.is_empty() {
+        return;
+    }
+    git(project_dir, &["commit", "-m", message]);
 }
 
 fn write_gate_config(project_dir: &Path) {
