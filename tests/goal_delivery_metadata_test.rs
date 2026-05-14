@@ -253,6 +253,7 @@ fn public_goal_proof_literal_remains_source_compatible() {
         post_mutation_gates_ran: false,
         known_gaps: Vec::new(),
         human_decisions_required: Vec::new(),
+        recovery_status: None,
     };
 
     assert_eq!(proof.goal_id, "goal-delivery-test");

@@ -1,8 +1,35 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 use uuid::Uuid;
+
+/// Typed error for goal state loading failures.
+///
+/// Distinguishes missing files from corrupted or invalid-format state
+/// so callers and tests can match on the root cause.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GoalStateError {
+    MissingFile { path: String },
+    IoError { path: String, reason: String },
+    InvalidFormat { path: String, reason: String },
+}
+
+impl std::fmt::Display for GoalStateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingFile { path } => write!(f, "Goal state file missing: {path}"),
+            Self::IoError { path, reason } => {
+                write!(f, "Goal state file unreadable at {path}: {reason}")
+            }
+            Self::InvalidFormat { path, reason } => {
+                write!(f, "Goal state file has invalid format at {path}: {reason}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for GoalStateError {}
 
 pub const GOALS_DIR: &str = "goals";
 pub const GOAL_STATE_FILE: &str = "goal.json";
@@ -184,11 +211,23 @@ impl GoalState {
 
     pub async fn load(goal_dir: &Path) -> Result<Self> {
         let path = goal_dir.join(GOAL_STATE_FILE);
-        let json = tokio::fs::read_to_string(&path)
-            .await
-            .with_context(|| format!("Failed to read goal state: {}", path.display()))?;
-        let mut state: Self = serde_json::from_str(&json)
-            .with_context(|| format!("Failed to parse goal state: {}", path.display()))?;
+        let json = tokio::fs::read_to_string(&path).await.map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                GoalStateError::MissingFile {
+                    path: path.display().to_string(),
+                }
+            } else {
+                GoalStateError::IoError {
+                    path: path.display().to_string(),
+                    reason: e.to_string(),
+                }
+            }
+        })?;
+        let mut state: Self =
+            serde_json::from_str(&json).map_err(|e| GoalStateError::InvalidFormat {
+                path: path.display().to_string(),
+                reason: e.to_string(),
+            })?;
         state.state_dir = goal_dir.to_path_buf();
         Ok(state)
     }
