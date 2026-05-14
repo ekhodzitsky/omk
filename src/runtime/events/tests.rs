@@ -11,6 +11,8 @@ use crate::runtime::events::{
     Event, EventBuilder, EventKind, EventReader, EventWriter, GateId, RunId, TaskId, WorkerId,
 };
 
+mod reader_edge_cases;
+
 #[test]
 fn event_roundtrip() {
     let event = Event::new(RunId("test".to_string()), EventKind::RunStarted)

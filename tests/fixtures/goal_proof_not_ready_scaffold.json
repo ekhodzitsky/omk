@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "goal_id": "<goal-id>",
+  "status": "not_ready",
+  "readiness": "not ready: controller scaffold has not executed agents or verification gates",
+  "summary": "Goal 'Build deterministic proof snapshot coverage' has durable planning artifacts, but no local verification or agent execution evidence yet.",
+  "generated_at": "<timestamp>",
+  "artifacts": [
+    {
+      "kind": "prd",
+      "path": "prd.md",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "technical_plan",
+      "path": "technical-plan.md",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "task_graph",
+      "path": "task-graph.json",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "test_spec",
+      "path": "test-spec.md",
+      "created_at": "<timestamp>"
+    }
+  ],
+  "task_graph_summary": {
+    "total_tasks": 6,
+    "pending_tasks": 4,
+    "blocked_tasks": 0,
+    "done_tasks": 2
+  },
+  "changed_files": [],
+  "commits": [],
+  "gates": [],
+  "post_mutation_gates_ran": false,
+  "known_gaps": [
+    "agent execution has not run for this goal yet",
+    "verification gates have not run for this goal",
+    "proof cannot claim readiness until agent-owned execution evidence exists"
+  ],
+  "human_decisions_required": []
+}

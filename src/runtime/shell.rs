@@ -3,11 +3,12 @@ use anyhow::Result;
 /// Escape a string for safe inclusion in a POSIX shell command.
 ///
 /// This uses the `shlex` crate to properly handle:
-/// - Single quotes -> '\'''
 /// - Dollar signs -> no expansion
 /// - Backslashes -> preserved
 /// - Newlines -> preserved within quotes
 /// - Empty strings -> "''"
+/// - Strings containing single quotes -> wrapped in double quotes
+///   (or the `'\''` idiom when shell metacharacters force it)
 ///
 /// # Example
 /// ```
@@ -141,5 +142,78 @@ mod tests {
             let parsed = shlex::split(&format!("cmd {escaped}"));
             assert_eq!(parsed, Some(vec!["cmd".to_string(), s.to_string()]));
         }
+    }
+
+    #[test]
+    fn shell_escape_roundtrip_extra_dangerous_inputs() {
+        // Additional edge cases beyond the basic roundtrip set: characters
+        // that would change meaning if unquoted (redirects, globs, mixed
+        // quoting, escapes, embedded tabs, non-ASCII), and a payload that
+        // mixes several at once.
+        let cases = [
+            "> /etc/passwd",
+            "< /dev/null",
+            "* glob ?",
+            "&& malicious",
+            "|| fallback",
+            r"path\with\backslashes",
+            "it's \"double\" too",
+            "a\tb",
+            "café — мир 🌍",
+            "mix: $X `cmd` 'q' \"q\" \\ \t end",
+        ];
+
+        for s in cases {
+            let escaped = shell_escape(s).expect("shell_escape must succeed for safe text");
+            let parsed = shlex::split(&format!("cmd {escaped}"));
+            assert_eq!(
+                parsed,
+                Some(vec!["cmd".to_string(), s.to_string()]),
+                "roundtrip failed for input: {s:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn shell_escape_rejects_null_byte() {
+        // shlex::try_quote refuses NUL bytes; this is the documented escape
+        // hatch surfaced as an error rather than a silently broken command.
+        assert!(shell_escape("foo\0bar").is_err());
+    }
+
+    #[test]
+    fn validate_safe_allows_intended_whitespace() {
+        // \n and \t are the two intentionally allow-listed control bytes;
+        // regular spaces and printable punctuation must pass too.
+        assert!(validate_safe("").is_ok());
+        assert!(validate_safe("hello world").is_ok());
+        assert!(validate_safe("line1\nline2").is_ok());
+        assert!(validate_safe("col1\tcol2").is_ok());
+        assert!(validate_safe("mix\nof\tboth").is_ok());
+    }
+
+    #[test]
+    fn validate_safe_rejects_other_control_chars() {
+        // Every non-allow-listed ASCII control byte must be rejected,
+        // including \r, vertical tab, form feed, BEL, ESC, and DEL.
+        for byte in 0u8..=31 {
+            if byte == b'\n' || byte == b'\t' {
+                continue;
+            }
+            let s = format!("a{}b", byte as char);
+            assert!(
+                validate_safe(&s).is_err(),
+                "byte 0x{byte:02x} must be rejected",
+            );
+        }
+        // DEL (0x7F) is also classified as ASCII control.
+        assert!(validate_safe("a\x7fb").is_err());
+    }
+
+    #[test]
+    fn validate_safe_allows_non_ascii_unicode() {
+        // Multi-byte UTF-8 sequences must not be misread as control bytes;
+        // every continuation byte has the top bit set and is >= 0x80.
+        assert!(validate_safe("héllo мир 🌍").is_ok());
     }
 }
