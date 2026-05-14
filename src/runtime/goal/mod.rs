@@ -53,10 +53,11 @@ pub use state::{
     GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
 };
 pub use task_graph::{
-    load_goal_task_delivery_records, read_goal_task_delivery_metadata,
-    update_goal_task_delivery_metadata, GoalTask, GoalTaskDeliveryMetadata,
-    GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryRecord, GoalTaskDeliveryStatus,
-    GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
+    load_goal_task_delivery_records, plan_goal_delivery_slices, read_goal_task_delivery_metadata,
+    record_goal_delivery_slice_plan, update_goal_task_delivery_metadata,
+    GoalDeliveryOverlapSerialization, GoalDeliverySlice, GoalDeliverySlicePlan, GoalTask,
+    GoalTaskDeliveryMetadata, GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryRecord,
+    GoalTaskDeliveryStatus, GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
 };
 pub(crate) use types::GoalRunUntilReadyOutcome;
 pub use types::{GoalBudget, GoalId};

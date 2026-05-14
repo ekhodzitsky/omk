@@ -17,6 +17,7 @@ use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 
 mod artifacts;
+mod delivery;
 
 pub(crate) async fn create_goal_with_scaffold(
     goal: &str,
@@ -93,6 +94,9 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
         record_artifact(&mut state, kind, path, now);
     }
     append_controller_task_events(&state, &task_graph).await?;
+    if state.until_ready && state.status != GoalStatus::BlockedOnHuman {
+        delivery::materialize_delivery_slices(&state, &task_graph, &cwd).await?;
+    }
 
     state.phase = GoalPhase::Proof;
     let git = detect_git_evidence(&cwd).await;
