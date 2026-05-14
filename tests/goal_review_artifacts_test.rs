@@ -92,6 +92,38 @@ fn proof_json(envs: &[(&'static str, PathBuf)], project_dir: &Path) -> Value {
     serde_json::from_slice(&output.stdout).expect("proof output should be JSON")
 }
 
+fn proof_markdown(envs: &[(&'static str, PathBuf)], project_dir: &Path) -> String {
+    let mut cmd = omk_cmd(envs);
+    let output = cmd
+        .current_dir(project_dir)
+        .args(["goal", "proof", "latest", "--format", "md"])
+        .output()
+        .expect("omk goal proof markdown failed");
+    assert!(
+        output.status.success(),
+        "goal proof markdown failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("proof markdown should be utf-8")
+}
+
+fn latest_goal_dir(envs: &[(&'static str, PathBuf)]) -> PathBuf {
+    let state_home = envs
+        .iter()
+        .find(|(key, _)| *key == "XDG_STATE_HOME")
+        .map(|(_, value)| value)
+        .expect("isolated env should include XDG_STATE_HOME");
+    let goals_dir = state_home.join("omk").join("goals");
+    let mut dirs = fs::read_dir(&goals_dir)
+        .expect("goals dir should exist")
+        .map(|entry| entry.expect("goal dir entry").path())
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+    dirs.sort();
+    dirs.pop().expect("goal dir should exist")
+}
+
 fn init_git_project(project_dir: &Path) {
     git(project_dir, &["init"]);
     git(project_dir, &["config", "user.email", "omk@example.com"]);
@@ -179,12 +211,42 @@ fn goal_review_records_typed_reviewer_artifacts_without_model_calls() {
         })
         .collect();
 
-    assert_eq!(by_pass.len(), 5);
+    assert_eq!(by_pass.len(), 6);
     assert_eq!(by_pass.get("architect"), Some(&"passed"));
     assert_eq!(by_pass.get("code"), Some(&"passed"));
     assert_eq!(by_pass.get("test"), Some(&"passed"));
     assert_eq!(by_pass.get("security"), Some(&"passed"));
     assert_eq!(by_pass.get("performance"), Some(&"passed"));
+    assert_eq!(by_pass.get("anti-slop"), Some(&"passed"));
+
+    for artifact in artifacts {
+        assert!(
+            artifact.get("status").is_some(),
+            "review artifact missing status: {artifact}"
+        );
+        assert!(
+            artifact.get("evidence").and_then(Value::as_array).is_some(),
+            "review artifact missing evidence array: {artifact}"
+        );
+        assert!(
+            artifact.get("risks").and_then(Value::as_array).is_some(),
+            "review artifact missing risks array: {artifact}"
+        );
+        assert!(
+            artifact
+                .get("known_gaps")
+                .and_then(Value::as_array)
+                .is_some(),
+            "review artifact missing known_gaps array: {artifact}"
+        );
+        assert!(
+            artifact
+                .get("recommended_next_step")
+                .and_then(Value::as_str)
+                .is_some_and(|step| !step.trim().is_empty()),
+            "review artifact missing recommended_next_step: {artifact}"
+        );
+    }
 }
 
 #[test]
@@ -223,4 +285,53 @@ fn goal_review_blocks_proof_when_performance_artifact_is_blocked() {
         "proof readiness must not claim blocked review evidence passed: {}",
         proof["readiness"]
     );
+}
+
+#[test]
+fn goal_review_wall_json_and_markdown_are_stable_and_human_readable() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_smoke_and_performance_gate_config(project.path());
+    init_git_project(project.path());
+    execute_goal_with_agent_evidence(&envs, project.path(), "Render review wall proof");
+    run_goal_review(&envs, project.path());
+
+    let proof = proof_json(&envs, project.path());
+    let artifacts = proof["review_artifacts"]
+        .as_array()
+        .expect("proof should include review artifacts");
+    let passes = artifacts
+        .iter()
+        .map(|artifact| artifact["pass"].as_str().expect("pass name"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        passes,
+        vec![
+            "architect",
+            "code",
+            "test",
+            "security",
+            "performance",
+            "anti-slop"
+        ]
+    );
+
+    let proof_md = proof_markdown(&envs, project.path());
+    assert!(proof_md.contains("# Goal Proof "));
+    assert!(proof_md.contains("## Known Gaps"));
+
+    let review_md = fs::read_to_string(
+        latest_goal_dir(&envs)
+            .join("artifacts")
+            .join("reviews")
+            .join("goal-review.md"),
+    )
+    .expect("review artifact markdown should exist");
+    assert!(review_md.contains("## Architect"));
+    assert!(review_md.contains("## Code"));
+    assert!(review_md.contains("## Test"));
+    assert!(review_md.contains("## Security"));
+    assert!(review_md.contains("## Performance"));
+    assert!(review_md.contains("## Anti-Slop"));
+    assert!(review_md.contains("Recommended next step:"));
 }
