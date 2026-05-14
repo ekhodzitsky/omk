@@ -248,7 +248,7 @@ fn oracle_gates(proof: &GoalProof) -> Vec<super::oracle::GoalOracleGate> {
 async fn finish_integrator_decision(
     mut state: GoalState,
     prior_proof: GoalProof,
-    proof: GoalProof,
+    mut proof: GoalProof,
     integration_evidence: Value,
     oracle_evidence: Value,
     now: chrono::DateTime<Utc>,
@@ -258,7 +258,6 @@ async fn finish_integrator_decision(
     state.updated_at = now;
     state.save().await?;
 
-    let mut proof = proof;
     proof.git = super::evidence::detect_git_evidence(project_dir)
         .await
         .or(proof.git);

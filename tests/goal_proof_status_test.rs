@@ -215,7 +215,7 @@ fn proof_rebuild_preserves_failed_infra_like_state() {
         .expect("failed to write goal state");
         fs::remove_file(goal_dir.join("proof.json")).expect("failed to remove proof");
 
-        let proof = goal_proof_json(&envs, state["goal_id"].as_str().unwrap(), project.path());
+        let proof = goal_proof_json(&envs, state["goal_id"].as_str().expect("goal_id should be a string"), project.path());
         assert_eq!(proof["status"], status);
         assert!(proof["readiness"]
             .as_str()

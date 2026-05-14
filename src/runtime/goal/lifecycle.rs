@@ -106,10 +106,60 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
         latest_state.status,
         GoalStatus::Paused | GoalStatus::Cancelled | GoalStatus::NeedsMoreBudget
     );
+
+    let (proof_gates, proof_git, proof_changed_files, post_mutation_gates_ran) =
+        run_post_mutation_cycle(
+            &state,
+            project_dir,
+            &mut task_graph,
+            verification_proof,
+            agent_execution_succeeded,
+            &agent_evidence,
+            now,
+        )
+        .await?;
+
+    proof::write_json_artifact(
+        &state.state_dir.join(state::GOAL_TASK_GRAPH_FILE),
+        &task_graph,
+    )
+    .await?;
+
+    let state = finalize_execution_state(
+        state,
+        latest_state,
+        preserve_interrupted_status,
+        &agent_evidence,
+        now,
+    )
+    .await?;
+
+    build_and_persist_execution_proof(
+        &state,
+        &task_graph,
+        proof_gates,
+        proof_changed_files,
+        proof_git,
+        post_mutation_gates_ran,
+        now,
+    )
+    .await
+}
+
+async fn run_post_mutation_cycle(
+    state: &GoalState,
+    project_dir: &Path,
+    task_graph: &mut GoalTaskGraph,
+    verification_proof: GoalProof,
+    agent_execution_succeeded: bool,
+    agent_evidence: &evidence::GoalAgentRunEvidence,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(Vec<crate::runtime::gates::GateResult>, Option<super::evidence::GoalGitEvidence>, Vec<String>, bool)> {
     let mut proof_gates = verification_proof.gates;
     let mut proof_git = verification_proof.git;
-    let mut proof_changed_files = agent_evidence.changed_files;
+    let mut proof_changed_files = agent_evidence.changed_files.clone();
     let mut post_mutation_gates_ran = false;
+
     if agent_execution_succeeded && !proof_changed_files.is_empty() {
         let gate_config = crate::runtime::gates::load_or_detect_gates(project_dir).await;
         let gate_artifacts = state
@@ -123,23 +173,27 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
             Some(&gate_artifacts),
         )
         .await;
-        verifier::append_gate_events(&state, &proof_gates).await?;
+        verifier::append_gate_events(state, &proof_gates).await?;
         proof_git = evidence::detect_git_evidence(project_dir).await;
         proof_changed_files = crate::runtime::gates::detect_changed_files(project_dir).await;
         if let Some(task) =
-            verifier::apply_local_verification_task_result(&mut task_graph, &proof_gates, now)
+            verifier::apply_local_verification_task_result(task_graph, &proof_gates, now)
         {
-            verifier::append_local_verification_task_events(&state, &task).await?;
+            verifier::append_local_verification_task_events(state, &task).await?;
         }
         post_mutation_gates_ran = true;
     }
 
-    proof::write_json_artifact(
-        &state.state_dir.join(state::GOAL_TASK_GRAPH_FILE),
-        &task_graph,
-    )
-    .await?;
+    Ok((proof_gates, proof_git, proof_changed_files, post_mutation_gates_ran))
+}
 
+async fn finalize_execution_state(
+    state: GoalState,
+    latest_state: GoalState,
+    preserve_interrupted_status: bool,
+    agent_evidence: &evidence::GoalAgentRunEvidence,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<GoalState> {
     let mut state = if preserve_interrupted_status {
         latest_state
     } else {
@@ -158,10 +212,21 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     }
     state.updated_at = now;
     state.save().await?;
+    Ok(state)
+}
 
+async fn build_and_persist_execution_proof(
+    state: &GoalState,
+    task_graph: &GoalTaskGraph,
+    proof_gates: Vec<crate::runtime::gates::GateResult>,
+    proof_changed_files: Vec<String>,
+    proof_git: Option<super::evidence::GoalGitEvidence>,
+    post_mutation_gates_ran: bool,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<GoalProof> {
     let proof = proof::build_verified_proof(
-        &state,
-        &task_graph,
+        state,
+        task_graph,
         proof_gates,
         proof_changed_files,
         proof_git,
@@ -169,9 +234,8 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
         now,
     );
     proof::write_json_artifact(&state.state_dir.join(state::GOAL_PROOF_FILE), &proof).await?;
-    append_proof_event(&state, &proof).await?;
-    budget::append_budget_checkpoint(&state, "execute_completed").await?;
-
+    append_proof_event(state, &proof).await?;
+    budget::append_budget_checkpoint(state, "execute_completed").await?;
     Ok(proof)
 }
 
