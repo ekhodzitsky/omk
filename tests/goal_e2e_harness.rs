@@ -18,6 +18,10 @@ fn test_goal_run_until_ready_first_user_path_records_progress_and_proof() {
         .success();
 
     let run = omk_cmd(&envs)
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WRITE_FILE", "agent-output.txt")
+        .env("MOCK_KIMI_WRITE_BODY", "north star goal e2e\n")
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
         .current_dir(project.path())
         .args([
             "goal",
@@ -79,10 +83,11 @@ fn test_goal_run_until_ready_first_user_path_records_progress_and_proof() {
 
     let proof = goal_proof_json(&envs, project.path());
     assert_eq!(proof["status"], "not_ready");
-    assert_eq!(
-        proof["readiness"],
-        "not ready: controller scaffold has not executed agents or verification gates"
-    );
+    assert!(proof["readiness"]
+        .as_str()
+        .is_some_and(|readiness| readiness.contains("integration acceptance")));
+    assert_eq!(proof["post_mutation_gates_ran"], true);
+    assert_json_array_contains_str(&proof["changed_files"], "agent-output.txt");
     for gap in fixture_lines("goal_end_to_end_known_gaps.txt") {
         assert_json_array_contains_str(&proof["known_gaps"], &gap);
     }
