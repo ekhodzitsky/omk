@@ -243,7 +243,9 @@ pub(crate) async fn run_goal_agent_task_wave(
         monitor_cancel.clone(),
     ));
 
-    let run_result = runner.run_with_cancel(&worker_specs, &cancel).await;
+    let run_result = runner
+        .run_with_cancel_reason(&worker_specs, &cancel, "cancelled by user")
+        .await;
     monitor_cancel.cancel();
     let _ = monitor_handle.await;
     cancel.cancel();
@@ -253,7 +255,8 @@ pub(crate) async fn run_goal_agent_task_wave(
 
     let summary = run_result?;
     let worker_results = read_goal_agent_worker_results(&worker_specs, &accepted_task_ids).await?;
-    let worker_summary = summarize_goal_agent_worker_results(&worker_results);
+    let worker_summary = summarize_goal_agent_worker_results(&worker_results)
+        .or_else(|| (summary.cancelled > 0).then(|| "cancelled by user".to_string()));
     let agent_proposed_tasks = extract_goal_agent_task_proposals(&worker_results);
     let changed_files = write_goal_agent_mutation_snapshot(
         state,
