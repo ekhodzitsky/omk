@@ -11,6 +11,12 @@ omk goal run "Build or transform this project until it is proof-backed ready" --
 
 The system should plan, research, spawn agents, assign tasks, verify results,
 recover from failures, and stop only with a proof-backed terminal status.
+With explicit delivery policy, the north star extends to one-command,
+end-to-end repository delivery: task-scoped worktrees, branches, PRs,
+review/fix loops, cleanup, integrator PR, and gated merge into the protected
+baseline.
+The first interface stays terminal-native/TUI-first: fast install, one command,
+live textual orchestration updates, and no graphical UI dependency.
 
 Positioning is locked in `docs/COMPETITIVE_POSITIONING.md`: OMK is a local,
 repo-native, proof-driven autonomous software engineering runtime, not a hosted
@@ -149,7 +155,8 @@ Exit criteria:
 
 ## Stage 7 - GitHub Output
 
-Target: turn long-running goals into reviewable delivery artifacts.
+Target: turn long-running goals into reviewable and mergeable delivery
+artifacts.
 
 - Generate PRs from task-scoped branches instead of writing to `master` /
   `main`.
@@ -159,12 +166,17 @@ Target: turn long-running goals into reviewable delivery artifacts.
 - Attach task id, owner, write scope, and verification wall output.
 - Link changed files, gates, known gaps, and decisions.
 - Support release-candidate output for GitHub-only releases.
+- Under explicit `auto-pr` / `gated` policy, run the whole delivery loop:
+  slice PRs, review/fix iterations, integrator PR, CI/proof gates, and final
+  merge into the protected baseline.
 
 Exit criteria:
 
 - `omk goal open-pr latest --dry-run` creates a reviewable PR draft with proof
   evidence.
 - `omk goal` can map accepted task graph nodes to branches and PR links.
+- End-to-end mode records every created PR, review, fix task, merge decision,
+  integrator result, and final baseline commit in `proof.json`.
 
 ## Stage 8 - Long-Horizon Reliability
 

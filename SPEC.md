@@ -10,6 +10,9 @@ keeps working until the goal is ready, blocked, or out of budget.
 Canonical detailed design:
 `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
+End-to-end delivery contract:
+`docs/superpowers/specs/2026-05-14-omk-goal-end-to-end-delivery.md`
+
 ## Product Thesis
 
 Progress is powered by laziness: users should be able to express intent once and
@@ -22,6 +25,19 @@ The product promise is not "generate lots of code." The product promise is:
 
 `omk goal` must be allowed to run for hours or days, but it must not be allowed
 to claim success without evidence.
+
+## End-to-End Delivery Contract
+
+The north-star `goal` flow is end-to-end delivery, not only local proof. With
+explicit delivery/merge policy, the controller may decompose work, create
+task-scoped teams, branches, worktrees, commits, PRs, review/fix loops, and
+integrator PRs under the hood. The primary UX remains one lazy command and a
+terminal-native/TUI-first view of the orchestrator's progress.
+
+A goal is not fully `ready` in this mode until required slices are reviewed,
+audited, verified, integrated, and merged into `main`/`master`, or stopped with
+precise blocker evidence. Dry-run proof, unmerged branch evidence, and PR drafts
+are useful intermediate output, not the complete end-to-end promise.
 
 ## Must-Have Positioning
 
@@ -258,6 +274,14 @@ Every goal run ends in exactly one terminal status:
 - Mark task slices integrated only after the PR is merged or explicitly
   rejected.
 
+### Operator Experience
+
+The happy path is one command, `omk goal run "<task>" --until-ready`, or a
+future equivalent shorthand. Prefer TUI/terminal output before graphical UI.
+Show a live orchestrator narrative: implemented work, current verification,
+next step, blockers, and material tradeoffs. A glance should reveal whether the
+goal is planning, implementing, reviewing, fixing, merging, blocked, or ready.
+
 ### Verification
 
 The verification wall is configurable, but the default Rust profile includes:
@@ -324,14 +348,7 @@ omk goal accept [goal-id|latest] --summary <text>
 omk goal reject [goal-id|latest] --reason <text>
 ```
 
-Later command surface:
-
-```bash
-omk goal plan <goal>
-omk goal approve-plan <goal-id>
-omk goal add-task <goal-id> <task>
-omk goal open-pr <goal-id> --dry-run
-```
+Future command extensions are defined by the end-to-end delivery contract.
 
 ## MVP Definition
 
