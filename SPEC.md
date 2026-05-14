@@ -94,16 +94,19 @@ current beta MVP instead of inventing a parallel runtime:
   review, and hardening evidence exists;
 - local verification gate execution through `omk goal verify`, with gate output
   artifacts and gate results embedded in the goal proof;
-- local controller execution through `omk goal execute`, which marks the
-  `goal-local-verify` task done when required gates pass, launches
-  policy-validated bounded Wire-backed agent task waves, records mutation diff
-  and changed-file evidence, dispatches accepted agent-proposed follow-up tasks,
-  enforces `max_agents` as the worker pool cap, recovers expired task leases
-  with `retry_scheduled` evidence while preferring a different available worker
-  over the stale owner, quarantines stale workers with `worker_dead` evidence
-  and durable `stale-worker-cleanup.json` markers, ignores late stale-worker
-  outbox/heartbeat updates, and reruns verification gates when agent work
-  changes project files;
+- local controller execution through `omk goal execute`, which:
+  - marks `goal-local-verify` done when required gates pass;
+  - launches policy-validated bounded Wire-backed agent task waves with
+    mutation diff and changed-file evidence;
+  - dispatches accepted agent-proposed follow-up tasks on later invocations;
+  - enforces `max_agents` as the worker pool cap;
+  - recovers expired task leases with `retry_scheduled` evidence, preferring a
+    different available worker over the stale owner;
+  - quarantines stale workers with `worker_dead` evidence and durable
+    `stale-worker-cleanup.json` markers, ignoring late stale-worker
+    outbox/heartbeat updates;
+  - reruns verification gates against the mutated tree when agent work changes
+    project files;
 - active operator interruption during Wire-backed goal execution: `pause` or
   `cancel` updates durable goal state, the active execute process observes the
   state change, cancels workers, prevents additional task dispatch, and
