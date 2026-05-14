@@ -1,3 +1,1 @@
-agent execution has not run for this goal yet
-verification gates have not run for this goal
-proof cannot claim readiness until agent-owned execution evidence exists
+manual integration acceptance is required before ready; local delivery policy keeps GitHub mutation and merge disabled
