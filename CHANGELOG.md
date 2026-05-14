@@ -40,6 +40,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   smoke compatibility, while docs, full macOS build/test, coverage upload, and
   release artifacts stay on protected-branch, scheduled, manual, or release
   workflows.
+- **Documentation audit**: refreshed README, SPEC, ROADMAP, TODO, CONTRIBUTING,
+  AGENTS, SECURITY, and `docs/*` so the worktree/PR workflow, role names, MVP
+  status, and goal-runtime feature surface are consistent across files.
+  Replaced run-on goal-scaffold paragraphs with terse bullet lists pointing at
+  `SPEC.md` / `TODO.md` for the canonical surface.
+
+### Fixed
+
+- **`VERSION` file synced with `Cargo.toml`**: bumped `VERSION` from `0.3.1` to
+  the actual crate version `0.3.30`.
+- **Stale role name `coder`**: renamed remaining `coder` references in
+  `docs/PROJECT_MAP.md` and `docs/north_star_tutorial.md` to the canonical
+  `executor` role used by the role pack and CLI.
+- **Hardcoded version string in `docs/API.md`**: replaced the static `0.3.4`
+  health response example with a `<crate-version>` placeholder that tracks the
+  running binary.
+- **`SECURITY.md` supported versions**: collapsed obsolete 0.1.x / 0.2.x rows
+  into a single "latest 0.3.x" row, matching the pre-1.0 master-only release
+  policy.
 
 ## [0.3.30] - 2026-05-13
 

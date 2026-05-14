@@ -8,7 +8,7 @@ This tutorial walks through the **North Star Demo** — the target oh-my-kimi wo
 
 ```bash
 omk kimi sync
-omk team run 2:coder "fix all failing tests and produce a proof"
+omk team run 2:executor "fix all failing tests and produce a proof"
 omk hud --once
 omk proof show latest
 ```
@@ -79,7 +79,7 @@ Synchronizes OMK Kimi-native assets (agents, hooks, skills) into the current pro
 
 ### Step 3 — `omk team run`
 
-Launches a team of 2 coder workers with the task *"fix the failing test and make cargo test pass"*.
+Launches a team of 2 executor workers with the task *"fix the failing test and make cargo test pass"*.
 
 > **Status:** `omk team run` is the current team runtime. It uses scheduler state and Kimi Wire workers.
 

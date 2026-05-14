@@ -23,14 +23,6 @@ worktree or branch and a pull request.
 8. **Open a PR**: include task/scope, owner, risks, verification evidence, and
    known gaps.
 
-### Optional Trackers
-
-External trackers such as Beads or GitHub Issues may be useful for long-running
-coordination, but they are not required for normal development. The canonical
-handoff surface is the branch/worktree plus PR body. Do not let an agent
-silently initialize a project tracker or make tracker state a prerequisite for
-building, testing, or reviewing the project.
-
 ### Pull Request Rule
 
 Direct pushes to `master` / `main` are not part of the development workflow.
@@ -47,6 +39,11 @@ protected branches, scheduled runs, and releases: full macOS build/test runs
 after merge, docs build outside the PR fast path, coverage uploads from
 push/scheduled/manual runs, and release artifacts are produced only by the
 release workflow.
+
+External trackers (Beads, GitHub Issues, Linear, …) are optional and never a
+prerequisite for building, testing, or reviewing the project. The canonical
+handoff surface is the branch/worktree plus the PR body. Agents must not
+silently initialize a tracker or make tracker state a runtime dependency.
 
 ## Verification Wall
 
