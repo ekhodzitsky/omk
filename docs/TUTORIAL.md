@@ -44,6 +44,28 @@ kimi --version
 kimi auth status
 ```
 
+## First Goal
+
+The shortest lazy flow is one setup step and one goal command:
+
+```bash
+omk setup
+omk goal run "Build a tiny local-only Rust CLI with tests and proof evidence" --until-ready
+```
+
+During the run, the terminal prints the goal id, status, phase, state path, and
+proof path. Inspect the persisted progress and proof afterward:
+
+```bash
+omk goal replay latest
+omk goal proof latest --format md
+```
+
+In the current beta, `--until-ready` records the intent and creates the durable
+controller scaffold. If execution, review, or integration evidence is still
+missing, the proof remains `not_ready` and lists the exact gap instead of
+claiming success.
+
 ## Sync Kimi Assets
 
 Preview first:
@@ -121,16 +143,19 @@ run is not already ready. Cleanup commands should be dry-run first.
 Run the North Star demo without real Kimi API calls:
 
 ```bash
-MOCK_KIMI=1 ./scripts/north_star_demo.sh
+NORTH_STAR_DRY_RUN=1 bash scripts/north_star_demo.sh
 ```
 
-The mock path isolates `HOME`/`XDG_*`, creates a tiny failing Rust fixture,
-repairs it deterministically, and expects a ready proof.
+The dry-run path isolates `HOME`/`XDG_*`, forces a mock Kimi runtime even when
+real Kimi is installed, creates a tiny Rust fixture, runs `omk setup`, runs one
+`omk goal run --until-ready`, and then inspects replay/proof evidence.
 
 ## Greenfield Goal Demo
 
 Use this as the first honest `omk goal` greenfield acceptance example. It is a
-small engineering fixture, not a product launch flow.
+small engineering fixture, not a product launch flow. The happy path starts
+with one command; the later commands are inspection and explicit recovery
+surfaces, not required steering steps.
 
 ```bash
 tmpdir="$(mktemp -d)"
@@ -140,23 +165,21 @@ cd omk-goal-greenfield-demo
 omk setup
 omk goal run \
   "Build a tiny local-only Rust CLI named taskline. It should support add <text> and list commands, store tasks in tasks.txt, include tests for both commands, avoid network access, and add no new dependencies." \
+  --until-ready \
   --budget-time 30m \
   --budget-tokens 200000 \
   --max-agents 1
 omk goal show latest
-omk goal verify latest
-omk goal execute latest
-omk goal review latest
 omk goal proof latest --format md
+omk goal replay latest --format text
 ```
 
 `goal run` creates the durable acceptance artifact set: `goal.json`, `prd.md`,
 `technical-plan.md`, `test-spec.md`, `task-graph.json`, `decisions.jsonl`, and
-an initial `proof.json`. `goal verify` adds gate evidence under
-`artifacts/gates/`. `goal execute` adds bounded Wire worker evidence under
-`artifacts/agent-runs/` when Kimi is authenticated, or when `MOCK_KIMI` points
-at an executable wire-compatible mock. `goal review` adds controller review and
-security review artifacts.
+an initial `proof.json`. When the controller needs explicit recovery, use
+`goal verify` for gate evidence, `goal execute` for bounded Wire worker
+evidence, `goal review` for controller review/security artifacts, and
+`goal open-pr latest --dry-run` for a local PR draft without network mutation.
 
 For the Rust fixture, OMK auto-detects the default required gates:
 
