@@ -14,6 +14,7 @@ mod replay;
 mod state;
 mod task_graph;
 mod verifier;
+mod worktree;
 
 // Public API re-exports (preserved for backward compatibility)
 pub use budget::{
@@ -33,6 +34,7 @@ pub use state::{
 pub use task_graph::{
     GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
 };
+pub use worktree::{plan_goal_worktree, plan_goal_worktrees, GoalWorktreePlan};
 
 pub async fn create_goal(goal: &str, options: CreateGoalOptions) -> Result<GoalState> {
     planner::create_goal_with_scaffold(goal, options).await
