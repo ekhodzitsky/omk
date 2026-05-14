@@ -3,12 +3,12 @@
 ## Supported Versions
 
 OMK is pre-1.0 and ships from `master` only. The latest tagged GitHub release
-is the supported version; older 0.x tags are not back-ported.
+is the supported version; older tags are not back-ported.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| Latest 0.3.x | :white_check_mark: |
-| < latest 0.3.x | :x:           |
+| Version               | Supported          |
+| --------------------- | ------------------ |
+| Latest tagged release | :white_check_mark: |
+| Older tags            | :x:                |
 
 ## Reporting a Vulnerability
 

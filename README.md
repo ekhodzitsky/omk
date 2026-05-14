@@ -63,7 +63,7 @@ What is ready enough to use now:
 | Proof reports | Beta MVP: `omk proof show latest`, cached/regenerated proof, Markdown/text/JSON formats. |
 | Verification gates | Ready for local gates and `.omk/gates.toml` customization, including full stdout/stderr evidence capture for large-output gates. |
 | HUD | Text, JSON, and TUI are usable; web dashboard is still scaffold-level. |
-| `omk goal` controller scaffold | Scaffold MVP. Creates durable goal state with planning artifacts (PRD, plan, tests, task graph, decisions), runs bounded Wire-backed agent waves, enforces wall-clock/token/cost budgets with `budget-add` recovery, supports pause/resume/cancel with worker interruption, runs verification gates with post-mutation reruns, records controller review/security evidence, and writes honest proof/failure artifacts. Full surface in [SPEC.md](SPEC.md) and [TODO.md](TODO.md). |
+| `omk goal` controller scaffold | Current Scaffold. Creates durable goal state with planning artifacts (PRD, plan, tests, task graph, decisions), runs bounded Wire-backed agent waves, enforces wall-clock/token/cost budgets with `budget-add` recovery, supports pause/resume/cancel with worker interruption, runs verification gates with post-mutation reruns, records controller review/security evidence, and writes honest proof/failure artifacts. Full surface in [SPEC.md](SPEC.md) and [TODO.md](TODO.md). |
 | Autopilot, Ralph, Ultrawork | Power-user MVP: useful, but less polished than the Kimi asset + team/proof path. |
 | MCP server, marketplace, web dashboard | Secondary/scaffold surfaces. |
 

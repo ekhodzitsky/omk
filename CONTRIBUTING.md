@@ -42,7 +42,8 @@ release workflow.
 
 External trackers (Beads, GitHub Issues, Linear, …) are optional and never a
 prerequisite for building, testing, or reviewing the project. The canonical
-handoff surface is the branch/worktree plus the PR body.
+handoff surface is the branch/worktree plus the PR body. Agents must not
+silently initialize a tracker or make tracker state a runtime dependency.
 
 ## Verification Wall
 
