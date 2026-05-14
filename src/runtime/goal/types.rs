@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GoalId(String);
@@ -94,4 +95,41 @@ impl GoalBudget {
             options.max_agents,
         )
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GoalControllerStepKind {
+    Plan,
+    Verify,
+    Execute,
+    Review,
+    Blocked,
+}
+
+impl GoalControllerStepKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Plan => "plan",
+            Self::Verify => "verify",
+            Self::Execute => "execute",
+            Self::Review => "review",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GoalControllerStep {
+    pub(crate) kind: GoalControllerStepKind,
+    pub(crate) status: super::state::GoalStatus,
+    pub(crate) summary: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GoalRunUntilReadyOutcome {
+    pub(crate) state: super::state::GoalState,
+    pub(crate) proof: super::proof::GoalProof,
+    pub(crate) steps: Vec<GoalControllerStep>,
+    pub(crate) blocker: Option<String>,
+    pub(crate) policy_evidence_path: Option<PathBuf>,
 }

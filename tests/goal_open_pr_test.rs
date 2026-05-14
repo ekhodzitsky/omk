@@ -121,6 +121,7 @@ fn inject_delivery_metadata(task_graph_path: &Path) {
         "slice_id": "goal-agent-execute",
         "owner": "codex",
         "branch": "codex/goal-open-pr-fixture",
+        "worktree_path": "../oh-my-kimi-goal-open-pr",
         "pr_url": "https://github.com/ekhodzitsky/oh-my-kimi/pull/456",
         "write_scope": [
             "src/cli/goal/mod.rs",
@@ -181,16 +182,21 @@ fn goal_open_pr_markdown_dry_run_renders_goal_proof_and_delivery_metadata() {
     assert!(stdout.contains(goal_id));
     assert!(stdout.contains("## Task Summary"));
     assert!(stdout.contains("## Delivery Metadata"));
+    assert!(stdout.contains("slice: goal-agent-execute"));
     assert!(stdout.contains("owner: codex"));
     assert!(stdout.contains("branch: codex/goal-open-pr-fixture"));
+    assert!(stdout.contains("worktree: ../oh-my-kimi-goal-open-pr"));
     assert!(stdout.contains("pr: https://github.com/ekhodzitsky/oh-my-kimi/pull/456"));
     assert!(stdout.contains("src/runtime/goal/open_pr.rs"));
     assert!(stdout.contains("## Proof Summary"));
+    assert!(stdout.contains("Proof path:"));
+    assert!(stdout.contains("proof.json"));
     assert!(stdout.contains("## Verification Wall"));
     assert!(stdout.contains("smoke"));
     assert!(!stdout.contains("smoke-ok"));
     assert!(stdout.contains("## Release Candidate Notes"));
     assert!(stdout.contains("merge recommendation"));
+    assert!(stdout.contains("## Review Evidence"));
     assert!(stdout.contains("## Known Gaps"));
     assert!(stdout.contains("## Changed Files"));
     assert!(stdout.contains("src-change.txt"));

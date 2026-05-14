@@ -190,7 +190,6 @@ fn test_goal_run_creates_durable_scaffold_and_show_json() {
             "goal",
             "run",
             "Fix this repository until tests and proof pass",
-            "--until-ready",
             "--budget-time",
             "8h",
             "--max-agents",
@@ -225,7 +224,7 @@ fn test_goal_run_creates_durable_scaffold_and_show_json() {
         "Fix this repository until tests and proof pass"
     );
     assert_eq!(json["status"], "not_ready");
-    assert_eq!(json["until_ready"], true);
+    assert_eq!(json["until_ready"], false);
     assert_eq!(json["budget_time"], "8h");
     assert_eq!(json["max_agents"], 3);
     assert_eq!(json["terminal_criteria"]["proof_required"], true);
@@ -292,7 +291,6 @@ fn test_goal_run_writes_controller_decision_log() {
             "goal",
             "run",
             "Build a decision-audited goal controller scaffold",
-            "--until-ready",
         ])
         .assert()
         .success()
@@ -355,7 +353,6 @@ fn test_goal_run_writes_task_graph_and_not_ready_proof() {
             "goal",
             "run",
             "Build a proof-backed goal controller scaffold",
-            "--until-ready",
         ])
         .assert()
         .success()
