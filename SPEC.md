@@ -171,8 +171,8 @@ Every goal run ends in exactly one terminal status:
 7. **Local-first.** OMK owns local state and execution; GitHub integration is an
    output surface, not the source of truth.
 8. **PR-first integration.** Repository changes are integrated through
-   bead-scoped branches and PRs; `master` / `main` are read-only execution
-   baselines.
+   task-scoped branches/worktrees and PRs; `master` / `main` are read-only
+   execution baselines.
 
 ## Functional Requirements
 
@@ -218,8 +218,8 @@ Every goal run ends in exactly one terminal status:
 ### Implementation
 
 - Use isolated worktrees or branches for independent slices.
-- Tie each independent slice to a Beads task with owner, write scope,
-  dependencies, verification gates, and PR link.
+- Tie each independent slice to a goal task with owner, write scope,
+  dependencies, verification gates, branch, and PR link.
 - Keep write scopes explicit.
 - Merge accepted slices through an integrator step.
 - Preserve changelog, docs, migration notes, and release notes as part of done.
@@ -227,12 +227,16 @@ Every goal run ends in exactly one terminal status:
 
 ### Collaboration and Delivery
 
-- Treat Beads as the durable task graph for human and agent collaboration.
-- Require every agent to claim a bead before editing files.
-- Block or serialize overlapping write scopes through Beads dependencies.
-- Open PRs from bead-scoped branches; include proof, gates, known gaps, and
+- Treat the local goal task graph plus GitHub PRs as the durable collaboration
+  surface for humans and agents.
+- Require every agent to record its task ownership and write scope before
+  editing files.
+- Block or serialize overlapping write scopes through task dependencies or an
+  integrator PR.
+- Open PRs from task-scoped branches; include proof, gates, known gaps, and
   decision artifacts in the PR body.
-- Close beads only after the PR is merged or explicitly rejected.
+- Mark task slices integrated only after the PR is merged or explicitly
+  rejected.
 
 ### Verification
 
@@ -301,7 +305,6 @@ omk goal plan <goal>
 omk goal approve-plan <goal-id>
 omk goal add-task <goal-id> <task>
 omk goal open-pr <goal-id>
-omk goal sync-beads <goal-id>
 ```
 
 ## MVP Definition

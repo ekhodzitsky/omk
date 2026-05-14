@@ -51,9 +51,9 @@ required = true
 
 fn delivery_metadata() -> Value {
     json!({
-        "bead_id": "omk-io2.1",
+        "slice_id": "goal-agent-execute",
         "owner": "codex",
-        "branch": "codex/omk-io2.1-delivery-metadata",
+        "branch": "codex/goal-agent-execute-delivery-metadata",
         "pr_link": "https://github.com/ekhodzitsky/oh-my-kimi/pull/123",
         "write_scope": [
             "src/runtime/goal/task_graph.rs",
@@ -126,9 +126,12 @@ fn proof_delivery<'a>(proof_json: &'a Value, task_id: &str) -> &'a Value {
 }
 
 fn assert_delivery_metadata(delivery: &Value) {
-    assert_eq!(delivery["bead_id"], "omk-io2.1");
+    assert_eq!(delivery["slice_id"], "goal-agent-execute");
     assert_eq!(delivery["owner"], "codex");
-    assert_eq!(delivery["branch"], "codex/omk-io2.1-delivery-metadata");
+    assert_eq!(
+        delivery["branch"],
+        "codex/goal-agent-execute-delivery-metadata"
+    );
     assert_eq!(
         delivery["pr_link"],
         "https://github.com/ekhodzitsky/oh-my-kimi/pull/123"

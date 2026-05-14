@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Worktree/PR-first development workflow**: Beads is no longer required for
+  multi-agent development or `omk goal` delivery. The canonical coordination
+  path is now task-scoped worktrees/branches, explicit write scopes, PR
+  evidence, green CI, and review; external trackers remain optional.
+
 ## [0.3.30] - 2026-05-13
 
 ### Added

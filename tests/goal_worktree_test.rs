@@ -2,7 +2,7 @@ use omk::runtime::goal::{plan_goal_worktree, plan_goal_worktrees};
 use std::path::Path;
 
 #[test]
-fn test_goal_worktree_plan_is_deterministic_and_bead_scoped() {
+fn test_goal_worktree_plan_is_deterministic_and_task_scoped() {
     let root = Path::new("/repo/.omk/worktrees");
 
     let first = plan_goal_worktree(root, "goal-20260513-155000-deadbeef", "omk-io2.2")
