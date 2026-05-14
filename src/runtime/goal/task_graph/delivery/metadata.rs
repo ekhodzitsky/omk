@@ -62,10 +62,16 @@ impl<'de> Deserialize<'de> for GoalTaskDeliveryStatus {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GoalTaskDeliveryMetadata {
+    pub slice_id: Option<String>,
     pub owner: Option<String>,
+    pub read_scope: Vec<String>,
     pub write_scope: Vec<String>,
+    pub dependencies: Vec<String>,
     pub branch: Option<String>,
+    pub worktree_name: Option<String>,
     pub worktree_path: Option<PathBuf>,
+    pub gates: Vec<String>,
+    pub review_needs: Vec<String>,
     pub pr_url: Option<String>,
     pub commit_sha: Option<String>,
     pub verification_summary: Option<String>,
@@ -79,20 +85,32 @@ impl GoalTaskDeliveryMetadata {
             return Self::default();
         };
         let mut extra = object.clone();
+        let slice_id = take_string(&mut extra, "slice_id");
         let owner = take_string(&mut extra, "owner");
+        let read_scope = take_string_array(&mut extra, "read_scope").unwrap_or_default();
         let write_scope = take_string_array(&mut extra, "write_scope").unwrap_or_default();
+        let dependencies = take_string_array(&mut extra, "dependencies").unwrap_or_default();
         let branch = take_string(&mut extra, "branch");
+        let worktree_name = take_string(&mut extra, "worktree_name");
         let worktree_path = take_string(&mut extra, "worktree_path").map(PathBuf::from);
+        let gates = take_string_array(&mut extra, "gates").unwrap_or_default();
+        let review_needs = take_string_array(&mut extra, "review_needs").unwrap_or_default();
         let pr_url = take_string(&mut extra, "pr_url");
         let commit_sha = take_string(&mut extra, "commit_sha");
         let verification_summary = take_string(&mut extra, "verification_summary");
         let status = take_string(&mut extra, "status").map(GoalTaskDeliveryStatus::from);
 
         Self {
+            slice_id,
             owner,
+            read_scope,
             write_scope,
+            dependencies,
             branch,
+            worktree_name,
             worktree_path,
+            gates,
+            review_needs,
             pr_url,
             commit_sha,
             verification_summary,
@@ -103,19 +121,20 @@ impl GoalTaskDeliveryMetadata {
 
     pub fn to_value(&self) -> Value {
         let mut object = self.extra.clone();
+        insert_string(&mut object, "slice_id", self.slice_id.as_deref());
         insert_string(&mut object, "owner", self.owner.as_deref());
-        if !self.write_scope.is_empty() {
-            object.insert(
-                "write_scope".to_string(),
-                serde_json::json!(self.write_scope),
-            );
-        }
+        insert_string_array(&mut object, "read_scope", &self.read_scope);
+        insert_string_array(&mut object, "write_scope", &self.write_scope);
+        insert_string_array(&mut object, "dependencies", &self.dependencies);
         insert_string(&mut object, "branch", self.branch.as_deref());
+        insert_string(&mut object, "worktree_name", self.worktree_name.as_deref());
         let worktree_path = self
             .worktree_path
             .as_ref()
             .map(|path| path.display().to_string());
         insert_string(&mut object, "worktree_path", worktree_path.as_deref());
+        insert_string_array(&mut object, "gates", &self.gates);
+        insert_string_array(&mut object, "review_needs", &self.review_needs);
         insert_string(&mut object, "pr_url", self.pr_url.as_deref());
         insert_string(&mut object, "commit_sha", self.commit_sha.as_deref());
         insert_string(
@@ -132,12 +151,26 @@ impl GoalTaskDeliveryMetadata {
     }
 
     pub fn merge_update(&mut self, update: GoalTaskDeliveryMetadataUpdate) {
+        replace_if_some(&mut self.slice_id, update.slice_id);
         replace_if_some(&mut self.owner, update.owner);
+        if let Some(read_scope) = update.read_scope {
+            self.read_scope = read_scope;
+        }
         if let Some(write_scope) = update.write_scope {
             self.write_scope = write_scope;
         }
+        if let Some(dependencies) = update.dependencies {
+            self.dependencies = dependencies;
+        }
         replace_if_some(&mut self.branch, update.branch);
+        replace_if_some(&mut self.worktree_name, update.worktree_name);
         replace_if_some(&mut self.worktree_path, update.worktree_path);
+        if let Some(gates) = update.gates {
+            self.gates = gates;
+        }
+        if let Some(review_needs) = update.review_needs {
+            self.review_needs = review_needs;
+        }
         replace_if_some(&mut self.pr_url, update.pr_url);
         replace_if_some(&mut self.commit_sha, update.commit_sha);
         replace_if_some(&mut self.verification_summary, update.verification_summary);
@@ -175,13 +208,25 @@ impl<'de> Deserialize<'de> for GoalTaskDeliveryMetadata {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct GoalTaskDeliveryMetadataUpdate {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slice_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_scope: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_scope: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependencies: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree_path: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gates: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_needs: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -229,6 +274,12 @@ fn take_string_array(object: &mut Map<String, Value>, key: &str) -> Option<Vec<S
 fn insert_string(object: &mut Map<String, Value>, key: &str, value: Option<&str>) {
     if let Some(value) = value {
         object.insert(key.to_string(), Value::String(value.to_string()));
+    }
+}
+
+fn insert_string_array(object: &mut Map<String, Value>, key: &str, value: &[String]) {
+    if !value.is_empty() {
+        object.insert(key.to_string(), serde_json::json!(value));
     }
 }
 
