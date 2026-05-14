@@ -154,7 +154,12 @@ async fn run_post_mutation_cycle(
     agent_execution_succeeded: bool,
     agent_evidence: &evidence::GoalAgentRunEvidence,
     now: chrono::DateTime<chrono::Utc>,
-) -> Result<(Vec<crate::runtime::gates::GateResult>, Option<super::evidence::GoalGitEvidence>, Vec<String>, bool)> {
+) -> Result<(
+    Vec<crate::runtime::gates::GateResult>,
+    Option<super::evidence::GoalGitEvidence>,
+    Vec<String>,
+    bool,
+)> {
     let mut proof_gates = verification_proof.gates;
     let mut proof_git = verification_proof.git;
     let mut proof_changed_files = agent_evidence.changed_files.clone();
@@ -184,7 +189,12 @@ async fn run_post_mutation_cycle(
         post_mutation_gates_ran = true;
     }
 
-    Ok((proof_gates, proof_git, proof_changed_files, post_mutation_gates_ran))
+    Ok((
+        proof_gates,
+        proof_git,
+        proof_changed_files,
+        post_mutation_gates_ran,
+    ))
 }
 
 async fn finalize_execution_state(
