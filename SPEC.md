@@ -47,6 +47,7 @@ omk goal show latest
 omk goal verify latest
 omk goal execute latest
 omk goal review latest
+omk goal open-pr latest --dry-run --format markdown
 omk goal replay latest
 omk goal budget latest
 omk goal pause latest
@@ -78,7 +79,7 @@ current beta MVP instead of inventing a parallel runtime:
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
 - backward-compatible `goal.json` loading with safe defaults for newer fields
   and `state_dir` rehoming from the actual goal directory;
-- `omk goal plan/run/list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel`;
+- `omk goal plan/run/list/status/show/proof/open-pr/replay/budget/budget-add/verify/execute/review/pause/resume/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`,
   `task-graph.json`, and `decisions.jsonl`;
 - human-blocked oracle guard that stops vague goals as `blocked_on_human` when
@@ -122,6 +123,9 @@ current beta MVP instead of inventing a parallel runtime:
   test, security, performance, and anti-slop sections; each section carries
   status, evidence, risks, known gaps, and a recommended next step for PR
   readiness;
+- GitHub PR draft rendering through `omk goal open-pr`, which turns existing
+  proof evidence into Markdown, JSON, or text title/body output without network
+  access and blocks scaffold-only proofs with an actionable next step;
 - best-effort git branch, HEAD commit, and dirty-state capture in goal proofs;
 - bounded agent wave evidence under `artifacts/agent-runs/`;
 - structured per-task budgets carried into Wire worker inboxes and enforced as
@@ -239,6 +243,9 @@ Every goal run ends in exactly one terminal status:
   integrator PR.
 - Open PRs from task-scoped branches; include proof, gates, known gaps, and
   decision artifacts in the PR body.
+- Render PR drafts from local proof evidence first with `omk goal open-pr
+  latest --dry-run --format markdown|json|text`; GitHub creation must remain an
+  explicit integration action, never an implicit side effect of proof rendering.
 - Mark task slices integrated only after the PR is merged or explicitly
   rejected.
 
@@ -296,6 +303,7 @@ omk goal pause [goal-id|latest]
 omk goal resume [goal-id|latest]
 omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
+omk goal open-pr [goal-id|latest] --dry-run [--format markdown|json|text]
 omk goal replay [goal-id|latest] [--format text|json|md]
 omk goal budget [goal-id|latest] [--format text|json|md]
 omk goal budget-add [goal-id|latest] [--time <duration>] [--tokens <n>] [--usd <usd>]
@@ -310,7 +318,7 @@ Later command surface:
 omk goal plan <goal>
 omk goal approve-plan <goal-id>
 omk goal add-task <goal-id> <task>
-omk goal open-pr <goal-id>
+omk goal open-pr <goal-id> --dry-run
 ```
 
 ## MVP Definition

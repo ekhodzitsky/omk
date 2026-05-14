@@ -102,6 +102,19 @@ pub(crate) enum GoalCommands {
         #[arg(long, conflicts_with = "format")]
         json: bool,
     },
+    /// Render a GitHub PR title/body from goal proof evidence
+    #[command(after_help = help::GOAL_OPEN_PR_AFTER_HELP)]
+    OpenPr {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest", value_name = "GOAL_ID")]
+        goal_id: String,
+        /// Render without network or GitHub creation
+        #[arg(long)]
+        dry_run: bool,
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "markdown")]
+        format: OpenPrFormat,
+    },
     /// Replay the persisted goal timeline
     #[command(after_help = help::GOAL_REPLAY_AFTER_HELP)]
     Replay {
@@ -198,6 +211,17 @@ pub(crate) enum OutputFormat {
     Md,
 }
 
+#[derive(Copy, Clone, Debug, clap::ValueEnum)]
+pub(crate) enum OpenPrFormat {
+    /// Human-readable text
+    Text,
+    /// Machine-readable JSON
+    Json,
+    /// Markdown PR title/body draft
+    #[value(alias = "md")]
+    Markdown,
+}
+
 pub(crate) async fn run(args: Args) -> Result<()> {
     match args.command {
         GoalCommands::Run {
@@ -249,6 +273,14 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         } => {
             let goal_id = validate_goal_id(&goal_id)?;
             commands::cmd_proof(goal_id, resolve_format(format, json)).await
+        }
+        GoalCommands::OpenPr {
+            goal_id,
+            dry_run,
+            format,
+        } => {
+            let goal_id = validate_goal_id(&goal_id)?;
+            commands::cmd_open_pr(goal_id, dry_run, format).await
         }
         GoalCommands::Replay {
             goal_id,
