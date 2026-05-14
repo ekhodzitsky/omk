@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Rust helpers for owner, write scope, branch, worktree, PR, commit,
   verification summary, and status metadata while preserving unknown legacy
   JSON fields for existing task graphs and proof artifacts.
+- **Structured `omk goal` review wall**: goal review proof output now surfaces
+  deterministic architect, code, test, security, performance, and anti-slop
+  review sections with status, evidence, risks, known gaps, and a recommended
+  next step for PR readiness.
 
 ### Changed
 
