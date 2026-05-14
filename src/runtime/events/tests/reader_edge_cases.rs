@@ -1,4 +1,4 @@
-//! Edge-case coverage for `EventReader` (bead omk-68l.1).
+//! Edge-case coverage for `EventReader`.
 //!
 //! These tests pin current behavior for malformed JSONL, blank/whitespace
 //! lines, unknown event kinds, stable ordering, and the public read helpers
