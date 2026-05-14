@@ -200,9 +200,14 @@ async fn test_goal_worktree_materialize_records_delivery_metadata_for_task() {
     let state = tempfile::tempdir().expect("goal state tempdir");
     let goal_dir = state.path().join("goal-materialize");
     fs::create_dir_all(&goal_dir).expect("goal dir");
+    let mut graph = task_graph_json();
+    graph["tasks"][0]["delivery"] = json!({
+        "owner": "codex",
+        "verification_summary": "kept from earlier delivery metadata"
+    });
     fs::write(
         goal_dir.join(GOAL_TASK_GRAPH_FILE),
-        serde_json::to_vec_pretty(&task_graph_json()).expect("task graph json"),
+        serde_json::to_vec_pretty(&graph).expect("task graph json"),
     )
     .expect("write task graph");
 
@@ -222,6 +227,11 @@ async fn test_goal_worktree_materialize_records_delivery_metadata_for_task() {
     let delivery = &task_graph["tasks"][0]["delivery"];
 
     assert_eq!(delivery["branch"], plan.branch_name);
+    assert_eq!(delivery["owner"], "codex");
+    assert_eq!(
+        delivery["verification_summary"],
+        "kept from earlier delivery metadata"
+    );
     assert_eq!(
         delivery["worktree_path"],
         plan.worktree_path.display().to_string()

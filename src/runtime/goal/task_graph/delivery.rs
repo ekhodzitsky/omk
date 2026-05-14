@@ -19,7 +19,7 @@ pub(crate) async fn ensure_worktree_delivery_targets(
             anyhow::bail!(
                 "cannot record goal worktree delivery metadata: task {} not found in {}",
                 plan.task_id,
-                goal_dir.join(GOAL_TASK_GRAPH_FILE).display()
+                task_graph_path(goal_dir).display()
             );
         }
     }
@@ -317,11 +317,19 @@ pub(crate) async fn preserve_delivery_metadata_in_value(
 }
 
 async fn load_task_graph_value(goal_dir: &Path) -> Result<Value> {
-    let path = goal_dir.join(GOAL_TASK_GRAPH_FILE);
+    let path = task_graph_path(goal_dir);
     let json = tokio::fs::read_to_string(&path)
         .await
         .with_context(|| format!("Failed to read goal task graph: {}", path.display()))?;
-    serde_json::from_str(&json)
+    parse_task_graph_value(&path, &json)
+}
+
+fn task_graph_path(goal_dir: &Path) -> PathBuf {
+    goal_dir.join(GOAL_TASK_GRAPH_FILE)
+}
+
+fn parse_task_graph_value(path: &Path, json: &str) -> Result<Value> {
+    serde_json::from_str(json)
         .with_context(|| format!("Failed to parse goal task graph: {}", path.display()))
 }
 
@@ -345,13 +353,11 @@ pub(crate) async fn load_task_delivery_metadata(goal_dir: &Path) -> Result<Vec<V
 }
 
 async fn load_delivery_by_task_id(goal_dir: &Path) -> Result<HashMap<String, Value>> {
-    let path = goal_dir.join(GOAL_TASK_GRAPH_FILE);
+    let path = task_graph_path(goal_dir);
     match tokio::fs::read_to_string(&path).await {
-        Ok(json) => {
-            let value: Value = serde_json::from_str(&json)
-                .with_context(|| format!("Failed to parse goal task graph: {}", path.display()))?;
-            Ok(collect_delivery_by_task_id(&value))
-        }
+        Ok(json) => Ok(collect_delivery_by_task_id(&parse_task_graph_value(
+            &path, &json,
+        )?)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(HashMap::new()),
         Err(error) => Err(error)
             .with_context(|| format!("Failed to read goal task graph: {}", path.display())),

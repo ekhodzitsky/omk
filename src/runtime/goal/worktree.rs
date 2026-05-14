@@ -186,7 +186,7 @@ async fn ensure_materialization_targets_are_available(
         if git_branch_exists(repo_dir, &plan.branch_name).await? {
             anyhow::bail!("goal worktree branch already exists: {}", plan.branch_name);
         }
-        if plan.worktree_path.exists() {
+        if path_is_occupied(&plan.worktree_path)? {
             anyhow::bail!(
                 "goal worktree path already exists: {}",
                 plan.worktree_path.display()
@@ -194,6 +194,16 @@ async fn ensure_materialization_targets_are_available(
         }
     }
     Ok(())
+}
+
+fn path_is_occupied(path: &Path) -> Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => {
+            Err(error).with_context(|| format!("Failed to inspect path: {}", path.display()))
+        }
+    }
 }
 
 async fn git_branch_exists(repo_dir: &Path, branch_name: &str) -> Result<bool> {
