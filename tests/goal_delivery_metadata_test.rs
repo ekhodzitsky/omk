@@ -54,13 +54,17 @@ fn delivery_metadata() -> Value {
         "slice_id": "goal-agent-execute",
         "owner": "codex",
         "branch": "codex/goal-agent-execute-delivery-metadata",
+        "worktree_path": "../oh-my-kimi-goal-delivery",
+        "pr_url": "https://github.com/ekhodzitsky/oh-my-kimi/pull/123",
         "pr_link": "https://github.com/ekhodzitsky/oh-my-kimi/pull/123",
+        "commit_sha": "abc1234",
         "write_scope": [
             "src/runtime/goal/task_graph.rs",
             "src/runtime/goal/proof.rs",
             "tests/goal_delivery_metadata_test.rs"
         ],
-        "verification_summary": "cargo test --test goal_delivery_metadata_test passed"
+        "verification_summary": "cargo test --test goal_delivery_metadata_test passed",
+        "status": "delivered"
     })
 }
 
@@ -137,6 +141,12 @@ fn assert_delivery_metadata(delivery: &Value) {
         "https://github.com/ekhodzitsky/oh-my-kimi/pull/123"
     );
     assert_eq!(
+        delivery["pr_url"],
+        "https://github.com/ekhodzitsky/oh-my-kimi/pull/123"
+    );
+    assert_eq!(delivery["worktree_path"], "../oh-my-kimi-goal-delivery");
+    assert_eq!(delivery["commit_sha"], "abc1234");
+    assert_eq!(
         delivery["write_scope"]
             .as_array()
             .expect("write_scope should be an array")
@@ -147,6 +157,7 @@ fn assert_delivery_metadata(delivery: &Value) {
         delivery["verification_summary"],
         "cargo test --test goal_delivery_metadata_test passed"
     );
+    assert_eq!(delivery["status"], "delivered");
 }
 
 #[tokio::test]

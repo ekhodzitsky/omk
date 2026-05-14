@@ -118,6 +118,10 @@ current beta MVP instead of inventing a parallel runtime:
 - controller review through `omk goal review`, which marks `goal-review` and
   `goal-security-review` done only when execution evidence exists and the
   bounded changed-file secret scan finds no high-confidence findings;
+- structured `proof.json.review_artifacts` with deterministic architect, code,
+  test, security, performance, and anti-slop sections; each section carries
+  status, evidence, risks, known gaps, and a recommended next step for PR
+  readiness;
 - best-effort git branch, HEAD commit, and dirty-state capture in goal proofs;
 - bounded agent wave evidence under `artifacts/agent-runs/`;
 - structured per-task budgets carried into Wire worker inboxes and enforced as
@@ -273,6 +277,8 @@ Each goal writes `.omk/goals/<goal-id>/proof.json` with:
 - test results;
 - reviews performed;
 - security/performance notes;
+- structured specialist review wall sections for architect, code, test,
+  security, performance, and anti-slop evidence;
 - known gaps;
 - human decisions required;
 - links to artifacts.

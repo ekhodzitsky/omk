@@ -7,12 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`omk goal` delivery metadata API**: task delivery sidecars now have typed
+  Rust helpers for owner, write scope, branch, worktree, PR, commit,
+  verification summary, and status metadata while preserving unknown legacy
+  JSON fields for existing task graphs and proof artifacts.
+- **Structured `omk goal` review wall**: goal review proof output now surfaces
+  deterministic architect, code, test, security, performance, and anti-slop
+  review sections with status, evidence, risks, known gaps, and a recommended
+  next step for PR readiness.
+
 ### Changed
 
 - **Worktree/PR-first development workflow**: Beads is no longer required for
   multi-agent development or `omk goal` delivery. The canonical coordination
   path is now task-scoped worktrees/branches, explicit write scopes, PR
   evidence, green CI, and review; external trackers remain optional.
+- **CI feedback lanes**: PR checks now use a faster Ubuntu gate plus macOS
+  smoke compatibility, while docs, full macOS build/test, coverage upload, and
+  release artifacts stay on protected-branch, scheduled, manual, or release
+  workflows.
 
 ## [0.3.30] - 2026-05-13
 
