@@ -4,136 +4,61 @@ pub(crate) struct GoalOracleAssessment {
     pub(crate) human_decisions_required: Vec<String>,
 }
 
-// Fixture-spike shape only; runtime rewrite execution belongs in a later slice.
-#[allow(dead_code)]
-pub(crate) mod rewrite {
-    use std::collections::{BTreeMap, BTreeSet};
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GoalKind {
+    Greenfield,
+    Rewrite,
+    Migration,
+    Refactor,
+    Audit,
+    Bugfix,
+    Performance,
+    Docs,
+    Mixed,
+}
 
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub(crate) struct RewriteOracleObservation {
-        pub(crate) stdout: String,
-        pub(crate) stderr: String,
-        pub(crate) exit_code: i32,
-        pub(crate) file_artifacts: Vec<(String, String)>,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub(crate) struct RewriteOracleComparison {
-        pub(crate) compatible: bool,
-        pub(crate) mismatches: Vec<RewriteOracleMismatch>,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub(crate) struct RewriteOracleMismatch {
-        pub(crate) field: RewriteOracleField,
-        pub(crate) expected: String,
-        pub(crate) actual: String,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub(crate) enum RewriteOracleField {
-        Stdout,
-        Stderr,
-        ExitCode,
-        FileArtifact { path: String },
-    }
-
-    pub(crate) fn compare_rewrite_oracle(
-        expected: &RewriteOracleObservation,
-        actual: &RewriteOracleObservation,
-    ) -> RewriteOracleComparison {
-        let mut mismatches = Vec::new();
-
-        compare_text_field(
-            RewriteOracleField::Stdout,
-            &expected.stdout,
-            &actual.stdout,
-            &mut mismatches,
-        );
-        compare_text_field(
-            RewriteOracleField::Stderr,
-            &expected.stderr,
-            &actual.stderr,
-            &mut mismatches,
-        );
-
-        if expected.exit_code != actual.exit_code {
-            mismatches.push(RewriteOracleMismatch {
-                field: RewriteOracleField::ExitCode,
-                expected: expected.exit_code.to_string(),
-                actual: actual.exit_code.to_string(),
-            });
-        }
-
-        compare_file_artifacts(
-            &expected.file_artifacts,
-            &actual.file_artifacts,
-            &mut mismatches,
-        );
-
-        RewriteOracleComparison {
-            compatible: mismatches.is_empty(),
-            mismatches,
-        }
-    }
-
-    fn compare_text_field(
-        field: RewriteOracleField,
-        expected: &str,
-        actual: &str,
-        mismatches: &mut Vec<RewriteOracleMismatch>,
-    ) {
-        if expected != actual {
-            mismatches.push(RewriteOracleMismatch {
-                field,
-                expected: expected.to_string(),
-                actual: actual.to_string(),
-            });
-        }
-    }
-
-    fn compare_file_artifacts(
-        expected: &[(String, String)],
-        actual: &[(String, String)],
-        mismatches: &mut Vec<RewriteOracleMismatch>,
-    ) {
-        let expected = artifact_map(expected);
-        let actual = artifact_map(actual);
-        let paths: BTreeSet<_> = expected.keys().chain(actual.keys()).copied().collect();
-
-        for path in paths {
-            match (expected.get(path), actual.get(path)) {
-                (Some(expected), Some(actual)) if expected != actual => {
-                    mismatches.push(artifact_mismatch(path, expected, actual));
-                }
-                (Some(expected), None) => {
-                    mismatches.push(artifact_mismatch(path, expected, "<missing>"));
-                }
-                (None, Some(actual)) => {
-                    mismatches.push(artifact_mismatch(path, "<missing>", actual));
-                }
-                _ => {}
-            }
-        }
-    }
-
-    fn artifact_map(artifacts: &[(String, String)]) -> BTreeMap<&str, &str> {
-        artifacts
-            .iter()
-            .map(|(path, contents)| (path.as_str(), contents.as_str()))
-            .collect()
-    }
-
-    fn artifact_mismatch(path: &str, expected: &str, actual: &str) -> RewriteOracleMismatch {
-        RewriteOracleMismatch {
-            field: RewriteOracleField::FileArtifact {
-                path: path.to_string(),
-            },
-            expected: expected.to_string(),
-            actual: actual.to_string(),
+impl GoalKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Greenfield => "greenfield",
+            Self::Rewrite => "rewrite",
+            Self::Migration => "migration",
+            Self::Refactor => "refactor",
+            Self::Audit => "audit",
+            Self::Bugfix => "bugfix",
+            Self::Performance => "performance",
+            Self::Docs => "docs",
+            Self::Mixed => "mixed",
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GoalOracleEvidence {
+    pub(crate) kind: GoalKind,
+    pub(crate) passed: bool,
+    pub(crate) checks: Vec<GoalOracleCheck>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GoalOracleCheck {
+    pub(crate) name: String,
+    pub(crate) passed: bool,
+    pub(crate) gate: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GoalOracleGate {
+    pub(crate) name: String,
+    pub(crate) passed: bool,
+}
+
+#[allow(dead_code)]
+#[path = "oracle/rewrite.rs"]
+pub(crate) mod rewrite;
+#[allow(dead_code)]
+#[path = "oracle/surface.rs"]
+pub(crate) mod surface;
 
 impl GoalOracleAssessment {
     fn testable() -> Self {
@@ -182,6 +107,110 @@ pub(crate) fn assess_goal_oracle(goal: &str) -> GoalOracleAssessment {
     }
 
     GoalOracleAssessment::testable()
+}
+
+pub(crate) fn classify_goal_kind(goal: &str) -> GoalKind {
+    let lower = super::state::normalize_goal(goal).to_ascii_lowercase();
+    let mut matches = Vec::new();
+    if contains_any(&lower, &["rewrite", "port"]) {
+        matches.push(GoalKind::Rewrite);
+    }
+    if contains_any(&lower, &["migrate", "migration"]) {
+        matches.push(GoalKind::Migration);
+    }
+    if lower.contains("refactor") {
+        matches.push(GoalKind::Refactor);
+    }
+    if lower.contains("audit") {
+        matches.push(GoalKind::Audit);
+    }
+    if contains_any(&lower, &["bugfix", "bug fix", "fix "]) {
+        matches.push(GoalKind::Bugfix);
+    }
+    if contains_any(&lower, &["performance", "benchmark", "perf"]) {
+        matches.push(GoalKind::Performance);
+    }
+    if contains_any(&lower, &["docs", "documentation", "readme"]) {
+        matches.push(GoalKind::Docs);
+    }
+    if lower.contains("greenfield")
+        || (matches.is_empty() && contains_any(&lower, &["build", "create", "implement", "add "]))
+    {
+        matches.push(GoalKind::Greenfield);
+    }
+
+    matches.dedup();
+    match matches.as_slice() {
+        [] => GoalKind::Greenfield,
+        [kind] => *kind,
+        _ => GoalKind::Mixed,
+    }
+}
+
+pub(crate) fn assess_goal_oracle_evidence(
+    goal: &str,
+    gates: &[GoalOracleGate],
+) -> GoalOracleEvidence {
+    let kind = classify_goal_kind(goal);
+    let required = oracle_required_checks(kind);
+    let checks = required
+        .iter()
+        .map(|name| oracle_check(name, gates))
+        .collect::<Vec<_>>();
+    GoalOracleEvidence {
+        kind,
+        passed: !checks.is_empty() && checks.iter().all(|check| check.passed),
+        checks,
+    }
+}
+
+pub(crate) fn oracle_evidence_json(evidence: &GoalOracleEvidence) -> serde_json::Value {
+    serde_json::json!({
+        "kind": evidence.kind.as_str(),
+        "status": if evidence.passed { "passed" } else { "blocked" },
+        "checks": evidence.checks.iter().map(|check| {
+            serde_json::json!({
+                "name": check.name,
+                "status": if check.passed { "passed" } else { "blocked" },
+                "gate": check.gate,
+            })
+        }).collect::<Vec<_>>(),
+    })
+}
+
+fn oracle_required_checks(kind: GoalKind) -> &'static [&'static str] {
+    match kind {
+        GoalKind::Greenfield => &["acceptance", "smoke", "demo"],
+        GoalKind::Rewrite | GoalKind::Migration | GoalKind::Refactor => {
+            &["compatibility", "golden"]
+        }
+        GoalKind::Audit => &["audit"],
+        GoalKind::Bugfix => &["regression"],
+        GoalKind::Performance => &["performance"],
+        GoalKind::Docs => &["docs"],
+        GoalKind::Mixed => &["acceptance", "compatibility"],
+    }
+}
+
+fn oracle_check(name: &str, gates: &[GoalOracleGate]) -> GoalOracleCheck {
+    let needle = name.to_ascii_lowercase();
+    let gate = gates.iter().find(|gate| {
+        gate.passed
+            && gate
+                .name
+                .to_ascii_lowercase()
+                .split(|ch: char| !ch.is_ascii_alphanumeric())
+                .any(|part| part == needle)
+    });
+    GoalOracleCheck {
+        name: name.to_string(),
+        passed: gate.is_some(),
+        gate: gate.map(|gate| gate.name.clone()),
+    }
+}
+
+fn contains_any(value: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| value.contains(needle))
 }
 
 fn vague_improvement_patterns() -> &'static [&'static str] {

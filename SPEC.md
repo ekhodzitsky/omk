@@ -79,7 +79,7 @@ current beta MVP instead of inventing a parallel runtime:
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
 - backward-compatible `goal.json` loading with safe defaults for newer fields
   and `state_dir` rehoming from the actual goal directory;
-- `omk goal plan/run/list/status/show/proof/open-pr/replay/budget/budget-add/verify/execute/review/pause/resume/cancel`;
+- `omk goal plan/run/list/status/show/proof/open-pr/replay/budget/budget-add/verify/execute/review/accept/reject/pause/resume/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`,
   `task-graph.json`, and `decisions.jsonl`;
 - human-blocked oracle guard that stops vague goals as `blocked_on_human` when
@@ -90,8 +90,8 @@ current beta MVP instead of inventing a parallel runtime:
   and `lease_expires_at`, with backward-compatible defaults for older graphs;
 - controller-owned decision records in `decisions.jsonl` for planning,
   decomposition, and execution-boundary rationale;
-- honest goal-level `proof.json` with `not_ready` status until execution,
-  review, and hardening evidence exists;
+- honest goal-level `proof.json` with `ready` only after gates, execution,
+  review, explicit integration acceptance, and oracle evidence pass;
 - local verification gate execution through `omk goal verify`, with gate output
   artifacts and gate results embedded in the goal proof;
 - local controller execution through `omk goal execute`, which:
@@ -126,6 +126,12 @@ current beta MVP instead of inventing a parallel runtime:
   test, security, performance, and anti-slop sections; each section carries
   status, evidence, risks, known gaps, and a recommended next step for PR
   readiness;
+- explicit local integrator acceptance/rejection through `omk goal accept` and
+  `omk goal reject`, recorded as `proof.json.integration_evidence`;
+- oracle evidence in `proof.json.oracle_evidence`; current greenfield ready
+  paths require acceptance/smoke/demo gates, and rewrite/refactor ready paths
+  require compatibility/golden gates before local integrator acceptance can
+  produce `ready`;
 - GitHub PR draft rendering through `omk goal open-pr`, which turns existing
   proof evidence into Markdown, JSON, or text title/body output without network
   access and blocks scaffold-only proofs with an actionable next step;
@@ -289,6 +295,7 @@ Each goal writes `.omk/goals/<goal-id>/proof.json` with:
 - security/performance notes;
 - structured specialist review wall sections for architect, code, test,
   security, performance, and anti-slop evidence;
+- oracle evidence and integration acceptance/rejection evidence;
 - known gaps;
 - human decisions required;
 - links to artifacts.
@@ -306,13 +313,15 @@ omk goal pause [goal-id|latest]
 omk goal resume [goal-id|latest]
 omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
-omk goal open-pr [goal-id|latest] --dry-run [--format markdown|json|text]
+omk goal open-pr [goal-id|latest] --dry-run [--draft] [--format markdown|json|text]
 omk goal replay [goal-id|latest] [--format text|json|md]
 omk goal budget [goal-id|latest] [--format text|json|md]
 omk goal budget-add [goal-id|latest] [--time <duration>] [--tokens <n>] [--usd <usd>]
 omk goal verify [goal-id|latest]
 omk goal execute [goal-id|latest]
 omk goal review [goal-id|latest]
+omk goal accept [goal-id|latest] --summary <text>
+omk goal reject [goal-id|latest] --reason <text>
 ```
 
 Later command surface:

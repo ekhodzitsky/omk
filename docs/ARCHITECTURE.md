@@ -89,6 +89,24 @@ omk CLI (Rust)
 
 Current `omk goal` scaffold data flow:
 
+```text
+goal run/plan
+  |
+  v
+intake + oracle classifier
+  |
+  +-- blocked_on_human -> failure.json + proof.json
+  |
+  v
+planner artifacts -> task graph -> decisions
+  |
+  v
+verify gates -> execute scheduler/Wire wave -> review wall
+  |
+  v
+integrator accept/reject -> proof.json -> open-pr --dry-run
+```
+
 1. User runs `omk goal run "large outcome" --until-ready`.
 2. OMK writes `goals/<goal-id>/goal.json` under the OMK state directory and
    reloads goal state with safe defaults plus actual-directory `state_dir`
@@ -129,11 +147,21 @@ Current `omk goal` scaffold data flow:
 10. `omk goal review` writes controller review/security artifacts under
    `artifacts/reviews/` and closes `goal-review` / `goal-security-review`
    when evidence is sufficient.
-11. Operators inspect with `omk goal list/status/show/proof`.
-12. `omk goal cancel` writes `failure.json`.
+11. `omk goal accept` / `reject` records explicit local integration evidence;
+   only accepted goals with gates, execution, review, oracle, mutation, and
+   integration evidence can become `ready`.
+12. Task-scoped worktree helpers create deterministic branch/worktree names and
+   record owner, write scope, branch, worktree path, PR URL, verification
+   summary, and delivery status in the task graph.
+13. `omk goal open-pr --dry-run` renders a PR title/body from local proof
+   evidence without pushing or creating a GitHub PR.
+14. Operators inspect with `omk goal list/status/show/proof`, or attach a
+   no-dependency watcher to the files documented in
+   [GOAL_NOTIFICATIONS.md](GOAL_NOTIFICATIONS.md).
+15. `omk goal cancel` writes `failure.json`.
 
-Planned later flow adds specialist review loops, integration acceptance, and
-ready proof generation.
+Planned later flow keeps GitHub mutation explicit: draft PR creation may be
+added, but dry-run rendering remains the default safe path.
 
 ## CLI Surfaces
 

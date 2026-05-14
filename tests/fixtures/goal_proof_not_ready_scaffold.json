@@ -25,6 +25,21 @@
       "kind": "test_spec",
       "path": "test-spec.md",
       "created_at": "<timestamp>"
+    },
+    {
+      "kind": "greenfield_acceptance",
+      "path": "artifacts/oracles/greenfield-acceptance.md",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "greenfield_demo",
+      "path": "artifacts/oracles/greenfield-demo.sh",
+      "created_at": "<timestamp>"
+    },
+    {
+      "kind": "greenfield_usage_examples",
+      "path": "artifacts/oracles/usage-examples.md",
+      "created_at": "<timestamp>"
     }
   ],
   "task_graph_summary": {

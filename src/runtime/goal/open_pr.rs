@@ -6,15 +6,18 @@ use std::path::Path;
 
 use super::{GoalProof, GoalState, GoalTaskGraph, GOAL_PROOF_FILE};
 
+mod release;
+
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct GoalOpenPrDraft {
     pub(crate) goal_id: String,
     pub(crate) dry_run: bool,
+    pub(crate) draft: bool,
     pub(crate) title: String,
     pub(crate) body: String,
 }
 
-pub(crate) async fn render_goal_open_pr(goal_id: &str) -> Result<GoalOpenPrDraft> {
+pub(crate) async fn render_goal_open_pr(goal_id: &str, draft: bool) -> Result<GoalOpenPrDraft> {
     let state = super::resolve_goal(goal_id).await?;
     let proof_path = state.state_dir.join(GOAL_PROOF_FILE);
     if !tokio::fs::try_exists(&proof_path).await? {
@@ -41,10 +44,11 @@ pub(crate) async fn render_goal_open_pr(goal_id: &str) -> Result<GoalOpenPrDraft
     }
 
     let title = format!("Goal proof: {}", state.normalized_goal);
-    let body = render_pr_body(&state, &proof, &task_graph, &delivery_metadata);
+    let body = render_pr_body(&state, &proof, &task_graph, &delivery_metadata, draft);
     Ok(GoalOpenPrDraft {
         goal_id: state.goal_id,
         dry_run: true,
+        draft,
         title,
         body,
     })
@@ -83,25 +87,32 @@ fn render_pr_body(
     proof: &GoalProof,
     task_graph: &GoalTaskGraph,
     delivery_metadata: &[Value],
+    draft: bool,
 ) -> String {
     let mut body = String::new();
-    push_goal_section(&mut body, state, proof);
+    let proof_value = serde_json::to_value(proof).unwrap_or(Value::Null);
+    push_goal_section(&mut body, state, proof, draft);
     push_task_summary(&mut body, proof, task_graph);
     push_delivery_metadata(&mut body, delivery_metadata);
     push_proof_summary(&mut body, proof);
     push_verification_wall(&mut body, proof);
+    release::push_release_candidate_notes(&mut body, state, proof, draft);
+    push_review_evidence(&mut body, &proof_value);
+    push_integration_evidence(&mut body, &proof_value);
+    push_oracle_evidence(&mut body, &proof_value);
     push_known_gaps(&mut body, proof);
     push_changed_files(&mut body, proof);
     push_artifacts(&mut body, proof);
     body
 }
 
-fn push_goal_section(body: &mut String, state: &GoalState, proof: &GoalProof) {
+fn push_goal_section(body: &mut String, state: &GoalState, proof: &GoalProof, draft: bool) {
     push_heading(body, "Goal");
     push_line(body, &format!("- Goal id: `{}`", state.goal_id));
     push_line(body, &format!("- Objective: {}", state.original_goal));
     push_line(body, &format!("- Status: `{}`", proof.status));
     push_line(body, &format!("- Readiness: {}", proof.readiness));
+    push_line(body, &format!("- Draft: `{draft}`"));
     push_blank(body);
 }
 
@@ -157,7 +168,9 @@ fn push_delivery_metadata(body: &mut String, delivery_metadata: &[Value]) {
         if let Some(branch) = value_str(delivery, "branch") {
             push_line(body, &format!("  - branch: {branch}"));
         }
-        if let Some(pr_link) = value_str(delivery, "pr_link") {
+        if let Some(pr_link) =
+            value_str(delivery, "pr_url").or_else(|| value_str(delivery, "pr_link"))
+        {
             push_line(body, &format!("  - pr: {pr_link}"));
         }
         if let Some(summary) = value_str(delivery, "verification_summary") {
@@ -239,6 +252,76 @@ fn push_known_gaps(body: &mut String, proof: &GoalProof) {
         push_line(body, "- Human decisions required:");
         for decision in &proof.human_decisions_required {
             push_line(body, &format!("  - {decision}"));
+        }
+    }
+    push_blank(body);
+}
+
+fn push_review_evidence(body: &mut String, proof_value: &Value) {
+    push_heading(body, "Review Evidence");
+    let artifacts = proof_value
+        .get("review_artifacts")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    if artifacts.is_empty() {
+        push_line(body, "- No structured review wall evidence recorded.");
+    } else {
+        for artifact in artifacts {
+            let pass = value_str(artifact, "pass").unwrap_or("unknown");
+            let status = value_str(artifact, "status").unwrap_or("unknown");
+            let summary = value_str(artifact, "summary").unwrap_or("no summary");
+            push_line(body, &format!("- {pass}: {status} - {summary}"));
+        }
+    }
+    push_blank(body);
+}
+
+fn push_integration_evidence(body: &mut String, proof_value: &Value) {
+    push_heading(body, "Integration Evidence");
+    let Some(evidence) = proof_value.get("integration_evidence") else {
+        push_line(body, "- No integration evidence recorded.");
+        push_blank(body);
+        return;
+    };
+    if let Some(status) = value_str(evidence, "status") {
+        push_line(body, &format!("- status: {status}"));
+    }
+    if let Some(summary) = value_str(evidence, "summary") {
+        push_line(body, &format!("- summary: {summary}"));
+    }
+    if let Some(missing) = string_array(evidence.get("missing_evidence")) {
+        if !missing.is_empty() {
+            push_line(body, "- missing evidence:");
+            for gap in missing {
+                push_line(body, &format!("  - {gap}"));
+            }
+        }
+    }
+    push_blank(body);
+}
+
+fn push_oracle_evidence(body: &mut String, proof_value: &Value) {
+    push_heading(body, "Oracle Evidence");
+    let Some(evidence) = proof_value.get("oracle_evidence") else {
+        push_line(body, "- No oracle evidence recorded.");
+        push_blank(body);
+        return;
+    };
+    if let Some(kind) = value_str(evidence, "kind") {
+        push_line(body, &format!("- kind: {kind}"));
+    }
+    if let Some(status) = value_str(evidence, "status") {
+        push_line(body, &format!("- status: {status}"));
+    }
+    if let Some(checks) = evidence.get("checks").and_then(Value::as_array) {
+        push_line(body, "- checks:");
+        for check in checks {
+            let name = value_str(check, "name").unwrap_or("unknown");
+            let status = value_str(check, "status").unwrap_or("unknown");
+            let gate = value_str(check, "gate").unwrap_or("no gate");
+            push_line(body, &format!("  - {name}: {status} ({gate})"));
         }
     }
     push_blank(body);

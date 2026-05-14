@@ -176,6 +176,35 @@ integration acceptance exists, `omk goal proof` is expected to remain
 For the fuller artifact map and troubleshooting notes, see
 [north_star_tutorial.md](north_star_tutorial.md).
 
+## Rewrite, Audit, and Refactor Goal Examples
+
+Rewrite goals should name the source behavior that must stay compatible:
+
+```bash
+omk goal run "Rewrite this tiny Python CLI in Rust. Preserve stdout, stderr, exit codes, and generated files for the existing hello command." --until-ready --budget-time 1h --max-agents 1
+omk goal verify latest
+omk goal execute latest
+omk goal review latest
+omk goal accept latest --summary "compatibility and golden evidence accepted"
+```
+
+Refactor goals should name the behavior that must not change:
+
+```bash
+omk goal run "Refactor src/runtime/goal/replay.rs for clarity without changing replay JSON output, duplicate collapse, or malformed-line recovery." --until-ready --budget-time 45m --max-agents 1
+```
+
+Audit goals should name the evidence artifact and gate that closes the audit:
+
+```bash
+omk goal run "Audit goal proof output for secret leakage. Produce a security review artifact and keep all configured tests passing." --until-ready --budget-time 45m --max-agents 1
+```
+
+For rewrite/refactor/migration plans, `test-spec.md` lists compatibility and
+golden oracle checks plus any detected source command/API/file surfaces. For
+greenfield plans, `artifacts/oracles/` contains local acceptance, demo, and
+usage-example scaffolds.
+
 ## Verification Gates
 
 OMK has built-in gate presets for common stacks and supports project overrides:

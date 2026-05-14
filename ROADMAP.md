@@ -31,8 +31,9 @@ Status: current beta MVP.
   graph with retry/lease metadata, bounded Wire-backed agent waves with
   policy-validated follow-ups and worker-pool caps, post-mutation gate reruns,
   controller review/security evidence, pause/resume/cancel with worker
-  interruption, budget enforcement and recovery, deterministic replay, and
-  honest not-ready proof.
+  interruption, budget enforcement and recovery, deterministic replay, explicit
+  local integrator accept/reject, oracle evidence, and honest ready/not-ready
+  proof.
 - GitHub CI and coverage.
 
 ## Stage 1 - Goal State Core
@@ -103,6 +104,7 @@ Target: make readiness proof-backed.
 Exit criteria:
 
 - `ready` cannot be emitted while required gates are failing.
+- `ready` requires oracle evidence matching the goal class.
 - `not_ready` includes the failing evidence.
 
 ## Stage 5 - Worktree and Integration Flow
@@ -115,7 +117,9 @@ Target: make parallel work safe.
 - Create isolated worktrees or branches for independent task slices.
 - Record one task per slice with owner, write scope, dependencies, gates,
   branch, and PR link.
-- Merge accepted slices through an integrator task.
+- Merge accepted slices through an integrator task. Current local integrator
+  acceptance is explicit through `omk goal accept`; rejection remains visible
+  through `omk goal reject`.
 - Detect access conflicts before dispatch. Initial agent-proposed follow-up
   conflicts, including normalized, parent/child, and read/write path overlaps,
   are now rejected unless dependency ordering serializes the access.
@@ -149,7 +153,8 @@ Target: turn long-running goals into reviewable delivery artifacts.
 
 - Generate PRs from task-scoped branches instead of writing to `master` /
   `main`.
-- Open a PR or draft PR from a goal result.
+- Render a PR or draft PR body from a goal result without implicit network
+  mutation.
 - Attach proof summary to PR body.
 - Attach task id, owner, write scope, and verification wall output.
 - Link changed files, gates, known gaps, and decisions.
@@ -157,7 +162,8 @@ Target: turn long-running goals into reviewable delivery artifacts.
 
 Exit criteria:
 
-- `omk goal open-pr latest` creates a reviewable PR with proof evidence.
+- `omk goal open-pr latest --dry-run` creates a reviewable PR draft with proof
+  evidence.
 - `omk goal` can map accepted task graph nodes to branches and PR links.
 
 ## Stage 8 - Long-Horizon Reliability
