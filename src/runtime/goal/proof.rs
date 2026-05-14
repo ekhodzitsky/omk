@@ -36,6 +36,8 @@ pub struct GoalProof {
     pub post_mutation_gates_ran: bool,
     pub known_gaps: Vec<String>,
     pub human_decisions_required: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_status: Option<String>,
 }
 
 impl Serialize for GoalProof {
@@ -53,6 +55,9 @@ impl Serialize for GoalProof {
             field_count += 1;
         }
         if delivery_metadata.is_some() {
+            field_count += 1;
+        }
+        if self.recovery_status.is_some() {
             field_count += 1;
         }
 
@@ -80,6 +85,9 @@ impl Serialize for GoalProof {
         state.serialize_field("post_mutation_gates_ran", &self.post_mutation_gates_ran)?;
         state.serialize_field("known_gaps", &self.known_gaps)?;
         state.serialize_field("human_decisions_required", &self.human_decisions_required)?;
+        if let Some(recovery_status) = &self.recovery_status {
+            state.serialize_field("recovery_status", recovery_status)?;
+        }
         state.end()
     }
 }
@@ -168,6 +176,7 @@ pub(crate) fn build_scaffold_proof(
         post_mutation_gates_ran: false,
         known_gaps,
         human_decisions_required,
+        recovery_status: None,
     }
 }
 
@@ -299,6 +308,7 @@ pub(crate) fn build_verified_proof(
         post_mutation_gates_ran,
         known_gaps,
         human_decisions_required: Vec::new(),
+        recovery_status: None,
     };
     remember_goal_proof_review_artifacts(&proof, review_artifacts);
     proof

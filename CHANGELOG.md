@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deterministic architect, code, test, security, performance, and anti-slop
   review sections with status, evidence, risks, known gaps, and a recommended
   next step for PR readiness.
+- **`omk goal` crash recovery and replay hardening**: `replay_goal` is now
+  idempotent—duplicate exact JSON events are deterministically collapsed,
+  partial/corrupt trailing event lines are surfaced as `known_gaps` with a
+  `recovery_status`, and missing optional artifacts (task graph, proof) become
+  recoverable gaps instead of hard errors. `GoalState::load` returns typed
+  `GoalStateError` variants (`MissingFile`, `CorruptedJson`, `InvalidFormat`)
+  so callers can distinguish missing state from malformed JSON. `GoalProof`
+  carries an optional `recovery_status` field that is populated when proof is
+  rebuilt from state after a missing or unreadable proof file.
 
 ### Changed
 

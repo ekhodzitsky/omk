@@ -27,7 +27,7 @@ pub use evidence::GoalGitEvidence;
 pub use proof::GoalProof;
 pub use replay::{replay_goal, GoalReplay, GoalReplayEntry};
 pub use state::{
-    CreateGoalOptions, GoalArtifact, GoalFailure, GoalPhase, GoalState, GoalStatus,
+    CreateGoalOptions, GoalArtifact, GoalFailure, GoalPhase, GoalState, GoalStateError, GoalStatus,
     GoalTerminalCriteria, GOALS_DIR, GOAL_AGENT_RUNS_DIR, GOAL_ARTIFACTS_DIR,
     GOAL_BUDGET_CHECKPOINTS_FILE, GOAL_DECISIONS_FILE, GOAL_FAILURE_FILE, GOAL_GATE_ARTIFACTS_DIR,
     GOAL_PRD_FILE, GOAL_PROOF_FILE, GOAL_STATE_FILE, GOAL_TASK_GRAPH_FILE,
@@ -109,7 +109,43 @@ pub async fn resolve_goal(goal_id: &str) -> Result<GoalState> {
 
 pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
     let goal = resolve_goal(goal_id).await?;
-    GoalProof::load(&goal.state_dir).await
+    match GoalProof::load(&goal.state_dir).await {
+        Ok(proof) => Ok(proof),
+        Err(error) => {
+            let (task_graph, task_graph_gap) = match GoalTaskGraph::load(&goal.state_dir).await {
+                Ok(graph) => (graph, None),
+                Err(graph_error) => {
+                    let gap = format!(
+                        "Task graph could not be loaded while rebuilding proof: {}",
+                        graph_error.root_cause()
+                    );
+                    (
+                        GoalTaskGraph {
+                            version: 1,
+                            goal_id: goal.goal_id.clone(),
+                            generated_at: Utc::now(),
+                            tasks: Vec::new(),
+                        },
+                        Some(gap),
+                    )
+                }
+            };
+            let git = evidence::detect_git_evidence(&goal.state_dir).await;
+            let mut proof = proof::build_scaffold_proof(&goal, &task_graph, git, Utc::now());
+            proof.known_gaps.push(format!(
+                "Proof file could not be loaded; rebuilt from state: {}",
+                error.root_cause()
+            ));
+            if let Some(gap) = task_graph_gap {
+                proof.known_gaps.push(gap);
+            }
+            proof.recovery_status = Some(format!(
+                "recovered: proof rebuilt from state because load failed: {}",
+                error.root_cause()
+            ));
+            Ok(proof)
+        }
+    }
 }
 
 pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
