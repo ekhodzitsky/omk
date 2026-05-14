@@ -1,0 +1,5 @@
+Goal scaffold created:
+Status: not_ready
+Phase:  proof
+State:
+Proof:

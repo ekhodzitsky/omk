@@ -170,6 +170,48 @@ and `goal replay` still produce useful planning and gate artifacts, but the
 proof should remain `not_ready` because bounded agent execution evidence is
 missing.
 
+### Dry-run demo tries to use real Kimi
+
+Use the dry-run switch, not only `MOCK_KIMI`:
+
+```bash
+NORTH_STAR_DRY_RUN=1 bash scripts/north_star_demo.sh
+```
+
+Dry-run mode forces mock execution and isolated `HOME`/`XDG_*` state even when
+the real `kimi` binary is installed. If `MOCK_KIMI` is set to a path, ensure it
+is executable.
+
+### GitHub delivery policy blocks PR or merge
+
+`omk goal open-pr latest --dry-run` only renders local PR title/body evidence
+in the current release. Network mutation, PR creation, and merges require an
+explicit delivery policy in future gated delivery mode. Recovery today:
+
+```bash
+omk goal proof latest --format md
+omk goal open-pr latest --dry-run --format markdown
+```
+
+Use the rendered body as the handoff, then create the PR manually from a
+task-scoped branch.
+
+### CI, review, or merge conflict blocks readiness
+
+Do not accept the goal as ready while the proof names blockers. Use the proof
+and replay first:
+
+```bash
+omk goal replay latest --format text
+omk goal proof latest --format md
+```
+
+If CI failed, rerun the failing gate locally and attach new evidence with
+`omk goal verify latest`. If review found blockers, create a focused fix task
+or run another bounded execution pass before `omk goal review latest`. If merge
+conflicts are unsafe to resolve automatically, keep the proof `not_ready` and
+record the conflict files, branches, and manual recovery step in the PR body.
+
 ### Goal blocked on human oracle
 
 Vague requests such as "make this app great" or "build a product users love"

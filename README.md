@@ -186,17 +186,21 @@ Requirements:
 ```bash
 omk setup
 omk doctor
-omk kimi sync --dry-run
-omk kimi sync
-omk kimi doctor
+omk goal run "Build a tiny local-only Rust CLI with tests and proof evidence" --until-ready
+omk goal replay latest
+omk goal proof latest --format md
 ```
 
-`omk setup` creates config/state/data directories. `omk doctor` verifies the local environment. `omk kimi sync --dry-run` shows exactly which Kimi-native assets OMK would create or update before you write anything.
+`omk setup` creates config/state/data directories. `omk doctor` verifies the
+local environment. The first `goal run --until-ready` command writes durable
+goal state, terminal replay, and a proof-backed readiness result. In the current
+beta, a scaffold-only proof is expected to remain `not_ready` until execution,
+review, and integration evidence exist.
 
-For a CI-safe demo with no real Kimi API calls:
+For a CI-safe dry-run with no real Kimi API calls:
 
 ```bash
-MOCK_KIMI=1 ./scripts/north_star_demo.sh
+NORTH_STAR_DRY_RUN=1 bash scripts/north_star_demo.sh
 ```
 
 ## Multi-agent Workflow

@@ -5,6 +5,94 @@ use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 
 #[test]
+fn test_goal_run_until_ready_first_user_path_records_progress_and_proof() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path());
+    seed_git_project(project.path());
+
+    omk_cmd(&envs)
+        .current_dir(project.path())
+        .args(["setup"])
+        .assert()
+        .success();
+
+    let run = omk_cmd(&envs)
+        .current_dir(project.path())
+        .args([
+            "goal",
+            "run",
+            "Build a tiny local Rust CLI fixture until it has proof-backed setup, terminal progress, and a clear readiness result",
+            "--until-ready",
+            "--budget-time",
+            "30m",
+            "--budget-tokens",
+            "200000",
+            "--max-agents",
+            "1",
+        ])
+        .output()
+        .expect("omk goal run should launch");
+    assert!(
+        run.status.success(),
+        "goal run failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let run_stdout = String::from_utf8(run.stdout).expect("run stdout should be UTF-8");
+    assert_lines_present(
+        &run_stdout,
+        &fixture_lines("goal_end_to_end_progress_markers.txt"),
+    );
+
+    let show = command_json(&envs, project.path(), &["goal", "show", "latest", "--json"]);
+    assert_eq!(show["status"], "not_ready");
+    assert_eq!(show["phase"], "proof");
+    assert_eq!(show["until_ready"], true);
+    assert_eq!(show["budget_time"], "30m");
+    assert_eq!(show["budget_tokens"], 200000);
+    assert_eq!(show["max_agents"], 1);
+
+    let replay = omk_cmd(&envs)
+        .current_dir(project.path())
+        .args(["goal", "replay", "latest", "--format", "text"])
+        .output()
+        .expect("omk goal replay should launch");
+    assert!(
+        replay.status.success(),
+        "goal replay failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&replay.stdout),
+        String::from_utf8_lossy(&replay.stderr)
+    );
+    let replay_stdout = String::from_utf8(replay.stdout).expect("replay stdout should be UTF-8");
+    for marker in [
+        "Goal replay",
+        "Timeline:",
+        "run_started",
+        "budget_checkpoint",
+    ] {
+        assert!(
+            replay_stdout.contains(marker),
+            "replay output missing {marker}: {replay_stdout}"
+        );
+    }
+
+    let proof = goal_proof_json(&envs, project.path());
+    assert_eq!(proof["status"], "not_ready");
+    assert_eq!(
+        proof["readiness"],
+        "not ready: controller scaffold has not executed agents or verification gates"
+    );
+    for gap in fixture_lines("goal_end_to_end_known_gaps.txt") {
+        assert_json_array_contains_str(&proof["known_gaps"], &gap);
+    }
+
+    let goal_dir = only_goal_dir(&envs);
+    assert_goal_scaffold_artifacts(&goal_dir);
+    assert!(goal_dir.join("events.jsonl").exists());
+}
+
+#[test]
 fn test_goal_north_star_e2e_harness_reaches_open_pr_dry_run_render() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");
@@ -206,6 +294,26 @@ fn assert_json_array_contains_str(value: &Value, expected: &str) {
             .any(|item| item.as_str() == Some(expected)),
         "array should contain {expected}: {value}"
     );
+}
+
+fn fixture_lines(name: &str) -> Vec<String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join(name);
+    fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("read fixture {}: {error}", path.display()))
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn assert_lines_present(output: &str, lines: &[String]) {
+    for line in lines {
+        assert!(output.contains(line), "output missing {line}: {output}");
+    }
 }
 
 fn git(project_dir: &Path, args: &[&str]) {
