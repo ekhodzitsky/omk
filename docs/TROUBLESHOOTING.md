@@ -184,6 +184,36 @@ If the goal depends on taste, pricing, legal review, credentials, or external
 business judgment, capture that as a human decision before expecting autonomous
 execution to continue.
 
+### Goal rejected by the integrator
+
+`omk goal reject latest --reason <text>` keeps the proof `not_ready`, records
+`integration_evidence.status = rejected`, and writes a rollback-plan artifact
+under the goal's `artifacts/integration/` directory. Inspect it before starting
+the next slice:
+
+```bash
+omk goal proof latest --json
+omk goal show latest
+```
+
+The next attempt should either revert the rejected changed-file scope or replace
+it in a new task-scoped branch/worktree, then rerun verify, execute, review, and
+acceptance.
+
+### Goal needs more budget
+
+When wall-clock, token, or USD limits are exhausted, the goal status becomes
+`needs_more_budget` instead of silently continuing:
+
+```bash
+omk goal budget latest
+omk goal budget-add latest --time 1h
+omk goal budget-add latest --tokens 500000 --usd 5
+```
+
+Budget extensions are explicit operator decisions and are recorded in
+`budget-checkpoints.jsonl`.
+
 ### Kimi assets drift
 
 If agent behavior does not match expected roles/hooks/skills:

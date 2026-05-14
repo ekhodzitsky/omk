@@ -63,7 +63,7 @@ What is ready enough to use now:
 | Proof reports | Beta MVP: `omk proof show latest`, cached/regenerated proof, Markdown/text/JSON formats. |
 | Verification gates | Ready for local gates and `.omk/gates.toml` customization, including full stdout/stderr evidence capture for large-output gates. |
 | HUD | Text, JSON, and TUI are usable; web dashboard is still scaffold-level. |
-| `omk goal` controller scaffold | Current Scaffold. Creates durable goal state with planning artifacts (PRD, plan, tests, task graph, decisions), runs bounded Wire-backed agent waves, enforces wall-clock/token/cost budgets with `budget-add` recovery, supports pause/resume/cancel with worker interruption, runs verification gates with post-mutation reruns, records controller review/security evidence, and writes honest proof/failure artifacts. Full surface in [SPEC.md](SPEC.md) and [TODO.md](TODO.md). |
+| `omk goal` controller | Beta MVP. Creates durable goal state with PRD/plan/test/task/proof artifacts, classifies goal oracles, runs bounded Wire-backed agent waves, enforces budgets with `budget-add`, supports pause/resume/cancel, reruns gates after mutations, records review/security/integration evidence, renders PR drafts, and only marks `ready` when proof evidence passes. |
 | Autopilot, Ralph, Ultrawork | Power-user MVP: useful, but less polished than the Kimi asset + team/proof path. |
 | MCP server, marketplace, web dashboard | Secondary/scaffold surfaces. |
 
@@ -107,14 +107,17 @@ The goal controller scaffold is in place. Today it:
   deterministic event replay;
 - records controller review, bounded secret-scan security evidence, and a
   structured six-pass review wall;
+- supports explicit local integrator `accept` / `reject`, where `ready`
+  requires gates, agent execution, review wall, integration, and oracle
+  evidence;
 - renders proof-backed PR title/body drafts through
   `omk goal open-pr latest --dry-run` without GitHub/network side effects.
 
-Integration acceptance, specialist review loops, and `ready` proof generation are
-still planned. The current `team run`, event log, gates, and proof systems
-remain the execution foundation. The design lives in [SPEC.md](SPEC.md), the
-delivery path in [ROADMAP.md](ROADMAP.md), the backlog in [TODO.md](TODO.md),
-and the detailed design in
+Human PR merge/publish remains explicit and outside the automatic proof path.
+The current `team run`, event log, gates, and proof systems remain the
+execution foundation. The design lives in [SPEC.md](SPEC.md), the delivery path
+in [ROADMAP.md](ROADMAP.md), the backlog in [TODO.md](TODO.md), and the
+detailed design in
 [docs/superpowers/specs/2026-05-11-omk-goal-design.md](docs/superpowers/specs/2026-05-11-omk-goal-design.md).
 
 ## Positioning
@@ -253,18 +256,6 @@ omk hud --once
 
 `omk team run` is the current proof-oriented path. It records events, dispatches tasks, runs verification gates, and writes a final proof or failure artifact.
 
-### Team lifecycle
-
-```bash
-omk team roles
-omk team run 2:executor "refactor the auth module"
-omk team status <team-name>
-omk team health <team-name>
-omk team shutdown <team-name>
-```
-
-Use this when you want a named team state directory that can be inspected, health-checked, and shut down after a run.
-
 ### Run and proof inspection
 
 ```bash
@@ -297,6 +288,8 @@ omk goal budget-add latest --tokens 50000 --usd 1.0
 omk goal verify latest
 omk goal execute latest
 omk goal review latest
+omk goal accept latest --summary "local integrator accepted the proof"
+omk goal reject latest --reason "manual review found a blocker"
 omk goal open-pr latest --dry-run --format markdown
 omk goal open-pr latest --dry-run --format json
 omk goal pause latest
@@ -306,21 +299,12 @@ omk goal cancel latest
 
 `omk goal` writes durable goal state plus planning, gate, agent, and review
 evidence into `goals/<goal-id>/`. Proof artifacts stay honestly `not_ready`
-until execution, review, and integration evidence exist. When run inside a git
-worktree, proofs also record best-effort git branch, HEAD commit, and
-dirty-state. `omk goal open-pr` turns that proof into a dry-run PR draft with
-status, readiness, task summary, delivery metadata, verification wall, known
-gaps, changed files, and artifacts.
-
-### Power-user modes
-
-```bash
-omk autopilot "build a small REST API"
-omk ralph --max-iterations 5 "make tests pass"
-omk ultrawork --concurrency 4 "task one" "task two" "task three"
-```
-
-These modes are available and useful, but the strongest MVP path today is still: Kimi assets -> team run -> HUD/run/proof -> verification.
+until execution, review, oracle, and explicit integration evidence exist. When
+run inside a git worktree, proofs also record best-effort git branch, HEAD
+commit, and dirty-state. `omk goal open-pr` turns that proof into a dry-run PR
+draft with status, readiness, task summary, delivery metadata, verification
+wall, review/oracle/integration evidence, known gaps, changed files, and
+artifacts.
 
 ## Features
 
@@ -335,7 +319,7 @@ These modes are available and useful, but the strongest MVP path today is still:
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
 | HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
 | Cleanup and recovery | Team cleanup, backups, rollback, watchdog events, and interrupted-run failure artifacts. | Current |
-| Goal runtime (`omk goal`) | Durable goal state, planning artifacts (PRD, plan, tests, task graph, decisions), bounded Wire-backed execution waves with per-task budgets, verification gates with post-mutation reruns, controller review/security evidence, pause/resume/cancel with worker interruption, wall-clock/token/cost budget enforcement and `budget-add` recovery, deterministic replay, git evidence, and honest proof/failure artifacts. Specialist reviews and integration loops are still planned. | Current Scaffold |
+| Goal runtime (`omk goal`) | Durable goal state, oracle-aware planning artifacts, bounded Wire-backed execution waves, post-mutation verification gates, review/security/integration evidence, task-scoped delivery metadata, deterministic replay, git evidence, PR dry-run rendering, and honest proof/failure artifacts. | Beta MVP |
 | Autopilot | Single-lead autonomous execution with verification gates and resume/yolo options. | Power-user MVP |
 | Ralph | Persistent verify/fix loop with iteration limits and completion evidence. | Power-user MVP |
 | Ultrawork | Parallel burst prompts from args, files, or globs, with JSON output support. | Power-user MVP |
@@ -401,14 +385,9 @@ MOCK_KIMI=1 ./scripts/north_star_demo.sh
 - [Tutorial](docs/TUTORIAL.md)
 - [North Star tutorial](docs/north_star_tutorial.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Project map](docs/PROJECT_MAP.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Competitive Positioning](docs/COMPETITIVE_POSITIONING.md)
-- [Roadmap](ROADMAP.md)
-- [Spec](SPEC.md)
-- [Goal backlog](TODO.md)
-- [Goal detailed design](docs/superpowers/specs/2026-05-11-omk-goal-design.md)
-- [Contributing](CONTRIBUTING.md)
+- [Roadmap](ROADMAP.md), [Spec](SPEC.md), [Goal backlog](TODO.md), [Contributing](CONTRIBUTING.md)
 
 ## License
 

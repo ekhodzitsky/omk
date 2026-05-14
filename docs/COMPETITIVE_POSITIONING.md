@@ -1,6 +1,6 @@
 # Competitive Positioning
 
-Last reviewed: 2026-05-11
+Last reviewed: 2026-05-14
 
 This document is the canonical market map for `omk goal`.
 
@@ -145,3 +145,9 @@ Re-check these before major `omk goal` releases:
 - Aider: https://github.com/Aider-AI/aider
 - Dify: https://github.com/langgenius/dify
 - Cody docs: https://sourcegraph.com/docs/cody
+
+May 14, 2026 review note: Devin, OpenHands, Claude Code, and Aider still
+reinforce the same boundary. OMK should not chase broad hosted-agent or
+assistant-surface parity; the defensible MVP remains local durable state,
+task-scoped branches/worktrees, explicit verification/review/integration gates,
+and proof-backed terminal statuses.

@@ -40,6 +40,14 @@ pub(super) fn validate_goal_id(goal_id: &str) -> Result<&str> {
     Ok(trimmed)
 }
 
+pub(super) fn validate_decision_text<'a>(value: &'a str, flag: &str) -> Result<&'a str> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("{flag} cannot be empty.");
+    }
+    Ok(trimmed)
+}
+
 /// Validate an optional duration flag.
 ///
 /// `require_positive=true` rejects `0`/`0s` (used by `budget-add --time`,

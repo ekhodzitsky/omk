@@ -14,6 +14,8 @@ Examples:
   omk goal verify latest
   omk goal execute latest
   omk goal review latest
+  omk goal accept latest --summary \"local integrator accepted the proof\"
+  omk goal reject latest --reason \"manual review found a blocker\"
   omk goal open-pr latest --dry-run
 
 Goal state is stored under the OMK state directory, one folder per goal:
@@ -64,12 +66,13 @@ Examples:
 pub(super) const GOAL_OPEN_PR_AFTER_HELP: &str = "\
 Examples:
   omk goal open-pr latest --dry-run
+  omk goal open-pr latest --dry-run --draft
   omk goal open-pr latest --dry-run --format json
   omk goal open-pr goal-20260514-085416-149-ea263039 --dry-run --format md
 
 Renders a local PR title/body draft from persisted goal proof evidence. This
 release does not create GitHub PRs; keep --dry-run explicit until a separate
-creation mode exists.";
+creation mode exists. Use --draft to mark the rendered PR metadata as a draft.";
 
 pub(super) const GOAL_REPLAY_AFTER_HELP: &str = "\
 Examples:
@@ -107,6 +110,19 @@ pub(super) const GOAL_REVIEW_AFTER_HELP: &str = "\
 Examples:
   omk goal review
   omk goal review latest";
+
+pub(super) const GOAL_ACCEPT_AFTER_HELP: &str = "\
+Examples:
+  omk goal accept latest --summary \"local integrator accepted the proof\"
+
+Marks a goal ready only when gates, execution, review wall, oracle evidence,
+and explicit local integration acceptance are all present.";
+
+pub(super) const GOAL_REJECT_AFTER_HELP: &str = "\
+Examples:
+  omk goal reject latest --reason \"manual review found a blocker\"
+
+Records an explicit local integration rejection and keeps the proof not_ready.";
 
 pub(super) const GOAL_PAUSE_AFTER_HELP: &str = "\
 Examples:

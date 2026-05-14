@@ -16,12 +16,17 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 
+mod artifacts;
+
 pub(crate) async fn create_goal_with_scaffold(
     goal: &str,
     options: super::state::CreateGoalOptions,
 ) -> anyhow::Result<super::state::GoalState> {
-    let id = super::state::generate_goal_id();
-    let goal_dir = super::state::goals_dir().join(&id);
+    let id = super::types::GoalId::generate();
+    let id_string = id.to_string();
+    let until_ready = options.until_ready;
+    let budget = super::types::GoalBudget::from_options(options)?;
+    let goal_dir = super::state::goals_dir().join(id.as_str());
     crate::runtime::config::ensure_private_dir(&goal_dir).await?;
 
     let now = chrono::Utc::now();
@@ -33,7 +38,7 @@ pub(crate) async fn create_goal_with_scaffold(
     });
     let state = super::state::GoalState {
         version: 1,
-        goal_id: id.clone(),
+        goal_id: id_string,
         original_goal: goal.to_string(),
         normalized_goal,
         status: if oracle.testable {
@@ -45,11 +50,11 @@ pub(crate) async fn create_goal_with_scaffold(
         created_at: now,
         updated_at: now,
         completed_at: Some(now),
-        until_ready: options.until_ready,
-        budget_time: options.budget_time,
-        budget_tokens: options.budget_tokens,
-        budget_usd: options.budget_usd,
-        max_agents: options.max_agents,
+        until_ready,
+        budget_time: budget.time,
+        budget_tokens: budget.tokens,
+        budget_usd: budget.usd,
+        max_agents: budget.max_agents,
         terminal_criteria: super::state::GoalTerminalCriteria::default(),
         artifacts: Vec::new(),
         failure,
@@ -70,11 +75,11 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
 
     let now = Utc::now();
     state.phase = GoalPhase::Planning;
-    write_goal_brief(&state, now).await?;
+    artifacts::write_goal_brief(&state, now).await?;
     record_artifact(&mut state, "prd", GOAL_PRD_FILE, now);
 
     state.phase = GoalPhase::Planning;
-    write_technical_plan(&state, now).await?;
+    artifacts::write_technical_plan(&state, now).await?;
     record_artifact(&mut state, "technical_plan", GOAL_TECHNICAL_PLAN_FILE, now);
 
     state.phase = GoalPhase::Decomposition;
@@ -82,8 +87,11 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
     record_artifact(&mut state, "task_graph", GOAL_TASK_GRAPH_FILE, now);
 
     state.phase = GoalPhase::VerificationDesign;
-    write_test_spec(&state, &task_graph, now).await?;
+    artifacts::write_test_spec(&state, &task_graph, &cwd, now).await?;
     record_artifact(&mut state, "test_spec", GOAL_TEST_SPEC_FILE, now);
+    for (kind, path) in artifacts::write_greenfield_oracle_artifacts(&state).await? {
+        record_artifact(&mut state, kind, path, now);
+    }
     append_controller_task_events(&state, &task_graph).await?;
 
     state.phase = GoalPhase::Proof;
@@ -126,78 +134,6 @@ async fn write_blocked_goal_failure_artifact(state: &GoalState) -> Result<()> {
     crate::runtime::atomic::atomic_write(
         &state.state_dir.join(GOAL_FAILURE_FILE),
         failure_json.as_bytes(),
-    )
-    .await
-}
-
-async fn write_goal_brief(state: &GoalState, generated_at: DateTime<Utc>) -> Result<()> {
-    let body = format!(
-        "# Goal Brief\n\n\
-         Generated: {generated_at}\n\n\
-         ## Original Goal\n\n\
-         {}\n\n\
-         ## Normalized Goal\n\n\
-         {}\n\n\
-         ## Current Scope\n\n\
-         This scaffold captures intent and durable planning artifacts. Run `omk goal execute` to attach local gate evidence and a bounded Wire-backed agent wave, then `omk goal review` to attach controller review/security evidence.\n",
-        state.original_goal, state.normalized_goal
-    );
-    crate::runtime::atomic::atomic_write(&state.state_dir.join(GOAL_PRD_FILE), body.as_bytes())
-        .await
-}
-
-async fn write_technical_plan(state: &GoalState, generated_at: DateTime<Utc>) -> Result<()> {
-    let body = format!(
-        "# Technical Plan\n\n\
-         Generated: {generated_at}\n\n\
-         ## Controller Phases\n\n\
-         1. Intake records the original user goal.\n\
-         2. Planning writes this technical plan and the goal brief.\n\
-         3. Decomposition writes a task graph.\n\
-         4. Verification design writes a test specification.\n\
-         5. Local execution runs verification gates and refreshes proof evidence.\n\
-         6. Review records controller review and security evidence.\n\
-         7. Proof writes an honest not-ready proof until required execution, review, and integration evidence exists.\n\n\
-         ## Execution Boundary\n\n\
-         The current controller records planning task evidence, local verification task evidence, a bounded Wire-backed `goal-agent-execute` wave, agent mutation diff/changed-file evidence, post-mutation gate reruns when files change, and controller review/security evidence. The initial wave can make minimal project changes under the worker boundary, but readiness still requires specialist review loops and integration acceptance.\n\n\
-         Goal ID: `{}`\n",
-        state.goal_id
-    );
-    crate::runtime::atomic::atomic_write(
-        &state.state_dir.join(GOAL_TECHNICAL_PLAN_FILE),
-        body.as_bytes(),
-    )
-    .await
-}
-
-async fn write_test_spec(
-    state: &GoalState,
-    task_graph: &GoalTaskGraph,
-    generated_at: DateTime<Utc>,
-) -> Result<()> {
-    let task_lines = task_graph
-        .tasks
-        .iter()
-        .map(|task| format!("- `{}`: {}", task.id, task.acceptance.join("; ")))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let body = format!(
-        "# Test Spec\n\n\
-         Generated: {generated_at}\n\n\
-         ## Required Proof Before Ready\n\n\
-         - Required gates must pass.\n\
-         - A proof artifact must cite gate evidence.\n\
-         - Known gaps must be empty or explicitly accepted by a human.\n\n\
-         ## Scaffold Task Acceptance\n\n\
-         {task_lines}\n\n\
-         ## Current Status\n\n\
-         `omk goal` remains `not_ready` because readiness still requires integration acceptance and specialist review loops beyond controller-owned planning, local verification, bounded agent execution, mutation evidence, post-mutation gate reruns, and controller review/security evidence.\n\n\
-         Goal ID: `{}`\n",
-        state.goal_id
-    );
-    crate::runtime::atomic::atomic_write(
-        &state.state_dir.join(GOAL_TEST_SPEC_FILE),
-        body.as_bytes(),
     )
     .await
 }

@@ -8,6 +8,12 @@ use std::time::Duration;
 use tokio::process::Command;
 use tokio::time::timeout;
 
+mod conflict;
+
+pub use conflict::{
+    detect_goal_merge_conflicts, GoalMergeConflictCheckRequest, GoalMergeConflictEvidence,
+};
+
 const BRANCH_PREFIX: &str = "omk/goal";
 const WORKTREE_PREFIX: &str = "goal";
 const COMPONENT_MAX_CHARS: usize = 48;

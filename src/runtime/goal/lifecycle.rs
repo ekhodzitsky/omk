@@ -1,0 +1,280 @@
+use anyhow::Result;
+use chrono::Utc;
+use std::path::Path;
+
+use super::proof::GoalProof;
+use super::state::{GoalPhase, GoalState, GoalStatus};
+use super::task_graph::{GoalTaskGraph, GoalTaskStatus};
+use super::{agent, budget, dispatch, evidence, proof, state, task_graph, verifier};
+
+pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
+    let mut state = super::resolve_goal(goal_id).await?;
+    ensure_goal_can_continue(&state)?;
+    budget::ensure_budget_available(&mut state, "goal verify").await?;
+    let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
+    let gate_config = crate::runtime::gates::load_or_detect_gates(project_dir).await;
+    let gate_artifacts = state
+        .state_dir
+        .join(state::GOAL_ARTIFACTS_DIR)
+        .join(state::GOAL_GATE_ARTIFACTS_DIR);
+    let gates = crate::runtime::gates::run_gates_with_evidence(
+        &gate_config,
+        project_dir,
+        Some(&gate_artifacts),
+    )
+    .await;
+    let changed_files = crate::runtime::gates::detect_changed_files(project_dir).await;
+    let now = Utc::now();
+
+    verifier::append_gate_events(&state, &gates).await?;
+    let git = evidence::detect_git_evidence(project_dir).await;
+    let updated_task = verifier::apply_local_verification_task_result(&mut task_graph, &gates, now);
+    if let Some(task) = &updated_task {
+        verifier::append_local_verification_task_events(&state, task).await?;
+    }
+    proof::write_json_artifact(
+        &state.state_dir.join(state::GOAL_TASK_GRAPH_FILE),
+        &task_graph,
+    )
+    .await?;
+
+    state.status = GoalStatus::NotReady;
+    state.phase = GoalPhase::Proof;
+    state.updated_at = now;
+    state.completed_at = Some(now);
+    state.save().await?;
+
+    let proof =
+        proof::build_verified_proof(&state, &task_graph, gates, changed_files, git, false, now);
+    proof::write_json_artifact(&state.state_dir.join(state::GOAL_PROOF_FILE), &proof).await?;
+    append_proof_event(&state, &proof).await?;
+    budget::append_budget_checkpoint(&state, "verify_completed").await?;
+
+    Ok(proof)
+}
+
+pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
+    let mut state = super::resolve_goal(goal_id).await?;
+    ensure_goal_can_continue(&state)?;
+    budget::ensure_budget_available(&mut state, "goal execute").await?;
+    state.status = GoalStatus::Running;
+    state.phase = GoalPhase::Execution;
+    state.updated_at = Utc::now();
+    state.completed_at = None;
+    state.save().await?;
+
+    let verification_proof = verify_goal(goal_id, project_dir).await?;
+    let state = super::resolve_goal(goal_id).await?;
+    let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
+    let local_verify_done = task_graph.tasks.iter().any(|task| {
+        task.id == state::GOAL_LOCAL_VERIFY_TASK_ID && task.status == GoalTaskStatus::Done
+    });
+
+    if !local_verify_done {
+        return Ok(verification_proof);
+    }
+
+    let Some(dispatch) = agent::goal_agent_dispatch_plan(&state, &task_graph) else {
+        return Ok(verification_proof);
+    };
+
+    let now = Utc::now();
+    let agent_evidence =
+        dispatch::run_goal_agent_task_wave(&state, &task_graph, project_dir, now, &dispatch)
+            .await?;
+    match dispatch.kind {
+        agent::GoalAgentWaveKind::Initial => {
+            if let Some(task) =
+                task_graph::apply_agent_execution_task_result(&mut task_graph, &agent_evidence, now)
+            {
+                dispatch::append_agent_execution_task_events(&state, &task, &agent_evidence)
+                    .await?;
+            }
+        }
+        agent::GoalAgentWaveKind::FollowUp => {
+            task_graph::apply_agent_followup_task_results(&mut task_graph, &agent_evidence, now);
+        }
+    }
+    task_graph::apply_agent_proposed_task_mutations(&state, &mut task_graph, &agent_evidence, now)
+        .await?;
+
+    let agent_execution_succeeded = agent_evidence.summary.completed
+        == agent_evidence.summary.total
+        && agent_evidence.summary.failed == 0;
+    let latest_state = super::resolve_goal(&state.goal_id).await?;
+    let preserve_interrupted_status = matches!(
+        latest_state.status,
+        GoalStatus::Paused | GoalStatus::Cancelled | GoalStatus::NeedsMoreBudget
+    );
+    let mut proof_gates = verification_proof.gates;
+    let mut proof_git = verification_proof.git;
+    let mut proof_changed_files = agent_evidence.changed_files;
+    let mut post_mutation_gates_ran = false;
+    if agent_execution_succeeded && !proof_changed_files.is_empty() {
+        let gate_config = crate::runtime::gates::load_or_detect_gates(project_dir).await;
+        let gate_artifacts = state
+            .state_dir
+            .join(state::GOAL_ARTIFACTS_DIR)
+            .join(state::GOAL_GATE_ARTIFACTS_DIR)
+            .join("post-mutation");
+        proof_gates = crate::runtime::gates::run_gates_with_evidence(
+            &gate_config,
+            project_dir,
+            Some(&gate_artifacts),
+        )
+        .await;
+        verifier::append_gate_events(&state, &proof_gates).await?;
+        proof_git = evidence::detect_git_evidence(project_dir).await;
+        proof_changed_files = crate::runtime::gates::detect_changed_files(project_dir).await;
+        if let Some(task) =
+            verifier::apply_local_verification_task_result(&mut task_graph, &proof_gates, now)
+        {
+            verifier::append_local_verification_task_events(&state, &task).await?;
+        }
+        post_mutation_gates_ran = true;
+    }
+
+    proof::write_json_artifact(
+        &state.state_dir.join(state::GOAL_TASK_GRAPH_FILE),
+        &task_graph,
+    )
+    .await?;
+
+    let mut state = if preserve_interrupted_status {
+        latest_state
+    } else {
+        state
+    };
+    evidence::record_artifact_path_once(
+        &mut state,
+        "agent_run",
+        agent_evidence.run_path.clone(),
+        now,
+    );
+    if !preserve_interrupted_status {
+        state.status = GoalStatus::NotReady;
+        state.phase = GoalPhase::Proof;
+        state.completed_at = Some(now);
+    }
+    state.updated_at = now;
+    state.save().await?;
+
+    let proof = proof::build_verified_proof(
+        &state,
+        &task_graph,
+        proof_gates,
+        proof_changed_files,
+        proof_git,
+        post_mutation_gates_ran,
+        now,
+    );
+    proof::write_json_artifact(&state.state_dir.join(state::GOAL_PROOF_FILE), &proof).await?;
+    append_proof_event(&state, &proof).await?;
+    budget::append_budget_checkpoint(&state, "execute_completed").await?;
+
+    Ok(proof)
+}
+
+pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
+    let mut state = super::resolve_goal(goal_id).await?;
+    ensure_goal_can_continue(&state)?;
+    budget::ensure_budget_available(&mut state, "goal review").await?;
+    state.status = GoalStatus::Running;
+    state.phase = GoalPhase::VerificationDesign;
+    state.updated_at = Utc::now();
+    state.completed_at = None;
+    state.save().await?;
+
+    let mut state = super::resolve_goal(goal_id).await?;
+    let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
+    let prior_proof = GoalProof::load(&state.state_dir).await?;
+    let now = Utc::now();
+
+    let review_evidence =
+        verifier::write_goal_review_evidence(&state, &task_graph, &prior_proof, project_dir, now)
+            .await?;
+    let mut updated_tasks = Vec::new();
+    if let Some(task) =
+        verifier::apply_goal_review_task_result(&mut task_graph, &review_evidence, now)
+    {
+        updated_tasks.push(task);
+    }
+    if let Some(task) =
+        verifier::apply_goal_security_review_task_result(&mut task_graph, &review_evidence, now)
+    {
+        updated_tasks.push(task);
+    }
+    verifier::append_goal_review_task_events(&state, &updated_tasks).await?;
+    proof::write_json_artifact(
+        &state.state_dir.join(state::GOAL_TASK_GRAPH_FILE),
+        &task_graph,
+    )
+    .await?;
+
+    evidence::record_artifact_path_once(
+        &mut state,
+        "review",
+        review_evidence.review_path.clone(),
+        now,
+    );
+    evidence::record_artifact_path_once(
+        &mut state,
+        "security_review",
+        review_evidence.security_review_path.clone(),
+        now,
+    );
+    state.status = GoalStatus::NotReady;
+    state.phase = GoalPhase::Proof;
+    state.updated_at = now;
+    state.completed_at = Some(now);
+    state.save().await?;
+
+    let proof = proof::build_verified_proof(
+        &state,
+        &task_graph,
+        prior_proof.gates,
+        prior_proof.changed_files,
+        prior_proof.git,
+        prior_proof.post_mutation_gates_ran,
+        now,
+    );
+    proof::write_json_artifact(&state.state_dir.join(state::GOAL_PROOF_FILE), &proof).await?;
+    append_proof_event(&state, &proof).await?;
+    budget::append_budget_checkpoint(&state, "review_completed").await?;
+
+    Ok(proof)
+}
+
+fn ensure_goal_can_continue(state: &GoalState) -> Result<()> {
+    if state.status == GoalStatus::Paused {
+        anyhow::bail!(
+            "Goal '{}' is paused; run `omk goal resume {}` before continuing",
+            state.goal_id,
+            state.goal_id
+        );
+    }
+    if state.status == GoalStatus::BlockedOnHuman {
+        let reason = state
+            .failure
+            .as_ref()
+            .map(|failure| failure.reason.as_str())
+            .unwrap_or("human decision required");
+        anyhow::bail!("Goal '{}' is blocked_on_human: {reason}", state.goal_id);
+    }
+    Ok(())
+}
+
+async fn append_proof_event(state: &GoalState, proof: &GoalProof) -> Result<()> {
+    let writer = crate::runtime::events::EventWriter::new(
+        state.state_dir.join(crate::runtime::config::EVENTS_FILE),
+    );
+    let builder = crate::runtime::events::EventBuilder::new(crate::runtime::events::RunId(
+        state.goal_id.clone(),
+    ));
+    writer
+        .append(&builder.proof_written(
+            &state.state_dir.join(state::GOAL_PROOF_FILE),
+            &proof.status.to_string(),
+        )?)
+        .await
+}

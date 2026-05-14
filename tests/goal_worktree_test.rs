@@ -202,7 +202,6 @@ async fn test_goal_worktree_materialize_records_delivery_metadata_for_task() {
     fs::create_dir_all(&goal_dir).expect("goal dir");
     let mut graph = task_graph_json();
     graph["tasks"][0]["delivery"] = json!({
-        "owner": "codex",
         "verification_summary": "kept from earlier delivery metadata"
     });
     fs::write(
@@ -227,10 +226,18 @@ async fn test_goal_worktree_materialize_records_delivery_metadata_for_task() {
     let delivery = &task_graph["tasks"][0]["delivery"];
 
     assert_eq!(delivery["branch"], plan.branch_name);
-    assert_eq!(delivery["owner"], "codex");
+    assert_eq!(delivery["owner"], "executor");
+    assert_eq!(delivery["status"], "planned");
     assert_eq!(
         delivery["verification_summary"],
         "kept from earlier delivery metadata"
+    );
+    assert_eq!(
+        delivery["write_scope"]
+            .as_array()
+            .expect("write scope")
+            .len(),
+        1
     );
     assert_eq!(
         delivery["worktree_path"],
@@ -347,6 +354,7 @@ fn task_graph_json() -> Value {
             "title": "Task 1",
             "description": "Materialize worktree for task 1.",
             "status": "pending",
+            "owner_role": "executor",
             "dependencies": [],
             "read_set": [],
             "write_set": ["src/runtime/goal/worktree.rs"],

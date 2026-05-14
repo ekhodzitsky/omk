@@ -121,7 +121,7 @@ fn inject_delivery_metadata(task_graph_path: &Path) {
         "slice_id": "goal-agent-execute",
         "owner": "codex",
         "branch": "codex/goal-open-pr-fixture",
-        "pr_link": "https://github.com/ekhodzitsky/oh-my-kimi/pull/456",
+        "pr_url": "https://github.com/ekhodzitsky/oh-my-kimi/pull/456",
         "write_scope": [
             "src/cli/goal/mod.rs",
             "src/cli/goal/commands/mod.rs",
@@ -189,6 +189,8 @@ fn goal_open_pr_markdown_dry_run_renders_goal_proof_and_delivery_metadata() {
     assert!(stdout.contains("## Verification Wall"));
     assert!(stdout.contains("smoke"));
     assert!(!stdout.contains("smoke-ok"));
+    assert!(stdout.contains("## Release Candidate Notes"));
+    assert!(stdout.contains("merge recommendation"));
     assert!(stdout.contains("## Known Gaps"));
     assert!(stdout.contains("## Changed Files"));
     assert!(stdout.contains("src-change.txt"));
@@ -221,6 +223,38 @@ fn goal_open_pr_json_dry_run_is_valid_json() {
         .as_str()
         .expect("body string")
         .contains("## Verification Wall"));
+}
+
+#[test]
+fn goal_open_pr_draft_dry_run_marks_draft_metadata() {
+    let (_tmp, envs) = isolated_env();
+    let (_project, _goal_dir) = init_project_with_goal(&envs);
+
+    let output = omk_cmd(&envs)
+        .args([
+            "goal",
+            "open-pr",
+            "latest",
+            "--dry-run",
+            "--draft",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("omk goal open-pr failed");
+
+    assert!(
+        output.status.success(),
+        "open-pr draft json failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: Value = serde_json::from_slice(&output.stdout).expect("open-pr JSON should parse");
+    assert_eq!(json["draft"], true);
+    assert!(json["body"]
+        .as_str()
+        .expect("body string")
+        .contains("- Draft: `true`"));
 }
 
 #[test]

@@ -20,8 +20,9 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use validate::{
-    resolve_format, validate_budget_time, validate_goal_id, validate_goal_text,
-    validate_optional_budget_tokens, validate_optional_budget_usd, validate_optional_max_agents,
+    resolve_format, validate_budget_time, validate_decision_text, validate_goal_id,
+    validate_goal_text, validate_optional_budget_tokens, validate_optional_budget_usd,
+    validate_optional_max_agents,
 };
 
 #[derive(Parser, Debug)]
@@ -111,9 +112,32 @@ pub(crate) enum GoalCommands {
         /// Render without network or GitHub creation
         #[arg(long)]
         dry_run: bool,
+        /// Render metadata for a GitHub draft PR
+        #[arg(long)]
+        draft: bool,
         /// Output format
         #[arg(short, long, value_enum, default_value = "markdown")]
         format: OpenPrFormat,
+    },
+    /// Accept a proof-backed goal after explicit local integrator review
+    #[command(after_help = help::GOAL_ACCEPT_AFTER_HELP)]
+    Accept {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest", value_name = "GOAL_ID")]
+        goal_id: String,
+        /// Integrator acceptance summary
+        #[arg(long, value_name = "TEXT")]
+        summary: String,
+    },
+    /// Reject goal readiness after explicit local integrator review
+    #[command(after_help = help::GOAL_REJECT_AFTER_HELP)]
+    Reject {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest", value_name = "GOAL_ID")]
+        goal_id: String,
+        /// Rejection reason
+        #[arg(long, value_name = "TEXT")]
+        reason: String,
     },
     /// Replay the persisted goal timeline
     #[command(after_help = help::GOAL_REPLAY_AFTER_HELP)]
@@ -277,10 +301,21 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         GoalCommands::OpenPr {
             goal_id,
             dry_run,
+            draft,
             format,
         } => {
             let goal_id = validate_goal_id(&goal_id)?;
-            commands::cmd_open_pr(goal_id, dry_run, format).await
+            commands::cmd_open_pr(goal_id, dry_run, draft, format).await
+        }
+        GoalCommands::Accept { goal_id, summary } => {
+            let goal_id = validate_goal_id(&goal_id)?;
+            let summary = validate_decision_text(&summary, "--summary")?;
+            commands::cmd_accept(goal_id, summary).await
+        }
+        GoalCommands::Reject { goal_id, reason } => {
+            let goal_id = validate_goal_id(&goal_id)?;
+            let reason = validate_decision_text(&reason, "--reason")?;
+            commands::cmd_reject(goal_id, reason).await
         }
         GoalCommands::Replay {
             goal_id,

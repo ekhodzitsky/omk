@@ -9,7 +9,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 
 - [x] Add `src/runtime/goal/` module.
 - [x] Define `GoalStatus` and `GoalState`.
-- [ ] Define dedicated `GoalId`, `GoalKind`, and `GoalBudget` types.
+- [x] Define dedicated `GoalId`, `GoalKind`, and `GoalBudget` types.
 - [x] Define terminal statuses: `ready`, `not_ready`, `blocked_on_human`,
       `blocked_on_external`, `needs_more_budget`, `failed_infra`, `cancelled`.
 - [x] Add `goals/<goal-id>/` path resolution under the OMK state directory.
@@ -46,7 +46,7 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Generate `decisions.jsonl`.
 - [x] Add a planning-only mode.
 - [x] Add `blocked_on_human` when success criteria cannot be made testable.
-- [ ] Add tests for greenfield and rewrite planning fixtures.
+- [x] Add tests for greenfield and rewrite planning fixtures.
 
 ## Phase 4 - Task Graph
 
@@ -88,92 +88,96 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Capture known gaps.
 - [x] Block `ready` when required gates fail.
 - [x] Add `omk goal proof [goal-id|latest]`.
-- [ ] Add golden proof tests.
+- [x] Add golden proof tests, including `ready`, `not_ready`,
+      `blocked_on_human`, `needs_more_budget`, `cancelled`, and
+      infra-like terminal status coverage.
+- [x] Add ready-path greenfield and rewrite fixture tests with oracle,
+      review, integration, and PR draft evidence.
 
 ## Phase 7 - Rewrite Oracle
 
-- [ ] Detect source project command/API surfaces.
-- [ ] Generate compatibility test plan.
-- [ ] Add reference implementation runner.
-- [ ] Add golden fixture capture.
-- [ ] Compare outputs, errors, exit codes, and file artifacts.
-- [ ] Track intentional incompatibilities.
-- [ ] Add small Python-to-Rust fixture demo.
+- [x] Detect source project command/API surfaces.
+- [x] Generate compatibility test plan.
+- [x] Add reference implementation runner.
+- [x] Add golden fixture capture.
+- [x] Compare outputs, errors, exit codes, and file artifacts.
+- [x] Track intentional incompatibilities.
+- [x] Add small Python-to-Rust fixture demo.
 
 ## Phase 8 - Greenfield Oracle
 
-- [ ] Generate acceptance tests from PRD.
-- [ ] Generate smoke/demo script.
-- [ ] Generate docs-first usage examples.
-- [ ] Add "engineering-ready" vs "product-ready" distinction.
-- [ ] Add greenfield CLI/app fixture demo.
+- [x] Generate acceptance tests from PRD.
+- [x] Generate smoke/demo script.
+- [x] Generate docs-first usage examples.
+- [x] Add "engineering-ready" vs "product-ready" distinction.
+- [x] Add greenfield CLI/app fixture demo.
 
 ## Phase 9 - Worktree Integration
 
 - [x] Treat `master` / `main` as read-only baselines in docs, PR templates,
       and future automation. (Docs and PR template done; CI/branch-protection
       automation tracked separately.)
-- [ ] Add goal task ownership for parallel goal task slices.
-- [ ] Create isolated worktrees for independent slices.
-- [ ] Track branch per task or subgoal.
-- [ ] Track task id and PR link per task or subgoal.
-- [ ] Add integrator step.
-- [ ] Detect merge conflicts.
-- [ ] Preserve changelog and docs updates.
-- [ ] Add rollback for rejected slices.
+- [x] Add goal task ownership for parallel goal task slices.
+- [x] Create isolated worktrees for independent slices.
+- [x] Track branch per task or subgoal.
+- [x] Track task id and PR link per task or subgoal.
+- [x] Add integrator step.
+- [x] Detect merge conflicts and record task delivery evidence.
+- [x] Preserve changelog and docs updates.
+- [x] Add rollback for rejected slices.
 
 ## Phase 10 - Review Loops
 
 - [x] Add initial controller review pass.
 - [x] Add initial controller security evidence pass.
 - [x] Persist initial review artifacts.
-- [ ] Add architect review pass.
-- [ ] Add code reviewer pass.
-- [ ] Add test-engineer pass.
-- [ ] Add specialist security review pass.
-- [ ] Add performance review pass.
-- [ ] Add anti-slop cleanup pass.
+- [x] Add architect review pass.
+- [x] Add code reviewer pass.
+- [x] Add test-engineer pass.
+- [x] Add specialist security review pass.
+- [x] Add performance review pass.
+- [x] Add anti-slop cleanup pass.
 
 ## Phase 11 - GitHub Delivery
 
-- [ ] Add `omk goal open-pr`.
-- [ ] Generate PR body from proof.
-- [ ] Include task id, owner, write scope, verification wall output, and known
+- [x] Add `omk goal open-pr`.
+- [x] Generate PR body from proof.
+- [x] Include task id, owner, write scope, verification wall output, and known
       gaps in generated PR bodies.
-- [ ] Link artifacts and known gaps.
-- [ ] Support draft PRs.
-- [ ] Support release-candidate notes.
+- [x] Link artifacts and known gaps.
+- [x] Support draft PR dry-run metadata.
+- [x] Support release-candidate notes in PR dry-run output.
 
 ## Phase 12 - Long-Horizon Reliability
 
 - [x] Add pause/resume across process restart.
 - [x] Harden pause/resume against active worker interruption.
-- [ ] Add crash recovery tests.
+- [x] Add crash recovery tests.
 - [x] Add budget checkpoints.
 - [x] Enforce exhausted wall-clock `--budget-time` before goal verify/execute/review.
 - [x] Add operator recovery for `needs_more_budget` goals with `budget-add`.
 - [x] Enforce per-task Wire worker budget hard stops.
 - [x] Add token/cost budget sources and hard stops.
-- [ ] Add notification hooks.
+- [x] Document no-dependency notification hook extension point.
 - [x] Add stale worker cleanup.
 - [x] Add goal replay.
 - [x] Harden goal replay into deterministic crash-recovery replay.
 
 ## Documentation Tasks
 
-- [ ] Add `omk goal` tutorial after CLI MVP exists.
-- [ ] Add troubleshooting entries for blocked goals.
-- [ ] Add architecture diagram for goal controller and scheduler.
-- [ ] Add examples for rewrite, greenfield, audit, and refactor goals.
-- [ ] Refresh `docs/COMPETITIVE_POSITIONING.md` before each major `omk goal` release.
-- [ ] Update README feature table when the first goal MVP lands.
+- [x] Add `omk goal` tutorial after CLI MVP exists.
+- [x] Add troubleshooting entries for blocked goals.
+- [x] Add architecture diagram for goal controller and scheduler.
+- [x] Add examples for rewrite, greenfield, audit, and refactor goals.
+- [x] Refresh `docs/COMPETITIVE_POSITIONING.md` before each major `omk goal` release.
+- [x] Update README feature table when the first goal MVP lands.
 
 ## Release Gates for First Goal MVP
 
-- [ ] `cargo fmt -- --check`
-- [ ] `cargo check --all-targets`
-- [ ] `cargo clippy --all-targets --all-features -- -D warnings`
-- [ ] `cargo test --all-features`
-- [ ] `cargo doc --no-deps`
-- [ ] `cargo deny --all-features check advisories licenses`
-- [ ] North Star goal fixture demo passes.
+- [x] `cargo fmt -- --check`
+- [x] `cargo check --all-targets`
+- [x] `cargo clippy --all-targets --all-features -- -D warnings`
+- [x] `cargo test --all-features`
+- [x] `cargo doc --no-deps`
+- [x] `cargo deny --all-features check advisories licenses`
+- [x] North Star goal fixture demo passes.
