@@ -4,6 +4,8 @@ This is the implementation backlog for `omk goal`.
 
 Canonical spec: `SPEC.md`
 Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
+End-to-end delivery contract:
+`docs/superpowers/specs/2026-05-14-omk-goal-end-to-end-delivery.md`
 
 ## Phase 1 - Durable Goal State
 
@@ -148,7 +150,44 @@ Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
 - [x] Support draft PR dry-run metadata.
 - [x] Support release-candidate notes in PR dry-run output.
 
-## Phase 12 - Long-Horizon Reliability
+## Phase 12 - End-to-End Delivery Controller
+
+- [ ] Keep the primary UX one-command: `omk goal run ... --until-ready`;
+      additional commands are for inspection, recovery, and explicit policy
+      changes, not for driving the happy path step by step.
+- [ ] Keep the first operator surface TUI/terminal-first; defer graphical UI
+      until the end-to-end terminal flow is reliable.
+- [ ] Add orchestrator narrative updates: what was implemented, what is being
+      checked, what comes next, blockers, and material tradeoffs under
+      consideration.
+- [ ] Treat routine polish as part of the goal: final `ready` must include
+      review, audit, cleanup/refactor, docs, and verification evidence; if
+      polish remains, record concrete follow-up tasks instead of claiming done.
+- [ ] Add explicit delivery policy for automatic PR/merge side effects.
+- [ ] Auto-decompose large goals into PR-sized delivery slices.
+- [ ] Assign each slice an owner role, write scope, branch, worktree, gates,
+      review requirements, and integration dependency.
+- [ ] Materialize task-scoped branches/worktrees from the goal controller.
+- [ ] Dispatch agents per slice through the existing scheduler/Wire runtime.
+- [ ] Commit accepted slice changes with proof and task metadata.
+- [ ] Push task branches and create draft PRs when policy permits.
+- [ ] Run architect, code, test, security, performance, and anti-slop reviews
+      against each slice PR.
+- [ ] Convert review findings into fix tasks and repeat review/fix loops until
+      blockers are resolved or the goal is blocked with evidence.
+- [ ] Create or update an integrator branch/PR that combines accepted slices.
+- [ ] Detect integration conflicts, rebase/update task PRs, and record conflict
+      evidence when automatic recovery is unsafe.
+- [ ] Gate final merge into `main` / `master` on proof, CI, review wall, and
+      delivery policy.
+- [ ] Update `proof.json` with task PRs, commits, reviews, merge status,
+      integrator PR, CI runs, and final baseline commit.
+- [ ] Add an end-to-end fixture proving: plan -> worktree -> agent -> commit ->
+      PR draft/create -> review fix loop -> integrator -> gated merge.
+- [ ] Document manual recovery for failed PR creation, failed CI, review
+      blockers, merge conflicts, and partial acceptance.
+
+## Phase 13 - Long-Horizon Reliability
 
 - [x] Add pause/resume across process restart.
 - [x] Harden pause/resume against active worker interruption.
