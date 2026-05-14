@@ -12,7 +12,7 @@ use super::super::state::{
 };
 use super::model::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GoalTaskGraphSummary {
     pub total_tasks: usize,
     pub pending_tasks: usize,
