@@ -85,9 +85,19 @@ impl TeamRunner {
         worker_specs: &[WorkerSpec],
         cancel: &CancellationToken,
     ) -> Result<RunSummary> {
+        self.run_with_cancel_reason(worker_specs, cancel, "controller interrupt")
+            .await
+    }
+
+    pub(crate) async fn run_with_cancel_reason(
+        &mut self,
+        worker_specs: &[WorkerSpec],
+        cancel: &CancellationToken,
+        cancel_reason: &str,
+    ) -> Result<RunSummary> {
         loop {
             if cancel.is_cancelled() {
-                self.cancel_unfinished_tasks("controller interrupt").await?;
+                self.cancel_unfinished_tasks(cancel_reason).await?;
                 self.snapshot().await?;
                 break;
             }
@@ -96,7 +106,7 @@ impl TeamRunner {
             self.poll_workers().await?;
 
             if cancel.is_cancelled() {
-                self.cancel_unfinished_tasks("controller interrupt").await?;
+                self.cancel_unfinished_tasks(cancel_reason).await?;
                 self.snapshot().await?;
                 break;
             }
