@@ -11,7 +11,7 @@ This file is the first stop for AI agents working on oh-my-kimi. It keeps the pr
    - `src/wire/README.md`
    - `src/kimi_native/README.md`
 3. Run `scripts/repo-map.sh` when you need a fresh code index.
-4. Use Kimi `explore` for read-only lookup before broad edits, then use `plan` or `coder` only after the target files are known.
+4. Use Kimi `explore` for read-only lookup before broad edits, then use `plan` or `executor` only after the target files are known.
 
 Do not split or reorganize the large files just because they are large. File-splitting is a separate refactor and must be requested explicitly.
 
@@ -23,12 +23,20 @@ The current public wedge is Kimi-only:
 
 ```text
 omk kimi sync
-omk team run 2:coder "fix all failing tests and produce a proof"
+omk team run 2:executor "fix all failing tests and produce a proof"
 omk hud --once
 omk proof show latest
 ```
 
-The core commands are current; web HUD, secondary dashboard surfaces, and proof/operator ergonomics are still hardening. `omk goal` has a current state-core scaffold plus backward-compatible state loading, human-blocked oracle guard, controller decision logs, load-time task graph validation with retry/lease metadata, first-class graph mutation events, policy-validated multi-task Wire-backed execution waves with mutation evidence, path-normalized dependency-ordered read/write access conflict policy for agent-proposed follow-ups, accepted and later-dispatched agent-proposed follow-up tasks, bounded `max_agents` worker pools, stale-lease recovery and stale-worker cleanup evidence, post-mutation gate reruns, and controller review/security evidence, and is the planned north-star workflow for long-running proof-backed engineering goals. Check `README.md`, `SPEC.md`, `ROADMAP.md`, and `TODO.md` before promising a command is fully polished.
+The core commands are current; web HUD, secondary dashboard surfaces, and
+proof/operator ergonomics are still hardening. `omk goal` is a current
+controller scaffold: durable state, planning artifacts, validated task graph,
+bounded Wire-backed execution waves, verification gates with post-mutation
+reruns, controller review/security evidence, pause/resume/cancel with active
+worker interruption, and wall-clock/token/cost budget enforcement. It is the
+planned north-star workflow for long-running proof-backed engineering goals.
+Check `README.md`, `SPEC.md`, `ROADMAP.md`, and `TODO.md` before promising a
+command is fully polished.
 
 Competitive positioning is tracked in `docs/COMPETITIVE_POSITIONING.md`. Keep
 public wording anchored on "local, repo-native, proof-driven autonomous software
@@ -37,7 +45,14 @@ engineering runtime" rather than "Devin clone" or "generic agent workflow app."
 ## Current vs Target (L8) Snapshot
 
 - **Current:** Kimi-only execution, scheduler-backed Wire `team run`, run/proof inspection, and Kimi-native asset sync/doctor/rollback.
-- **Current Scaffold:** `omk goal` controller scaffold with backward-compatible state loading, human-blocked oracle guard, controller-owned task evidence, controller decision logs, local verification task evidence, load-time task graph validation, durable retry/lease task metadata, first-class graph mutation events, policy-validated multi-task Wire-backed agent execution with mutation evidence and per-task budget hard stops, path-normalized dependency-ordered read/write access conflict policy for agent-proposed follow-ups, accepted and later-dispatched agent-proposed follow-up tasks, deterministic replayable event timelines, budget checkpoint events, wall-clock/token/cost budget enforcement and `budget-add` recovery, pause/resume lifecycle events with active worker interruption, bounded `max_agents` worker pools, stale-lease recovery and stale-worker cleanup evidence, post-mutation gate reruns, controller review/security evidence, git evidence, and local gate evidence; web HUD and secondary dashboard/MCP surfaces are present but still hardening.
+- **Current Scaffold:** `omk goal` controller scaffold — durable state with
+  safe loading, planning artifacts, validated task graph with retry/lease
+  metadata, bounded Wire-backed execution waves with per-task budgets, agent
+  follow-up policy, pause/resume/cancel with worker interruption,
+  wall-clock/token/cost budget enforcement and recovery, post-mutation gate
+  reruns, controller review/security evidence, git evidence, and deterministic
+  event replay. Web HUD and secondary dashboard/MCP surfaces are present but
+  still hardening.
 - **Target:** `omk goal` as the proof-first controller that plans, researches, spawns agents, verifies, and stops with a truthful terminal status.
 
 When writing docs or implementation notes, mark maturity explicitly (`Current`, `Current MVP`, `Current Scaffold`, `Next`, `Later`) to avoid mixing shipped behavior with roadmap intent.
@@ -107,7 +122,7 @@ Use this default flow for Kimi K2.6 or any other coding agent:
 
 1. `explore`: map files and symbols for the specific task.
 2. `plan`: only when the implementation path has tradeoffs or touches multiple areas.
-3. `coder`: edit the smallest file set that satisfies the task.
+3. `executor`: edit the smallest file set that satisfies the task.
 4. Run focused verification before broad verification.
 5. Record known gaps honestly.
 

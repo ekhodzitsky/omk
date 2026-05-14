@@ -1,17 +1,25 @@
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
-use tracing::warn;
+
+mod checkpoint;
+mod events;
+mod per_task;
+mod usage;
+
+pub use per_task::{evaluate_task_budget, PerTaskBudgetSnapshot};
+
+pub(crate) use checkpoint::append_budget_checkpoint;
+use checkpoint::read_budget_checkpoints;
+use events::{
+    append_budget_exhausted_event, append_budget_extended_event, GoalBudgetExhaustedEvent,
+    GoalBudgetExtendedEvent,
+};
+use usage::{collect_goal_budget_usage, GoalBudgetUsage};
 
 use super::state::{
     format_goal_duration_secs, parse_goal_duration_secs, GoalPhase, GoalState, GoalStatus,
-    GOAL_AGENT_RUNS_DIR, GOAL_ARTIFACTS_DIR, GOAL_BUDGET_CHECKPOINTS_FILE, GOAL_CONTROLLER_ACTOR,
 };
-
-const STANDARD_INPUT_USD_PER_1M_TOKENS: f64 = 2.0;
-const STANDARD_OUTPUT_USD_PER_1M_TOKENS: f64 = 8.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoalBudgetCheckpoint {
@@ -71,12 +79,6 @@ pub struct GoalBudgetAdd {
     pub usd: Option<f64>,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-struct GoalBudgetUsage {
-    used_tokens: u64,
-    estimated_cost_usd: f64,
-}
-
 #[derive(Debug, Clone)]
 struct GoalBudgetExhaustion {
     budget_source: &'static str,
@@ -86,67 +88,10 @@ struct GoalBudgetExhaustion {
     remaining_budget_usd: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct GoalBudgetExhaustedEvent {
-    action: String,
-    status: GoalStatus,
-    phase: GoalPhase,
-    recorded_at: DateTime<Utc>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    budget_time: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    total_budget_secs: Option<u64>,
-    pub elapsed_since_created_secs: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub remaining_budget_secs: Option<u64>,
-    budget_source: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    budget_tokens: Option<u64>,
-    used_tokens: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    remaining_budget_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    budget_usd: Option<f64>,
-    estimated_cost_usd: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    remaining_budget_usd: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct GoalBudgetExtendedEvent {
-    previous_budget_time: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    added_budget_time: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    added_budget_secs: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    new_budget_time: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    new_total_budget_secs: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    previous_budget_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    added_budget_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    new_budget_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    previous_budget_usd: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    added_budget_usd: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    new_budget_usd: Option<f64>,
-    elapsed_since_created_secs: u64,
-    used_tokens: u64,
-    estimated_cost_usd: f64,
-    status: GoalStatus,
-    phase: GoalPhase,
-    recorded_at: DateTime<Utc>,
-}
-
 pub async fn goal_budget(goal_id: &str) -> Result<GoalBudgetReport> {
     let state = super::resolve_goal(goal_id).await?;
     let checkpoints = read_budget_checkpoints(&state).await?;
-    let usage = collect_goal_budget_usage(&state);
+    let usage = collect_goal_budget_usage(&state).await;
     Ok(GoalBudgetReport {
         version: 1,
         goal_id: state.goal_id,
@@ -196,7 +141,7 @@ pub async fn add_goal_budget_limits(goal_id: &str, add: GoalBudgetAdd) -> Result
         .signed_duration_since(state.created_at)
         .num_seconds()
         .max(0) as u64;
-    let usage = collect_goal_budget_usage(&state);
+    let usage = collect_goal_budget_usage(&state).await;
     let previous_budget_time = state.budget_time.clone();
     let previous_budget_tokens = state.budget_tokens;
     let previous_budget_usd = state.budget_usd;
@@ -294,7 +239,7 @@ pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str)
         .num_seconds()
         .max(0) as u64;
 
-    let usage = collect_goal_budget_usage(state);
+    let usage = collect_goal_budget_usage(state).await;
     let Some(exhaustion) =
         first_budget_exhaustion(state, total_budget_secs, elapsed_since_created_secs, usage)
     else {
@@ -334,88 +279,6 @@ pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str)
         exhaustion.budget_source,
         exhaustion.message_detail
     );
-}
-
-pub(crate) async fn append_budget_checkpoint(
-    state: &GoalState,
-    label: &str,
-) -> Result<GoalBudgetCheckpoint> {
-    let checkpoint = build_budget_checkpoint(state, label, Utc::now());
-    let line = serde_json::to_vec(&checkpoint)?;
-    let mut content = line;
-    content.push(b'\n');
-    crate::runtime::atomic::atomic_append(&budget_checkpoints_path(state), &content).await?;
-    append_budget_checkpoint_event(state, &checkpoint).await?;
-    Ok(checkpoint)
-}
-
-async fn append_budget_extended_event(
-    state: &GoalState,
-    payload: &GoalBudgetExtendedEvent,
-) -> Result<()> {
-    let writer = crate::runtime::events::EventWriter::new(
-        state.state_dir.join(crate::runtime::config::EVENTS_FILE),
-    );
-    let event = crate::runtime::events::Event::new(
-        crate::runtime::events::RunId(state.goal_id.clone()),
-        crate::runtime::events::EventKind::GoalBudgetExtended,
-    )
-    .with_actor(GOAL_CONTROLLER_ACTOR)
-    .with_payload(payload)?;
-    writer.append(&event).await
-}
-
-async fn append_budget_exhausted_event(
-    state: &GoalState,
-    payload: &GoalBudgetExhaustedEvent,
-) -> Result<()> {
-    let writer = crate::runtime::events::EventWriter::new(
-        state.state_dir.join(crate::runtime::config::EVENTS_FILE),
-    );
-    let event = crate::runtime::events::Event::new(
-        crate::runtime::events::RunId(state.goal_id.clone()),
-        crate::runtime::events::EventKind::GoalBudgetExhausted,
-    )
-    .with_actor(GOAL_CONTROLLER_ACTOR)
-    .with_payload(payload)?;
-    writer.append(&event).await
-}
-
-fn build_budget_checkpoint(
-    state: &GoalState,
-    label: &str,
-    recorded_at: DateTime<Utc>,
-) -> GoalBudgetCheckpoint {
-    let total_budget_secs = state
-        .budget_time
-        .as_deref()
-        .and_then(parse_goal_duration_secs);
-    let elapsed_since_created_secs = recorded_at
-        .signed_duration_since(state.created_at)
-        .num_seconds()
-        .max(0) as u64;
-    let remaining_budget_secs =
-        total_budget_secs.map(|total| total.saturating_sub(elapsed_since_created_secs));
-    let usage = collect_goal_budget_usage(state);
-
-    GoalBudgetCheckpoint {
-        version: 1,
-        goal_id: state.goal_id.clone(),
-        label: label.to_string(),
-        status: state.status,
-        phase: state.phase,
-        recorded_at,
-        budget_time: state.budget_time.clone(),
-        total_budget_secs,
-        elapsed_since_created_secs,
-        remaining_budget_secs,
-        budget_tokens: state.budget_tokens,
-        used_tokens: usage.used_tokens,
-        remaining_budget_tokens: remaining_tokens(state.budget_tokens, usage.used_tokens),
-        budget_usd: state.budget_usd,
-        estimated_cost_usd: usage.estimated_cost_usd,
-        remaining_budget_usd: remaining_usd(state.budget_usd, usage.estimated_cost_usd),
-    }
 }
 
 fn first_budget_exhaustion(
@@ -475,180 +338,10 @@ fn first_budget_exhaustion(
     None
 }
 
-fn collect_goal_budget_usage(state: &GoalState) -> GoalBudgetUsage {
-    let root = state
-        .state_dir
-        .join(GOAL_ARTIFACTS_DIR)
-        .join(GOAL_AGENT_RUNS_DIR);
-    if !root.exists() {
-        return GoalBudgetUsage::default();
-    }
-
-    let mut usage = GoalBudgetUsage::default();
-    for entry in walkdir::WalkDir::new(root)
-        .into_iter()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_type().is_file())
-        .filter(|entry| entry.file_name() == "wire-events.jsonl")
-    {
-        usage.add(collect_wire_event_file_usage(entry.path()));
-    }
-    usage
-}
-
-fn collect_wire_event_file_usage(path: &Path) -> GoalBudgetUsage {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return GoalBudgetUsage::default();
-    };
-
-    let mut anonymous = GoalBudgetUsage::default();
-    let mut by_message: HashMap<String, GoalBudgetUsage> = HashMap::new();
-    for line in content.lines().filter(|line| !line.trim().is_empty()) {
-        let Some((message_id, usage)) = parse_wire_status_usage(line) else {
-            continue;
-        };
-        if let Some(message_id) = message_id {
-            by_message
-                .entry(message_id)
-                .and_modify(|current| current.keep_max(usage))
-                .or_insert(usage);
-        } else {
-            anonymous.add(usage);
-        }
-    }
-
-    for usage in by_message.into_values() {
-        anonymous.add(usage);
-    }
-    anonymous
-}
-
-fn parse_wire_status_usage(line: &str) -> Option<(Option<String>, GoalBudgetUsage)> {
-    let value: serde_json::Value = serde_json::from_str(line).ok()?;
-    let params = value.get("params")?;
-    let event_type = params.get("type")?.as_str()?;
-    if !event_type.eq_ignore_ascii_case("status_update")
-        && !event_type.eq_ignore_ascii_case("status-update")
-    {
-        return None;
-    }
-    let payload = params.get("payload")?;
-    let message_id = payload
-        .get("message_id")
-        .and_then(|value| value.as_str())
-        .map(ToString::to_string);
-    token_usage_from_payload(payload).map(|usage| (message_id, usage))
-}
-
-fn token_usage_from_payload(payload: &serde_json::Value) -> Option<GoalBudgetUsage> {
-    let token_usage = payload.get("token_usage")?;
-    if let Some(total) = token_usage.as_u64() {
-        return Some(GoalBudgetUsage {
-            used_tokens: total,
-            estimated_cost_usd: estimate_unknown_token_cost(total),
-        });
-    }
-
-    let input_other = token_usage
-        .get("input_other")
-        .and_then(|value| value.as_u64())
-        .unwrap_or(0);
-    let input_cache_read = token_usage
-        .get("input_cache_read")
-        .and_then(|value| value.as_u64())
-        .unwrap_or(0);
-    let input_cache_creation = token_usage
-        .get("input_cache_creation")
-        .and_then(|value| value.as_u64())
-        .unwrap_or(0);
-    let output = token_usage
-        .get("output")
-        .and_then(|value| value.as_u64())
-        .unwrap_or(0);
-    let input = input_other
-        .saturating_add(input_cache_read)
-        .saturating_add(input_cache_creation);
-    let total = input.saturating_add(output);
-    (total > 0).then(|| GoalBudgetUsage {
-        used_tokens: total,
-        estimated_cost_usd: estimate_split_token_cost(input, output),
-    })
-}
-
-fn estimate_unknown_token_cost(tokens: u64) -> f64 {
-    (tokens as f64 / 1_000_000.0) * STANDARD_OUTPUT_USD_PER_1M_TOKENS
-}
-
-fn estimate_split_token_cost(input_tokens: u64, output_tokens: u64) -> f64 {
-    (input_tokens as f64 / 1_000_000.0) * STANDARD_INPUT_USD_PER_1M_TOKENS
-        + (output_tokens as f64 / 1_000_000.0) * STANDARD_OUTPUT_USD_PER_1M_TOKENS
-}
-
 fn remaining_tokens(budget_tokens: Option<u64>, used_tokens: u64) -> Option<u64> {
     budget_tokens.map(|budget| budget.saturating_sub(used_tokens))
 }
 
 fn remaining_usd(budget_usd: Option<f64>, estimated_cost_usd: f64) -> Option<f64> {
     budget_usd.map(|budget| (budget - estimated_cost_usd).max(0.0))
-}
-
-impl GoalBudgetUsage {
-    fn add(&mut self, other: GoalBudgetUsage) {
-        self.used_tokens = self.used_tokens.saturating_add(other.used_tokens);
-        self.estimated_cost_usd += other.estimated_cost_usd;
-    }
-
-    fn keep_max(&mut self, other: GoalBudgetUsage) {
-        if other.used_tokens > self.used_tokens {
-            *self = other;
-        }
-    }
-}
-
-async fn read_budget_checkpoints(state: &GoalState) -> Result<Vec<GoalBudgetCheckpoint>> {
-    let path = budget_checkpoints_path(state);
-    let content = match tokio::fs::read_to_string(&path).await {
-        Ok(content) => content,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error.into()),
-    };
-
-    let mut checkpoints = Vec::new();
-    for (line_no, line) in content.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        match serde_json::from_str::<GoalBudgetCheckpoint>(line) {
-            Ok(checkpoint) => checkpoints.push(checkpoint),
-            Err(error) => {
-                warn!(
-                    line = line_no + 1,
-                    error = %error,
-                    "Skipping malformed goal budget checkpoint"
-                );
-            }
-        }
-    }
-    Ok(checkpoints)
-}
-
-async fn append_budget_checkpoint_event(
-    state: &GoalState,
-    checkpoint: &GoalBudgetCheckpoint,
-) -> Result<()> {
-    let writer = crate::runtime::events::EventWriter::new(
-        state.state_dir.join(crate::runtime::config::EVENTS_FILE),
-    );
-    let event = crate::runtime::events::Event::new(
-        crate::runtime::events::RunId(state.goal_id.clone()),
-        crate::runtime::events::EventKind::BudgetCheckpoint,
-    )
-    .with_actor(GOAL_CONTROLLER_ACTOR)
-    .with_payload(checkpoint)?;
-    writer.append(&event).await
-}
-
-fn budget_checkpoints_path(state: &GoalState) -> std::path::PathBuf {
-    state.state_dir.join(GOAL_BUDGET_CHECKPOINTS_FILE)
 }

@@ -49,7 +49,7 @@ Get team status.
 ```json
 {
   "status": "ok",
-  "team": "coder-a1b2",
+  "team": "executor-a1b2",
   "stdout": "...",
   "stderr": ""
 }
@@ -71,7 +71,7 @@ Shutdown or mark a team interrupted.
 ```json
 {
   "status": "shutdown",
-  "team": "coder-a1b2",
+  "team": "executor-a1b2",
   "force": false,
   "stdout": "...",
   "stderr": ""
@@ -104,7 +104,7 @@ Base URL: `http://localhost:8080`
 ```json
 {
   "status": "ok",
-  "version": "0.3.4",
+  "version": "<crate-version>",
   "checks": {
     "kimi": {
       "status": "ok"
@@ -115,6 +115,8 @@ Base URL: `http://localhost:8080`
   }
 }
 ```
+
+`version` matches the running `omk` crate version reported by `omk --version`.
 
 ### `GET /api/teams`
 

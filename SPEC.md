@@ -47,6 +47,7 @@ omk goal show latest
 omk goal verify latest
 omk goal execute latest
 omk goal review latest
+omk goal open-pr latest --dry-run --format markdown
 omk goal replay latest
 omk goal budget latest
 omk goal pause latest
@@ -78,7 +79,7 @@ current beta MVP instead of inventing a parallel runtime:
 - durable `goals/<goal-id>/goal.json` creation under the OMK state directory;
 - backward-compatible `goal.json` loading with safe defaults for newer fields
   and `state_dir` rehoming from the actual goal directory;
-- `omk goal plan/run/list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel`;
+- `omk goal plan/run/list/status/show/proof/open-pr/replay/budget/budget-add/verify/execute/review/pause/resume/cancel`;
 - scaffold `prd.md`, `technical-plan.md`, `test-spec.md`,
   `task-graph.json`, and `decisions.jsonl`;
 - human-blocked oracle guard that stops vague goals as `blocked_on_human` when
@@ -93,16 +94,19 @@ current beta MVP instead of inventing a parallel runtime:
   review, and hardening evidence exists;
 - local verification gate execution through `omk goal verify`, with gate output
   artifacts and gate results embedded in the goal proof;
-- local controller execution through `omk goal execute`, which marks the
-  `goal-local-verify` task done when required gates pass, launches
-  policy-validated bounded Wire-backed agent task waves, records mutation diff
-  and changed-file evidence, dispatches accepted agent-proposed follow-up tasks,
-  enforces `max_agents` as the worker pool cap, recovers expired task leases
-  with `retry_scheduled` evidence while preferring a different available worker
-  over the stale owner, quarantines stale workers with `worker_dead` evidence
-  and durable `stale-worker-cleanup.json` markers, ignores late stale-worker
-  outbox/heartbeat updates, and reruns verification gates when agent work
-  changes project files;
+- local controller execution through `omk goal execute`, which:
+  - marks `goal-local-verify` done when required gates pass;
+  - launches policy-validated bounded Wire-backed agent task waves with
+    mutation diff and changed-file evidence;
+  - dispatches accepted agent-proposed follow-up tasks on later invocations;
+  - enforces `max_agents` as the worker pool cap;
+  - recovers expired task leases with `retry_scheduled` evidence, preferring a
+    different available worker over the stale owner;
+  - quarantines stale workers with `worker_dead` evidence and durable
+    `stale-worker-cleanup.json` markers, ignoring late stale-worker
+    outbox/heartbeat updates;
+  - reruns verification gates against the mutated tree when agent work changes
+    project files;
 - active operator interruption during Wire-backed goal execution: `pause` or
   `cancel` updates durable goal state, the active execute process observes the
   state change, cancels workers, prevents additional task dispatch, and
@@ -118,6 +122,13 @@ current beta MVP instead of inventing a parallel runtime:
 - controller review through `omk goal review`, which marks `goal-review` and
   `goal-security-review` done only when execution evidence exists and the
   bounded changed-file secret scan finds no high-confidence findings;
+- structured `proof.json.review_artifacts` with deterministic architect, code,
+  test, security, performance, and anti-slop sections; each section carries
+  status, evidence, risks, known gaps, and a recommended next step for PR
+  readiness;
+- GitHub PR draft rendering through `omk goal open-pr`, which turns existing
+  proof evidence into Markdown, JSON, or text title/body output without network
+  access and blocks scaffold-only proofs with an actionable next step;
 - best-effort git branch, HEAD commit, and dirty-state capture in goal proofs;
 - bounded agent wave evidence under `artifacts/agent-runs/`;
 - structured per-task budgets carried into Wire worker inboxes and enforced as
@@ -171,8 +182,8 @@ Every goal run ends in exactly one terminal status:
 7. **Local-first.** OMK owns local state and execution; GitHub integration is an
    output surface, not the source of truth.
 8. **PR-first integration.** Repository changes are integrated through
-   bead-scoped branches and PRs; `master` / `main` are read-only execution
-   baselines.
+   task-scoped branches/worktrees and PRs; `master` / `main` are read-only
+   execution baselines.
 
 ## Functional Requirements
 
@@ -218,8 +229,8 @@ Every goal run ends in exactly one terminal status:
 ### Implementation
 
 - Use isolated worktrees or branches for independent slices.
-- Tie each independent slice to a Beads task with owner, write scope,
-  dependencies, verification gates, and PR link.
+- Tie each independent slice to a goal task with owner, write scope,
+  dependencies, verification gates, branch, and PR link.
 - Keep write scopes explicit.
 - Merge accepted slices through an integrator step.
 - Preserve changelog, docs, migration notes, and release notes as part of done.
@@ -227,12 +238,19 @@ Every goal run ends in exactly one terminal status:
 
 ### Collaboration and Delivery
 
-- Treat Beads as the durable task graph for human and agent collaboration.
-- Require every agent to claim a bead before editing files.
-- Block or serialize overlapping write scopes through Beads dependencies.
-- Open PRs from bead-scoped branches; include proof, gates, known gaps, and
+- Treat the local goal task graph plus GitHub PRs as the durable collaboration
+  surface for humans and agents.
+- Require every agent to record its task ownership and write scope before
+  editing files.
+- Block or serialize overlapping write scopes through task dependencies or an
+  integrator PR.
+- Open PRs from task-scoped branches; include proof, gates, known gaps, and
   decision artifacts in the PR body.
-- Close beads only after the PR is merged or explicitly rejected.
+- Render PR drafts from local proof evidence first with `omk goal open-pr
+  latest --dry-run --format markdown|json|text`; GitHub creation must remain an
+  explicit integration action, never an implicit side effect of proof rendering.
+- Mark task slices integrated only after the PR is merged or explicitly
+  rejected.
 
 ### Verification
 
@@ -269,6 +287,8 @@ Each goal writes `.omk/goals/<goal-id>/proof.json` with:
 - test results;
 - reviews performed;
 - security/performance notes;
+- structured specialist review wall sections for architect, code, test,
+  security, performance, and anti-slop evidence;
 - known gaps;
 - human decisions required;
 - links to artifacts.
@@ -286,6 +306,7 @@ omk goal pause [goal-id|latest]
 omk goal resume [goal-id|latest]
 omk goal cancel [goal-id|latest]
 omk goal proof [goal-id|latest]
+omk goal open-pr [goal-id|latest] --dry-run [--format markdown|json|text]
 omk goal replay [goal-id|latest] [--format text|json|md]
 omk goal budget [goal-id|latest] [--format text|json|md]
 omk goal budget-add [goal-id|latest] [--time <duration>] [--tokens <n>] [--usd <usd>]
@@ -300,8 +321,7 @@ Later command surface:
 omk goal plan <goal>
 omk goal approve-plan <goal-id>
 omk goal add-task <goal-id> <task>
-omk goal open-pr <goal-id>
-omk goal sync-beads <goal-id>
+omk goal open-pr <goal-id> --dry-run
 ```
 
 ## MVP Definition

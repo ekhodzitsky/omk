@@ -1,8 +1,8 @@
-## Bead
+## Task
 
-<!-- Required for multi-agent work. Example: Closes bd:omk-123 -->
+<!-- Required for multi-agent work. Example: goal-agent-implement, docs-refresh, omk-123 if an external tracker is used. -->
 
-- Bead:
+- Task:
 - Owner:
 - Branch:
 
@@ -38,6 +38,6 @@
 ## Checklist
 
 - [ ] This PR is not targeting direct work on `master` / `main` outside the PR flow.
-- [ ] The bead has been claimed or this PR explains why no bead applies.
+- [ ] The task/scope and owner are declared above.
 - [ ] Docs/changelog/version were updated when behavior or release metadata changed.
 - [ ] New behavior has tests or an explicit `Not-tested:` rationale.

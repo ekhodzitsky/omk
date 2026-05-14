@@ -27,14 +27,12 @@ Status: current beta MVP.
 - Proof and failure artifacts.
 - Run/proof/HUD inspection.
 - Verification gates.
-- `omk goal` durable scaffold with backward-compatible state loading, planning
-  artifacts, decision log, task graph, local verification task evidence, git evidence, policy-validated bounded
-  Wire-backed agent waves, accepted follow-up tasks, `max_agents` worker-pool
-  caps, human-blocked oracle guard, durable task graph retry/lease metadata, stale-lease recovery evidence, load-time task graph validation,
-  first-class graph mutation events, path-normalized dependency-ordered
-  read/write access conflict policy for agent-proposed follow-ups, mutation
-  diff/changed-file evidence, post-mutation gate reruns, controller
-  review/security evidence, and not-ready proof.
+- `omk goal` durable scaffold — state, planning artifacts, validated task
+  graph with retry/lease metadata, bounded Wire-backed agent waves with
+  policy-validated follow-ups and worker-pool caps, post-mutation gate reruns,
+  controller review/security evidence, pause/resume/cancel with worker
+  interruption, budget enforcement and recovery, deterministic replay, and
+  honest not-ready proof.
 - GitHub CI and coverage.
 
 ## Stage 1 - Goal State Core
@@ -112,11 +110,11 @@ Exit criteria:
 Target: make parallel work safe.
 
 - Treat `master` / `main` as read-only baselines; all slices land through PRs.
-- Use Beads as the durable coordination layer for human, Codex, Kimi, Claude,
-  and future `omk goal` workers.
+- Use the goal task graph plus GitHub PRs as the durable coordination layer for
+  human, Codex, Kimi, Claude, and future `omk goal` workers.
 - Create isolated worktrees or branches for independent task slices.
-- Claim one bead per slice and record owner, write scope, dependencies, gates,
-  and PR link.
+- Record one task per slice with owner, write scope, dependencies, gates,
+  branch, and PR link.
 - Merge accepted slices through an integrator task.
 - Detect access conflicts before dispatch. Initial agent-proposed follow-up
   conflicts, including normalized, parent/child, and read/write path overlaps,
@@ -128,7 +126,7 @@ Exit criteria:
 
 - Two independent slices can run concurrently and integrate deterministically.
 - Conflicting read/write access sets block dispatch or require a plan change.
-- Every integrated slice has a bead, branch, PR, and verification evidence.
+- Every integrated slice has a task id, branch, PR, and verification evidence.
 
 ## Stage 6 - Self-Review and Hardening
 
@@ -149,18 +147,18 @@ Exit criteria:
 
 Target: turn long-running goals into reviewable delivery artifacts.
 
-- Generate PRs from bead-scoped branches instead of writing to `master` /
+- Generate PRs from task-scoped branches instead of writing to `master` /
   `main`.
 - Open a PR or draft PR from a goal result.
 - Attach proof summary to PR body.
-- Attach bead id, owner, write scope, and verification wall output.
+- Attach task id, owner, write scope, and verification wall output.
 - Link changed files, gates, known gaps, and decisions.
 - Support release-candidate output for GitHub-only releases.
 
 Exit criteria:
 
 - `omk goal open-pr latest` creates a reviewable PR with proof evidence.
-- `omk goal` can map accepted task graph nodes to Beads and PR links.
+- `omk goal` can map accepted task graph nodes to branches and PR links.
 
 ## Stage 8 - Long-Horizon Reliability
 

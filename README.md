@@ -20,7 +20,7 @@ OMK is inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claud
 [![crates.io](https://img.shields.io/badge/crates.io-not%20published-lightgrey.svg)](#install)
 [![Status: beta MVP](https://img.shields.io/badge/status-beta%20MVP-0f172a.svg)](#mvp-status)
 
-[Why](#why) - [MVP Status](#mvp-status) - [North Star](#north-star) - [Positioning](#positioning) - [Install](#install) - [First Run](#first-run) - [Features](#features) - [Commands](#commands) - [Why Better](#where-omk-is-stronger)
+[Why](#why) - [MVP Status](#mvp-status) - [North Star](#north-star) - [Positioning](#positioning) - [Install](#install) - [First Run](#first-run) - [Workflow](#multi-agent-workflow) - [Features](#features) - [Commands](#commands) - [Why Better](#where-omk-is-stronger)
 
 </div>
 
@@ -63,7 +63,7 @@ What is ready enough to use now:
 | Proof reports | Beta MVP: `omk proof show latest`, cached/regenerated proof, Markdown/text/JSON formats. |
 | Verification gates | Ready for local gates and `.omk/gates.toml` customization, including full stdout/stderr evidence capture for large-output gates. |
 | HUD | Text, JSON, and TUI are usable; web dashboard is still scaffold-level. |
-| `omk goal` controller scaffold | Current scaffold: creates durable goal state with backward-compatible state loading, planning artifacts, validated task graph with retry/lease metadata, decision log, deterministic replayable event timeline, budget checkpoints with wall-clock/token/cost budget enforcement and `budget-add` recovery, local verification task evidence, policy-validated multi-task Wire-backed agent task/mutation evidence with per-task budget hard stops, stale-worker quarantine cleanup, accepted and later-dispatched agent-proposed follow-up tasks with path-normalized dependency-ordered read/write access conflict policy, human-blocked oracle guard for vague goals, pause/resume lifecycle state with active worker interruption, post-mutation gate reruns, controller review/security evidence, not-ready proof, and cancellation failure artifacts. |
+| `omk goal` controller scaffold | Current Scaffold. Creates durable goal state with planning artifacts (PRD, plan, tests, task graph, decisions), runs bounded Wire-backed agent waves, enforces wall-clock/token/cost budgets with `budget-add` recovery, supports pause/resume/cancel with worker interruption, runs verification gates with post-mutation reruns, records controller review/security evidence, and writes honest proof/failure artifacts. Full surface in [SPEC.md](SPEC.md) and [TODO.md](TODO.md). |
 | Autopilot, Ralph, Ultrawork | Power-user MVP: useful, but less polished than the Kimi asset + team/proof path. |
 | MCP server, marketplace, web dashboard | Secondary/scaffold surfaces. |
 
@@ -89,58 +89,33 @@ assign tasks, verify results, recover from failures, and stop only with a
 truthful terminal status such as `ready`, `not_ready`, `blocked_on_human`, or
 `needs_more_budget`.
 
-The goal controller scaffold is implemented: it creates records under the OMK
-state directory's `goals/` tree, loads older `goal.json` records with safe
-defaults and actual-directory `state_dir` rehoming, blocks vague goals as
-`blocked_on_human` when success criteria cannot be made testable, writes
-`prd.md`, `technical-plan.md`, `test-spec.md`, `task-graph.json`,
-`decisions.jsonl`, and an honest `proof.json`, and supports
-list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel. Exhausted
-`--budget-time`, `--budget-tokens`, or `--budget-usd` goals stop before
-`verify`, `execute`, or `review` spends more work and persist
-`needs_more_budget`; `omk goal budget-add latest --time 1h --tokens 50000 --usd 1.0`
-adds operator-approved budget and resumes the goal to `not_ready`.
-During Wire-backed execution, `omk goal pause latest` now interrupts active
-goal workers, records cancellation evidence, and preserves the durable `paused`
-status instead of letting the active execute process overwrite it.
-`omk goal replay latest --json` is deterministic across separate CLI
-invocations because replay timestamps are derived from persisted event evidence.
-The scaffold marks
-controller-owned planning tasks as done with artifact evidence and writes
-controller rationale to `decisions.jsonl`. `omk goal
-verify` runs local verification gates and records gate evidence; `omk goal
-execute` marks `goal-local-verify` done when required gates pass, turns
-`goal-agent-execute` into a policy-validated multi-task Wire-backed wave,
-records `task-policy.json`, worker-enforced per-task budgets,
-accepted/rejected task events,
-outbox plus Wire event evidence, mutation diffs, and changed-file snapshots
-under `artifacts/agent-runs/`. Wire workers may return structured
-`OMK_TASK_PROPOSAL: {...}` follow-up work; the controller validates those
-proposals, records `agent-task-proposals.json`, emits proposal/decision events,
-appends accepted safe follow-up tasks as pending graph nodes, and emits
-`task_graph_mutated` events for accepted graph additions. Task graphs are
-validated on load for duplicate ids, missing dependencies, self-dependencies,
-and dependency cycles before controller execution proceeds. Agent-proposed
-follow-ups that write the same path, normalized alias path, parent/child path,
-or read/write-overlapping path must be dependency-ordered; unordered access
-conflicts are rejected with policy evidence instead of becoming graph nodes.
-Later `execute`
-invocations dispatch ready pending follow-ups through a
-`goal-agent-followups` Wire wave and mark those durable graph nodes from worker
-results. Agent waves now honor the goal `--max-agents` cap by creating a bounded
-Wire worker pool for concurrently ready tasks, and expired leases are recovered
-with `retry_scheduled` evidence that prefers another available worker over the
-stale owner. `task-graph.json` records each durable task node's retry count, max
-retry policy, and current lease-expiration field. Recovered stale workers are quarantined with a durable
-`stale-worker-cleanup.json` marker plus `worker_dead` evidence, and later
-stale-worker outbox/heartbeat updates are ignored. When the agent changes project files, `execute` reruns verification
-gates against the mutated tree and records post-mutation gate evidence. `omk
-goal review` records controller review and bounded secret-scan security evidence
-under `artifacts/reviews/`. Integration, specialist review loops, and ready
-proof generation are still planned. The current `team run`, event log, gates, and
-proof systems remain the execution foundation. The design is tracked in
-[SPEC.md](SPEC.md), the delivery path in [ROADMAP.md](ROADMAP.md), and the task
-backlog in [TODO.md](TODO.md).
+The goal controller scaffold is in place. Today it:
+
+- creates durable state under `goals/<goal-id>/` with safe loading for older records;
+- writes planning artifacts (`prd.md`, `technical-plan.md`, `test-spec.md`,
+  `task-graph.json`, `decisions.jsonl`) and an honest `proof.json`;
+- blocks vague goals as `blocked_on_human` when no testable oracle exists;
+- runs local verification gates with full evidence capture and post-mutation
+  reruns when agents change project files;
+- dispatches bounded Wire-backed agent waves with policy validation, per-task
+  budget hard stops, stale-lease recovery, and `max-agents` worker-pool caps;
+- accepts agent-proposed follow-up tasks under path-normalized read/write
+  conflict policy, then dispatches them on later `execute` invocations;
+- enforces wall-clock, token, and USD budgets with `needs_more_budget`, and
+  supports operator recovery through `omk goal budget-add`;
+- supports pause/resume/cancel with active worker interruption and
+  deterministic event replay;
+- records controller review, bounded secret-scan security evidence, and a
+  structured six-pass review wall;
+- renders proof-backed PR title/body drafts through
+  `omk goal open-pr latest --dry-run` without GitHub/network side effects.
+
+Integration acceptance, specialist review loops, and `ready` proof generation are
+still planned. The current `team run`, event log, gates, and proof systems
+remain the execution foundation. The design lives in [SPEC.md](SPEC.md), the
+delivery path in [ROADMAP.md](ROADMAP.md), the backlog in [TODO.md](TODO.md),
+and the detailed design in
+[docs/superpowers/specs/2026-05-11-omk-goal-design.md](docs/superpowers/specs/2026-05-11-omk-goal-design.md).
 
 ## Positioning
 
@@ -221,6 +196,35 @@ For a CI-safe demo with no real Kimi API calls:
 MOCK_KIMI=1 ./scripts/north_star_demo.sh
 ```
 
+## Multi-agent Workflow
+
+OMK is built to be edited safely by multiple humans and agents (Codex, Kimi,
+Claude, and future `omk goal` workers). The coordination contract is simple
+and deliberately tracker-agnostic:
+
+- `master` / `main` are **read-only** baselines. All work lands through a PR.
+- Each task gets its own branch or worktree:
+  `agent/<task-slug>`, `codex/<task-slug>`, `kimi/<task-slug>`,
+  `claude/<task-slug>`.
+- The PR declares task, owner, write scope, verification evidence, and known
+  gaps. The PR body — not an external tracker — is the durable handoff surface.
+- External trackers (Beads, GitHub Issues, Linear, …) are **optional** and must
+  never become a hard prerequisite for building, testing, or reviewing OMK.
+
+Bootstrap example:
+
+```bash
+git fetch origin
+git worktree add ../omk-fix-foo -b claude/fix-foo origin/master
+cd ../omk-fix-foo
+# edit, run the verification wall, commit, push, open a PR
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow and
+[AGENTS.md](AGENTS.md) for the multi-agent hard constraints. The PR template
+at [.github/pull_request_template.md](.github/pull_request_template.md) lists
+the expected fields.
+
 ## Commands
 
 ### Kimi-native assets
@@ -293,17 +297,20 @@ omk goal budget-add latest --tokens 50000 --usd 1.0
 omk goal verify latest
 omk goal execute latest
 omk goal review latest
+omk goal open-pr latest --dry-run --format markdown
+omk goal open-pr latest --dry-run --format json
 omk goal pause latest
 omk goal resume latest
 omk goal cancel latest
 ```
 
-`omk goal` currently creates durable goal state, planning artifacts, a task
-graph with controller-owned task evidence, local verification task evidence,
-local and post-mutation gate evidence, policy-validated multi-task Wire-backed
-agent task/mutation evidence, accepted and later-dispatched agent-proposed follow-up tasks, controller review/security evidence, and honest
-not-ready/cancelled proof artifacts. Goal proofs also capture best-effort git
-branch, HEAD commit, and dirty-state evidence when run inside a git worktree.
+`omk goal` writes durable goal state plus planning, gate, agent, and review
+evidence into `goals/<goal-id>/`. Proof artifacts stay honestly `not_ready`
+until execution, review, and integration evidence exist. When run inside a git
+worktree, proofs also record best-effort git branch, HEAD commit, and
+dirty-state. `omk goal open-pr` turns that proof into a dry-run PR draft with
+status, readiness, task summary, delivery metadata, verification wall, known
+gaps, changed files, and artifacts.
 
 ### Power-user modes
 
@@ -328,7 +335,7 @@ These modes are available and useful, but the strongest MVP path today is still:
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
 | HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
 | Cleanup and recovery | Team cleanup, backups, rollback, watchdog events, and interrupted-run failure artifacts. | Current |
-| Goal runtime | Durable goal state with backward-compatible state loading, plan/run/list/status/show/proof/replay/budget/budget-add/verify/execute/review/pause/resume/cancel, planning artifacts, decision log, validated task graph with controller-owned, local verification, retry/lease metadata, human-blocked oracle guard, policy-validated multi-task Wire-backed agent mutation with per-task budget hard stops, stale-worker quarantine cleanup, accepted and later-dispatched agent-proposed follow-up tasks, path-normalized dependency-ordered read/write access conflict policy, deterministic replayable event timeline, budget checkpoints, wall-clock/token/cost `needs_more_budget` enforcement and recovery, `task_graph_mutated` events, pause/resume lifecycle events with active worker interruption, post-mutation gate reruns, review, and security evidence, git evidence, local gate evidence, not-ready proof, and cancellation failure artifacts. Specialist reviews and integration loops are next. | Current Scaffold |
+| Goal runtime (`omk goal`) | Durable goal state, planning artifacts (PRD, plan, tests, task graph, decisions), bounded Wire-backed execution waves with per-task budgets, verification gates with post-mutation reruns, controller review/security evidence, pause/resume/cancel with worker interruption, wall-clock/token/cost budget enforcement and `budget-add` recovery, deterministic replay, git evidence, and honest proof/failure artifacts. Specialist reviews and integration loops are still planned. | Current Scaffold |
 | Autopilot | Single-lead autonomous execution with verification gates and resume/yolo options. | Power-user MVP |
 | Ralph | Persistent verify/fix loop with iteration limits and completion evidence. | Power-user MVP |
 | Ultrawork | Parallel burst prompts from args, files, or globs, with JSON output support. | Power-user MVP |

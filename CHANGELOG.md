@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`omk goal` delivery metadata API**: task delivery sidecars now have typed
+  Rust helpers for owner, write scope, branch, worktree, PR, commit,
+  verification summary, and status metadata while preserving unknown legacy
+  JSON fields for existing task graphs and proof artifacts.
+- **Structured `omk goal` review wall**: goal review proof output now surfaces
+  deterministic architect, code, test, security, performance, and anti-slop
+  review sections with status, evidence, risks, known gaps, and a recommended
+  next step for PR readiness.
+- **`omk goal` crash recovery and replay hardening**: `replay_goal` is now
+  idempotent—duplicate exact JSON events are deterministically collapsed,
+  partial/corrupt trailing event lines are surfaced as `known_gaps` with a
+  `recovery_status`, and missing optional artifacts (task graph, proof) become
+  recoverable gaps instead of hard errors. `GoalState::load` returns typed
+  `GoalStateError` variants (`MissingFile`, `CorruptedJson`, `InvalidFormat`)
+  so callers can distinguish missing state from malformed JSON. `GoalProof`
+  carries an optional `recovery_status` field that is populated when proof is
+  rebuilt from state after a missing or unreadable proof file.
+- **`omk goal open-pr` dry-run output**: goals with proof evidence can now render
+  GitHub PR title/body drafts as Markdown, JSON, or text without network access
+  or GitHub auth; scaffold-only proofs fail with an actionable next step.
+
+### Changed
+
+- **Worktree/PR-first development workflow**: Beads is no longer required for
+  multi-agent development or `omk goal` delivery. The canonical coordination
+  path is now task-scoped worktrees/branches, explicit write scopes, PR
+  evidence, green CI, and review; external trackers remain optional.
+- **CI feedback lanes**: PR checks now use a faster Ubuntu gate plus macOS
+  smoke compatibility, while docs, full macOS build/test, coverage upload, and
+  release artifacts stay on protected-branch, scheduled, manual, or release
+  workflows.
+- **Documentation audit**: refreshed README, SPEC, ROADMAP, TODO, CONTRIBUTING,
+  AGENTS, SECURITY, and `docs/*` so the worktree/PR workflow, role names, MVP
+  status, and goal-runtime feature surface are consistent across files.
+  Replaced run-on goal-scaffold paragraphs with terse bullet lists pointing at
+  `SPEC.md` / `TODO.md` for the canonical surface.
+
+### Fixed
+
+- **`VERSION` file synced with `Cargo.toml`**: bumped `VERSION` from `0.3.1` to
+  the actual crate version `0.3.30`.
+- **Stale role name `coder`**: renamed remaining `coder` references in
+  `docs/PROJECT_MAP.md` and `docs/north_star_tutorial.md` to the canonical
+  `executor` role used by the role pack and CLI.
+- **Hardcoded version string in `docs/API.md`**: replaced the static `0.3.4`
+  health response example with a `<crate-version>` placeholder that tracks the
+  running binary.
+- **`SECURITY.md` supported versions**: collapsed obsolete 0.1.x / 0.2.x rows
+  into a single "latest 0.3.x" row, matching the pre-1.0 master-only release
+  policy.
+
 ## [0.3.30] - 2026-05-13
 
 ### Added
