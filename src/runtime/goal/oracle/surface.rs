@@ -98,3 +98,72 @@ async fn push_api_if_exists(
 async fn exists(path: impl AsRef<Path>) -> Result<bool> {
     tokio::fs::try_exists(path).await.map_err(Into::into)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[tokio::test]
+    async fn detects_rust_command_and_api_surfaces() {
+        let project = tempfile::tempdir().expect("project");
+        fs::write(
+            project.path().join("Cargo.toml"),
+            "[package]\nname='demo'\nversion='0.1.0'\n",
+        )
+        .expect("Cargo.toml");
+        fs::create_dir_all(project.path().join("src")).expect("src dir");
+        fs::write(
+            project.path().join("src/lib.rs"),
+            "pub fn answer() -> u8 { 42 }\n",
+        )
+        .expect("lib.rs");
+
+        let surfaces = detect_source_project_surfaces(project.path())
+            .await
+            .expect("surface detection");
+
+        assert!(surfaces
+            .commands
+            .iter()
+            .any(|command| command == "cargo test"));
+        assert!(surfaces
+            .commands
+            .iter()
+            .any(|command| command == "cargo check --all-targets"));
+        assert!(surfaces
+            .api_files
+            .iter()
+            .any(|path| path == &PathBuf::from("src/lib.rs")));
+    }
+
+    #[tokio::test]
+    async fn detects_python_command_and_api_surfaces() {
+        let project = tempfile::tempdir().expect("project");
+        fs::write(
+            project.path().join("pyproject.toml"),
+            "[project]\nname='demo'\n",
+        )
+        .expect("pyproject.toml");
+        fs::create_dir_all(project.path().join("demo")).expect("package dir");
+        fs::write(
+            project.path().join("demo/__init__.py"),
+            "def answer(): return 42\n",
+        )
+        .expect("__init__.py");
+        fs::create_dir_all(project.path().join("tests")).expect("tests dir");
+
+        let surfaces = detect_source_project_surfaces(project.path())
+            .await
+            .expect("surface detection");
+
+        assert!(surfaces
+            .commands
+            .iter()
+            .any(|command| command == "python -m pytest"));
+        assert!(surfaces
+            .api_files
+            .iter()
+            .any(|path| path == &PathBuf::from("demo/__init__.py")));
+    }
+}
