@@ -3,10 +3,19 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-use tracing::{debug, error, info};
+use tokio::io::AsyncWriteExt;
+use tokio_stream::StreamExt;
+use tokio_util::codec::{FramedRead, LinesCodec};
+use tracing::{debug, error, info, warn};
 
 use super::tools::{handle_tool_call, list_tools};
+
+/// Maximum length of a single inbound MCP JSON-RPC request, in bytes.
+///
+/// Bounds memory damage from a misbehaving / hostile MCP client that sends
+/// a multi-GB payload without a newline. Mirrors the wire-side cap in
+/// `crate::wire::client::MAX_WIRE_LINE_LENGTH`.
+const MAX_MCP_LINE_LENGTH: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 struct JsonRpcRequest {
@@ -40,10 +49,22 @@ pub async fn run_mcp_server() -> Result<()> {
     info!("Starting OMK MCP server over stdio");
 
     let stdin = tokio::io::stdin();
-    let mut reader = tokio::io::BufReader::new(stdin).lines();
+    // Length-capped line reader. A non-cooperative MCP client that never
+    // emits a newline can no longer drive the host to OOM.
+    let mut reader = FramedRead::new(stdin, LinesCodec::new_with_max_length(MAX_MCP_LINE_LENGTH));
     let mut stdout = tokio::io::stdout();
 
-    while let Some(line) = reader.next_line().await? {
+    while let Some(line_result) = reader.next().await {
+        let line = match line_result {
+            Ok(line) => line,
+            Err(e) => {
+                // Most likely a max-line-length violation. Log and continue;
+                // the framer drops the over-long line so the next message
+                // boundary should still be discoverable.
+                warn!(error = %e, "Failed to read MCP line (length cap or IO error); skipping");
+                continue;
+            }
+        };
         let line = line.trim();
         if line.is_empty() {
             continue;
