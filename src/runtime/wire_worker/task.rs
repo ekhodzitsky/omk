@@ -1,13 +1,38 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use crate::runtime::events::{Event, EventBuilder, EventKind, TaskId, WorkerId};
+use crate::runtime::events::{Event, EventBuilder, EventKind, JsonlWriter, TaskId, WorkerId};
 use crate::runtime::wire_worker::WireWorkerAdapter;
 use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
 use crate::wire::client::{WireClient, WireMessage};
 use crate::wire::protocol::{redact_wire_secrets, Request, RequestParams};
+
+/// Outcome of [`WireWorkerAdapter::process_task`].
+///
+/// `Completed` means the task ran to a natural conclusion (success, failure,
+/// or wire error) and the result has already been written to the outbox.
+///
+/// The `Cancelled*` variants both mean cancellation fired before completion —
+/// kimi has been killed and no result has been written. They differ in which
+/// token fired:
+///
+/// - [`TaskOutcome::CancelledTimeout`]: the per-task budget elapsed; caller
+///   should record a timeout in the outbox so the scheduler sees a failure.
+/// - [`TaskOutcome::CancelledExternal`]: the outer worker shutdown token
+///   fired; caller should not record anything because the worker itself is
+///   tearing down.
+///
+/// The variant is determined inside the `select!` arm that fires, which
+/// eliminates the TOCTOU race that an after-the-fact `is_cancelled()` check
+/// has when both tokens fire in quick succession.
+pub(super) enum TaskOutcome {
+    Completed,
+    CancelledTimeout,
+    CancelledExternal,
+}
 
 impl WireWorkerAdapter {
     pub(super) async fn process_task(
@@ -15,8 +40,10 @@ impl WireWorkerAdapter {
         task: &WorkerTask,
         kimi_bin: &str,
         outbox: &PathBuf,
-        wire_events_path: &PathBuf,
-    ) -> Result<()> {
+        wire_events_writer: &JsonlWriter,
+        outer_cancel: &CancellationToken,
+        timeout_cancel: &CancellationToken,
+    ) -> Result<TaskOutcome> {
         info!(worker = %self.spec.name, task = %task.id, "Processing task via wire");
 
         let started = Event::new(self.run_id.clone(), EventKind::TaskStarted)
@@ -83,26 +110,46 @@ impl WireWorkerAdapter {
         loop {
             tokio::select! {
                 biased;
-                _ = self.cancel_token.cancelled() => {
-                    info!(worker = %self.spec.name, task = %task.id, "Task processing cancelled");
-                    success = false;
-                    failure_reason = Some("cancelled by user".to_string());
-                    break;
+                _ = outer_cancel.cancelled() => {
+                    info!(
+                        worker = %self.spec.name,
+                        task = %task.id,
+                        "Task processing cancelled (worker shutdown)"
+                    );
+                    // Reap the kimi child immediately so it does not linger as
+                    // a zombie / continue mutating the worktree behind our back.
+                    let _ = client.shutdown().await;
+                    return Ok(TaskOutcome::CancelledExternal);
+                }
+                _ = timeout_cancel.cancelled() => {
+                    info!(
+                        worker = %self.spec.name,
+                        task = %task.id,
+                        "Task processing cancelled (per-task budget timeout)"
+                    );
+                    let _ = client.shutdown().await;
+                    return Ok(TaskOutcome::CancelledTimeout);
                 }
                 msg = client.read_message_timeout(self.active_turn_timeout) => {
                     match msg {
                         Ok(WireMessage::Event(ev)) => {
                             let raw_json =
                                 serde_json::to_string(&redact_wire_secrets(&serde_json::to_value(&ev)?))?;
-                            let mut file = tokio::fs::OpenOptions::new()
-                                .create(true)
-                                .append(true)
-                                .open(wire_events_path)
-                                .await?;
-                            file.write_all(raw_json.as_bytes()).await?;
-                            file.write_all(b"\n").await?;
-                            file.flush().await?;
-                            drop(file);
+                            // Route through the single-writer actor so
+                            // concurrent producers across the wire-worker
+                            // adapter (and any future helpers cloning the
+                            // writer) cannot interleave partial lines.
+                            let mut line = raw_json.into_bytes();
+                            line.push(b'\n');
+                            wire_events_writer
+                                .append_line(line)
+                                .await
+                                .with_context(|| {
+                                    format!(
+                                        "failed to append wire event for task {} (worker {})",
+                                        task.id, self.spec.name
+                                    )
+                                })?;
 
                             match ev.params.to_event() {
                                 Ok(typed) => match typed {
@@ -245,7 +292,7 @@ impl WireWorkerAdapter {
             "Task finished"
         );
 
-        Ok(())
+        Ok(TaskOutcome::Completed)
     }
 
     pub(super) async fn record_task_timeout(
