@@ -119,14 +119,17 @@ impl Autopilot {
         if is_complex {
             info!("Task is complex, running omk team 2:executor");
             let omk_exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("omk"));
-            let output = tokio::process::Command::new(&omk_exe)
-                .args(["team", "run", "2:executor", &self.task])
-                .current_dir(&self.dir)
-                .output()
-                .await;
+            let output = tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                tokio::process::Command::new(&omk_exe)
+                    .args(["team", "run", "2:executor", &self.task])
+                    .current_dir(&self.dir)
+                    .output(),
+            )
+            .await;
 
             match output {
-                Ok(out) => {
+                Ok(Ok(out)) => {
                     let stdout = String::from_utf8_lossy(&out.stdout);
                     let stderr = String::from_utf8_lossy(&out.stderr);
                     tracing::debug!(stdout = %stdout, stderr = %stderr, "omk team output");
@@ -134,8 +137,11 @@ impl Autopilot {
                         warn!("omk team exited with non-zero status");
                     }
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     warn!(error = %e, "Failed to run omk team");
+                }
+                Err(_) => {
+                    warn!("omk team timed out");
                 }
             }
         } else {

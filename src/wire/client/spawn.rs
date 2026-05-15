@@ -58,14 +58,14 @@ impl ProcessWireClient {
         // Drain stderr in a background task so a verbose kimi cannot fill the
         // pipe buffer (typically 64 KiB) and block its own writes — which would
         // otherwise deadlock the wire session.
-        if let Some(stderr) = child.stderr.take() {
+        let stderr_handle = child.stderr.take().map(|stderr| {
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
                     warn!(target: "kimi.stderr", "{}", line);
                 }
-            });
-        }
+            })
+        });
 
         info!("Wire client spawned");
 
@@ -76,6 +76,7 @@ impl ProcessWireClient {
             pending_messages: std::collections::VecDeque::new(),
             request_id_counter: 0,
             handshake_done: false,
+            stderr_handle,
         })
     }
 }
