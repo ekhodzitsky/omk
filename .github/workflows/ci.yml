@@ -179,7 +179,7 @@ jobs:
         run: echo "Cargo dependency inputs did not change; dependency audit is a cheap no-op."
 
       # SHA-pinned third-party action (v2.0.18 at time of pin).
-      - uses: EmbarkStudios/cargo-deny-action@0105f7c440bc8084c17cad47fe92e63049519458
+      - uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1
         if: github.event_name != 'pull_request' || needs.changes.outputs.deps == 'true'
         with:
           command: check advisories licenses sources
