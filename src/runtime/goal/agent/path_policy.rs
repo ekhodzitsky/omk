@@ -1,6 +1,6 @@
 use std::path::{Component, Path};
 
-use super::super::state::is_safe_goal_agent_path;
+use crate::runtime::goal::state::is_safe_goal_agent_path;
 use super::GoalAgentTaskProposal;
 
 const PROJECT_FILES_ALIAS: &str = "project files";

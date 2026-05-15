@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "goal_id": "goal-test-reconcile",
+  "original_goal": "Test reconcile",
+  "normalized_goal": "Test reconcile",
+  "status": "running",
+  "phase": "execution",
+  "created_at": "2026-05-15T10:00:00Z",
+  "updated_at": "2026-05-15T12:00:00Z",
+  "state_dir": "."
+}

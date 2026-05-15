@@ -1,6 +1,9 @@
-use super::evidence::{detect_git_evidence, record_artifact};
-use super::proof::{build_scaffold_proof, write_json_artifact};
-use super::state::{
+use crate::runtime::events::{
+    Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId,
+};
+use crate::runtime::goal::evidence::{detect_git_evidence, record_artifact};
+use crate::runtime::goal::proof::{build_scaffold_proof, write_json_artifact};
+use crate::runtime::goal::state::{
     GoalFailure, GoalPhase, GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_AGENT_RUNS_DIR,
     GOAL_ARTIFACTS_DIR, GOAL_CONTROLLER_ACTOR, GOAL_DECISIONS_FILE, GOAL_FAILURE_FILE,
     GOAL_GATE_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PRD_FILE, GOAL_PROOF_FILE,
@@ -8,46 +11,41 @@ use super::state::{
     GOAL_SECURITY_REVIEW_TASK_ID, GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE,
     GOAL_TEST_SPEC_FILE,
 };
-use super::task_graph::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
-use crate::runtime::events::{
-    Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId,
-};
+use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
+use crate::runtime::goal::task_graph::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 
-mod artifacts;
-mod delivery;
-
 pub(crate) async fn create_goal_with_scaffold(
     goal: &str,
-    options: super::state::CreateGoalOptions,
-) -> anyhow::Result<super::state::GoalState> {
-    let id = super::types::GoalId::generate();
+    options: crate::runtime::goal::state::CreateGoalOptions,
+) -> anyhow::Result<crate::runtime::goal::state::GoalState> {
+    let id = crate::runtime::goal::types::GoalId::generate();
     let id_string = id.to_string();
     let until_ready = options.until_ready;
-    let budget = super::types::GoalBudget::from_options(options)?;
-    let goal_dir = super::state::goals_dir().join(id.as_str());
+    let budget = crate::runtime::goal::types::GoalBudget::from_options(options)?;
+    let goal_dir = crate::runtime::goal::state::goals_dir().join(id.as_str());
     crate::runtime::config::ensure_private_dir(&goal_dir).await?;
 
     let now = chrono::Utc::now();
-    let normalized_goal = super::state::normalize_goal(goal);
-    let oracle = super::oracle::assess_goal_oracle(&normalized_goal);
+    let normalized_goal = crate::runtime::goal::state::normalize_goal(goal);
+    let oracle = crate::runtime::goal::oracle::assess_goal_oracle(&normalized_goal);
     let failure = (!oracle.testable).then(|| GoalFailure {
         reason: oracle.human_decisions_required.join("; "),
         recorded_at: now,
     });
-    let state = super::state::GoalState {
+    let state = crate::runtime::goal::state::GoalState {
         version: 1,
         goal_id: id_string,
         original_goal: goal.to_string(),
         normalized_goal,
         status: if oracle.testable {
-            super::state::GoalStatus::NotReady
+            crate::runtime::goal::state::GoalStatus::NotReady
         } else {
-            super::state::GoalStatus::BlockedOnHuman
+            crate::runtime::goal::state::GoalStatus::BlockedOnHuman
         },
-        phase: super::state::GoalPhase::Intake,
+        phase: crate::runtime::goal::state::GoalPhase::Intake,
         created_at: now,
         updated_at: now,
         completed_at: Some(now),
@@ -56,12 +54,12 @@ pub(crate) async fn create_goal_with_scaffold(
         budget_tokens: budget.tokens,
         budget_usd: budget.usd,
         max_agents: budget.max_agents,
-        terminal_criteria: super::state::GoalTerminalCriteria::default(),
+        terminal_criteria: crate::runtime::goal::state::GoalTerminalCriteria::default(),
         artifacts: Vec::new(),
         failure,
         state_dir: goal_dir.clone(),
     };
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
 
     run_controller_scaffold(state).await
 }
@@ -76,11 +74,11 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
 
     let now = Utc::now();
     state.phase = GoalPhase::Planning;
-    artifacts::write_goal_brief(&state, now).await?;
+    super::artifacts::write_goal_brief(&state, now).await?;
     record_artifact(&mut state, "prd", GOAL_PRD_FILE, now);
 
     state.phase = GoalPhase::Planning;
-    artifacts::write_technical_plan(&state, now).await?;
+    super::artifacts::write_technical_plan(&state, now).await?;
     record_artifact(&mut state, "technical_plan", GOAL_TECHNICAL_PLAN_FILE, now);
 
     state.phase = GoalPhase::Decomposition;
@@ -88,14 +86,14 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
     record_artifact(&mut state, "task_graph", GOAL_TASK_GRAPH_FILE, now);
 
     state.phase = GoalPhase::VerificationDesign;
-    artifacts::write_test_spec(&state, &task_graph, &cwd, now).await?;
+    super::artifacts::write_test_spec(&state, &task_graph, &cwd, now).await?;
     record_artifact(&mut state, "test_spec", GOAL_TEST_SPEC_FILE, now);
-    for (kind, path) in artifacts::write_greenfield_oracle_artifacts(&state).await? {
+    for (kind, path) in super::artifacts::write_greenfield_oracle_artifacts(&state).await? {
         record_artifact(&mut state, kind, path, now);
     }
     append_controller_task_events(&state, &task_graph).await?;
     if state.until_ready && state.status != GoalStatus::BlockedOnHuman {
-        delivery::materialize_delivery_slices(&state, &task_graph, &cwd).await?;
+        super::delivery::materialize_delivery_slices(&state, &task_graph, &cwd).await?;
     }
 
     state.phase = GoalPhase::Proof;
@@ -103,7 +101,8 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
     let proof = build_scaffold_proof(&state, &task_graph, git, now);
     write_json_artifact(&state.state_dir.join(GOAL_PROOF_FILE), &proof).await?;
     record_artifact(&mut state, "proof", GOAL_PROOF_FILE, now);
-    super::decision::append_controller_scaffold_decisions(&state, &task_graph, now).await?;
+    crate::runtime::goal::decision::append_controller_scaffold_decisions(&state, &task_graph, now)
+        .await?;
     record_artifact(&mut state, "decisions", GOAL_DECISIONS_FILE, now);
 
     if state.status != GoalStatus::BlockedOnHuman {
@@ -111,11 +110,11 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
     }
     state.updated_at = now;
     state.completed_at = Some(now);
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
     if state.status == GoalStatus::BlockedOnHuman {
         write_blocked_goal_failure_artifact(&state).await?;
     }
-    super::budget::append_budget_checkpoint(&state, "goal_created").await?;
+    crate::runtime::goal::budget::append_budget_checkpoint(&state, "goal_created").await?;
 
     let run_failed_reason = if state.status == GoalStatus::BlockedOnHuman {
         state

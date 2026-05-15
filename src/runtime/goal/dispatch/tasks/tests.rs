@@ -4,7 +4,8 @@ use crate::runtime::goal::agent::{
 };
 use crate::runtime::goal::proof::write_json_artifact;
 use crate::runtime::goal::state::{
-    GoalPhase, GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_TASK_GRAPH_FILE,
+    FileSystemGoalStateStore, GoalPhase, GoalState, GoalStateStore, GoalStatus,
+    GOAL_AGENT_EXECUTE_TASK_ID, GOAL_TASK_GRAPH_FILE,
 };
 use crate::runtime::goal::task_graph::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 use chrono::Utc;
@@ -87,7 +88,7 @@ async fn setup_goal_state(budget_time: Option<String>) -> (GoalState, GoalTaskGr
         failure: None,
         state_dir: state_dir.clone(),
     };
-    state.save().await.unwrap();
+    FileSystemGoalStateStore::new().save(&state).await.unwrap();
 
     let task_graph = GoalTaskGraph {
         version: 1,

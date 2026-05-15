@@ -9,9 +9,11 @@ pub async fn record_session_end(
     estimate: crate::cost::estimator::CostEstimate,
     notification: crate::notifications::NotificationEvent,
 ) -> Result<()> {
-    let tracker = crate::cost::tracker::CostTracker::new(&crate::runtime::config::state_dir());
+    let state_dir = crate::runtime::config::state_dir();
+    let sink = crate::cost::file_sink::JsonFileCostSink::new(state_dir.join("costs.json"));
+    let tracker = crate::cost::tracker::CostTracker::new(sink);
     let _ = tracker
-        .record(crate::cost::tracker::SessionCost {
+        .record(crate::cost::types::SessionCost {
             session_type: session_type.to_string(),
             name: name.to_string(),
             started_at,

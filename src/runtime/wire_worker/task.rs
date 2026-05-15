@@ -7,7 +7,7 @@ use tracing::{info, warn};
 use crate::runtime::events::{Event, EventBuilder, EventKind, JsonlWriter, TaskId, WorkerId};
 use crate::runtime::wire_worker::WireWorkerAdapter;
 use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
-use crate::wire::client::{WireClient, WireMessage};
+use crate::wire::client::{ProcessWireClient, WireClient, WireMessage};
 use crate::wire::protocol::{redact_wire_secrets, Request, RequestParams};
 
 /// Outcome of [`WireWorkerAdapter::process_task`].
@@ -55,7 +55,7 @@ impl WireWorkerAdapter {
         self.event_writer.append(&started).await?;
 
         let project_dir = self.spec.project_dir.as_deref();
-        let mut client = WireClient::spawn(kimi_bin, project_dir, None, None)?;
+        let mut client = ProcessWireClient::spawn(kimi_bin, project_dir, None, None)?;
 
         let init_params = crate::wire::protocol::InitializeParams {
             protocol_version: crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string(),

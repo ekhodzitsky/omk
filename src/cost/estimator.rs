@@ -1,10 +1,8 @@
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 
 /// Pricing tiers for heuristic cost estimation.
 /// These are approximate rates based on typical API pricing.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq)]
 pub enum PricingTier {
     /// Budget tier (~$2 / 1M tokens output)
     Budget,
@@ -69,6 +67,8 @@ impl CostEstimate {
 /// - ~1000 tokens/minute per worker for active generation
 /// - Input:output ratio ~ 3:1
 /// - Minimum 500 tokens per session
+///
+/// This function is pure: no I/O, no panics for any input.
 pub fn estimate_cost(
     duration_secs: u64,
     worker_count: usize,
@@ -128,4 +128,76 @@ pub fn estimate_ralph_cost(
         iterations + stories_total,
         PricingTier::Standard,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_estimate_cost_zero_duration() {
+        let est = estimate_cost(0, 1, 0, PricingTier::Standard);
+        assert_eq!(est.duration_secs, 0);
+        assert_eq!(est.worker_count, 1);
+        // Minimum 500 tokens enforced
+        assert_eq!(est.input_tokens + est.output_tokens, 500);
+        assert!(est.estimated_usd > 0.0);
+    }
+
+    #[test]
+    fn test_estimate_cost_basic() {
+        let est = estimate_cost(60, 2, 1, PricingTier::Standard);
+        assert_eq!(est.duration_secs, 60);
+        assert_eq!(est.worker_count, 2);
+        assert_eq!(est.tier, PricingTier::Standard);
+        // 1 min * 1000 tpm * 2 workers * 1.3 iterations = 2600 tokens
+        assert_eq!(est.input_tokens + est.output_tokens, 2600);
+    }
+
+    #[test]
+    fn test_estimate_cost_premium_tier() {
+        let budget = estimate_cost(60, 1, 0, PricingTier::Budget);
+        let standard = estimate_cost(60, 1, 0, PricingTier::Standard);
+        let premium = estimate_cost(60, 1, 0, PricingTier::Premium);
+
+        assert!(budget.estimated_usd < standard.estimated_usd);
+        assert!(standard.estimated_usd < premium.estimated_usd);
+    }
+
+    #[test]
+    fn test_pricing_tier_from_model_hint() {
+        assert_eq!(PricingTier::from_model_hint("kimi"), PricingTier::Standard);
+        assert_eq!(PricingTier::from_model_hint("gpt-4o"), PricingTier::Premium);
+        assert_eq!(PricingTier::from_model_hint("haiku"), PricingTier::Budget);
+        assert_eq!(PricingTier::from_model_hint("UNKNOWN"), PricingTier::Standard);
+    }
+
+    #[test]
+    fn test_cost_estimate_formatted() {
+        let est = CostEstimate {
+            input_tokens: 3000,
+            output_tokens: 1000,
+            duration_secs: 120,
+            worker_count: 3,
+            estimated_usd: 1.5,
+            tier: PricingTier::Standard,
+        };
+        let s = est.formatted();
+        assert!(s.contains("~$1.5000"));
+        assert!(s.contains("3 workers"));
+        assert!(s.contains("~120s"));
+        assert!(s.contains("~4K tokens"));
+    }
+
+    #[test]
+    fn test_estimate_team_cost_premium_role() {
+        let est = estimate_team_cost(60, 1, "security-audit");
+        assert_eq!(est.tier, PricingTier::Premium);
+    }
+
+    #[test]
+    fn test_estimate_team_cost_standard_role() {
+        let est = estimate_team_cost(60, 1, "developer");
+        assert_eq!(est.tier, PricingTier::Standard);
+    }
 }

@@ -1,10 +1,12 @@
 use anyhow::Result;
 
-use super::{
-    controller_task_summary, Event, EventBuilder, EventKind, EventWriter, GoalAgentRunEvidence,
-    GoalState, GoalTaskStatus, RunId, TaskId, WorkerId, WorkerSpec, EVENTS_FILE,
-    GOAL_AGENT_WORKER_ID,
-};
+use crate::runtime::config::EVENTS_FILE;
+use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId};
+use crate::runtime::goal::evidence::GoalAgentRunEvidence;
+use crate::runtime::goal::planner::controller_task_summary;
+use crate::runtime::goal::state::{GoalState, GOAL_AGENT_WORKER_ID};
+use crate::runtime::goal::task_graph::GoalTaskStatus;
+use crate::runtime::worker::WorkerSpec;
 
 pub async fn read_goal_agent_worker_results(
     specs: &[WorkerSpec],

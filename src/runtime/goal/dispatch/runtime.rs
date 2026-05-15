@@ -5,7 +5,7 @@ use tokio::task::JoinHandle;
 use crate::runtime::config::{HEARTBEAT_FILE, INBOX_FILE, OUTBOX_FILE, WORKERS_DIR};
 use crate::runtime::worker::WorkerSpec;
 
-use super::{GOAL_AGENT_WORKER_ID, GOAL_AGENT_WORKER_ROLE};
+use crate::runtime::goal::state::{GOAL_AGENT_WORKER_ID, GOAL_AGENT_WORKER_ROLE};
 
 pub(crate) fn goal_agent_wire_runtime_available() -> bool {
     std::env::var_os("MOCK_KIMI").is_some() || which::which("kimi").is_ok()

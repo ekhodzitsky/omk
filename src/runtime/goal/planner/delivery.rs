@@ -1,9 +1,9 @@
 use anyhow::Result;
 use std::path::Path;
 
-use super::super::state::GoalState;
-use super::super::task_graph::{self, GoalTaskGraph};
-use super::super::worktree::{
+use crate::runtime::goal::state::GoalState;
+use crate::runtime::goal::task_graph::{self, GoalTaskGraph};
+use crate::runtime::goal::worktree::{
     is_git_worktree, materialize_goal_worktrees, GoalWorktreeMaterializeRequest,
 };
 

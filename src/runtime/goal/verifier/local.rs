@@ -1,8 +1,8 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 
-use super::super::state::{GoalState, GOAL_CONTROLLER_ACTOR, GOAL_LOCAL_VERIFY_TASK_ID};
-use super::super::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
+use crate::runtime::goal::state::{GoalState, GOAL_CONTROLLER_ACTOR, GOAL_LOCAL_VERIFY_TASK_ID};
+use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
 use crate::runtime::events::{
     Event, EventBuilder, EventKind, EventWriter, GateId, RunId, TaskId, WorkerId,
 };
@@ -26,7 +26,7 @@ pub(crate) fn apply_local_verification_task_result(
     };
     task.owner_role = Some(GOAL_CONTROLLER_ACTOR.to_string());
     task.completed_at = gates_ok.then_some(completed_at);
-    task.evidence = super::super::evidence::local_verification_task_evidence(gates, gates_ok);
+    task.evidence = crate::runtime::goal::evidence::local_verification_task_evidence(gates, gates_ok);
     Some(task.clone())
 }
 
@@ -38,7 +38,7 @@ pub(crate) async fn append_local_verification_task_events(
     let builder = EventBuilder::new(RunId(state.goal_id.clone()));
     let worker_id = WorkerId(GOAL_CONTROLLER_ACTOR.to_string());
     let task_id = TaskId(task.id.clone());
-    let summary = super::super::planner::controller_task_summary(task);
+    let summary = crate::runtime::goal::planner::controller_task_summary(task);
 
     let started = Event::new(RunId(state.goal_id.clone()), EventKind::TaskStarted)
         .with_actor(GOAL_CONTROLLER_ACTOR)

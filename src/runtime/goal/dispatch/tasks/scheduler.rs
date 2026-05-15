@@ -1,6 +1,9 @@
 use chrono::{DateTime, Utc};
 
-use super::{GoalAgentTaskProposal, GoalState, GoalTaskGraph, Task, GOAL_LOCAL_VERIFY_TASK_ID};
+use crate::runtime::goal::agent::GoalAgentTaskProposal;
+use crate::runtime::goal::state::{GoalState, GOAL_LOCAL_VERIFY_TASK_ID};
+use crate::runtime::goal::task_graph::GoalTaskGraph;
+use crate::runtime::scheduler::task::Task;
 
 pub fn goal_agent_scheduler_tasks(
     state: &GoalState,

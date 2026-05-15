@@ -7,8 +7,8 @@ fn state() -> GoalState {
         goal_id: "goal-test".to_string(),
         original_goal: "Build a safe goal runtime".to_string(),
         normalized_goal: "Build a safe goal runtime".to_string(),
-        status: super::super::state::GoalStatus::Running,
-        phase: super::super::state::GoalPhase::Execution,
+        status: crate::runtime::goal::state::GoalStatus::Running,
+        phase: crate::runtime::goal::state::GoalPhase::Execution,
         created_at: Utc::now(),
         updated_at: Utc::now(),
         completed_at: None,
@@ -17,15 +17,15 @@ fn state() -> GoalState {
         budget_tokens: None,
         budget_usd: None,
         max_agents: Some(2),
-        terminal_criteria: super::super::state::GoalTerminalCriteria::default(),
+        terminal_criteria: crate::runtime::goal::state::GoalTerminalCriteria::default(),
         artifacts: Vec::new(),
         failure: None,
         state_dir: std::path::PathBuf::from("/tmp/goal-test"),
     }
 }
 
-fn done_task(id: &str) -> super::super::task_graph::GoalTask {
-    super::super::task_graph::GoalTask {
+fn done_task(id: &str) -> crate::runtime::goal::task_graph::GoalTask {
+    crate::runtime::goal::task_graph::GoalTask {
         id: id.to_string(),
         title: format!("Task {id}"),
         description: format!("Task {id} description"),

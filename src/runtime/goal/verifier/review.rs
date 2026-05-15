@@ -3,12 +3,12 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-use super::super::evidence::GoalReviewEvidence;
-use super::super::state::{
+use crate::runtime::goal::evidence::GoalReviewEvidence;
+use crate::runtime::goal::state::{
     GoalState, GOAL_ARTIFACTS_DIR, GOAL_REVIEW_ARTIFACTS_DIR, GOAL_REVIEW_FILE,
     GOAL_SECURITY_REVIEW_FILE,
 };
-use super::super::task_graph::{goal_task_done, GoalTaskGraph};
+use crate::runtime::goal::task_graph::{goal_task_done, GoalTaskGraph};
 use crate::runtime::gates::gates_passed;
 
 pub(crate) fn review_wall_markdown(artifacts: &[Value]) -> String {
@@ -83,7 +83,7 @@ fn markdown_list(artifact: &Value, field: &str) -> String {
 pub(crate) async fn write_goal_review_evidence(
     state: &GoalState,
     task_graph: &GoalTaskGraph,
-    proof: &super::super::proof::GoalProof,
+    proof: &crate::runtime::goal::proof::GoalProof,
     project_dir: &Path,
     generated_at: DateTime<Utc>,
 ) -> Result<GoalReviewEvidence> {
@@ -94,15 +94,15 @@ pub(crate) async fn write_goal_review_evidence(
     crate::runtime::config::ensure_private_dir(&review_abs_dir).await?;
 
     let local_verify_done =
-        goal_task_done(task_graph, super::super::state::GOAL_LOCAL_VERIFY_TASK_ID);
+        goal_task_done(task_graph, crate::runtime::goal::state::GOAL_LOCAL_VERIFY_TASK_ID);
     let agent_execution_done =
-        goal_task_done(task_graph, super::super::state::GOAL_AGENT_EXECUTE_TASK_ID);
+        goal_task_done(task_graph, crate::runtime::goal::state::GOAL_AGENT_EXECUTE_TASK_ID);
     let gates_ok = !proof.gates.is_empty() && gates_passed(&proof.gates);
     let security_findings =
         super::scan_goal_security_findings(project_dir, &proof.changed_files).await?;
     let review_ok = local_verify_done && agent_execution_done;
     let security_ok = agent_execution_done && security_findings.is_empty();
-    let review_artifacts = super::super::proof::collect_review_artifacts(
+    let review_artifacts = crate::runtime::goal::proof::collect_review_artifacts(
         review_ok,
         security_ok,
         &proof.gates,

@@ -3,10 +3,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use super::super::agent::{GoalAgentTaskPolicy, GoalAgentTaskProposal};
-use super::super::evidence::GoalAgentRunEvidence;
-use super::super::proof::write_json_artifact;
-use super::super::state::{
+use crate::runtime::goal::agent::{GoalAgentTaskPolicy, GoalAgentTaskProposal};
+use crate::runtime::goal::evidence::GoalAgentRunEvidence;
+use crate::runtime::goal::proof::write_json_artifact;
+use crate::runtime::goal::state::{
     default_goal_agent_task_budget_secs, GoalState, GOAL_AGENT_EXECUTE_TASK_ID,
     GOAL_AGENT_WORKER_ID, GOAL_AGENT_WORKER_ROLE, GOAL_CONTROLLER_ACTOR, GOAL_TASK_GRAPH_FILE,
 };
@@ -105,7 +105,7 @@ pub(crate) fn apply_agent_execution_task_result(
     task.owner_role = Some(GOAL_AGENT_WORKER_ROLE.to_string());
     task.completed_at = success.then_some(completed_at);
     record_goal_task_attempt_result(task, success);
-    task.evidence = super::super::evidence::agent_execution_task_evidence(evidence, success);
+    task.evidence = crate::runtime::goal::evidence::agent_execution_task_evidence(evidence, success);
     Some(task.clone())
 }
 
@@ -141,7 +141,7 @@ pub(crate) fn apply_agent_followup_task_results(
         task.completed_at = success.then_some(completed_at);
         record_goal_task_attempt_result(task, success);
         task.evidence =
-            super::super::evidence::agent_followup_task_evidence(evidence, result, success);
+            crate::runtime::goal::evidence::agent_followup_task_evidence(evidence, result, success);
     }
 }
 
@@ -162,7 +162,7 @@ pub(crate) async fn apply_agent_proposed_task_mutations(
         return Ok(());
     }
 
-    let policy = super::super::agent::validate_goal_agent_task_proposals(
+    let policy = crate::runtime::goal::agent::validate_goal_agent_task_proposals(
         state,
         task_graph,
         &evidence.summary.run_id,
@@ -236,7 +236,7 @@ async fn append_agent_proposed_task_events(
             crate::runtime::events::EventKind::TaskProposed,
         )
         .with_actor(GOAL_AGENT_WORKER_ID)
-        .with_payload(super::super::agent::goal_agent_task_policy_payload(
+        .with_payload(crate::runtime::goal::agent::goal_agent_task_policy_payload(
             proposal, None,
         ))?;
         writer.append(&event).await?;
@@ -248,7 +248,7 @@ async fn append_agent_proposed_task_events(
             crate::runtime::events::EventKind::TaskAccepted,
         )
         .with_actor(GOAL_CONTROLLER_ACTOR)
-        .with_payload(super::super::agent::goal_agent_task_policy_payload(
+        .with_payload(crate::runtime::goal::agent::goal_agent_task_policy_payload(
             proposal,
             Some("accepted agent-proposed task graph mutation"),
         ))?;
@@ -261,7 +261,7 @@ async fn append_agent_proposed_task_events(
             crate::runtime::events::EventKind::TaskRejected,
         )
         .with_actor(GOAL_CONTROLLER_ACTOR)
-        .with_payload(super::super::agent::goal_agent_task_policy_payload(
+        .with_payload(crate::runtime::goal::agent::goal_agent_task_policy_payload(
             &decision.task,
             Some(&decision.reason),
         ))?;

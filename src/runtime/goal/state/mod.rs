@@ -3,6 +3,7 @@ mod duration;
 mod error;
 mod path;
 mod persistence;
+mod store;
 mod types;
 
 #[cfg(test)]
@@ -17,6 +18,10 @@ pub use constants::{
 };
 pub use error::GoalStateError;
 pub use persistence::goals_dir;
+pub use store::{FileSystemGoalStateStore, GoalStateStore};
+
+#[cfg(test)]
+pub use store::InMemoryGoalStateStore;
 pub use types::{
     CreateGoalOptions, GoalArtifact, GoalFailure, GoalPhase, GoalState, GoalStatus,
     GoalTerminalCriteria,

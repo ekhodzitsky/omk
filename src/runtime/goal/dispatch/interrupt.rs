@@ -1,7 +1,7 @@
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
-use super::{GoalState, GoalStatus};
+use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore, GoalStatus};
 
 pub(crate) async fn watch_goal_control_interrupt(
     goal_dir: std::path::PathBuf,
@@ -13,7 +13,7 @@ pub(crate) async fn watch_goal_control_interrupt(
             biased;
             _ = monitor_cancel.cancelled() => return None,
             _ = tokio::time::sleep(goal_interrupt_poll_interval()) => {
-                let Ok(state) = GoalState::load(&goal_dir).await else {
+                let Ok(state) = FileSystemGoalStateStore::new().load(&goal_dir).await else {
                     continue;
                 };
                 if matches!(state.status, GoalStatus::Paused | GoalStatus::Cancelled) {

@@ -1,4 +1,5 @@
-use super::{goal_agent_task_policy_payload, GoalAgentTaskProposal, PerTaskBudgetSnapshot};
+use crate::runtime::goal::agent::{goal_agent_task_policy_payload, GoalAgentTaskProposal};
+use crate::runtime::goal::budget::PerTaskBudgetSnapshot;
 
 pub fn task_dispatch_accepted_payload(
     proposal: &GoalAgentTaskProposal,

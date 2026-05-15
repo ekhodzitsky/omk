@@ -23,15 +23,21 @@ pub(crate) async fn run(args: Args) -> Result<()> {
 }
 
 async fn show_report() -> Result<()> {
-    let tracker = crate::cost::tracker::CostTracker::new(&crate::runtime::config::state_dir());
+    let sink = crate::cost::file_sink::JsonFileCostSink::new(
+        crate::runtime::config::state_dir().join("costs.json"),
+    );
+    let tracker = crate::cost::tracker::CostTracker::new(sink);
     let report = tracker.report().await?;
     println!("{}", report);
     Ok(())
 }
 
 async fn reset_costs() -> Result<()> {
-    let tracker = crate::cost::tracker::CostTracker::new(&crate::runtime::config::state_dir());
-    tracker.save(&[]).await?;
+    let sink = crate::cost::file_sink::JsonFileCostSink::new(
+        crate::runtime::config::state_dir().join("costs.json"),
+    );
+    let tracker = crate::cost::tracker::CostTracker::new(sink);
+    tracker.clear().await?;
     println!("✓ Cost tracking data reset");
     Ok(())
 }

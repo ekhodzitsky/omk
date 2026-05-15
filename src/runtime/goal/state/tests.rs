@@ -1,6 +1,6 @@
 use super::{
-    format_goal_duration_secs, is_safe_goal_agent_path, normalize_goal, GoalPhase, GoalState,
-    GoalStatus, GOAL_STATE_FILE,
+    format_goal_duration_secs, is_safe_goal_agent_path, normalize_goal, FileSystemGoalStateStore,
+    GoalPhase, GoalStateStore, GoalStatus, GOAL_STATE_FILE,
 };
 use std::fs;
 
@@ -52,7 +52,7 @@ async fn goal_state_loads_legacy_json_with_safe_defaults() {
     )
     .unwrap();
 
-    let state = GoalState::load(temp.path()).await.unwrap();
+    let state = FileSystemGoalStateStore::new().load(temp.path()).await.unwrap();
 
     assert_eq!(state.version, 1);
     assert_eq!(state.phase, GoalPhase::Intake);
@@ -89,7 +89,7 @@ async fn goal_state_load_rehomes_stale_persisted_state_dir() {
     )
     .unwrap();
 
-    let state = GoalState::load(temp.path()).await.unwrap();
+    let state = FileSystemGoalStateStore::new().load(temp.path()).await.unwrap();
 
     assert_eq!(state.goal_id, "goal-moved");
     assert_eq!(state.status, GoalStatus::Paused);

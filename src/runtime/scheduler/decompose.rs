@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::wire::client::{WireClient, WireMessage};
+use crate::wire::client::{ProcessWireClient, WireClient, WireMessage};
 use crate::wire::protocol::{ClientInfo, Event, InitializeParams};
 
 /// A subtask produced by lead decomposition.
@@ -42,7 +42,7 @@ impl SynthesisAgent {
 }
 
 async fn run_wire_prompt(prompt: &str, kimi_bin: &str, client_name: &str) -> Result<String> {
-    let mut client = WireClient::spawn(kimi_bin, None, None, None)?;
+    let mut client = ProcessWireClient::spawn(kimi_bin, None, None, None)?;
 
     let init_params = InitializeParams {
         protocol_version: crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string(),

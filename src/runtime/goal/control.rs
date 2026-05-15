@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
 
+use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 use super::state::{GoalFailure, GoalState, GoalStatus};
 use super::{budget, state};
 
@@ -22,7 +23,7 @@ pub async fn pause_goal(goal_id: &str) -> Result<GoalState> {
     state.status = GoalStatus::Paused;
     state.updated_at = now;
     state.completed_at = None;
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
     append_goal_lifecycle_event(&state, crate::runtime::events::EventKind::GoalPaused).await?;
     budget::append_budget_checkpoint(&state, "goal_paused").await?;
     Ok(state)
@@ -42,7 +43,7 @@ pub async fn resume_goal(goal_id: &str) -> Result<GoalState> {
     state.status = GoalStatus::NotReady;
     state.updated_at = now;
     state.completed_at = None;
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
     append_goal_lifecycle_event(&state, crate::runtime::events::EventKind::GoalResumed).await?;
     budget::append_budget_checkpoint(&state, "goal_resumed").await?;
     Ok(state)
@@ -58,7 +59,7 @@ pub async fn cancel_goal(goal_id: &str) -> Result<GoalState> {
         reason: "cancelled by user".to_string(),
         recorded_at: now,
     });
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
 
     let failure_json = serde_json::to_string_pretty(&state)?;
     crate::runtime::atomic::atomic_write(

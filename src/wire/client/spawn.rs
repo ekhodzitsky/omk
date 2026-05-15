@@ -2,17 +2,12 @@ use anyhow::{Context, Result};
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::Duration;
-use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::{info, warn};
 
-use crate::wire::client::{WireClient, LEGACY_NO_HANDSHAKE_PROTOCOL_VERSION, MAX_WIRE_LINE_LENGTH};
-use crate::wire::protocol::{
-    InitializeParams, InitializeResult, JsonRpcErrorResponse, JsonRpcRequest,
-    JsonRpcSuccessResponse,
-};
+use crate::wire::client::{ProcessWireClient, MAX_WIRE_LINE_LENGTH};
 
-impl WireClient {
+impl ProcessWireClient {
     /// Spawn a new kimi process in wire mode.
     pub fn spawn(
         kimi_binary: &str,
@@ -82,56 +77,5 @@ impl WireClient {
             request_id_counter: 0,
             handshake_done: false,
         })
-    }
-
-    /// Send initialize handshake.
-    pub async fn initialize(&mut self, params: InitializeParams) -> Result<InitializeResult> {
-        let id = self.next_id();
-        let req = JsonRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            method: "initialize".to_string(),
-            id: id.clone(),
-            params,
-        };
-        self.send_request(&req).await?;
-
-        let line = match self.stdout_reader.next().await {
-            Some(Ok(line)) => line,
-            Some(Err(e)) => {
-                return Err(e).context("Failed to read initialize response");
-            }
-            None => {
-                anyhow::bail!("kimi stdout closed while waiting for initialize response");
-            }
-        };
-
-        // Check for method-not-found error (-32601)
-        if let Ok(error_resp) = serde_json::from_str::<JsonRpcErrorResponse>(&line) {
-            if error_resp.error.code == -32601 {
-                warn!(
-                    code = error_resp.error.code,
-                    "Server does not support initialize, falling back to legacy no-handshake mode"
-                );
-                self.handshake_done = true;
-                return Ok(InitializeResult {
-                    protocol_version: LEGACY_NO_HANDSHAKE_PROTOCOL_VERSION.to_string(),
-                    server: None,
-                    slash_commands: None,
-                    external_tools: None,
-                    capabilities: None,
-                    hooks: None,
-                });
-            }
-            anyhow::bail!(
-                "Initialize failed: {} (code: {})",
-                error_resp.error.message,
-                error_resp.error.code
-            );
-        }
-
-        let resp: JsonRpcSuccessResponse<InitializeResult> =
-            serde_json::from_str(&line).context("Failed to parse initialize response")?;
-        self.handshake_done = true;
-        Ok(resp.result)
     }
 }

@@ -26,8 +26,9 @@ pub struct WireResponse {
 }
 
 /// Process wire messages in a loop, handling events and requests.
-pub async fn process_messages<F, Fut>(client: &mut WireClient, mut handler: F) -> Result<()>
+pub async fn process_messages<C, F, Fut>(client: &mut C, mut handler: F) -> Result<()>
 where
+    C: WireClient,
     F: FnMut(WireMessage) -> Fut,
     Fut: std::future::Future<Output = Result<Option<WireResponse>>>,
 {

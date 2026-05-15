@@ -1,12 +1,12 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 
-use super::super::evidence::GoalReviewEvidence;
-use super::super::state::{
+use crate::runtime::goal::evidence::GoalReviewEvidence;
+use crate::runtime::goal::state::{
     GoalState, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_CONTROLLER_ACTOR, GOAL_LOCAL_VERIFY_TASK_ID,
     GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_TASK_ID,
 };
-use super::super::task_graph::{
+use crate::runtime::goal::task_graph::{
     goal_task_done, GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus,
 };
 use crate::runtime::events::{
@@ -78,7 +78,7 @@ pub(crate) async fn append_goal_review_task_events(
 
     for task in tasks {
         let task_id = TaskId(task.id.clone());
-        let summary = super::super::planner::controller_task_summary(task);
+        let summary = crate::runtime::goal::planner::controller_task_summary(task);
         events.push(
             Event::new(RunId(state.goal_id.clone()), EventKind::TaskStarted)
                 .with_actor(GOAL_CONTROLLER_ACTOR)
