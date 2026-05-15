@@ -3,7 +3,8 @@ use chrono::Utc;
 use std::collections::HashMap;
 use tracing::{info, warn};
 
-use super::task::{Task, TaskId, TaskState};
+use super::summary::TaskSummary;
+use crate::runtime::scheduler::task::{Task, TaskId, TaskState};
 
 /// Default lease duration for a claimed task.
 pub const DEFAULT_LEASE_SECS: u64 = 300; // 5 minutes
@@ -278,26 +279,6 @@ impl ClaimStore {
 impl Default for ClaimStore {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct TaskSummary {
-    pub pending: usize,
-    pub claimed: usize,
-    pub running: usize,
-    pub completed: usize,
-    pub failed: usize,
-    pub cancelled: usize,
-}
-
-impl TaskSummary {
-    pub fn total(&self) -> usize {
-        self.pending + self.claimed + self.running + self.completed + self.failed + self.cancelled
-    }
-
-    pub fn done(&self) -> usize {
-        self.completed + self.failed + self.cancelled
     }
 }
 
