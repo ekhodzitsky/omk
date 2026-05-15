@@ -103,20 +103,20 @@ impl GoalStateStore for FileSystemGoalStateStore {
 /// In-memory implementation for unit tests.
 #[cfg(test)]
 pub struct InMemoryGoalStateStore {
-    inner: std::sync::Mutex<HashMap<PathBuf, GoalState>>,
+    inner: tokio::sync::Mutex<HashMap<PathBuf, GoalState>>,
 }
 
 #[cfg(test)]
 impl InMemoryGoalStateStore {
     pub fn new() -> Self {
         Self {
-            inner: std::sync::Mutex::new(HashMap::new()),
+            inner: tokio::sync::Mutex::new(HashMap::new()),
         }
     }
 
     #[allow(dead_code)]
-    pub fn insert(&self, goal_dir: PathBuf, state: GoalState) {
-        self.inner.lock().unwrap().insert(goal_dir, state);
+    pub async fn insert(&self, goal_dir: PathBuf, state: GoalState) {
+        self.inner.lock().await.insert(goal_dir, state);
     }
 }
 
@@ -125,13 +125,13 @@ impl GoalStateStore for InMemoryGoalStateStore {
     async fn save(&self, state: &GoalState) -> Result<()> {
         self.inner
             .lock()
-            .unwrap()
+            .await
             .insert(state.state_dir.clone(), state.clone());
         Ok(())
     }
 
     async fn load(&self, goal_dir: &Path) -> Result<GoalState> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().await;
         let mut state =
             inner
                 .get(goal_dir)
@@ -144,7 +144,7 @@ impl GoalStateStore for InMemoryGoalStateStore {
     }
 
     async fn list(&self) -> Result<Vec<GoalState>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().await;
         let mut goals: Vec<GoalState> = inner.values().cloned().collect();
         goals.sort_by(|a, b| {
             b.created_at

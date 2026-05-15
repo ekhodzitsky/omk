@@ -32,6 +32,15 @@ pub struct ProcessWireClient {
     pub(crate) pending_messages: VecDeque<WireMessage>,
     pub(crate) request_id_counter: u64,
     pub(crate) handshake_done: bool,
+    pub(crate) stderr_handle: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl Drop for ProcessWireClient {
+    fn drop(&mut self) {
+        if let Some(handle) = self.stderr_handle.take() {
+            handle.abort();
+        }
+    }
 }
 
 #[cfg(test)]

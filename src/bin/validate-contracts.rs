@@ -144,7 +144,10 @@ fn extract_frontmatter(content: &str) -> Option<&str> {
 }
 
 fn validate_top(doc: &serde_yaml::Value, issues: &mut Vec<Issue>) {
-    let map = doc.as_mapping().expect("doc is a mapping");
+    let Some(map) = doc.as_mapping() else {
+        issues.push(Issue::new("root", "doc must be a mapping"));
+        return;
+    };
     let keys: HashSet<String> = map
         .keys()
         .filter_map(|k| k.as_str().map(|s| s.to_string()))

@@ -14,31 +14,32 @@ pub(crate) const REDACTED_SECRET: &str = "[REDACTED]";
 /// transcript that quotes an environment variable verbatim. They are
 /// intentionally conservative (anchored, long minimum lengths) so legitimate
 /// content does not get false-positive scrubbed.
-static SECRET_VALUE_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
-    let patterns: &[&str] = &[
-        // GitHub personal-access / OAuth / refresh tokens.
-        r"\bgh[pousr]_[A-Za-z0-9]{20,}\b",
-        // AWS access key id.
-        r"\bAKIA[0-9A-Z]{16}\b",
-        // Slack bot/user/app/refresh tokens (xoxb-, xoxa-, xoxp-, xoxr-, xoxs-).
-        r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b",
-        // Stripe live/test secret keys.
-        r"\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b",
-        // Generic Bearer-token-shaped fragments that survived key redaction.
-        r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{20,}\b",
-        // PEM private key block markers (one finding flags the whole block).
-        r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
-    ];
-    patterns
-        .iter()
-        // SAFETY: all patterns are hardcoded and statically validated by regex syntax.
-        .map(|p| Regex::new(p).unwrap())
-        .collect()
-});
+static SECRET_VALUE_PATTERNS: Lazy<std::result::Result<Vec<Regex>, regex::Error>> =
+    Lazy::new(|| {
+        let patterns: &[&str] = &[
+            // GitHub personal-access / OAuth / refresh tokens.
+            r"\bgh[pousr]_[A-Za-z0-9]{20,}\b",
+            // AWS access key id.
+            r"\bAKIA[0-9A-Z]{16}\b",
+            // Slack bot/user/app/refresh tokens (xoxb-, xoxa-, xoxp-, xoxr-, xoxs-).
+            r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b",
+            // Stripe live/test secret keys.
+            r"\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b",
+            // Generic Bearer-token-shaped fragments that survived key redaction.
+            r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{20,}\b",
+            // PEM private key block markers (one finding flags the whole block).
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+        ];
+        patterns.iter().map(|&p| Regex::new(p)).collect()
+    });
 
 fn scrub_secret_patterns(input: &str) -> Cow<'_, str> {
+    let patterns = match SECRET_VALUE_PATTERNS.as_ref() {
+        Ok(p) => p,
+        Err(_) => return Cow::Borrowed(input),
+    };
     let mut current: Cow<'_, str> = Cow::Borrowed(input);
-    for re in SECRET_VALUE_PATTERNS.iter() {
+    for re in patterns.iter() {
         match re.replace_all(current.as_ref(), REDACTED_SECRET) {
             Cow::Borrowed(_) => {}
             Cow::Owned(new) => current = Cow::Owned(new),

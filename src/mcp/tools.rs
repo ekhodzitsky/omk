@@ -66,9 +66,12 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value, Omk
                 cmd.args(["--name", n]);
             }
 
-            let output = cmd.output().await.map_err(|_e| OmkError::ShellFailed {
-                command: format!("omk team run {}", spec),
-            })?;
+            let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output())
+                .await
+                .map_err(|_| OmkError::Timeout { secs: 60 })?
+                .map_err(|_e| OmkError::ShellFailed {
+                    command: format!("omk team run {}", spec),
+                })?;
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -84,13 +87,17 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value, Omk
         "omk_team_status" => {
             let team_name = arguments["name"].as_str().unwrap_or("");
 
-            let output = Command::new(&omk_bin)
-                .args(["team", "status", team_name])
-                .output()
-                .await
-                .map_err(|_e| OmkError::ShellFailed {
-                    command: format!("omk team status {}", team_name),
-                })?;
+            let output = tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                Command::new(&omk_bin)
+                    .args(["team", "status", team_name])
+                    .output(),
+            )
+            .await
+            .map_err(|_| OmkError::Timeout { secs: 60 })?
+            .map_err(|_e| OmkError::ShellFailed {
+                command: format!("omk team status {}", team_name),
+            })?;
 
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -113,9 +120,12 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value, Omk
                 cmd.arg("--force");
             }
 
-            let output = cmd.output().await.map_err(|_e| OmkError::ShellFailed {
-                command: format!("omk team shutdown {}", team_name),
-            })?;
+            let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output())
+                .await
+                .map_err(|_| OmkError::Timeout { secs: 60 })?
+                .map_err(|_e| OmkError::ShellFailed {
+                    command: format!("omk team shutdown {}", team_name),
+                })?;
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -129,13 +139,15 @@ pub async fn handle_tool_call(name: &str, arguments: Value) -> Result<Value, Omk
         }
 
         "omk_doctor" => {
-            let output = Command::new(&omk_bin)
-                .arg("doctor")
-                .output()
-                .await
-                .map_err(|_e| OmkError::ShellFailed {
-                    command: "omk doctor".to_string(),
-                })?;
+            let output = tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                Command::new(&omk_bin).arg("doctor").output(),
+            )
+            .await
+            .map_err(|_| OmkError::Timeout { secs: 60 })?
+            .map_err(|_e| OmkError::ShellFailed {
+                command: "omk doctor".to_string(),
+            })?;
 
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);

@@ -134,7 +134,7 @@ pub trait WireClient {
 /// Tests inject messages via [`InMemoryWireClient::inject`].
 pub struct InMemoryWireClient {
     incoming: Mutex<VecDeque<WireMessage>>,
-    pending: std::sync::Mutex<VecDeque<WireMessage>>,
+    pending: Mutex<VecDeque<WireMessage>>,
     outgoing: Mutex<Vec<serde_json::Value>>,
     handshake_done: bool,
     request_counter: u64,
@@ -150,7 +150,7 @@ impl InMemoryWireClient {
     pub fn new() -> Self {
         Self {
             incoming: Mutex::new(VecDeque::new()),
-            pending: std::sync::Mutex::new(VecDeque::new()),
+            pending: Mutex::new(VecDeque::new()),
             outgoing: Mutex::new(Vec::new()),
             handshake_done: false,
             request_counter: 0,
@@ -185,7 +185,7 @@ impl WireClient for InMemoryWireClient {
     }
 
     async fn read_message(&mut self) -> Result<WireMessage> {
-        if let Some(msg) = self.pending.lock().unwrap().pop_front() {
+        if let Some(msg) = self.pending.lock().await.pop_front() {
             return Ok(msg);
         }
         match self.incoming.lock().await.pop_front() {
@@ -203,19 +203,18 @@ impl WireClient for InMemoryWireClient {
 
     async fn read_response<T: DeserializeOwned>(&mut self, expected_id: &str) -> Result<T> {
         loop {
-            if let Some(idx) = self
-                .pending
-                .lock()
-                .unwrap()
-                .iter()
-                .position(|msg| wire_message_id(msg) == Some(expected_id))
-            {
+            let idx = {
+                let lock = self.pending.lock().await;
+                lock.iter()
+                    .position(|msg| wire_message_id(msg) == Some(expected_id))
+            };
+            if let Some(idx) = idx {
                 let msg = self
                     .pending
                     .lock()
-                    .unwrap()
+                    .await
                     .remove(idx)
-                    .ok_or_else(|| anyhow::anyhow!("pending response index should be valid"))?;
+                    .context("pending response index should be valid")?;
                 return decode_response(msg, expected_id);
             }
 
@@ -228,7 +227,7 @@ impl WireClient for InMemoryWireClient {
                     return bail_wire_error(resp);
                 }
                 Some(other) => {
-                    self.pending.lock().unwrap().push_back(other);
+                    self.pending.lock().await.push_back(other);
                 }
                 None => anyhow::bail!("in-memory wire stream closed while waiting for response"),
             }

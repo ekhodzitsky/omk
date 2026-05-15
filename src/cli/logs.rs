@@ -23,13 +23,17 @@ pub(crate) async fn run(args: Args) -> Result<()> {
 
     if args.follow {
         println!("Following {} (Ctrl+C to stop)...", log_file.display());
-        let status = tokio::process::Command::new("tail")
-            .args(["-f", "-n", &args.lines.to_string()])
-            .arg(&log_file)
-            .kill_on_drop(true)
-            .status()
-            .await
-            .context("Failed to run tail command")?;
+        let status = tokio::time::timeout(
+            std::time::Duration::from_secs(300),
+            tokio::process::Command::new("tail")
+                .args(["-f", "-n", &args.lines.to_string()])
+                .arg(&log_file)
+                .kill_on_drop(true)
+                .status(),
+        )
+        .await
+        .context("tail command timed out")?
+        .context("Failed to run tail command")?;
 
         if !status.success() {
             anyhow::bail!("tail command failed");
