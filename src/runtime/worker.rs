@@ -37,8 +37,15 @@ impl WorkerSpec {
 
     /// Write a task to the inbox
     pub async fn send_task(&self, task: &WorkerTask) -> Result<()> {
-        let line = serde_json::to_string(task)?;
-        crate::runtime::atomic::atomic_append_jsonl(&self.inbox, &line).await?;
+        // Use O_APPEND-based append (write is line-atomic on POSIX for
+        // payloads under PIPE_BUF) rather than the older read-modify-write
+        // `atomic_append_jsonl` helper, whose name was misleading: two
+        // concurrent callers could load the same pre-image and the second
+        // atomic_write would clobber the first task. POSIX `O_APPEND`
+        // serializes the kernel-side seek+write per system call.
+        let mut line = serde_json::to_vec(task)?;
+        line.push(b'\n');
+        crate::runtime::atomic::atomic_append(&self.inbox, &line).await?;
         Ok(())
     }
 

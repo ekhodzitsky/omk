@@ -147,28 +147,83 @@ async fn restore_backup(name: &str) -> Result<()> {
     }
 
     let state_dir = crate::runtime::config::state_dir();
+    let state_parent = state_dir
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("state_dir has no parent directory"))?
+        .to_path_buf();
+    let state_name = state_dir
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("state_dir has no file name component"))?
+        .to_os_string();
 
-    // Remove current state
-    if state_dir.exists() {
-        tokio::fs::remove_dir_all(&state_dir).await?;
+    // Extract into an isolated temp sibling first so a corrupt or hostile
+    // tarball cannot wipe live state before extraction completes successfully.
+    // Suffix the path with the process id so two concurrent `omk restore`
+    // invocations in the same wall-clock second cannot collide and stomp on
+    // each other's in-flight sandbox.
+    let stamp = format!(
+        "{}-{}",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S"),
+        std::process::id()
+    );
+    let tmp_dir = state_parent.join(format!(".omk-restore-{}", stamp));
+    if tmp_dir.exists() {
+        tokio::fs::remove_dir_all(&tmp_dir).await?;
     }
+    tokio::fs::create_dir_all(&tmp_dir).await?;
 
-    // Extract backup
-    let status = tokio::time::timeout(
+    // --no-same-owner: do not preserve archive uid/gid (avoids surprises when
+    // restoring under a different user).
+    // -C tmp_dir: extract into the sandbox directory. Both GNU tar and BSD tar
+    // strip leading `/` and reject `..` in member paths by default, so the
+    // sandbox additionally bounds any pathological archive.
+    let extract_status = tokio::time::timeout(
         std::time::Duration::from_secs(60),
         Command::new("tar")
-            .args(["-xzf"])
+            .arg("--no-same-owner")
+            .arg("-xzf")
             .arg(&backup_path)
             .arg("-C")
-            .arg(state_dir.parent().unwrap_or(std::path::Path::new(".")))
+            .arg(&tmp_dir)
             .status(),
     )
     .await
     .context("tar command timed out")?
     .context("Failed to run tar command")?;
 
-    if !status.success() {
-        anyhow::bail!("tar extraction failed");
+    if !extract_status.success() {
+        let _ = tokio::fs::remove_dir_all(&tmp_dir).await;
+        anyhow::bail!("tar extraction failed; live state untouched");
+    }
+
+    let extracted = tmp_dir.join(&state_name);
+    if !extracted.exists() {
+        let _ = tokio::fs::remove_dir_all(&tmp_dir).await;
+        anyhow::bail!(
+            "Backup did not contain expected '{}' directory at the top level; live state untouched",
+            state_name.to_string_lossy()
+        );
+    }
+
+    // Stash live state aside so the swap is reversible on failure.
+    let stash = state_parent.join(format!(".omk-prev-{}", stamp));
+    let live_existed = state_dir.exists();
+    if live_existed {
+        tokio::fs::rename(&state_dir, &stash).await?;
+    }
+
+    if let Err(e) = tokio::fs::rename(&extracted, &state_dir).await {
+        // Roll back so the user is not left without state.
+        if live_existed && stash.exists() {
+            let _ = tokio::fs::rename(&stash, &state_dir).await;
+        }
+        let _ = tokio::fs::remove_dir_all(&tmp_dir).await;
+        return Err(e).context("Failed to install restored state");
+    }
+
+    let _ = tokio::fs::remove_dir_all(&tmp_dir).await;
+    if stash.exists() {
+        let _ = tokio::fs::remove_dir_all(&stash).await;
     }
 
     println!("✓ State restored from {}", backup_path.display());

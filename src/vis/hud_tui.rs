@@ -3,10 +3,36 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use crossterm::{
+    cursor::Show,
     event::{self, DisableMouseCapture, EnableMouseCapture, Event as CrosstermEvent, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+
+/// RAII guard that restores the terminal to a sane state — even on panic or
+/// early `?` return from the run loop. Without this, a wire/event-stream
+/// failure mid-render leaves the user's terminal in raw mode + alt-screen +
+/// mouse-capture (no echo, no cursor, no working stty).
+struct RawModeGuard;
+
+impl RawModeGuard {
+    fn enter() -> Result<Self> {
+        enable_raw_mode()?;
+        execute!(std::io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
+        Ok(RawModeGuard)
+    }
+}
+
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        // Each restore step is best-effort: a failure here means we are
+        // already on a fire and propagating it would just hide the original
+        // error. Keep going so as much as possible gets reset.
+        let _ = execute!(std::io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+        let _ = execute!(std::io::stdout(), Show);
+        let _ = disable_raw_mode();
+    }
+}
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -20,7 +46,7 @@ use crate::runtime::events::EventKind;
 use crate::runtime::state::{TaskStatus, TeamState};
 use crate::runtime::watchdog::Watchdog;
 use crate::vis::event_stream::EventStream;
-use crate::vis::hud::HudState;
+use crate::vis::hud::{strip_ansi, HudState};
 
 pub struct HudTui {
     hud_state: HudState,
@@ -51,23 +77,13 @@ impl HudTui {
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        enable_raw_mode()?;
-        let mut stdout = std::io::stdout();
-        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-        let backend = CrosstermBackend::new(stdout);
+        // Guard restores raw mode / alt screen / mouse capture on Drop, so a
+        // panic or any `?` short-circuit inside run_loop no longer leaves the
+        // user's terminal corrupted.
+        let _guard = RawModeGuard::enter()?;
+        let backend = CrosstermBackend::new(std::io::stdout());
         let mut terminal = Terminal::new(backend)?;
-
-        let res = self.run_loop(&mut terminal).await;
-
-        disable_raw_mode()?;
-        execute!(
-            terminal.backend_mut(),
-            LeaveAlternateScreen,
-            DisableMouseCapture
-        )?;
-        terminal.show_cursor()?;
-
-        res
+        self.run_loop(&mut terminal).await
     }
 
     async fn run_loop(
@@ -169,13 +185,13 @@ impl HudTui {
         let header_text = Text::from(vec![
             Line::from(vec![
                 Span::styled(
-                    format!("OMK HUD — {} ", self.team_name),
+                    format!("OMK HUD — {} ", strip_ansi(&self.team_name)),
                     Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
-                    format!("run: {} ", self.hud_state.run_id),
+                    format!("run: {} ", strip_ansi(&self.hud_state.run_id)),
                     Style::default().fg(Color::Gray),
                 ),
                 Span::styled(
@@ -224,15 +240,19 @@ impl HudTui {
                     "N/A".to_string()
                 };
 
-                let task_str = d.current_task_id.clone().unwrap_or_else(|| "-".to_string());
+                let task_str = d
+                    .current_task_id
+                    .as_deref()
+                    .map(strip_ansi)
+                    .unwrap_or_else(|| "-".to_string());
 
                 Row::new(vec![
-                    Cell::from(d.name.clone()),
+                    Cell::from(strip_ansi(&d.name)),
                     Cell::from(Span::styled(status_text, Style::default().fg(status_color))),
                     Cell::from(task_str),
                     Cell::from(age_str),
                     Cell::from(d.retry_count.to_string()),
-                    Cell::from(d.gate_status.clone()),
+                    Cell::from(strip_ansi(&d.gate_status)),
                 ])
             })
             .collect();
@@ -270,10 +290,10 @@ impl HudTui {
                         TaskStatus::Failed => (Color::Red, "Failed"),
                     };
 
-                    let worker_str = t.assigned_to.clone().unwrap_or_default();
+                    let worker_str = t.assigned_to.as_deref().map(strip_ansi).unwrap_or_default();
 
                     Row::new(vec![
-                        Cell::from(t.id.clone()),
+                        Cell::from(strip_ansi(&t.id)),
                         Cell::from(Span::styled(status_text, Style::default().fg(status_color))),
                         Cell::from(worker_str),
                         Cell::from("-"),
@@ -313,7 +333,11 @@ impl HudTui {
             .take(10)
             .map(|e| {
                 let ts = e.ts.format("%H:%M:%S").to_string();
-                let actor = e.actor.as_deref().unwrap_or("-");
+                let actor = e
+                    .actor
+                    .as_deref()
+                    .map(strip_ansi)
+                    .unwrap_or_else(|| "-".to_string());
                 let kind = format!("{:?}", e.kind);
                 Line::from(vec![
                     Span::styled(format!("{} ", ts), Style::default().fg(Color::DarkGray)),

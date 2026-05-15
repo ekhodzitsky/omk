@@ -109,10 +109,11 @@ fn goal_worktree_plan_is_deterministic_and_safe() {
         "worktree plans must be stable for the same inputs"
     );
     assert!(
-        !plan_a.branch_name.contains("..")
+        plan_a.branch_name.starts_with("omk/goal/")
+            && !plan_a.branch_name.contains("..")
             && !plan_a.branch_name.contains(' ')
-            && !plan_a.branch_name.contains('/')
-            || plan_a.branch_name.starts_with("omk/goal/"),
+            && !plan_a.branch_name.contains('\t')
+            && !plan_a.branch_name.contains('\0'),
         "branch name must stay inside the sanctioned namespace: {}",
         plan_a.branch_name,
     );

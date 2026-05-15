@@ -1,11 +1,19 @@
-# Build stage
-FROM rust:1.95.0-slim-bookworm AS builder
-ENV RUSTUP_TOOLCHAIN=stable
+# syntax=docker/dockerfile:1
+#
+# Build stage. The MSRV from Cargo.toml is 1.78; we build on a current
+# stable tag a few releases ahead to pick up rustc improvements without
+# drifting too far from MSRV's verification path.
+#
+# Reproducibility note: tag-only pin (no digest) is intentional for now.
+# Dependabot's `docker` ecosystem (configured in .github/dependabot.yml)
+# bumps this tag on upstream releases. When we cut a 1.0, pin by digest
+# here AND in the runtime base below.
+FROM rust:1.85-slim-bookworm AS builder
 WORKDIR /usr/src/omk
 COPY . .
-RUN cargo +stable build --release --features server
+RUN cargo build --release --features server
 
-# Runtime stage
+# Runtime stage.
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \

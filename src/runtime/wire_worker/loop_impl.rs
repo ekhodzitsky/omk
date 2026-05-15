@@ -1,8 +1,11 @@
 use anyhow::Result;
 use std::io::SeekFrom;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt};
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
+use super::task::TaskOutcome;
+use crate::runtime::events::JsonlWriter;
 use crate::runtime::wire_worker::WireWorkerAdapter;
 use crate::runtime::worker::WorkerTask;
 
@@ -18,6 +21,12 @@ impl WireWorkerAdapter {
         let outbox = &self.spec.outbox;
         let heartbeat = &self.spec.heartbeat;
         let wire_events_path = self.spec.inbox.parent().unwrap().join("wire-events.jsonl");
+
+        // Spawn a single writer actor for wire-events.jsonl. All wire events
+        // emitted by process_task across iterations share the same actor, so
+        // concurrent task processings (and clones to future helpers) cannot
+        // interleave partial JSON line writes.
+        let wire_events_writer = JsonlWriter::new(wire_events_path);
 
         let kimi_bin = std::env::var("MOCK_KIMI")
             .ok()
@@ -112,13 +121,36 @@ impl WireWorkerAdapter {
                     match serde_json::from_str::<WorkerTask>(trimmed) {
                         Ok(task) => {
                             let timeout_secs = task_timeout_secs(&task);
-                            match tokio::time::timeout(
-                                std::time::Duration::from_secs(timeout_secs),
-                                self.process_task(&task, &kimi_bin, outbox, &wire_events_path),
-                            )
-                            .await
-                            {
-                                Ok(Err(e)) => {
+
+                            // Per-task cancel token, fired by a sleep task
+                            // once the budget elapses. process_task observes
+                            // this token (and the outer worker-shutdown token)
+                            // in distinct select! arms — the arm that fires
+                            // produces the right `TaskOutcome` variant, which
+                            // is race-free.
+                            let timeout_token = CancellationToken::new();
+                            let timer_token = timeout_token.clone();
+                            let timer = tokio::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_secs(timeout_secs))
+                                    .await;
+                                timer_token.cancel();
+                            });
+
+                            let result = self
+                                .process_task(
+                                    &task,
+                                    &kimi_bin,
+                                    outbox,
+                                    &wire_events_writer,
+                                    &self.cancel_token,
+                                    &timeout_token,
+                                )
+                                .await;
+
+                            timer.abort();
+
+                            match result {
+                                Err(e) => {
                                     warn!(
                                         error = %e,
                                         worker = %self.spec.name,
@@ -126,7 +158,7 @@ impl WireWorkerAdapter {
                                         "Task processing failed"
                                     );
                                 }
-                                Err(_) => {
+                                Ok(TaskOutcome::CancelledTimeout) => {
                                     warn!(
                                         worker = %self.spec.name,
                                         task = %task.id,
@@ -136,7 +168,13 @@ impl WireWorkerAdapter {
                                     self.record_task_timeout(&task, outbox, timeout_secs)
                                         .await?;
                                 }
-                                Ok(Ok(())) => {}
+                                Ok(TaskOutcome::CancelledExternal) => {
+                                    // Worker shutdown is in flight; the outer
+                                    // loop's cancel check will exit next pass.
+                                    // No outbox record — there is no scheduler
+                                    // expecting one for a torn-down worker.
+                                }
+                                Ok(TaskOutcome::Completed) => {}
                             }
                         }
                         Err(e) => {

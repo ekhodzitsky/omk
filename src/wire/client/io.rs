@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde::de::DeserializeOwned;
-use tokio::io::AsyncBufReadExt;
 use tokio::time::Duration;
+use tokio_stream::StreamExt;
 use tracing::debug;
 
 use crate::wire::client::WireClient;
@@ -19,15 +19,18 @@ impl WireClient {
     }
 
     pub(super) async fn read_message_from_stdout(&mut self) -> Result<WireMessage> {
-        let mut line = String::new();
-        self.stdout_reader
-            .read_line(&mut line)
-            .await
-            .context("Failed to read from kimi stdout")?;
-        if line.is_empty() {
-            anyhow::bail!("kimi stdout closed");
-        }
-        debug!(line = %line.trim(), "Received wire message");
+        // FramedRead<_, LinesCodec> caps each line at MAX_WIRE_LINE_LENGTH;
+        // exceeding the cap surfaces here as a LinesCodecError. Without that
+        // cap, an uncooperative peer that omits newlines drives the reader
+        // to OOM the host.
+        let line = match self.stdout_reader.next().await {
+            Some(Ok(line)) => line,
+            Some(Err(e)) => {
+                return Err(e).context("Failed to read from kimi stdout");
+            }
+            None => anyhow::bail!("kimi stdout closed"),
+        };
+        debug!(line = %line, "Received wire message");
         let msg: WireMessage =
             serde_json::from_str(&line).context("Failed to parse wire message")?;
         Ok(msg)
@@ -42,8 +45,14 @@ impl WireClient {
     }
 
     /// Gracefully shutdown the child process.
+    ///
+    /// Calls `kill().await` (SIGKILL) and then `wait().await` so the child
+    /// process is fully reaped — otherwise it lingers as a zombie until the
+    /// `WireClient` is dropped (and `kill_on_drop` reaps it via Tokio's
+    /// background reaper).
     pub async fn shutdown(mut self) -> Result<()> {
-        let _ = self.child.kill().await;
+        let _ = self.child.start_kill();
+        let _ = self.child.wait().await;
         Ok(())
     }
 

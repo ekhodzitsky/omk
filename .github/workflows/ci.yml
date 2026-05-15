@@ -71,8 +71,11 @@ jobs:
 
       - name: Install Rust
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        uses: dtolnay/rust-toolchain@stable
+        # SHA-pinned third-party action (v1 at time of pin).
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        # rust-toolchain's "stable" alias is selected via `toolchain` input.
         with:
+          toolchain: stable
           components: rustfmt, clippy
 
       - name: Cache cargo
@@ -127,7 +130,11 @@ jobs:
 
       - name: Install Rust
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        uses: dtolnay/rust-toolchain@stable
+        # SHA-pinned third-party action (v1 at time of pin).
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        # rust-toolchain's "stable" alias is selected via `toolchain` input.
+        with:
+          toolchain: stable
 
       - name: Cache cargo
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
@@ -167,7 +174,8 @@ jobs:
         if: github.event_name == 'pull_request' && needs.changes.outputs.deps != 'true'
         run: echo "Cargo dependency inputs did not change; dependency audit is a cheap no-op."
 
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      # SHA-pinned third-party action (v2.0.18 at time of pin).
+      - uses: EmbarkStudios/cargo-deny-action@0105f7c440bc8084c17cad47fe92e63049519458
         if: github.event_name != 'pull_request' || needs.changes.outputs.deps == 'true'
         with:
           command: check advisories licenses sources

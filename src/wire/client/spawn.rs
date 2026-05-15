@@ -2,10 +2,11 @@ use anyhow::{Context, Result};
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::Duration;
+use tokio_stream::StreamExt;
+use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::{info, warn};
 
-use crate::wire::client::WireClient;
-use crate::wire::client::LEGACY_NO_HANDSHAKE_PROTOCOL_VERSION;
+use crate::wire::client::{WireClient, LEGACY_NO_HANDSHAKE_PROTOCOL_VERSION, MAX_WIRE_LINE_LENGTH};
 use crate::wire::protocol::{
     InitializeParams, InitializeResult, JsonRpcErrorResponse, JsonRpcRequest,
     JsonRpcSuccessResponse,
@@ -51,7 +52,25 @@ impl WireClient {
         let mut child = child.context("Failed to spawn kimi --wire")?;
         let stdin = child.stdin.take().context("No stdin")?;
         let stdout = child.stdout.take().context("No stdout")?;
-        let stdout_reader = BufReader::new(stdout);
+        // FramedRead with a length-capped LinesCodec: each line is bounded at
+        // MAX_WIRE_LINE_LENGTH (16 MiB). Without the cap, a peer that omits
+        // newlines can drive the reader to OOM the host.
+        let stdout_reader = FramedRead::new(
+            stdout,
+            LinesCodec::new_with_max_length(MAX_WIRE_LINE_LENGTH),
+        );
+
+        // Drain stderr in a background task so a verbose kimi cannot fill the
+        // pipe buffer (typically 64 KiB) and block its own writes — which would
+        // otherwise deadlock the wire session.
+        if let Some(stderr) = child.stderr.take() {
+            tokio::spawn(async move {
+                let mut reader = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    warn!(target: "kimi.stderr", "{}", line);
+                }
+            });
+        }
 
         info!("Wire client spawned");
 
@@ -76,14 +95,15 @@ impl WireClient {
         };
         self.send_request(&req).await?;
 
-        let mut line = String::new();
-        self.stdout_reader
-            .read_line(&mut line)
-            .await
-            .context("Failed to read initialize response")?;
-        if line.is_empty() {
-            anyhow::bail!("kimi stdout closed while waiting for initialize response");
-        }
+        let line = match self.stdout_reader.next().await {
+            Some(Ok(line)) => line,
+            Some(Err(e)) => {
+                return Err(e).context("Failed to read initialize response");
+            }
+            None => {
+                anyhow::bail!("kimi stdout closed while waiting for initialize response");
+            }
+        };
 
         // Check for method-not-found error (-32601)
         if let Ok(error_resp) = serde_json::from_str::<JsonRpcErrorResponse>(&line) {

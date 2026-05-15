@@ -42,7 +42,9 @@ async fn send_discord(url: &str, event: &NotificationEvent) -> Result<()> {
         .json(&body)
         .send()
         .await
-        .context("Discord webhook request failed")?;
+        .context("Discord webhook request failed")?
+        .error_for_status()
+        .context("Discord webhook returned an error status")?;
 
     Ok(())
 }
@@ -57,7 +59,9 @@ async fn send_slack(url: &str, event: &NotificationEvent) -> Result<()> {
         .json(&body)
         .send()
         .await
-        .context("Slack webhook request failed")?;
+        .context("Slack webhook request failed")?
+        .error_for_status()
+        .context("Slack webhook returned an error status")?;
 
     Ok(())
 }
@@ -74,7 +78,9 @@ async fn send_telegram(url: &str, event: &NotificationEvent) -> Result<()> {
         .json(&body)
         .send()
         .await
-        .context("Telegram webhook request failed")?;
+        .context("Telegram webhook request failed")?
+        .error_for_status()
+        .context("Telegram webhook returned an error status")?;
 
     Ok(())
 }

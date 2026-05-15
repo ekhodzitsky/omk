@@ -21,6 +21,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
+      # Needed for the build-provenance attestation step.
+      id-token: write
+      attestations: write
     strategy:
       matrix:
         include:
@@ -37,8 +40,10 @@ jobs:
           persist-credentials: false
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        # SHA-pinned third-party action (v1 tag at time of pin).
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Cache cargo
@@ -59,6 +64,7 @@ jobs:
       - name: Package
         shell: bash
         run: |
+          set -euo pipefail
           bin_name=omk
           target=${{ matrix.target }}
           version=${GITHUB_REF_NAME#v}
@@ -66,14 +72,34 @@ jobs:
           mkdir -p "$dist_dir"
           cp "target/${target}/release/${bin_name}" "$dist_dir/"
           cp README.md LICENSE "$dist_dir/" 2>/dev/null || true
-          tar czf "${dist_dir}.tar.gz" "$dist_dir"
+          # Flat tarball: archive members live at the root, not under a
+          # versioned subdirectory. install.sh and other consumers therefore
+          # find `omk` at the top level after `tar -xzf`.
+          tar czf "${dist_dir}.tar.gz" -C "$dist_dir" .
+          # Publish SHA256 alongside the archive so install.sh and `omk
+          # update` can verify integrity before installing.
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${dist_dir}.tar.gz" > "${dist_dir}.tar.gz.sha256"
+          else
+            shasum -a 256 "${dist_dir}.tar.gz" > "${dist_dir}.tar.gz.sha256"
+          fi
           echo "ASSET=${dist_dir}.tar.gz" >> "$GITHUB_ENV"
+          echo "ASSET_SHA=${dist_dir}.tar.gz.sha256" >> "$GITHUB_ENV"
+
+      - name: Attest build provenance
+        # SLSA-style attestation, keyless via the runner's GitHub OIDC token.
+        # The signing root is GitHub's; no private key to manage.
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ env.ASSET }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}
-          path: ${{ env.ASSET }}
+          path: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET_SHA }}
 
   release:
     name: Create GitHub Release
@@ -92,11 +118,77 @@ jobs:
           path: artifacts
 
       - name: Create Release
-        uses: softprops/action-gh-release@v3
+        # SHA-pinned third-party action (v3.0.0 at time of pin). Resolving by
+        # SHA prevents a compromised tag from injecting malicious release
+        # logic into a build that has write access to releases.
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
         with:
-          files: artifacts/**/*.tar.gz
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.tar.gz.sha256
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-packaging:
+    name: Sync packaging channels
+    needs: release
+    # Serializes packaging-sync runs across overlapping release tags so two
+    # concurrent jobs do not race on the same branch.
+    concurrency:
+      group: packaging-sync
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # peter-evans/create-pull-request needs to push a branch; the
+          # workflow-issued token's contents:write scope is enough for that
+          # because we never push directly to a protected branch.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: master
+
+      - name: Download artifact checksums
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Sync version + checksums into Homebrew / AUR / flake.nix
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=${GITHUB_REF_NAME#v}
+          ./scripts/sync-packaging-versions.sh "$version" artifacts
+
+      - name: Open packaging-sync PR
+        # SHA-pinned third-party action (v8.1.1 at time of pin). This opens a
+        # PR against master instead of pushing directly so branch-protection
+        # rules (required reviews, signed commits, status checks) cannot
+        # break the release pipeline.
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/packaging-sync-${{ github.ref_name }}
+          base: master
+          commit-message: "chore(packaging): sync versions to ${{ github.ref_name }}"
+          title: "chore(packaging): sync versions to ${{ github.ref_name }}"
+          body: |
+            Auto-generated by the release pipeline after publishing
+            `${{ github.ref_name }}`. Bumps version + SHA256 placeholders
+            in Homebrew / AUR / flake.nix to match the just-released
+            binaries.
+
+            Generated by `.github/workflows/release.yml::update-packaging`.
+          labels: |
+            packaging
+            automated
+          add-paths: |
+            homebrew
+            aur
+            flake.nix
+          delete-branch: true

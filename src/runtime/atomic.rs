@@ -102,10 +102,19 @@ async fn set_private_file_permissions(_file: &fs::File, _path: &Path) -> Result<
     Ok(())
 }
 
-/// Append a line to a JSONL file atomically-ish.
+/// Append a line to a JSONL file via read-modify-write.
 ///
-/// For true multi-process safety, use a lock file. This function
-/// uses atomic_write on a copy for critical state files.
+/// **Deprecated** — this helper is NOT atomic across concurrent writers:
+/// two callers can read the same pre-image and the second `atomic_write`
+/// clobbers the first. Use [`atomic_append`] instead — `O_APPEND` makes
+/// the kernel serialize per-syscall seek+write, which is line-atomic for
+/// payloads under PIPE_BUF on POSIX.
+///
+/// Kept temporarily to avoid breaking external callers and tests.
+#[deprecated(
+    since = "0.3.31",
+    note = "Race-prone read-modify-write; prefer `atomic_append` which uses O_APPEND."
+)]
 pub async fn atomic_append_jsonl(path: &Path, line: &str) -> Result<()> {
     let mut content = Vec::new();
 
@@ -139,6 +148,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)]
     async fn test_atomic_append_jsonl() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("test.jsonl");

@@ -35,7 +35,10 @@ jobs:
 
       - name: Install Rust
         if: github.event_name != 'pull_request'
-        uses: dtolnay/rust-toolchain@stable
+        # SHA-pinned third-party action (v1 at time of pin).
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: stable
 
       - name: Cache cargo
         if: github.event_name != 'pull_request'
@@ -72,7 +75,8 @@ jobs:
 
       - name: Upload to Codecov
         if: github.event_name != 'pull_request'
-        uses: codecov/codecov-action@v6
+        # SHA-pinned third-party action (v6.0.0 at time of pin).
+        uses: codecov/codecov-action@3f20e214133d0983f9a10f3d63b0faf9241a3daa
         with:
           files: ./cobertura.xml
           disable_search: true
