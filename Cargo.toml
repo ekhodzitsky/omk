@@ -59,7 +59,7 @@ uuid = { version = "1.16", features = ["v4", "serde"] }
 # Filesystem & paths
 dirs = "6.0"
 walkdir = "2.5"
-which = "7.0"
+which = "8.0"
 
 # TUI (optional for now, enabled by default)
 ratatui = { version = "0.30", optional = true }
