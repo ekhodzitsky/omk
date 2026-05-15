@@ -1,33 +1,18 @@
 use std::collections::{BTreeSet, HashMap};
-use std::path::Path;
 
 use crate::runtime::events::{
-    Event, EventKind, EventReader, FileChangedPayload, GateResultPayload, RunId,
-    TaskCompletedPayload,
+    Event, EventKind, FileChangedPayload, GateResultPayload, RunId, TaskCompletedPayload,
 };
-use crate::runtime::gates::GateResult;
 use crate::runtime::proof::{
     ChangedFile, GateStatus, Proof, ProofFailure, ProofGate, ProofRetry, ProofStatus,
     WireEvidenceSummary,
 };
 
-/// Generate a proof from recorded events.
-pub struct ProofGenerator;
+use super::helpers::{
+    copy_payload_field, gate_evidence_from_payload, gate_key_from_payload, value_as_string,
+};
 
-impl ProofGenerator {
-    pub async fn from_events(run_id: &RunId, event_log: &Path) -> anyhow::Result<Proof> {
-        let log_summary = EventReader::summary(event_log).await?;
-        let events = EventReader::read_all(event_log).await?;
-        let mut proof = Self::from_event_list(run_id, &events)?;
-        if log_summary.parse_failures > 0 {
-            proof.known_gaps.push(format!(
-                "event log parse failures: {} malformed line(s) skipped",
-                log_summary.parse_failures
-            ));
-        }
-        Ok(proof)
-    }
-
+impl super::ProofGenerator {
     pub fn from_event_list(run_id: &RunId, events: &[Event]) -> anyhow::Result<Proof> {
         let mut proof = Proof::new(run_id.clone());
         let mut file_changes: HashMap<String, String> = HashMap::new();
@@ -325,130 +310,5 @@ impl ProofGenerator {
         );
 
         Ok(proof)
-    }
-
-    /// Generate a proof from verification gate results directly (for modes that don't use events yet).
-    #[allow(dead_code)]
-    pub fn from_gate_results(
-        run_id: RunId,
-        gate_results: &[GateResult],
-        changed_files: &[String],
-        known_gaps: &[String],
-    ) -> Proof {
-        let mut proof = Proof::new(run_id);
-
-        proof.gates = gate_results
-            .iter()
-            .map(|gr| ProofGate {
-                name: gr.name.clone(),
-                status: if gr.passed {
-                    GateStatus::Passed
-                } else {
-                    GateStatus::Failed
-                },
-                required: gr.required,
-                evidence: Some(serde_json::json!({
-                    "command_line": gr.command_line.clone(),
-                    "exit_code": gr.exit_code,
-                    "timed_out": gr.timed_out,
-                    "stdout_summary": gr.stdout_summary.clone(),
-                    "stderr_summary": gr.stderr_summary.clone(),
-                    "output_path": gr.output_path.clone(),
-                    "timeout_secs": gr.timeout_secs,
-                })),
-            })
-            .collect();
-
-        proof.changed_files = changed_files
-            .iter()
-            .map(|p| ChangedFile {
-                path: p.clone(),
-                operation: "modified".to_string(),
-            })
-            .collect();
-
-        proof.known_gaps = known_gaps.to_vec();
-
-        let has_required_failure = proof
-            .gates
-            .iter()
-            .any(|g| g.required && g.status == GateStatus::Failed);
-        let has_required_gate = proof.gates.iter().any(|g| g.required);
-        proof.status = if has_required_failure {
-            ProofStatus::Failed
-        } else if has_required_gate {
-            ProofStatus::Ready
-        } else {
-            ProofStatus::NotReady
-        };
-
-        proof.summary = format!(
-            "Run {}: {}. {} file(s) changed, {} gate(s), {} known gap(s).",
-            proof.run_id,
-            proof.status,
-            proof.changed_files.len(),
-            proof.gates.len(),
-            proof.known_gaps.len(),
-        );
-
-        proof
-    }
-}
-
-pub(crate) fn value_as_string(value: &serde_json::Value) -> Option<String> {
-    if let Some(text) = value.as_str() {
-        return Some(text.to_string());
-    }
-    if let Some(number) = value.as_i64() {
-        return Some(number.to_string());
-    }
-    if let Some(number) = value.as_u64() {
-        return Some(number.to_string());
-    }
-    if let Some(number) = value.as_f64() {
-        return Some(number.to_string());
-    }
-    if let Some(boolean) = value.as_bool() {
-        return Some(boolean.to_string());
-    }
-    value.get("0")?.as_str().map(str::to_string)
-}
-
-pub(crate) fn gate_evidence_from_payload(payload: &serde_json::Value) -> Option<serde_json::Value> {
-    let mut evidence = serde_json::Map::new();
-    for key in [
-        "command_line",
-        "exit_code",
-        "timed_out",
-        "stdout_summary",
-        "stderr_summary",
-        "output_path",
-        "timeout_secs",
-    ] {
-        if let Some(value) = payload.get(key) {
-            evidence.insert(key.to_string(), value.clone());
-        }
-    }
-    if evidence.is_empty() {
-        None
-    } else {
-        Some(serde_json::Value::Object(evidence))
-    }
-}
-
-pub(crate) fn gate_key_from_payload(payload: &serde_json::Value) -> Option<String> {
-    payload
-        .get("gate_id")
-        .and_then(value_as_string)
-        .or_else(|| payload.get("name").and_then(value_as_string))
-}
-
-pub(crate) fn copy_payload_field(
-    payload: &serde_json::Value,
-    into: &mut serde_json::Map<String, serde_json::Value>,
-    key: &str,
-) {
-    if let Some(value) = payload.get(key) {
-        into.insert(key.to_string(), value.clone());
     }
 }
