@@ -3,6 +3,7 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
+use tokio::process::Command;
 
 use super::kimi_native_cmd;
 use super::{
@@ -517,12 +518,10 @@ async fn verify_sha256(archive_path: &std::path::Path, sha_path: &std::path::Pat
         );
     }
 
-    let mut tried_any = false;
     for cmd in [("sha256sum", vec!["-c"]), ("shasum", vec!["-a", "256", "-c"])] {
         if which::which(cmd.0).is_err() {
             continue;
         }
-        tried_any = true;
         let status = tokio::time::timeout(
             std::time::Duration::from_secs(30),
             Command::new(cmd.0)
@@ -544,13 +543,10 @@ async fn verify_sha256(archive_path: &std::path::Path, sha_path: &std::path::Pat
         );
     }
 
-    if !tried_any {
-        anyhow::bail!(
-            "Neither sha256sum nor shasum is installed; cannot verify the download. \
-             Install one and re-run, or use `cargo install`."
-        );
-    }
-    unreachable!("loop body either returned Ok, bailed, or skipped");
+    anyhow::bail!(
+        "Neither sha256sum nor shasum is installed; cannot verify the download. \
+         Install one and re-run, or use `cargo install`."
+    );
 }
 
 /// Install `new_binary` as `current_exe` atomically.
