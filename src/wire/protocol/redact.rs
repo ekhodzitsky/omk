@@ -31,7 +31,8 @@ static SECRET_VALUE_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
     ];
     patterns
         .iter()
-        .map(|p| Regex::new(p).expect("compile redact pattern"))
+        // SAFETY: all patterns are hardcoded and statically validated by regex syntax.
+        .map(|p| Regex::new(p).unwrap())
         .collect()
 });
 

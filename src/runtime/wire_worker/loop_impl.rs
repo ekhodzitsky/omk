@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::io::SeekFrom;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt};
 use tokio_util::sync::CancellationToken;
@@ -20,7 +20,9 @@ impl WireWorkerAdapter {
         let inbox = &self.spec.inbox;
         let outbox = &self.spec.outbox;
         let heartbeat = &self.spec.heartbeat;
-        let wire_events_path = self.spec.inbox.parent().unwrap().join("wire-events.jsonl");
+        let wire_events_path = self.spec.inbox.parent()
+            .context("inbox must have a parent directory")?
+            .join("wire-events.jsonl");
 
         // Spawn a single writer actor for wire-events.jsonl. All wire events
         // emitted by process_task across iterations share the same actor, so
