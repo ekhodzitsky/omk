@@ -55,8 +55,10 @@ impl WireClient {
         // FramedRead with a length-capped LinesCodec: each line is bounded at
         // MAX_WIRE_LINE_LENGTH (16 MiB). Without the cap, a peer that omits
         // newlines can drive the reader to OOM the host.
-        let stdout_reader =
-            FramedRead::new(stdout, LinesCodec::new_with_max_length(MAX_WIRE_LINE_LENGTH));
+        let stdout_reader = FramedRead::new(
+            stdout,
+            LinesCodec::new_with_max_length(MAX_WIRE_LINE_LENGTH),
+        );
 
         // Drain stderr in a background task so a verbose kimi cannot fill the
         // pipe buffer (typically 64 KiB) and block its own writes — which would

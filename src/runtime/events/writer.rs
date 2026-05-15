@@ -49,7 +49,10 @@ impl JsonlWriter {
     pub async fn append_line(&self, payload: Vec<u8>) -> Result<()> {
         let (ack_tx, ack_rx) = oneshot::channel();
         self.tx
-            .send(WriterMsg { payload, ack: ack_tx })
+            .send(WriterMsg {
+                payload,
+                ack: ack_tx,
+            })
             .await
             .map_err(|_| anyhow!("JsonlWriter actor has shut down before send"))?;
         ack_rx
@@ -75,9 +78,11 @@ async fn writer_task(path: PathBuf, mut rx: mpsc::Receiver<WriterMsg>) {
             // Drain so senders unblock with a clear error rather than
             // hanging on a never-completing channel send.
             while let Some(msg) = rx.recv().await {
-                let _ = msg
-                    .ack
-                    .send(Err(anyhow!("JsonlWriter could not open '{}': {}", path.display(), e)));
+                let _ = msg.ack.send(Err(anyhow!(
+                    "JsonlWriter could not open '{}': {}",
+                    path.display(),
+                    e
+                )));
             }
             return;
         }
@@ -90,7 +95,13 @@ async fn writer_task(path: PathBuf, mut rx: mpsc::Receiver<WriterMsg>) {
             Ok::<_, std::io::Error>(())
         }
         .await
-        .map_err(|e| anyhow!("JsonlWriter file write failed for '{}': {}", path.display(), e));
+        .map_err(|e| {
+            anyhow!(
+                "JsonlWriter file write failed for '{}': {}",
+                path.display(),
+                e
+            )
+        });
         let _ = msg.ack.send(result);
     }
 
@@ -193,7 +204,11 @@ mod tests {
                 serde_json::from_str(line).expect("each line must be intact JSON");
             assert!(v.get("i").and_then(|v| v.as_u64()).is_some());
             let body = v.get("body").and_then(|v| v.as_str()).unwrap();
-            assert_eq!(body.len(), payload_len, "body payload must not be truncated");
+            assert_eq!(
+                body.len(),
+                payload_len,
+                "body payload must not be truncated"
+            );
         }
     }
 
@@ -204,6 +219,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let writer = JsonlWriter::new(dir.path()); // a directory, not a file
         let result = writer.append_line(b"hello\n".to_vec()).await;
-        assert!(result.is_err(), "append against a directory path must error");
+        assert!(
+            result.is_err(),
+            "append against a directory path must error"
+        );
     }
 }

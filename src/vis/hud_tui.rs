@@ -290,11 +290,7 @@ impl HudTui {
                         TaskStatus::Failed => (Color::Red, "Failed"),
                     };
 
-                    let worker_str = t
-                        .assigned_to
-                        .as_deref()
-                        .map(strip_ansi)
-                        .unwrap_or_default();
+                    let worker_str = t.assigned_to.as_deref().map(strip_ansi).unwrap_or_default();
 
                     Row::new(vec![
                         Cell::from(strip_ansi(&t.id)),

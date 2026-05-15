@@ -657,7 +657,7 @@ mod verdict_tests {
         // verdict at the END, and we refuse to honor a stray earlier line.
         let mut body = String::from("VERDICT: PASS\n");
         body.push_str(&"prose ".repeat(60)); // ~360 chars of filler
-        // No VERDICT at the end → parser sees no verdict in last 200 chars.
+                                             // No VERDICT at the end → parser sees no verdict in last 200 chars.
         assert_eq!(parse_verdict(&body), None);
     }
 

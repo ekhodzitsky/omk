@@ -1,9 +1,9 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
+use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
-use tokio::process::Command;
 
 use super::kimi_native_cmd;
 use super::{
@@ -518,7 +518,10 @@ async fn verify_sha256(archive_path: &std::path::Path, sha_path: &std::path::Pat
         );
     }
 
-    for cmd in [("sha256sum", vec!["-c"]), ("shasum", vec!["-a", "256", "-c"])] {
+    for cmd in [
+        ("sha256sum", vec!["-c"]),
+        ("shasum", vec!["-a", "256", "-c"]),
+    ] {
         if which::which(cmd.0).is_err() {
             continue;
         }
@@ -618,13 +621,15 @@ async fn install_binary_atomically(
     .context("sync task panicked")?
     .context("failed to fsync staged binary")?;
 
-    tokio::fs::rename(&staging, current_exe).await.with_context(|| {
-        format!(
-            "failed to rename {} into {}",
-            staging.display(),
-            current_exe.display()
-        )
-    })?;
+    tokio::fs::rename(&staging, current_exe)
+        .await
+        .with_context(|| {
+            format!(
+                "failed to rename {} into {}",
+                staging.display(),
+                current_exe.display()
+            )
+        })?;
 
     Ok(())
 }

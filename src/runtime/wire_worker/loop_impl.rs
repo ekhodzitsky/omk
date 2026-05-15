@@ -131,10 +131,8 @@ impl WireWorkerAdapter {
                             let timeout_token = CancellationToken::new();
                             let timer_token = timeout_token.clone();
                             let timer = tokio::spawn(async move {
-                                tokio::time::sleep(std::time::Duration::from_secs(
-                                    timeout_secs,
-                                ))
-                                .await;
+                                tokio::time::sleep(std::time::Duration::from_secs(timeout_secs))
+                                    .await;
                                 timer_token.cancel();
                             });
 
