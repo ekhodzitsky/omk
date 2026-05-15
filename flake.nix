@@ -22,7 +22,8 @@
       {
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "omk";
-          version = "0.3.0";
+          # version auto-synced on tag push by release.yml::update-packaging.
+          version = "0.3.30";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           nativeBuildInputs = [ pkgs.pkg-config ];

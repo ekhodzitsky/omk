@@ -1,6 +1,7 @@
 # Maintainer: ekhodzitsky <ekhodzitsky@gmail.com>
 pkgname=omk
-pkgver=0.3.0
+# pkgver is auto-synced on tag push by release.yml::update-packaging.
+pkgver=0.3.30
 pkgrel=1
 pkgdesc="Multi-agent orchestration for Kimi CLI"
 arch=('x86_64' 'aarch64')
@@ -9,6 +10,10 @@ license=('MIT')
 depends=()
 makedepends=('cargo')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/ekhodzitsky/oh-my-kimi/archive/v$pkgver.tar.gz")
+# `SKIP` here is a known gap: AUR consumes the GitHub *source* tarball, not
+# the binary release assets, so release.yml cannot pre-populate this hash.
+# Maintainers MUST run `updpkgsums` locally before submitting an AUR update
+# so users get integrity-verified downloads.
 sha256sums=('SKIP')
 
 build() {

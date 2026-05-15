@@ -1,7 +1,12 @@
 class Omk < Formula
   desc "Multi-agent orchestration for Kimi CLI"
   homepage "https://github.com/ekhodzitsky/oh-my-kimi"
-  version "0.1.1"
+  # NOTE: version and sha256 fields are auto-synced on tag push by
+  # .github/workflows/release.yml::update-packaging (scripts/sync-packaging-versions.sh).
+  # Until the first release after that automation lands, the sha256
+  # placeholders below are intentionally NOT real digests — `brew install`
+  # will fail by design so nobody installs an unverified binary.
+  version "0.3.30"
   license "MIT"
 
   on_macos do
