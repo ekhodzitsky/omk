@@ -36,13 +36,12 @@ impl<S: CostSink> CostTracker<S> {
         }
 
         let total: f64 = costs.iter().map(|c| c.estimate.estimated_usd).sum();
-        let by_type = costs.iter().fold(
-            std::collections::HashMap::new(),
-            |mut acc, c| {
+        let by_type = costs
+            .iter()
+            .fold(std::collections::HashMap::new(), |mut acc, c| {
                 *acc.entry(c.session_type.clone()).or_insert(0.0) += c.estimate.estimated_usd;
                 acc
-            },
-        );
+            });
 
         let mut report = "💰 OMK Cost Report\n".to_string();
         report.push_str(&format!("Total estimated: ~${:.4}\n\n", total));

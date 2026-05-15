@@ -169,7 +169,10 @@ mod tests {
         assert_eq!(PricingTier::from_model_hint("kimi"), PricingTier::Standard);
         assert_eq!(PricingTier::from_model_hint("gpt-4o"), PricingTier::Premium);
         assert_eq!(PricingTier::from_model_hint("haiku"), PricingTier::Budget);
-        assert_eq!(PricingTier::from_model_hint("UNKNOWN"), PricingTier::Standard);
+        assert_eq!(
+            PricingTier::from_model_hint("UNKNOWN"),
+            PricingTier::Standard
+        );
     }
 
     #[test]

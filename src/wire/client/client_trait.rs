@@ -23,7 +23,8 @@ pub trait WireClient {
     fn next_id(&mut self) -> String;
 
     /// Send a JSON-RPC request.
-    async fn send_request<Params: Serialize>(&mut self, req: &JsonRpcRequest<Params>) -> Result<()>;
+    async fn send_request<Params: Serialize>(&mut self, req: &JsonRpcRequest<Params>)
+        -> Result<()>;
 
     /// Read the next incoming message.
     async fn read_message(&mut self) -> Result<WireMessage>;
@@ -174,7 +175,10 @@ impl WireClient for InMemoryWireClient {
         format!("req-{}", self.request_counter)
     }
 
-    async fn send_request<Params: Serialize>(&mut self, req: &JsonRpcRequest<Params>) -> Result<()> {
+    async fn send_request<Params: Serialize>(
+        &mut self,
+        req: &JsonRpcRequest<Params>,
+    ) -> Result<()> {
         let value = serde_json::to_value(req)?;
         self.outgoing.lock().await.push(value);
         Ok(())
@@ -238,7 +242,10 @@ impl WireClient for InMemoryWireClient {
             result,
         };
         let line = format!("{}\n", serde_json::to_string(&resp)?);
-        self.outgoing.lock().await.push(serde_json::Value::String(line));
+        self.outgoing
+            .lock()
+            .await
+            .push(serde_json::Value::String(line));
         Ok(())
     }
 
@@ -253,7 +260,10 @@ impl WireClient for InMemoryWireClient {
             },
         };
         let line = format!("{}\n", serde_json::to_string(&resp)?);
-        self.outgoing.lock().await.push(serde_json::Value::String(line));
+        self.outgoing
+            .lock()
+            .await
+            .push(serde_json::Value::String(line));
         Ok(())
     }
 

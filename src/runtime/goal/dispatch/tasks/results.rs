@@ -1,7 +1,9 @@
 use anyhow::Result;
 
 use crate::runtime::config::EVENTS_FILE;
-use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId};
+use crate::runtime::events::{
+    Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId,
+};
 use crate::runtime::goal::evidence::GoalAgentRunEvidence;
 use crate::runtime::goal::planner::controller_task_summary;
 use crate::runtime::goal::state::{GoalState, GOAL_AGENT_WORKER_ID};

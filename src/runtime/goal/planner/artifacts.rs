@@ -67,7 +67,8 @@ pub(super) async fn write_test_spec(
         .map(|task| format!("- `{}`: {}", task.id, task.acceptance.join("; ")))
         .collect::<Vec<_>>()
         .join("\n");
-    let oracle = crate::runtime::goal::oracle::assess_goal_oracle_evidence(&state.normalized_goal, &[]);
+    let oracle =
+        crate::runtime::goal::oracle::assess_goal_oracle_evidence(&state.normalized_goal, &[]);
     let oracle_lines = oracle
         .checks
         .iter()

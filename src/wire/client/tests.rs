@@ -107,14 +107,16 @@ async fn test_roundtrip_send_request_read_response() {
 async fn test_prompt_buffers_events_that_arrive_before_response() {
     let mut client = InMemoryWireClient::new();
     client
-        .inject(WireMessage::Event(crate::wire::protocol::JsonRpcNotification {
-            jsonrpc: "2.0".to_string(),
-            method: "event".to_string(),
-            params: crate::wire::protocol::EventParams {
-                event_type: "turn_begin".to_string(),
-                payload: serde_json::json!({"user_input":"hello"}),
+        .inject(WireMessage::Event(
+            crate::wire::protocol::JsonRpcNotification {
+                jsonrpc: "2.0".to_string(),
+                method: "event".to_string(),
+                params: crate::wire::protocol::EventParams {
+                    event_type: "turn_begin".to_string(),
+                    payload: serde_json::json!({"user_input":"hello"}),
+                },
             },
-        }))
+        ))
         .await;
     client
         .inject(WireMessage::SuccessResponse(
@@ -149,14 +151,16 @@ async fn test_prompt_waits_for_matching_response_id() {
         ))
         .await;
     client
-        .inject(WireMessage::Event(crate::wire::protocol::JsonRpcNotification {
-            jsonrpc: "2.0".to_string(),
-            method: "event".to_string(),
-            params: crate::wire::protocol::EventParams {
-                event_type: "turn_begin".to_string(),
-                payload: serde_json::json!({"user_input":"hello"}),
+        .inject(WireMessage::Event(
+            crate::wire::protocol::JsonRpcNotification {
+                jsonrpc: "2.0".to_string(),
+                method: "event".to_string(),
+                params: crate::wire::protocol::EventParams {
+                    event_type: "turn_begin".to_string(),
+                    payload: serde_json::json!({"user_input":"hello"}),
+                },
             },
-        }))
+        ))
         .await;
     client
         .inject(WireMessage::SuccessResponse(
@@ -182,14 +186,16 @@ async fn test_prompt_waits_for_matching_response_id() {
 async fn test_start_prompt_allows_streaming_before_response() {
     let mut client = InMemoryWireClient::new();
     client
-        .inject(WireMessage::Event(crate::wire::protocol::JsonRpcNotification {
-            jsonrpc: "2.0".to_string(),
-            method: "event".to_string(),
-            params: crate::wire::protocol::EventParams {
-                event_type: "turn_begin".to_string(),
-                payload: serde_json::json!({"user_input":"hello"}),
+        .inject(WireMessage::Event(
+            crate::wire::protocol::JsonRpcNotification {
+                jsonrpc: "2.0".to_string(),
+                method: "event".to_string(),
+                params: crate::wire::protocol::EventParams {
+                    event_type: "turn_begin".to_string(),
+                    payload: serde_json::json!({"user_input":"hello"}),
+                },
             },
-        }))
+        ))
         .await;
 
     let id = client.start_prompt("hello").await.unwrap();
@@ -224,14 +230,16 @@ async fn test_send_response_and_error() {
 async fn test_process_messages_loop() {
     let mut client = InMemoryWireClient::new();
     client
-        .inject(WireMessage::Event(crate::wire::protocol::JsonRpcNotification {
-            jsonrpc: "2.0".to_string(),
-            method: "event".to_string(),
-            params: crate::wire::protocol::EventParams {
-                event_type: "turn_begin".to_string(),
-                payload: serde_json::json!({"user_input":"hello"}),
+        .inject(WireMessage::Event(
+            crate::wire::protocol::JsonRpcNotification {
+                jsonrpc: "2.0".to_string(),
+                method: "event".to_string(),
+                params: crate::wire::protocol::EventParams {
+                    event_type: "turn_begin".to_string(),
+                    payload: serde_json::json!({"user_input":"hello"}),
+                },
             },
-        }))
+        ))
         .await;
 
     let seen_event = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));

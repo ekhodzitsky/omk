@@ -1,12 +1,12 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 
-use crate::runtime::goal::state::{GoalState, GOAL_CONTROLLER_ACTOR, GOAL_LOCAL_VERIFY_TASK_ID};
-use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
 use crate::runtime::events::{
     Event, EventBuilder, EventKind, EventWriter, GateId, RunId, TaskId, WorkerId,
 };
 use crate::runtime::gates::{gates_passed, GateResult};
+use crate::runtime::goal::state::{GoalState, GOAL_CONTROLLER_ACTOR, GOAL_LOCAL_VERIFY_TASK_ID};
+use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
 
 pub(crate) fn apply_local_verification_task_result(
     task_graph: &mut GoalTaskGraph,
@@ -26,7 +26,8 @@ pub(crate) fn apply_local_verification_task_result(
     };
     task.owner_role = Some(GOAL_CONTROLLER_ACTOR.to_string());
     task.completed_at = gates_ok.then_some(completed_at);
-    task.evidence = crate::runtime::goal::evidence::local_verification_task_evidence(gates, gates_ok);
+    task.evidence =
+        crate::runtime::goal::evidence::local_verification_task_evidence(gates, gates_ok);
     Some(task.clone())
 }
 

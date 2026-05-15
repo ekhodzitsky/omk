@@ -190,6 +190,9 @@ mod tests {
         let result = resolve_goal_with_store(&store, "nonexistent").await;
         assert!(result.is_err());
         let msg = format!("{}", result.unwrap_err());
-        assert!(msg.contains("nonexistent"), "error should mention the goal id");
+        assert!(
+            msg.contains("nonexistent"),
+            "error should mention the goal id"
+        );
     }
 }

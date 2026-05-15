@@ -1,4 +1,6 @@
-use omk::wire::client::{process_messages, ProcessWireClient, WireClient, WireMessage as ClientWireMessage};
+use omk::wire::client::{
+    process_messages, ProcessWireClient, WireClient, WireMessage as ClientWireMessage,
+};
 use omk::wire::protocol::*;
 use serde_json::json;
 use std::fs;
@@ -319,7 +321,8 @@ cat > /dev/null
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
 
     // Send initialize request and read response
     let init_result = client
@@ -368,7 +371,8 @@ cat > /dev/null
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
 
     let _ = client
         .initialize(InitializeParams {
@@ -405,7 +409,8 @@ echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
     let seen_events = Arc::new(Mutex::new(Vec::<String>::new()));
     let seen_events_for_handler = seen_events.clone();
 
@@ -448,7 +453,8 @@ echo '{{"jsonrpc":"2.0","method":"event","params":{{"type":"turn_begin","payload
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
     let seen_events = Arc::new(Mutex::new(Vec::<String>::new()));
     let seen_events_for_handler = seen_events.clone();
 
@@ -496,7 +502,8 @@ cat > /dev/null
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
 
     let _ = client
         .initialize(InitializeParams {
@@ -537,7 +544,8 @@ cat > /dev/null
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
 
     let _ = client
         .initialize(InitializeParams {
@@ -572,7 +580,8 @@ cat > /dev/null
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
 
     let _ = client
         .initialize(InitializeParams {
@@ -611,7 +620,8 @@ cat > /dev/null
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
 
     let init_result = client
         .initialize(InitializeParams {
@@ -644,7 +654,8 @@ exit 1
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
 
     let result = client
         .initialize(InitializeParams {
@@ -674,7 +685,8 @@ cat > /dev/null
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
 
     let result = client
         .initialize(InitializeParams {
@@ -703,7 +715,8 @@ echo '{"jsonrpc":"2.0","id":"req-1","result":'
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
 
     let result = client
         .initialize(InitializeParams {
@@ -737,7 +750,8 @@ sleep 10
     perms.set_mode(0o755);
     fs::set_permissions(&script_path, perms).unwrap();
 
-    let mut client = ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
+    let mut client =
+        ProcessWireClient::spawn(script_path.to_str().unwrap(), None, None, None).unwrap();
     client
         .initialize(InitializeParams {
             protocol_version: "1.9".to_string(),

@@ -170,7 +170,10 @@ fn validate_top(doc: &serde_yaml::Value, issues: &mut Vec<Issue>) {
         if !VALID_LEVELS.contains(&val) {
             issues.push(Issue::new(
                 "level",
-                format!("invalid value '{val}' (expected: {})", VALID_LEVELS.join(", ")),
+                format!(
+                    "invalid value '{val}' (expected: {})",
+                    VALID_LEVELS.join(", ")
+                ),
             ));
         }
     }
@@ -196,14 +199,15 @@ fn validate_surface(doc: &serde_yaml::Value, issues: &mut Vec<Issue>) {
     };
 
     for (i, item) in arr.iter().enumerate() {
-        let name = item
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("?");
+        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("?");
         let path = format!("surface[{i}]({name})");
 
         for &key in &["name", "kind", "visibility", "contract", "proof"] {
-            if !item.as_mapping().map(|m| m.contains_key(key)).unwrap_or(false) {
+            if !item
+                .as_mapping()
+                .map(|m| m.contains_key(key))
+                .unwrap_or(false)
+            {
                 issues.push(Issue::new(&path, format!("missing {key}")));
             }
         }
@@ -226,10 +230,7 @@ fn validate_proof(proof: &serde_yaml::Value, ctx: &str, issues: &mut Vec<Issue>)
         }
     }
 
-    let kind = proof
-        .get("kind")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let kind = proof.get("kind").and_then(|v| v.as_str()).unwrap_or("");
     if !VALID_PROOF_KINDS.contains(&kind) {
         issues.push(Issue::new(
             format!("{ctx}.proof"),
@@ -238,10 +239,7 @@ fn validate_proof(proof: &serde_yaml::Value, ctx: &str, issues: &mut Vec<Issue>)
     }
 
     if kind != "manual" && kind != "missing" {
-        let cmd = proof
-            .get("command")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let cmd = proof.get("command").and_then(|v| v.as_str()).unwrap_or("");
         if cmd.trim().is_empty() {
             issues.push(Issue::new(
                 format!("{ctx}.proof"),
@@ -261,7 +259,11 @@ fn validate_dependencies(doc: &serde_yaml::Value, issues: &mut Vec<Issue>) {
         for (i, item) in arr.iter().enumerate() {
             let path = format!("dependencies.internal[{i}]");
             for &key in &["module", "scope", "reason"] {
-                if !item.as_mapping().map(|m| m.contains_key(key)).unwrap_or(false) {
+                if !item
+                    .as_mapping()
+                    .map(|m| m.contains_key(key))
+                    .unwrap_or(false)
+                {
                     issues.push(Issue::new(&path, format!("missing {key}")));
                 }
             }
@@ -272,7 +274,11 @@ fn validate_dependencies(doc: &serde_yaml::Value, issues: &mut Vec<Issue>) {
         for (i, item) in arr.iter().enumerate() {
             let path = format!("dependencies.external[{i}]");
             for &key in &["name", "scope", "reason"] {
-                if !item.as_mapping().map(|m| m.contains_key(key)).unwrap_or(false) {
+                if !item
+                    .as_mapping()
+                    .map(|m| m.contains_key(key))
+                    .unwrap_or(false)
+                {
                     issues.push(Issue::new(&path, format!("missing {key}")));
                 }
             }
@@ -288,7 +294,11 @@ fn validate_consumers(doc: &serde_yaml::Value, issues: &mut Vec<Issue>) {
 
     for (i, item) in arr.iter().enumerate() {
         let path = format!("consumers[{i}]");
-        if !item.as_mapping().map(|m| m.contains_key("path")).unwrap_or(false) {
+        if !item
+            .as_mapping()
+            .map(|m| m.contains_key("path"))
+            .unwrap_or(false)
+        {
             issues.push(Issue::new(&path, "missing 'path'"));
         }
     }
@@ -301,14 +311,15 @@ fn validate_invariants(doc: &serde_yaml::Value, issues: &mut Vec<Issue>) {
     };
 
     for (i, item) in arr.iter().enumerate() {
-        let id = item
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("?");
+        let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("?");
         let path = format!("invariants[{i}]({id})");
 
         for &key in &["id", "rule", "proof"] {
-            if !item.as_mapping().map(|m| m.contains_key(key)).unwrap_or(false) {
+            if !item
+                .as_mapping()
+                .map(|m| m.contains_key(key))
+                .unwrap_or(false)
+            {
                 issues.push(Issue::new(&path, format!("missing {key}")));
             }
         }

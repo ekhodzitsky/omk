@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+use super::model::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 use crate::runtime::goal::agent::{GoalAgentTaskPolicy, GoalAgentTaskProposal};
 use crate::runtime::goal::evidence::GoalAgentRunEvidence;
 use crate::runtime::goal::proof::write_json_artifact;
@@ -10,7 +11,6 @@ use crate::runtime::goal::state::{
     default_goal_agent_task_budget_secs, GoalState, GOAL_AGENT_EXECUTE_TASK_ID,
     GOAL_AGENT_WORKER_ID, GOAL_AGENT_WORKER_ROLE, GOAL_CONTROLLER_ACTOR, GOAL_TASK_GRAPH_FILE,
 };
-use super::model::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GoalTaskGraphSummary {
@@ -105,7 +105,8 @@ pub(crate) fn apply_agent_execution_task_result(
     task.owner_role = Some(GOAL_AGENT_WORKER_ROLE.to_string());
     task.completed_at = success.then_some(completed_at);
     record_goal_task_attempt_result(task, success);
-    task.evidence = crate::runtime::goal::evidence::agent_execution_task_evidence(evidence, success);
+    task.evidence =
+        crate::runtime::goal::evidence::agent_execution_task_evidence(evidence, success);
     Some(task.clone())
 }
 

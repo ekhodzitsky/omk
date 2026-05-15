@@ -3,13 +3,13 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
+use crate::runtime::gates::gates_passed;
 use crate::runtime::goal::evidence::GoalReviewEvidence;
 use crate::runtime::goal::state::{
     GoalState, GOAL_ARTIFACTS_DIR, GOAL_REVIEW_ARTIFACTS_DIR, GOAL_REVIEW_FILE,
     GOAL_SECURITY_REVIEW_FILE,
 };
 use crate::runtime::goal::task_graph::{goal_task_done, GoalTaskGraph};
-use crate::runtime::gates::gates_passed;
 
 pub(crate) fn review_wall_markdown(artifacts: &[Value]) -> String {
     if artifacts.is_empty() {
@@ -93,10 +93,14 @@ pub(crate) async fn write_goal_review_evidence(
     let review_abs_dir = state.state_dir.join(&review_dir);
     crate::runtime::config::ensure_private_dir(&review_abs_dir).await?;
 
-    let local_verify_done =
-        goal_task_done(task_graph, crate::runtime::goal::state::GOAL_LOCAL_VERIFY_TASK_ID);
-    let agent_execution_done =
-        goal_task_done(task_graph, crate::runtime::goal::state::GOAL_AGENT_EXECUTE_TASK_ID);
+    let local_verify_done = goal_task_done(
+        task_graph,
+        crate::runtime::goal::state::GOAL_LOCAL_VERIFY_TASK_ID,
+    );
+    let agent_execution_done = goal_task_done(
+        task_graph,
+        crate::runtime::goal::state::GOAL_AGENT_EXECUTE_TASK_ID,
+    );
     let gates_ok = !proof.gates.is_empty() && gates_passed(&proof.gates);
     let security_findings =
         super::scan_goal_security_findings(project_dir, &proof.changed_files).await?;

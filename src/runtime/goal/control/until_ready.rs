@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use crate::runtime::goal::proof::GoalProof;
 use crate::runtime::goal::state::{self, FileSystemGoalStateStore, GoalStateStore, GoalStatus};
 use crate::runtime::goal::task_graph::{goal_task_done, GoalTaskGraph, GoalTaskStatus};
-use crate::runtime::goal::types::{GoalControllerStep, GoalControllerStepKind, GoalRunUntilReadyOutcome};
+use crate::runtime::goal::types::{
+    GoalControllerStep, GoalControllerStepKind, GoalRunUntilReadyOutcome,
+};
 use crate::runtime::goal::{evidence, proof};
 
 const MAX_EXECUTE_PASSES: usize = 8;

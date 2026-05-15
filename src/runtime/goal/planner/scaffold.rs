@@ -3,6 +3,7 @@ use crate::runtime::events::{
 };
 use crate::runtime::goal::evidence::{detect_git_evidence, record_artifact};
 use crate::runtime::goal::proof::{build_scaffold_proof, write_json_artifact};
+use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 use crate::runtime::goal::state::{
     GoalFailure, GoalPhase, GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_AGENT_RUNS_DIR,
     GOAL_ARTIFACTS_DIR, GOAL_CONTROLLER_ACTOR, GOAL_DECISIONS_FILE, GOAL_FAILURE_FILE,
@@ -11,7 +12,6 @@ use crate::runtime::goal::state::{
     GOAL_SECURITY_REVIEW_TASK_ID, GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE,
     GOAL_TEST_SPEC_FILE,
 };
-use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 use crate::runtime::goal::task_graph::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 use anyhow::Result;
 use chrono::{DateTime, Utc};

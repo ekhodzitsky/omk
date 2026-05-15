@@ -1,6 +1,9 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 
+use crate::runtime::events::{
+    Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId,
+};
 use crate::runtime::goal::evidence::GoalReviewEvidence;
 use crate::runtime::goal::state::{
     GoalState, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_CONTROLLER_ACTOR, GOAL_LOCAL_VERIFY_TASK_ID,
@@ -8,9 +11,6 @@ use crate::runtime::goal::state::{
 };
 use crate::runtime::goal::task_graph::{
     goal_task_done, GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus,
-};
-use crate::runtime::events::{
-    Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId,
 };
 
 pub(crate) fn apply_goal_review_task_result(

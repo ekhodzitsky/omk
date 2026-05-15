@@ -3,8 +3,8 @@ use serde::Serialize;
 use serde_json::Value;
 use std::path::Path;
 
-use crate::runtime::goal::state::{GOAL_PROOF_FILE, GOAL_TASK_GRAPH_FILE};
 use super::sidecar;
+use crate::runtime::goal::state::{GOAL_PROOF_FILE, GOAL_TASK_GRAPH_FILE};
 
 pub(crate) async fn write_json_artifact<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     let mut value = serde_json::to_value(value)?;
@@ -23,7 +23,8 @@ async fn enrich_goal_json_artifact(path: &Path, value: &mut Value) -> Result<()>
 
     match file_name {
         GOAL_TASK_GRAPH_FILE => {
-            crate::runtime::goal::task_graph::preserve_delivery_metadata_in_value(goal_dir, value).await
+            crate::runtime::goal::task_graph::preserve_delivery_metadata_in_value(goal_dir, value)
+                .await
         }
         GOAL_PROOF_FILE => attach_delivery_metadata_to_proof_value(goal_dir, value).await,
         _ => Ok(()),
@@ -34,7 +35,8 @@ async fn attach_delivery_metadata_to_proof_value(
     goal_dir: &Path,
     proof_value: &mut Value,
 ) -> Result<()> {
-    let delivery_metadata = crate::runtime::goal::task_graph::load_task_delivery_metadata(goal_dir).await?;
+    let delivery_metadata =
+        crate::runtime::goal::task_graph::load_task_delivery_metadata(goal_dir).await?;
     sidecar::remember_goal_proof_delivery_metadata_for_value(
         proof_value,
         delivery_metadata.clone(),

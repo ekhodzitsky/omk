@@ -21,7 +21,12 @@ pub(crate) async fn gather_wave_results(
     mutation_diff_path: &Path,
     changed_files_path: &Path,
     summary: &RunSummary,
-) -> Result<(Vec<WorkerResult>, Option<String>, Vec<GoalAgentTaskProposal>, Vec<String>)> {
+) -> Result<(
+    Vec<WorkerResult>,
+    Option<String>,
+    Vec<GoalAgentTaskProposal>,
+    Vec<String>,
+)> {
     let worker_results = read_goal_agent_worker_results(worker_specs, accepted_task_ids).await?;
     let worker_summary = summarize_goal_agent_worker_results(&worker_results)
         .or_else(|| (summary.cancelled > 0).then(|| "cancelled by user".to_string()));
@@ -33,6 +38,10 @@ pub(crate) async fn gather_wave_results(
         changed_files_path,
     )
     .await?;
-    Ok((worker_results, worker_summary, agent_proposed_tasks, changed_files))
+    Ok((
+        worker_results,
+        worker_summary,
+        agent_proposed_tasks,
+        changed_files,
+    ))
 }
-

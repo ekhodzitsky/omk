@@ -2,11 +2,11 @@ use anyhow::Result;
 use chrono::Utc;
 use std::path::Path;
 
-use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 use super::proof::GoalProof;
 use super::state::{GoalPhase, GoalState, GoalStatus};
 use super::task_graph::{GoalTaskGraph, GoalTaskStatus};
 use super::{agent, budget, dispatch, evidence, proof, state, task_graph, verifier};
+use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 
 pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = super::resolve_goal(goal_id).await?;

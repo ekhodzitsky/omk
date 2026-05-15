@@ -80,10 +80,9 @@ pub(crate) async fn validate_and_classify_tasks(
                 }
             }
             Err(reason) => {
-                let rejected_event =
-                    Event::new(RunId(run_id.to_string()), EventKind::TaskRejected)
-                        .with_actor(GOAL_CONTROLLER_ACTOR)
-                        .with_payload(task_dispatch_rejected_payload(proposal, &reason, None)?)?;
+                let rejected_event = Event::new(RunId(run_id.to_string()), EventKind::TaskRejected)
+                    .with_actor(GOAL_CONTROLLER_ACTOR)
+                    .with_payload(task_dispatch_rejected_payload(proposal, &reason, None)?)?;
                 event_writer.append(&rejected_event).await?;
                 dispatch_rejected_count += 1;
             }

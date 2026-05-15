@@ -9,8 +9,8 @@ mod io;
 mod process_impl;
 mod spawn;
 
-pub use dispatch::{process_messages, WireMessage, WireResponse};
 pub use client_trait::{InMemoryWireClient, WireClient};
+pub use dispatch::{process_messages, WireMessage, WireResponse};
 
 const LEGACY_NO_HANDSHAKE_PROTOCOL_VERSION: &str = "legacy/no-handshake";
 

@@ -123,17 +123,22 @@ impl InMemoryGoalStateStore {
 #[cfg(test)]
 impl GoalStateStore for InMemoryGoalStateStore {
     async fn save(&self, state: &GoalState) -> Result<()> {
-        self.inner.lock().unwrap().insert(state.state_dir.clone(), state.clone());
+        self.inner
+            .lock()
+            .unwrap()
+            .insert(state.state_dir.clone(), state.clone());
         Ok(())
     }
 
     async fn load(&self, goal_dir: &Path) -> Result<GoalState> {
         let inner = self.inner.lock().unwrap();
-        let mut state = inner.get(goal_dir).cloned().ok_or_else(|| {
-            GoalStateError::MissingFile {
-                path: goal_dir.display().to_string(),
-            }
-        })?;
+        let mut state =
+            inner
+                .get(goal_dir)
+                .cloned()
+                .ok_or_else(|| GoalStateError::MissingFile {
+                    path: goal_dir.display().to_string(),
+                })?;
         state.state_dir = goal_dir.to_path_buf();
         Ok(state)
     }
