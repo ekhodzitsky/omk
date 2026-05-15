@@ -339,3 +339,6 @@ pub(crate) fn carry_goal_proof_sidecars(
     }
     sidecar::remember_goal_proof_acceptance_evidence(to, integration_evidence, oracle_evidence);
 }
+
+#[cfg(test)]
+mod tests;

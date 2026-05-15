@@ -111,6 +111,10 @@ jobs:
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         run: cargo test
 
+      - name: Validate module contracts
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo run --bin validate-contracts
+
       - name: Build docs
         if: github.event_name != 'pull_request'
         run: cargo doc --no-deps

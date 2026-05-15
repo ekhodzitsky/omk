@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "goal_id": "goal-test-reconcile",
+  "status": "not_ready",
+  "readiness": "not ready: required verification evidence is incomplete or failing",
+  "summary": "Goal 'Test reconcile' remains not ready until required evidence exists.",
+  "generated_at": "2026-05-15T12:00:00Z",
+  "artifacts": [],
+  "task_graph_summary": {
+    "total_tasks": 3,
+    "pending_tasks": 2,
+    "blocked_tasks": 0,
+    "done_tasks": 1
+  },
+  "changed_files": [],
+  "commits": [],
+  "gates": [],
+  "post_mutation_gates_ran": false,
+  "known_gaps": [
+    "verification evidence is incomplete"
+  ],
+  "human_decisions_required": []
+}

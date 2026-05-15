@@ -1,64 +1,36 @@
-#![allow(dead_code)]
+use anyhow::Result;
 
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use std::path::Path;
+use super::sink::CostSink;
+use super::types::SessionCost;
 
-use super::estimator::CostEstimate;
-
-/// Tracked cost for a single session.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionCost {
-    pub session_type: String,
-    pub name: String,
-    pub started_at: chrono::DateTime<chrono::Utc>,
-    pub ended_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub estimate: CostEstimate,
-    pub actual_usd: Option<f64>,
+/// Persistent cost tracker backed by a [`CostSink`].
+///
+/// `CostTracker` knows nothing about files or I/O. All storage operations
+/// are delegated to the generic `S: CostSink` implementation, making the
+/// tracker fully testable with an in-memory backend.
+pub struct CostTracker<S: CostSink> {
+    sink: S,
 }
 
-/// Persistent cost tracker.
-pub struct CostTracker {
-    path: std::path::PathBuf,
-}
-
-impl CostTracker {
-    pub fn new(state_dir: &Path) -> Self {
-        Self {
-            path: state_dir.join("costs.json"),
-        }
-    }
-
-    pub async fn load(&self) -> Result<Vec<SessionCost>> {
-        if !self.path.exists() {
-            return Ok(Vec::new());
-        }
-        let content = tokio::fs::read_to_string(&self.path).await?;
-        let costs: Vec<SessionCost> = serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse {}", self.path.display()))?;
-        Ok(costs)
-    }
-
-    pub async fn save(&self, costs: &[SessionCost]) -> Result<()> {
-        let json = serde_json::to_string_pretty(costs)?;
-        crate::runtime::atomic::atomic_write(&self.path, json.as_bytes()).await?;
-        Ok(())
+impl<S: CostSink> CostTracker<S> {
+    pub fn new(sink: S) -> Self {
+        Self { sink }
     }
 
     pub async fn record(&self, cost: SessionCost) -> Result<()> {
-        let mut costs = self.load().await?;
+        let mut costs = self.sink.load().await?;
         costs.push(cost);
-        self.save(&costs).await?;
+        self.sink.save(&costs).await?;
         Ok(())
     }
 
     pub async fn total_estimated(&self) -> Result<f64> {
-        let costs = self.load().await?;
+        let costs = self.sink.load().await?;
         Ok(costs.iter().map(|c| c.estimate.estimated_usd).sum())
     }
 
     pub async fn report(&self) -> Result<String> {
-        let costs = self.load().await?;
+        let costs = self.sink.load().await?;
         if costs.is_empty() {
             return Ok("No cost data recorded yet.".to_string());
         }
@@ -80,5 +52,90 @@ impl CostTracker {
         report.push_str(&format!("\nSessions: {}\n", costs.len()));
 
         Ok(report)
+    }
+
+    /// Clear all recorded costs.
+    pub async fn clear(&self) -> Result<()> {
+        self.sink.save(&[]).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cost::estimator::{CostEstimate, PricingTier};
+    use crate::cost::sink::InMemoryCostSink;
+    use crate::cost::types::SessionCost;
+    use chrono::Utc;
+
+    fn sample_estimate(usd: f64) -> CostEstimate {
+        CostEstimate {
+            input_tokens: 1000,
+            output_tokens: 500,
+            duration_secs: 60,
+            worker_count: 1,
+            estimated_usd: usd,
+            tier: PricingTier::Standard,
+        }
+    }
+
+    fn sample_cost(session_type: &str, usd: f64) -> SessionCost {
+        SessionCost {
+            session_type: session_type.to_string(),
+            name: "test-session".to_string(),
+            started_at: Utc::now(),
+            ended_at: None,
+            estimate: sample_estimate(usd),
+            actual_usd: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_record_and_total() {
+        let sink = InMemoryCostSink::new();
+        let tracker = CostTracker::new(sink);
+
+        tracker.record(sample_cost("team", 1.23)).await.unwrap();
+        tracker.record(sample_cost("team", 2.77)).await.unwrap();
+
+        let total = tracker.total_estimated().await.unwrap();
+        assert!((total - 4.0).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn test_report_empty() {
+        let sink = InMemoryCostSink::new();
+        let tracker = CostTracker::new(sink);
+
+        let report = tracker.report().await.unwrap();
+        assert!(report.contains("No cost data recorded yet"));
+    }
+
+    #[tokio::test]
+    async fn test_report_grouping() {
+        let sink = InMemoryCostSink::new();
+        let tracker = CostTracker::new(sink);
+
+        tracker.record(sample_cost("team", 1.0)).await.unwrap();
+        tracker.record(sample_cost("autopilot", 2.0)).await.unwrap();
+        tracker.record(sample_cost("team", 3.0)).await.unwrap();
+
+        let report = tracker.report().await.unwrap();
+        assert!(report.contains("Total estimated: ~$6.0000"));
+        assert!(report.contains("team"));
+        assert!(report.contains("autopilot"));
+        assert!(report.contains("Sessions: 3"));
+    }
+
+    #[tokio::test]
+    async fn test_clear() {
+        let sink = InMemoryCostSink::new();
+        let tracker = CostTracker::new(sink);
+
+        tracker.record(sample_cost("team", 5.0)).await.unwrap();
+        tracker.clear().await.unwrap();
+
+        let total = tracker.total_estimated().await.unwrap();
+        assert!((total).abs() < f64::EPSILON);
     }
 }

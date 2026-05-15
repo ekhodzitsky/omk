@@ -2,7 +2,7 @@ use serde_json::{json, Value};
 
 use crate::runtime::gates::{gates_passed, GateResult};
 
-use super::super::state::{
+use crate::runtime::goal::state::{
     GOAL_ARTIFACTS_DIR, GOAL_REVIEW_ARTIFACTS_DIR, GOAL_REVIEW_FILE, GOAL_SECURITY_REVIEW_FILE,
 };
 

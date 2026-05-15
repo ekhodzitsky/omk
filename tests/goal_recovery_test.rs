@@ -1,3 +1,4 @@
+use omk::runtime::goal::{FileSystemGoalStateStore, GoalStateStore};
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
@@ -267,7 +268,8 @@ async fn corrupted_required_state_returns_typed_actionable_error() {
     // Corrupt the required goal.json file.
     fs::write(goal_dir.join("goal.json"), "this is not json").expect("corrupt goal state");
 
-    let err = omk::runtime::goal::GoalState::load(&goal_dir)
+    let err = FileSystemGoalStateStore::new()
+        .load(&goal_dir)
         .await
         .expect_err("should fail on corrupted state");
 
@@ -329,7 +331,8 @@ async fn missing_required_state_returns_missing_file_error() {
 
     // Do NOT write goal.json.
 
-    let err = omk::runtime::goal::GoalState::load(&goal_dir)
+    let err = FileSystemGoalStateStore::new()
+        .load(&goal_dir)
         .await
         .expect_err("should fail on missing state");
 
@@ -355,7 +358,8 @@ async fn unreadable_required_state_returns_io_error() {
     // Write goal.json as a directory (causes read_to_string to fail with IsADirectory).
     fs::create_dir(goal_dir.join("goal.json")).expect("create goal.json as directory");
 
-    let err = omk::runtime::goal::GoalState::load(&goal_dir)
+    let err = FileSystemGoalStateStore::new()
+        .load(&goal_dir)
         .await
         .expect_err("should fail on unreadable state");
 

@@ -18,7 +18,8 @@ use events::{
 use usage::{collect_goal_budget_usage, GoalBudgetUsage};
 
 use super::state::{
-    format_goal_duration_secs, parse_goal_duration_secs, GoalPhase, GoalState, GoalStatus,
+    format_goal_duration_secs, parse_goal_duration_secs, FileSystemGoalStateStore, GoalPhase,
+    GoalState, GoalStateStore, GoalStatus,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,7 +200,7 @@ pub async fn add_goal_budget_limits(goal_id: &str, add: GoalBudgetAdd) -> Result
         state.completed_at = None;
     }
     state.updated_at = now;
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
 
     append_budget_extended_event(
         &state,
@@ -249,7 +250,7 @@ pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str)
     state.status = GoalStatus::NeedsMoreBudget;
     state.updated_at = now;
     state.completed_at = Some(now);
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(state).await?;
     append_budget_exhausted_event(
         state,
         &GoalBudgetExhaustedEvent {

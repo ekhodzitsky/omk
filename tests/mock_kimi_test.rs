@@ -368,11 +368,11 @@ fn test_wire_malformed_mode_emits_invalid_json() {
 
 #[tokio::test]
 async fn test_wire_control_methods() {
-    use omk::wire::client::WireClient;
+    use omk::wire::client::{ProcessWireClient, WireClient};
     use omk::wire::protocol::InitializeParams;
 
     let bin = mock_kimi_path_string();
-    let mut client = WireClient::spawn(&bin, None, None, None).unwrap();
+    let mut client = ProcessWireClient::spawn(&bin, None, None, None).unwrap();
 
     let init = client
         .initialize(InitializeParams {

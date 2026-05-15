@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 
 use super::proof::{carry_goal_proof_sidecars, write_json_artifact, GoalProof};
 use super::state::{
-    GoalFailure, GoalPhase, GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_ARTIFACTS_DIR,
-    GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PROOF_FILE, GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_TASK_ID,
+    FileSystemGoalStateStore, GoalFailure, GoalPhase, GoalState, GoalStateStore, GoalStatus,
+    GOAL_AGENT_EXECUTE_TASK_ID, GOAL_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PROOF_FILE,
+    GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_TASK_ID,
 };
 use super::task_graph::{goal_task_done, GoalTaskGraph};
 use crate::runtime::events::{EventBuilder, EventWriter, RunId};
@@ -256,7 +257,7 @@ async fn finish_integrator_decision(
 ) -> Result<GoalProof> {
     state.phase = GoalPhase::Proof;
     state.updated_at = now;
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
 
     proof.git = super::evidence::detect_git_evidence(project_dir)
         .await

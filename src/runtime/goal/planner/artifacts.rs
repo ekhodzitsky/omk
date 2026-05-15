@@ -2,10 +2,10 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use std::path::Path;
 
-use super::super::state::{
+use crate::runtime::goal::state::{
     GoalState, GOAL_PRD_FILE, GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
 };
-use super::super::task_graph::GoalTaskGraph;
+use crate::runtime::goal::task_graph::GoalTaskGraph;
 
 const ORACLE_ARTIFACTS_DIR: &str = "artifacts/oracles";
 const GREENFIELD_ACCEPTANCE_FILE: &str = "artifacts/oracles/greenfield-acceptance.md";
@@ -67,7 +67,8 @@ pub(super) async fn write_test_spec(
         .map(|task| format!("- `{}`: {}", task.id, task.acceptance.join("; ")))
         .collect::<Vec<_>>()
         .join("\n");
-    let oracle = super::super::oracle::assess_goal_oracle_evidence(&state.normalized_goal, &[]);
+    let oracle =
+        crate::runtime::goal::oracle::assess_goal_oracle_evidence(&state.normalized_goal, &[]);
     let oracle_lines = oracle
         .checks
         .iter()
@@ -108,8 +109,8 @@ pub(super) async fn write_test_spec(
 pub(super) async fn write_greenfield_oracle_artifacts(
     state: &GoalState,
 ) -> Result<Vec<(&'static str, &'static str)>> {
-    let kind = super::super::oracle::classify_goal_kind(&state.normalized_goal);
-    if kind != super::super::oracle::GoalKind::Greenfield {
+    let kind = crate::runtime::goal::oracle::classify_goal_kind(&state.normalized_goal);
+    if kind != crate::runtime::goal::oracle::GoalKind::Greenfield {
         return Ok(Vec::new());
     }
 
@@ -157,20 +158,20 @@ pub(super) async fn write_greenfield_oracle_artifacts(
 }
 
 async fn compatibility_plan(
-    oracle: &super::super::oracle::GoalOracleEvidence,
+    oracle: &crate::runtime::goal::oracle::GoalOracleEvidence,
     project_dir: &Path,
 ) -> Result<String> {
     if !matches!(
         oracle.kind,
-        super::super::oracle::GoalKind::Rewrite
-            | super::super::oracle::GoalKind::Migration
-            | super::super::oracle::GoalKind::Refactor
+        crate::runtime::goal::oracle::GoalKind::Rewrite
+            | crate::runtime::goal::oracle::GoalKind::Migration
+            | crate::runtime::goal::oracle::GoalKind::Refactor
     ) {
         return Ok(String::new());
     }
 
     let surfaces =
-        super::super::oracle::surface::detect_source_project_surfaces(project_dir).await?;
+        crate::runtime::goal::oracle::surface::detect_source_project_surfaces(project_dir).await?;
     let command_lines = if surfaces.commands.is_empty() {
         "- No source-project commands detected.\n".to_string()
     } else {

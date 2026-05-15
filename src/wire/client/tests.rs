@@ -73,7 +73,7 @@ exit 0
         tokio::fs::set_permissions(&script, perms).await.unwrap();
     }
 
-    let client = WireClient::spawn(script.to_str().unwrap(), None, None, None);
+    let client = ProcessWireClient::spawn(script.to_str().unwrap(), None, None, None);
     assert!(client.is_ok());
     let client = client.unwrap();
     client.shutdown().await.unwrap();
@@ -81,22 +81,16 @@ exit 0
 
 #[tokio::test]
 async fn test_roundtrip_send_request_read_response() {
-    let tmp = tempfile::tempdir().unwrap();
-    let script = tmp.path().join("mock-wire");
-    let script_content = r#"#!/bin/bash
-read -r line
-echo '{"jsonrpc":"2.0","id":"req-1","result":{"status":"ok","steps":[{"n":1}]}}'
-"#;
-    tokio::fs::write(&script, script_content).await.unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = tokio::fs::metadata(&script).await.unwrap().permissions();
-        perms.set_mode(0o755);
-        tokio::fs::set_permissions(&script, perms).await.unwrap();
-    }
-
-    let mut client = WireClient::spawn(script.to_str().unwrap(), None, None, None).unwrap();
+    let mut client = InMemoryWireClient::new();
+    client
+        .inject(WireMessage::SuccessResponse(
+            crate::wire::protocol::JsonRpcSuccessResponse {
+                jsonrpc: "2.0".to_string(),
+                id: "req-1".to_string(),
+                result: serde_json::json!({"status":"ok","steps":[{"n":1}]}),
+            },
+        ))
+        .await;
 
     let result = client.prompt("hello").await.unwrap();
     assert_eq!(result.status, "ok");
@@ -107,29 +101,32 @@ echo '{"jsonrpc":"2.0","id":"req-1","result":{"status":"ok","steps":[{"n":1}]}}'
         }
         other => panic!("expected legacy prompt trace, got {:?}", other),
     }
-
-    client.shutdown().await.unwrap();
 }
 
 #[tokio::test]
 async fn test_prompt_buffers_events_that_arrive_before_response() {
-    let tmp = tempfile::tempdir().unwrap();
-    let script = tmp.path().join("mock-wire-event-first");
-    let script_content = r#"#!/bin/bash
-read -r line
-echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":{"user_input":"hello"}}}'
-echo '{"jsonrpc":"2.0","id":"req-1","result":{"status":"ok"}}'
-"#;
-    tokio::fs::write(&script, script_content).await.unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = tokio::fs::metadata(&script).await.unwrap().permissions();
-        perms.set_mode(0o755);
-        tokio::fs::set_permissions(&script, perms).await.unwrap();
-    }
-
-    let mut client = WireClient::spawn(script.to_str().unwrap(), None, None, None).unwrap();
+    let mut client = InMemoryWireClient::new();
+    client
+        .inject(WireMessage::Event(
+            crate::wire::protocol::JsonRpcNotification {
+                jsonrpc: "2.0".to_string(),
+                method: "event".to_string(),
+                params: crate::wire::protocol::EventParams {
+                    event_type: "turn_begin".to_string(),
+                    payload: serde_json::json!({"user_input":"hello"}),
+                },
+            },
+        ))
+        .await;
+    client
+        .inject(WireMessage::SuccessResponse(
+            crate::wire::protocol::JsonRpcSuccessResponse {
+                jsonrpc: "2.0".to_string(),
+                id: "req-1".to_string(),
+                result: serde_json::json!({"status":"ok"}),
+            },
+        ))
+        .await;
 
     let result = client.prompt("hello").await.unwrap();
     assert_eq!(result.status, "ok");
@@ -139,30 +136,41 @@ echo '{"jsonrpc":"2.0","id":"req-1","result":{"status":"ok"}}'
         WireMessage::Event(ev) => assert_eq!(ev.params.event_type, "turn_begin"),
         other => panic!("expected buffered event, got {:?}", other),
     }
-
-    client.shutdown().await.unwrap();
 }
 
 #[tokio::test]
 async fn test_prompt_waits_for_matching_response_id() {
-    let tmp = tempfile::tempdir().unwrap();
-    let script = tmp.path().join("mock-wire-interleaved-response");
-    let script_content = r#"#!/bin/bash
-read -r line
-echo '{"jsonrpc":"2.0","id":"req-999","result":{"status":"wrong"}}'
-echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":{"user_input":"hello"}}}'
-echo '{"jsonrpc":"2.0","id":"req-1","result":{"status":"ok"}}'
-"#;
-    tokio::fs::write(&script, script_content).await.unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = tokio::fs::metadata(&script).await.unwrap().permissions();
-        perms.set_mode(0o755);
-        tokio::fs::set_permissions(&script, perms).await.unwrap();
-    }
-
-    let mut client = WireClient::spawn(script.to_str().unwrap(), None, None, None).unwrap();
+    let mut client = InMemoryWireClient::new();
+    client
+        .inject(WireMessage::SuccessResponse(
+            crate::wire::protocol::JsonRpcSuccessResponse {
+                jsonrpc: "2.0".to_string(),
+                id: "req-999".to_string(),
+                result: serde_json::json!({"status":"wrong"}),
+            },
+        ))
+        .await;
+    client
+        .inject(WireMessage::Event(
+            crate::wire::protocol::JsonRpcNotification {
+                jsonrpc: "2.0".to_string(),
+                method: "event".to_string(),
+                params: crate::wire::protocol::EventParams {
+                    event_type: "turn_begin".to_string(),
+                    payload: serde_json::json!({"user_input":"hello"}),
+                },
+            },
+        ))
+        .await;
+    client
+        .inject(WireMessage::SuccessResponse(
+            crate::wire::protocol::JsonRpcSuccessResponse {
+                jsonrpc: "2.0".to_string(),
+                id: "req-1".to_string(),
+                result: serde_json::json!({"status":"ok"}),
+            },
+        ))
+        .await;
 
     let result = client.prompt("hello").await.unwrap();
     assert_eq!(result.status, "ok");
@@ -172,29 +180,23 @@ echo '{"jsonrpc":"2.0","id":"req-1","result":{"status":"ok"}}'
         WireMessage::SuccessResponse(resp) => assert_eq!(resp.id, "req-999"),
         other => panic!("expected buffered non-matching response, got {:?}", other),
     }
-
-    client.shutdown().await.unwrap();
 }
 
 #[tokio::test]
 async fn test_start_prompt_allows_streaming_before_response() {
-    let tmp = tempfile::tempdir().unwrap();
-    let script = tmp.path().join("mock-wire-stream-before-response");
-    let script_content = r#"#!/bin/bash
-read -r line
-echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":{"user_input":"hello"}}}'
-sleep 1
-"#;
-    tokio::fs::write(&script, script_content).await.unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = tokio::fs::metadata(&script).await.unwrap().permissions();
-        perms.set_mode(0o755);
-        tokio::fs::set_permissions(&script, perms).await.unwrap();
-    }
-
-    let mut client = WireClient::spawn(script.to_str().unwrap(), None, None, None).unwrap();
+    let mut client = InMemoryWireClient::new();
+    client
+        .inject(WireMessage::Event(
+            crate::wire::protocol::JsonRpcNotification {
+                jsonrpc: "2.0".to_string(),
+                method: "event".to_string(),
+                params: crate::wire::protocol::EventParams {
+                    event_type: "turn_begin".to_string(),
+                    payload: serde_json::json!({"user_input":"hello"}),
+                },
+            },
+        ))
+        .await;
 
     let id = client.start_prompt("hello").await.unwrap();
     assert_eq!(id, "req-1");
@@ -204,28 +206,11 @@ sleep 1
         WireMessage::Event(ev) => assert_eq!(ev.params.event_type, "turn_begin"),
         other => panic!("expected streaming event, got {:?}", other),
     }
-
-    client.shutdown().await.unwrap();
 }
 
 #[tokio::test]
 async fn test_send_response_and_error() {
-    let tmp = tempfile::tempdir().unwrap();
-    let script = tmp.path().join("mock-wire-responder");
-    let script_content = r#"#!/bin/bash
-read -r line
-read -r line
-"#;
-    tokio::fs::write(&script, script_content).await.unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = tokio::fs::metadata(&script).await.unwrap().permissions();
-        perms.set_mode(0o755);
-        tokio::fs::set_permissions(&script, perms).await.unwrap();
-    }
-
-    let mut client = WireClient::spawn(script.to_str().unwrap(), None, None, None).unwrap();
+    let mut client = InMemoryWireClient::new();
 
     client
         .send_response("req-42", serde_json::json!({"ok": true}))
@@ -237,26 +222,25 @@ read -r line
         .await
         .unwrap();
 
-    client.shutdown().await.unwrap();
+    let outgoing = client.outgoing().await;
+    assert_eq!(outgoing.len(), 2);
 }
 
 #[tokio::test]
 async fn test_process_messages_loop() {
-    let tmp = tempfile::tempdir().unwrap();
-    let script = tmp.path().join("mock-wire-events");
-    let script_content = r#"#!/bin/bash
-echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":{"user_input":"hello"}}}'
-"#;
-    tokio::fs::write(&script, script_content).await.unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = tokio::fs::metadata(&script).await.unwrap().permissions();
-        perms.set_mode(0o755);
-        tokio::fs::set_permissions(&script, perms).await.unwrap();
-    }
-
-    let mut client = WireClient::spawn(script.to_str().unwrap(), None, None, None).unwrap();
+    let mut client = InMemoryWireClient::new();
+    client
+        .inject(WireMessage::Event(
+            crate::wire::protocol::JsonRpcNotification {
+                jsonrpc: "2.0".to_string(),
+                method: "event".to_string(),
+                params: crate::wire::protocol::EventParams {
+                    event_type: "turn_begin".to_string(),
+                    payload: serde_json::json!({"user_input":"hello"}),
+                },
+            },
+        ))
+        .await;
 
     let seen_event = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let seen_clone = seen_event.clone();
@@ -275,5 +259,4 @@ echo '{"jsonrpc":"2.0","method":"event","params":{"type":"turn_begin","payload":
     .unwrap();
 
     assert!(seen_event.load(std::sync::atomic::Ordering::SeqCst));
-    client.shutdown().await.unwrap();
 }

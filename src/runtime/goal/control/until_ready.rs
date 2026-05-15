@@ -3,11 +3,13 @@ use chrono::Utc;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
-use super::super::proof::GoalProof;
-use super::super::state::{self, GoalStatus};
-use super::super::task_graph::{goal_task_done, GoalTaskGraph, GoalTaskStatus};
-use super::super::types::{GoalControllerStep, GoalControllerStepKind, GoalRunUntilReadyOutcome};
-use super::super::{evidence, proof};
+use crate::runtime::goal::proof::GoalProof;
+use crate::runtime::goal::state::{self, FileSystemGoalStateStore, GoalStateStore, GoalStatus};
+use crate::runtime::goal::task_graph::{goal_task_done, GoalTaskGraph, GoalTaskStatus};
+use crate::runtime::goal::types::{
+    GoalControllerStep, GoalControllerStepKind, GoalRunUntilReadyOutcome,
+};
+use crate::runtime::goal::{evidence, proof};
 
 const MAX_EXECUTE_PASSES: usize = 8;
 const MANUAL_INTEGRATION_BLOCKER_FILE: &str = "artifacts/policy/manual-integration-blocker.json";
@@ -43,7 +45,7 @@ pub(crate) async fn run_goal_until_ready(
     options: state::CreateGoalOptions,
     project_dir: &Path,
 ) -> Result<GoalRunUntilReadyOutcome> {
-    let state = super::super::create_goal(goal, options).await?;
+    let state = crate::runtime::goal::create_goal(goal, options).await?;
     let mut steps = vec![GoalControllerStep {
         kind: GoalControllerStepKind::Plan,
         status: state.status,
@@ -70,7 +72,7 @@ pub(crate) async fn run_goal_until_ready(
         });
     }
 
-    let verified = super::super::verify_goal(&state.goal_id, project_dir).await?;
+    let verified = crate::runtime::goal::verify_goal(&state.goal_id, project_dir).await?;
     steps.push(GoalControllerStep {
         kind: GoalControllerStepKind::Verify,
         status: verified.status,
@@ -86,7 +88,7 @@ pub(crate) async fn run_goal_until_ready(
     }
 
     for pass in 1..=MAX_EXECUTE_PASSES {
-        let executed = super::super::execute_goal(&state.goal_id, project_dir).await?;
+        let executed = crate::runtime::goal::execute_goal(&state.goal_id, project_dir).await?;
         steps.push(GoalControllerStep {
             kind: GoalControllerStepKind::Execute,
             status: executed.status,
@@ -115,7 +117,7 @@ pub(crate) async fn run_goal_until_ready(
         }
     }
 
-    let reviewed = super::super::review_goal(&state.goal_id, project_dir).await?;
+    let reviewed = crate::runtime::goal::review_goal(&state.goal_id, project_dir).await?;
     steps.push(GoalControllerStep {
         kind: GoalControllerStepKind::Review,
         status: reviewed.status,
@@ -191,13 +193,13 @@ fn terminal_blocker(proof: &GoalProof) -> UntilReadyBlocker {
 }
 
 async fn has_pending_agent_dispatch(goal_id: &str) -> Result<bool> {
-    let state = super::super::resolve_goal(goal_id).await?;
+    let state = crate::runtime::goal::resolve_goal(goal_id).await?;
     let task_graph = GoalTaskGraph::load(&state.state_dir).await?;
-    Ok(super::super::agent::goal_agent_dispatch_plan(&state, &task_graph).is_some())
+    Ok(crate::runtime::goal::agent::goal_agent_dispatch_plan(&state, &task_graph).is_some())
 }
 
 async fn readiness_blocker(goal_id: &str, proof: &GoalProof) -> Result<UntilReadyBlocker> {
-    let state = super::super::resolve_goal(goal_id).await?;
+    let state = crate::runtime::goal::resolve_goal(goal_id).await?;
     let task_graph = GoalTaskGraph::load(&state.state_dir).await?;
     let blocked_tasks = task_graph
         .tasks
@@ -252,7 +254,7 @@ async fn finalize_until_ready_blocker(
     mut steps: Vec<GoalControllerStep>,
     blocker: UntilReadyBlocker,
 ) -> Result<GoalRunUntilReadyOutcome> {
-    let mut state = super::super::resolve_goal(goal_id).await?;
+    let mut state = crate::runtime::goal::resolve_goal(goal_id).await?;
     let mut proof = GoalProof::load(&state.state_dir).await?;
     let now = Utc::now();
     let relative_path = PathBuf::from(blocker.artifact_file);
@@ -272,7 +274,7 @@ async fn finalize_until_ready_blocker(
     proof::write_json_artifact(&state.state_dir.join(&relative_path), &artifact).await?;
     evidence::record_artifact_path_once(&mut state, "policy_blocker", relative_path.clone(), now);
     state.updated_at = now;
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
 
     push_unique(&mut proof.known_gaps, blocker.reason.clone());
     if blocker.human_decision_required {

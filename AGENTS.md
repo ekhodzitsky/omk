@@ -163,6 +163,62 @@ correctness, not ceremony.
    worktrees, and delivers repository mutations through PRs before treating
    them as integrated.
 
+## Agent Module Architecture (Hard Constraints)
+
+OMK is developed by multiple agents working in parallel. Each agent must be
+able to own a module without understanding the implementation of its neighbors.
+This requires explicit contracts, local documentation, and trait-based
+boundaries.
+
+### Module as an Agent Context
+
+Every top-level module under `src/X/` is an **agent context**: a self-contained
+unit of work that an agent can bring to state-of-art independently.
+
+Required files in every `src/X/`:
+- **`README.md`** — purpose, public API, status, dependencies on other modules.
+- **`TODO.md`** — current tasks, known gaps, planned features.
+- **`AGENTS.md`** (if module-specific rules exist) — editing constraints,
+  invariants, or safety rules that differ from the root.
+- **Unit tests** — every public type and function must have deterministic
+  `#[cfg(test)]` coverage. Prefer in-memory trait mocks over integration tests
+  for internal logic.
+
+### Contract-Driven Boundaries
+
+Modules communicate through **trait contracts**, not concrete types.
+
+Rules:
+1. **I/O happens at the edge.** Pure logic must not depend on `tokio::fs`,
+   `reqwest`, child processes, or other I/O directly. Wrap I/O in a trait and
+   keep the trait in the same module as the consumer.
+2. **No silent cross-layer coupling.** `runtime/` must not import `cost/`,
+   `notifications/`, `vis/`, or `cli/`. The only exception is `runtime/session.rs`,
+   which is scheduled for removal into `cli/`.
+3. **Trait per boundary.** Every module that stores state, sends network
+   traffic, or spawns processes must expose a trait for its behavior.
+   Example: `CostSink`, `EventSink`, `WireClient`.
+4. **Tests use mocks.** Unit tests must exercise logic through the trait
+   interface with an in-memory mock. Do not require temp files or shell
+   scripts for unit tests.
+
+### Documentation as System Prompt
+
+README/TODO/AGENTS.md inside a module are the **system prompt** for the agent
+assigned to that module. They must answer:
+- What does this module do?
+- What is its public API (types, traits, functions)?
+- Who are its consumers (which modules call it)?
+- What are the invariants and preconditions?
+- What is the current state of completion?
+
+### Migration Path
+
+Not all modules comply yet. When editing a module, bring it into compliance
+with this section before adding new features. Do not retrofit the entire
+codebase in one PR — migrate module-by-module, starting with the one you are
+touching.
+
 ## Rust Safety Rules (Hard Constraints)
 
 These rules apply to **new or modified production code** under `src/` (outside

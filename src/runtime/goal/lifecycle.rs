@@ -6,6 +6,7 @@ use super::proof::GoalProof;
 use super::state::{GoalPhase, GoalState, GoalStatus};
 use super::task_graph::{GoalTaskGraph, GoalTaskStatus};
 use super::{agent, budget, dispatch, evidence, proof, state, task_graph, verifier};
+use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 
 pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
     let mut state = super::resolve_goal(goal_id).await?;
@@ -42,7 +43,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     state.phase = GoalPhase::Proof;
     state.updated_at = now;
     state.completed_at = Some(now);
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
 
     let proof =
         proof::build_verified_proof(&state, &task_graph, gates, changed_files, git, false, now);
@@ -54,6 +55,15 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
 }
 
 pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
+    let dispatcher = dispatch::DefaultGoalDispatcher;
+    execute_goal_with_dispatcher(goal_id, project_dir, &dispatcher).await
+}
+
+async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher>(
+    goal_id: &str,
+    project_dir: &Path,
+    dispatcher: &D,
+) -> Result<GoalProof> {
     let mut state = super::resolve_goal(goal_id).await?;
     ensure_goal_can_continue(&state)?;
     budget::ensure_budget_available(&mut state, "goal execute").await?;
@@ -61,7 +71,7 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     state.phase = GoalPhase::Execution;
     state.updated_at = Utc::now();
     state.completed_at = None;
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
 
     let verification_proof = verify_goal(goal_id, project_dir).await?;
     let state = super::resolve_goal(goal_id).await?;
@@ -79,15 +89,16 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     };
 
     let now = Utc::now();
-    let agent_evidence =
-        dispatch::run_goal_agent_task_wave(&state, &task_graph, project_dir, now, &dispatch)
-            .await?;
+    let agent_evidence = dispatcher
+        .execute_wave(&state, &task_graph, project_dir, now, &dispatch)
+        .await?;
     match dispatch.kind {
         agent::GoalAgentWaveKind::Initial => {
             if let Some(task) =
                 task_graph::apply_agent_execution_task_result(&mut task_graph, &agent_evidence, now)
             {
-                dispatch::append_agent_execution_task_events(&state, &task, &agent_evidence)
+                dispatcher
+                    .append_execution_events(&state, &task, &agent_evidence)
                     .await?;
             }
         }
@@ -221,7 +232,7 @@ async fn finalize_execution_state(
         state.completed_at = Some(now);
     }
     state.updated_at = now;
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
     Ok(state)
 }
 
@@ -257,7 +268,7 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     state.phase = GoalPhase::VerificationDesign;
     state.updated_at = Utc::now();
     state.completed_at = None;
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
 
     let mut state = super::resolve_goal(goal_id).await?;
     let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
@@ -301,7 +312,7 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     state.phase = GoalPhase::Proof;
     state.updated_at = now;
     state.completed_at = Some(now);
-    state.save().await?;
+    FileSystemGoalStateStore::new().save(&state).await?;
 
     let proof = proof::build_verified_proof(
         &state,
