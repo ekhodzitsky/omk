@@ -50,10 +50,7 @@ pub(crate) async fn run_kimi_prompt(prompt: &str) -> Result<String> {
 pub(crate) async fn run_command(dir: &Path, cmd: &str, args: &[&str]) -> Result<()> {
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(60),
-        Command::new(cmd)
-            .args(args)
-            .current_dir(dir)
-            .output(),
+        Command::new(cmd).args(args).current_dir(dir).output(),
     )
     .await
     .with_context(|| format!("{} {} timed out", cmd, args.join(" ")))?
