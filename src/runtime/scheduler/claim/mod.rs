@@ -1,5 +1,5 @@
 mod store;
 mod summary;
 
-pub use store::{ClaimStore, DEFAULT_LEASE_SECS, RecoveredLease};
+pub use store::{ClaimStore, RecoveredLease, DEFAULT_LEASE_SECS};
 pub use summary::TaskSummary;

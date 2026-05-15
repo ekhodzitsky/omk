@@ -1,7 +1,7 @@
-mod helpers;
+mod cancel;
 mod dispatch;
+mod helpers;
 mod poll;
 mod stale;
-mod cancel;
 
 pub use helpers::*;

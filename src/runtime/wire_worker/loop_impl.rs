@@ -20,7 +20,10 @@ impl WireWorkerAdapter {
         let inbox = &self.spec.inbox;
         let outbox = &self.spec.outbox;
         let heartbeat = &self.spec.heartbeat;
-        let wire_events_path = self.spec.inbox.parent()
+        let wire_events_path = self
+            .spec
+            .inbox
+            .parent()
             .context("inbox must have a parent directory")?
             .join("wire-events.jsonl");
 

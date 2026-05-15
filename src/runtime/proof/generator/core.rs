@@ -2,9 +2,7 @@ use std::path::Path;
 
 use crate::runtime::events::{EventReader, RunId};
 use crate::runtime::gates::GateResult;
-use crate::runtime::proof::{
-    ChangedFile, GateStatus, Proof, ProofGate, ProofStatus,
-};
+use crate::runtime::proof::{ChangedFile, GateStatus, Proof, ProofGate, ProofStatus};
 
 impl super::ProofGenerator {
     pub async fn from_events(run_id: &RunId, event_log: &Path) -> anyhow::Result<Proof> {

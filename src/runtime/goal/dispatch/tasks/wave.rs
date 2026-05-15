@@ -10,12 +10,11 @@ use super::{
     prepare_goal_agent_workers, read_goal_agent_worker_results, stop_wire_worker,
     summarize_goal_agent_worker_results, task_dispatch_accepted_payload,
     task_dispatch_rejected_payload, validate_goal_agent_task_proposals,
-    watch_goal_control_interrupt, write_goal_agent_mutation_snapshot, write_json_artifact,
-    Event, EventBuilder, EventKind, EventWriter, GoalAgentDispatchPlan, GoalAgentRunEvidence,
-    GoalState, GOAL_AGENT_RUNS_DIR, GOAL_AGENT_TASK_POLICY_FILE,
-    GOAL_AGENT_TASK_PROPOSALS_FILE, GOAL_AGENT_WORKER_ROLE, GOAL_ARTIFACTS_DIR,
-    GOAL_CONTROLLER_ACTOR, GoalTaskGraph, RunId, TeamRunner, WireWorkerAdapter, WorkerId,
-    EVENTS_FILE, OUTBOX_FILE, WORKERS_DIR,
+    watch_goal_control_interrupt, write_goal_agent_mutation_snapshot, write_json_artifact, Event,
+    EventBuilder, EventKind, EventWriter, GoalAgentDispatchPlan, GoalAgentRunEvidence, GoalState,
+    GoalTaskGraph, RunId, TeamRunner, WireWorkerAdapter, WorkerId, EVENTS_FILE,
+    GOAL_AGENT_RUNS_DIR, GOAL_AGENT_TASK_POLICY_FILE, GOAL_AGENT_TASK_PROPOSALS_FILE,
+    GOAL_AGENT_WORKER_ROLE, GOAL_ARTIFACTS_DIR, GOAL_CONTROLLER_ACTOR, OUTBOX_FILE, WORKERS_DIR,
 };
 
 pub(crate) async fn run_goal_agent_task_wave(

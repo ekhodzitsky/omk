@@ -110,8 +110,8 @@ pub(super) async fn check_disk_space(path: &std::path::Path) -> bool {
     true
 }
 
-pub(super) async fn prometheus_metrics_handler(
-) -> std::result::Result<Response<String>, StatusCode> {
+pub(super) async fn prometheus_metrics_handler() -> std::result::Result<Response<String>, StatusCode>
+{
     let metrics_path = crate::runtime::config::state_dir().join("metrics.json");
     let mut output = String::new();
 

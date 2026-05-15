@@ -1,5 +1,5 @@
-mod types;
 mod convert;
+mod types;
 
 #[cfg(test)]
 mod tests;

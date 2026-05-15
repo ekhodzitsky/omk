@@ -57,11 +57,7 @@ pub(super) async fn check_hooks(hooks_dir: &Path, results: &mut Vec<DiagResult>)
     }
 }
 
-pub(super) async fn check_hook_configs(
-    dir: &Path,
-    kimi_dir: &Path,
-    results: &mut Vec<DiagResult>,
-) {
+pub(super) async fn check_hook_configs(dir: &Path, kimi_dir: &Path, results: &mut Vec<DiagResult>) {
     // Check hook configs reference existing scripts (L1-033)
     let hook_configs_to_check = ["hooks.toml.example", "config.toml"];
     for config_name in &hook_configs_to_check {

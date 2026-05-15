@@ -13,7 +13,7 @@ use super::provider::{is_known_provider, is_provider_installed};
 /// `bash -c`. The prompt is delivered as a single argv element, so a
 /// hostile prompt cannot break out into shell metacharacters even if the
 /// upstream shell-escape helper were to regress. The provider name is
-/// constrained to [`ALL_PROVIDERS`] up front so this argv-mode invocation
+/// constrained to `ALL_PROVIDERS` up front so this argv-mode invocation
 /// can never call an arbitrary binary either.
 pub async fn run_advisor_direct(provider: &str, prompt: &str, timeout_secs: u64) -> Result<String> {
     if !is_known_provider(provider) {

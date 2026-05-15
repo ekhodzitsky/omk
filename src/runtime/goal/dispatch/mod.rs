@@ -4,12 +4,10 @@ mod tasks;
 
 pub(crate) use interrupt::watch_goal_control_interrupt;
 pub(crate) use runtime::{
-    goal_agent_lease_seconds_override, goal_agent_wire_runtime_available,
-    goal_agent_worker_count, goal_agent_worker_name, prepare_goal_agent_workers, stop_wire_worker,
+    goal_agent_lease_seconds_override, goal_agent_wire_runtime_available, goal_agent_worker_count,
+    goal_agent_worker_name, prepare_goal_agent_workers, stop_wire_worker,
 };
-pub(crate) use tasks::{
-    append_agent_execution_task_events, run_goal_agent_task_wave,
-};
+pub(crate) use tasks::{append_agent_execution_task_events, run_goal_agent_task_wave};
 
 // Re-exports from parent module so submodules can use `super::` imports
 pub(crate) use super::agent::{

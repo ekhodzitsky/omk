@@ -2,12 +2,8 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
-use crate::runtime::autopilot::types::{
-    AutopilotPhase, AutopilotState, PhaseLog,
-};
-use crate::runtime::gates::{
-    detect_changed_files, gates_passed, DoneContract,
-};
+use crate::runtime::autopilot::types::{AutopilotPhase, AutopilotState, PhaseLog};
+use crate::runtime::gates::{detect_changed_files, gates_passed, DoneContract};
 
 /// Autopilot engine that drives the 6-phase pipeline.
 pub struct Autopilot {

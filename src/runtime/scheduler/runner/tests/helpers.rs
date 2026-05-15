@@ -58,7 +58,12 @@ pub async fn write_outbox(spec: &WorkerSpec, content: impl AsRef<[u8]>) {
     tokio::fs::write(&spec.outbox, content).await.unwrap();
 }
 
-pub fn assert_task_state(runner: &TeamRunner, task_id: &str, state: TaskState, owner: Option<&str>) {
+pub fn assert_task_state(
+    runner: &TeamRunner,
+    task_id: &str,
+    state: TaskState,
+    owner: Option<&str>,
+) {
     let task = runner
         .claim_store
         .get(&task_id.to_string())

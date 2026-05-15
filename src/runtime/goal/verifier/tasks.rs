@@ -6,7 +6,9 @@ use super::super::state::{
     GoalState, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_CONTROLLER_ACTOR, GOAL_LOCAL_VERIFY_TASK_ID,
     GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_TASK_ID,
 };
-use super::super::task_graph::{goal_task_done, GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
+use super::super::task_graph::{
+    goal_task_done, GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus,
+};
 use crate::runtime::events::{
     Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId,
 };

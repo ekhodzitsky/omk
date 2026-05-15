@@ -77,10 +77,7 @@ pub(crate) fn validate_manifest_entry_path(
     ))
 }
 
-pub(crate) fn validate_manifest_paths(
-    manifest: &AssetManifest,
-    project_dir: &Path,
-) -> Result<()> {
+pub(crate) fn validate_manifest_paths(manifest: &AssetManifest, project_dir: &Path) -> Result<()> {
     let project_root = absolute_root(project_dir);
 
     for (index, entry) in manifest.files.iter().enumerate() {

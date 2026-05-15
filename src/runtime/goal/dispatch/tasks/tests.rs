@@ -6,9 +6,7 @@ use crate::runtime::goal::proof::write_json_artifact;
 use crate::runtime::goal::state::{
     GoalPhase, GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_TASK_GRAPH_FILE,
 };
-use crate::runtime::goal::task_graph::{
-    GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus,
-};
+use crate::runtime::goal::task_graph::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 use chrono::Utc;
 use std::path::PathBuf;
 use std::sync::Once;

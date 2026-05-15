@@ -4,12 +4,12 @@ use clap_complete::{generate, Shell};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
+use super::{setup, update, Commands, Omk, ShellArg};
+use crate::cli::kimi_native_cmd;
 use crate::cli::{
     ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, goal, hud, logs, marketplace,
     proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
 };
-use crate::cli::kimi_native_cmd;
-use super::{setup, update, Commands, Omk, ShellArg};
 
 pub async fn run() -> Result<()> {
     let cancel = CancellationToken::new();

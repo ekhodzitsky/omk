@@ -93,8 +93,10 @@ pub(crate) async fn write_goal_review_evidence(
     let review_abs_dir = state.state_dir.join(&review_dir);
     crate::runtime::config::ensure_private_dir(&review_abs_dir).await?;
 
-    let local_verify_done = goal_task_done(task_graph, super::super::state::GOAL_LOCAL_VERIFY_TASK_ID);
-    let agent_execution_done = goal_task_done(task_graph, super::super::state::GOAL_AGENT_EXECUTE_TASK_ID);
+    let local_verify_done =
+        goal_task_done(task_graph, super::super::state::GOAL_LOCAL_VERIFY_TASK_ID);
+    let agent_execution_done =
+        goal_task_done(task_graph, super::super::state::GOAL_AGENT_EXECUTE_TASK_ID);
     let gates_ok = !proof.gates.is_empty() && gates_passed(&proof.gates);
     let security_findings =
         super::scan_goal_security_findings(project_dir, &proof.changed_files).await?;
