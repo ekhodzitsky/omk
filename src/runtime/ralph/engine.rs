@@ -2,126 +2,30 @@
 #![allow(dead_code)] // API surface for future features (verify_story, story escalation)
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use anyhow::Result;
-use regex::Regex;
-use tokio::process::Command;
 use tracing::{error, info, warn};
 
 use crate::runtime::gates::{
     detect_changed_files, format_gate_summary, gates_passed, load_or_detect_gates, run_gates,
     DoneContract,
 };
-use crate::runtime::state::{Prd, RalphState, StoryStatus, UserStory};
+use crate::runtime::state::{RalphState, StoryStatus, UserStory};
 
-fn slugify_task(task: &str) -> Result<String> {
-    let word_re = Regex::new(r"\b\w+\b")?;
-    let words: Vec<&str> = word_re.find_iter(task).map(|m| m.as_str()).collect();
-    let slug = words[..words.len().min(5)].join("-").to_lowercase();
-    if slug.is_empty() {
-        Ok("untitled".to_string())
-    } else {
-        Ok(slug)
-    }
-}
-
-/// Generate a PRD by breaking a task into 3–5 user stories.
-pub fn generate_prd(task: &str) -> Prd {
-    let sentences: Vec<&str> = task
-        .split(['.', '?', '!'])
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .collect();
-
-    let chunks: Vec<String> = if sentences.len() >= 3 {
-        sentences.into_iter().map(String::from).collect()
-    } else {
-        task.split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect()
-    };
-
-    let stories: Vec<UserStory> = chunks
-        .into_iter()
-        .enumerate()
-        .map(|(i, desc)| UserStory {
-            id: format!("US-{:03}", i + 1),
-            description: desc.clone(),
-            acceptance_criteria: vec![
-                format!("{} is implemented correctly", desc),
-                "All related tests pass".to_string(),
-            ],
-            status: StoryStatus::NotStarted,
-        })
-        .take(5)
-        .collect();
-
-    if stories.is_empty() {
-        Prd {
-            user_stories: vec![UserStory {
-                id: "US-001".to_string(),
-                description: task.to_string(),
-                acceptance_criteria: vec![
-                    format!("{} is implemented correctly", task),
-                    "All related tests pass".to_string(),
-                ],
-                status: StoryStatus::NotStarted,
-            }],
-        }
-    } else {
-        Prd {
-            user_stories: stories,
-        }
-    }
-}
-
-/// Spawn `kimi -p` and capture its combined output.
-pub async fn run_kimi(prompt: &str, dir: &Path) -> Result<String> {
-    let output = tokio::time::timeout(
-        Duration::from_secs(120),
-        Command::new("kimi")
-            .args(["-p", prompt])
-            .current_dir(dir)
-            .output(),
-    )
-    .await??;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    if !output.status.success() {
-        warn!(status = ?output.status, stderr = %stderr, "kimi command failed");
-    }
-
-    Ok(format!("{}{}", stdout, stderr))
-}
-
-/// Run `cargo test` in the given directory and return whether it succeeded.
-pub async fn run_tests(dir: &Path) -> Result<bool> {
-    let output = tokio::time::timeout(
-        Duration::from_secs(300),
-        Command::new("cargo")
-            .args(["test", "--quiet"])
-            .current_dir(dir)
-            .output(),
-    )
-    .await??;
-
-    Ok(output.status.success())
-}
-
-/// MVP verification: story passes if the test suite passes.
-fn verify_story(_story: &UserStory, _kimi_output: &str, tests_pass: bool) -> bool {
-    tests_pass
-}
+use super::generate::{generate_prd, slugify_task};
+use super::progress::print_progress;
+use super::runner::{run_kimi, run_tests};
 
 /// Compute the Ralph state directory for a task.
 pub fn state_dir_for(_dir: &Path, task: &str) -> Result<PathBuf> {
     Ok(crate::runtime::config::state_dir()
         .join("ralph")
         .join(slugify_task(task)?))
+}
+
+/// MVP verification: story passes if the test suite passes.
+fn verify_story(_story: &UserStory, _kimi_output: &str, tests_pass: bool) -> bool {
+    tests_pass
 }
 
 /// Run the Ralph persistent loop.
@@ -481,37 +385,4 @@ pub async fn run_ralph(
     .await;
 
     Ok(())
-}
-
-fn print_progress(state: &RalphState) {
-    let verified = state
-        .prd
-        .user_stories
-        .iter()
-        .filter(|s| matches!(s.status, StoryStatus::Verified))
-        .count();
-    let failed = state
-        .prd
-        .user_stories
-        .iter()
-        .filter(|s| matches!(s.status, StoryStatus::Failed))
-        .count();
-    let total = state.prd.user_stories.len();
-
-    println!();
-    println!(
-        "🔄 Ralph: {}/{} stories verified, {} failed (iteration {}/{})",
-        verified, total, failed, state.iteration, state.max_iterations
-    );
-    for story in &state.prd.user_stories {
-        let icon = match story.status {
-            StoryStatus::Verified => "✓",
-            StoryStatus::Failed => "✗",
-            StoryStatus::InProgress => "▶",
-            StoryStatus::Implemented => "◐",
-            StoryStatus::NotStarted => "○",
-        };
-        println!("   {} {}", icon, story.id);
-    }
-    println!();
 }
