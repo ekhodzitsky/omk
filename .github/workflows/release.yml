@@ -89,7 +89,7 @@ jobs:
       - name: Attest build provenance
         # SLSA-style attestation, keyless via the runner's GitHub OIDC token.
         # The signing root is GitHub's; no private key to manage.
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ env.ASSET }}
 
