@@ -11,10 +11,13 @@ use crate::runtime::goal::proof::GoalProof;
 use crate::runtime::goal::state::{
     self, FileSystemGoalStateStore, GoalPhase, GoalStateStore, GoalStatus,
 };
-use crate::runtime::goal::task_graph::{goal_task_done, GoalTaskGraph, GoalTaskStatus};
+use crate::runtime::goal::task_graph::{
+    all_slices_done, goal_task_done, GoalTaskGraph, GoalTaskStatus,
+};
 use crate::runtime::goal::types::{
     GoalControllerStep, GoalControllerStepKind, GoalRunUntilReadyOutcome,
 };
+use crate::runtime::goal::worktree::remove_goal_worktrees;
 use crate::runtime::goal::{evidence, proof};
 
 const MAX_EXECUTE_PASSES: usize = 8;
@@ -213,6 +216,10 @@ fn terminal_blocker(proof: &GoalProof) -> UntilReadyBlocker {
 async fn has_pending_agent_dispatch(goal_id: &str) -> Result<bool> {
     let state = crate::runtime::goal::resolve_goal(goal_id).await?;
     let task_graph = GoalTaskGraph::load(&state.state_dir).await?;
+    if state.slice_execution {
+        let done = all_slices_done(&state.state_dir, &task_graph).await?;
+        return Ok(!done);
+    }
     Ok(crate::runtime::goal::agent::goal_agent_dispatch_plan(&state, &task_graph).is_some())
 }
 
@@ -265,6 +272,21 @@ fn manual_integration_acceptance_required(task_graph: &GoalTaskGraph, proof: &Go
         && goal_task_done(task_graph, state::GOAL_SECURITY_REVIEW_TASK_ID)
         && !proof.changed_files.is_empty()
         && proof.post_mutation_gates_ran
+}
+
+async fn cleanup_goal_worktrees(state: &state::GoalState, project_dir: &Path) {
+    if !state.slice_execution {
+        return;
+    }
+    if let Ok(records) =
+        crate::runtime::goal::task_graph::load_goal_task_delivery_records(&state.state_dir).await
+    {
+        let paths: Vec<PathBuf> = records
+            .into_iter()
+            .filter_map(|r| r.metadata.worktree_path)
+            .collect();
+        remove_goal_worktrees(project_dir, &paths).await;
+    }
 }
 
 async fn finalize_until_ready_blocker(
@@ -372,6 +394,8 @@ async fn finalize_until_ready_delivery(
                     policy.as_str()
                 ),
             });
+
+            cleanup_goal_worktrees(&state, project_dir).await;
 
             Ok(GoalRunUntilReadyOutcome {
                 state,
@@ -518,6 +542,8 @@ async fn finalize_until_ready_delivery(
                     policy.as_str()
                 ),
             });
+
+            cleanup_goal_worktrees(&state, project_dir).await;
 
             Ok(GoalRunUntilReadyOutcome {
                 state,

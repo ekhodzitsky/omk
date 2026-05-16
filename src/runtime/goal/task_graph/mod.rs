@@ -2,16 +2,16 @@ mod delivery;
 mod model;
 mod mutation;
 
+pub use delivery::{
+    all_slices_done, load_goal_task_delivery_records, plan_goal_delivery_slices,
+    read_goal_task_delivery_metadata, ready_delivery_slices, record_goal_delivery_slice_plan,
+    update_goal_task_delivery_metadata, GoalDeliveryOverlapSerialization, GoalDeliverySlice,
+    GoalDeliverySlicePlan, GoalTaskDeliveryMetadata, GoalTaskDeliveryMetadataUpdate,
+    GoalTaskDeliveryRecord, GoalTaskDeliveryStatus,
+};
 pub(crate) use delivery::{
     ensure_worktree_delivery_targets, load_task_delivery_metadata,
     preserve_delivery_metadata_in_value, record_worktree_delivery_metadata,
-};
-pub use delivery::{
-    load_goal_task_delivery_records, plan_goal_delivery_slices, read_goal_task_delivery_metadata,
-    record_goal_delivery_slice_plan, update_goal_task_delivery_metadata,
-    GoalDeliveryOverlapSerialization, GoalDeliverySlice, GoalDeliverySlicePlan,
-    GoalTaskDeliveryMetadata, GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryRecord,
-    GoalTaskDeliveryStatus,
 };
 pub use model::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 pub use mutation::GoalTaskGraphSummary;

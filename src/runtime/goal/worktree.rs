@@ -293,6 +293,43 @@ fn git_failure(description: &str, output: &Output) -> anyhow::Error {
     )
 }
 
+/// Remove a single git worktree. Silently succeeds if the worktree does not exist.
+pub async fn remove_goal_worktree(repo_dir: &Path, worktree_path: &Path) -> Result<()> {
+    if !worktree_path.exists() {
+        return Ok(());
+    }
+    let output = git_output(
+        repo_dir,
+        vec![
+            OsString::from("worktree"),
+            OsString::from("remove"),
+            OsString::from("--force"),
+            worktree_path.as_os_str().to_os_string(),
+        ],
+        "remove goal worktree",
+    )
+    .await?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(git_failure("remove goal worktree", &output))
+    }
+}
+
+/// Remove all worktrees for a list of worktree paths. Errors are logged but not
+/// returned so that cleanup is best-effort.
+pub async fn remove_goal_worktrees(repo_dir: &Path, worktree_paths: &[PathBuf]) {
+    for path in worktree_paths {
+        if let Err(e) = remove_goal_worktree(repo_dir, path).await {
+            tracing::warn!(
+                error = %e,
+                worktree = %path.display(),
+                "Failed to remove goal worktree during cleanup"
+            );
+        }
+    }
+}
+
 fn normalize_identifier_component(label: &str, value: &str) -> Result<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {

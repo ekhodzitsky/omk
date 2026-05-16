@@ -119,6 +119,8 @@ pub struct GoalState {
     #[serde(default)]
     pub merge_policy: super::super::GoalMergePolicy,
     #[serde(default)]
+    pub slice_execution: bool,
+    #[serde(default)]
     pub artifacts: Vec<GoalArtifact>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<GoalFailure>,
@@ -143,6 +145,7 @@ pub struct CreateGoalOptions {
     pub max_agents: Option<usize>,
     pub delivery_policy: super::super::GoalDeliveryPolicy,
     pub merge_policy: super::super::GoalMergePolicy,
+    pub slice_execution: bool,
 }
 
 impl Default for CreateGoalOptions {
@@ -155,6 +158,7 @@ impl Default for CreateGoalOptions {
             max_agents: None,
             delivery_policy: super::super::GoalDeliveryPolicy::Local,
             merge_policy: super::super::GoalMergePolicy::Disabled,
+            slice_execution: false,
         }
     }
 }

@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
 
 use super::metadata::{GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryStatus};
+use super::persist::load_goal_task_delivery_records;
 use super::persist::update_goal_task_delivery_metadata;
 use crate::runtime::goal::state::GOAL_AGENT_EXECUTE_TASK_ID;
 use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
@@ -349,4 +350,289 @@ fn is_path_prefix(parent: &str, child: &str) -> bool {
     child
         .strip_prefix(parent)
         .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+/// Returns slices whose task is not Done and whose dependencies (including
+/// overlap serializations recorded in delivery metadata) are satisfied.
+pub async fn ready_delivery_slices(
+    goal_dir: &Path,
+    task_graph: &GoalTaskGraph,
+) -> Result<Vec<GoalDeliverySlice>> {
+    let records = load_goal_task_delivery_records(goal_dir).await?;
+    if records.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let tasks_by_id: HashMap<&str, &GoalTask> = task_graph
+        .tasks
+        .iter()
+        .map(|t| (t.id.as_str(), t))
+        .collect();
+
+    let mut ready = Vec::new();
+    for record in records {
+        let task = match tasks_by_id.get(record.task_id.as_str()) {
+            Some(t) => t,
+            None => continue,
+        };
+        if task.status == GoalTaskStatus::Done {
+            continue;
+        }
+
+        // Check slice-level dependencies (includes overlap serializations)
+        let slice_deps_satisfied = record.metadata.dependencies.iter().all(|dep_id| {
+            tasks_by_id
+                .get(dep_id.as_str())
+                .is_some_and(|t| t.status == GoalTaskStatus::Done)
+        });
+        if !slice_deps_satisfied {
+            continue;
+        }
+
+        // Also check task-level dependencies
+        let task_deps_satisfied = task.dependencies.iter().all(|dep_id| {
+            tasks_by_id
+                .get(dep_id.as_str())
+                .is_some_and(|t| t.status == GoalTaskStatus::Done)
+        });
+        if !task_deps_satisfied {
+            continue;
+        }
+
+        ready.push(GoalDeliverySlice {
+            slice_id: record
+                .metadata
+                .slice_id
+                .unwrap_or_else(|| record.task_id.clone()),
+            task_id: record.task_id,
+            owner_role: record.metadata.owner.unwrap_or_default(),
+            read_scope: record.metadata.read_scope,
+            write_scope: record.metadata.write_scope,
+            dependencies: record.metadata.dependencies,
+            branch_name: record.metadata.branch.unwrap_or_default(),
+            worktree_name: record.metadata.worktree_name.unwrap_or_default(),
+            worktree_path: record.metadata.worktree_path.unwrap_or_default(),
+            gates: record.metadata.gates,
+            review_needs: record.metadata.review_needs,
+        });
+    }
+
+    Ok(ready)
+}
+
+/// True when every delivery slice's task is Done. Returns false when no
+/// delivery slices exist (caller should fall back to traditional completion checks).
+pub async fn all_slices_done(goal_dir: &Path, task_graph: &GoalTaskGraph) -> Result<bool> {
+    let records = load_goal_task_delivery_records(goal_dir).await?;
+    if records.is_empty() {
+        return Ok(false);
+    }
+    let tasks_by_id: HashMap<&str, &GoalTask> = task_graph
+        .tasks
+        .iter()
+        .map(|t| (t.id.as_str(), t))
+        .collect();
+    Ok(records.iter().all(|record| {
+        tasks_by_id
+            .get(record.task_id.as_str())
+            .is_some_and(|task| task.status == GoalTaskStatus::Done)
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
+
+    fn task(id: &str, status: GoalTaskStatus, dependencies: &[&str]) -> GoalTask {
+        GoalTask {
+            id: id.to_string(),
+            title: format!("Task {id}"),
+            description: format!("Task {id} description"),
+            status,
+            owner_role: None,
+            completed_at: None,
+            evidence: Vec::new(),
+            retry_count: 0,
+            max_retries: 0,
+            lease_expires_at: None,
+            dependencies: dependencies.iter().map(|d| d.to_string()).collect(),
+            read_set: Vec::new(),
+            write_set: vec!["project files".to_string()],
+            risk: "low".to_string(),
+            acceptance: vec![format!("Task {id} acceptance")],
+        }
+    }
+
+    fn graph(tasks: Vec<GoalTask>) -> GoalTaskGraph {
+        GoalTaskGraph {
+            version: 1,
+            goal_id: "goal-test".to_string(),
+            generated_at: chrono::Utc::now(),
+            tasks,
+        }
+    }
+
+    #[tokio::test]
+    async fn all_slices_done_returns_false_when_no_records() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let graph = graph(vec![task("t1", GoalTaskStatus::Pending, &[])]);
+        let task_graph_json = serde_json::json!({
+            "version": 1,
+            "goal_id": "goal-test",
+            "generated_at": chrono::Utc::now(),
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "Task t1",
+                    "description": "desc",
+                    "status": "pending",
+                    "dependencies": [],
+                    "read_set": [],
+                    "write_set": ["project files"],
+                    "risk": "low",
+                    "acceptance": ["a"]
+                }
+            ]
+        });
+        tokio::fs::write(
+            tmp.path()
+                .join(crate::runtime::goal::state::GOAL_TASK_GRAPH_FILE),
+            serde_json::to_vec_pretty(&task_graph_json).expect("json"),
+        )
+        .await
+        .expect("write");
+
+        let done = all_slices_done(tmp.path(), &graph)
+            .await
+            .expect("all_slices_done");
+        assert!(!done, "no delivery records means not done");
+    }
+
+    #[tokio::test]
+    async fn all_slices_done_returns_true_when_all_tasks_done() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let graph = graph(vec![
+            task("t1", GoalTaskStatus::Done, &[]),
+            task("t2", GoalTaskStatus::Done, &["t1"]),
+        ]);
+        let task_graph_json = serde_json::json!({
+            "version": 1,
+            "goal_id": "goal-test",
+            "generated_at": chrono::Utc::now(),
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "Task t1",
+                    "description": "desc",
+                    "status": "done",
+                    "dependencies": [],
+                    "read_set": [],
+                    "write_set": ["project files"],
+                    "risk": "low",
+                    "acceptance": ["a"],
+                    "delivery": {
+                        "slice_id": "t1",
+                        "worktree_path": "/tmp/wt1",
+                        "status": "delivered"
+                    }
+                },
+                {
+                    "id": "t2",
+                    "title": "Task t2",
+                    "description": "desc",
+                    "status": "done",
+                    "dependencies": ["t1"],
+                    "read_set": [],
+                    "write_set": ["project files"],
+                    "risk": "low",
+                    "acceptance": ["a"],
+                    "delivery": {
+                        "slice_id": "t2",
+                        "worktree_path": "/tmp/wt2",
+                        "status": "delivered"
+                    }
+                }
+            ]
+        });
+        tokio::fs::write(
+            tmp.path()
+                .join(crate::runtime::goal::state::GOAL_TASK_GRAPH_FILE),
+            serde_json::to_vec_pretty(&task_graph_json).expect("json"),
+        )
+        .await
+        .expect("write");
+
+        let done = all_slices_done(tmp.path(), &graph)
+            .await
+            .expect("all_slices_done");
+        assert!(done, "all slice tasks are done");
+    }
+
+    #[tokio::test]
+    async fn ready_delivery_slices_filters_done_and_blocked_dependencies() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let graph = graph(vec![
+            task("t1", GoalTaskStatus::Done, &[]),
+            task("t2", GoalTaskStatus::Pending, &["t1"]),
+            task("t3", GoalTaskStatus::Pending, &["t1"]),
+        ]);
+        let task_graph_json = serde_json::json!({
+            "version": 1,
+            "goal_id": "goal-test",
+            "generated_at": chrono::Utc::now(),
+            "tasks": [
+                {
+                    "id": "t1",
+                    "title": "Task t1",
+                    "description": "desc",
+                    "status": "done",
+                    "dependencies": [],
+                    "read_set": [],
+                    "write_set": ["project files"],
+                    "risk": "low",
+                    "acceptance": ["a"],
+                    "delivery": { "slice_id": "t1", "worktree_path": "/tmp/wt1", "status": "delivered" }
+                },
+                {
+                    "id": "t2",
+                    "title": "Task t2",
+                    "description": "desc",
+                    "status": "pending",
+                    "dependencies": ["t1"],
+                    "read_set": [],
+                    "write_set": ["project files"],
+                    "risk": "low",
+                    "acceptance": ["a"],
+                    "delivery": { "slice_id": "t2", "worktree_path": "/tmp/wt2", "status": "planned", "dependencies": ["t1"] }
+                },
+                {
+                    "id": "t3",
+                    "title": "Task t3",
+                    "description": "desc",
+                    "status": "pending",
+                    "dependencies": ["t1"],
+                    "read_set": [],
+                    "write_set": ["project files"],
+                    "risk": "low",
+                    "acceptance": ["a"],
+                    "delivery": { "slice_id": "t3", "worktree_path": "/tmp/wt3", "status": "planned", "dependencies": ["t1", "t2"] }
+                }
+            ]
+        });
+        tokio::fs::write(
+            tmp.path()
+                .join(crate::runtime::goal::state::GOAL_TASK_GRAPH_FILE),
+            serde_json::to_vec_pretty(&task_graph_json).expect("json"),
+        )
+        .await
+        .expect("write");
+
+        let ready = ready_delivery_slices(tmp.path(), &graph)
+            .await
+            .expect("ready");
+        assert_eq!(ready.len(), 1, "only t2 is ready (t3 blocked on t2)");
+        assert_eq!(ready[0].task_id, "t2");
+        assert_eq!(ready[0].worktree_path, PathBuf::from("/tmp/wt2"));
+    }
 }

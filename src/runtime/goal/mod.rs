@@ -85,6 +85,7 @@ pub async fn plan_goal(goal: &str) -> anyhow::Result<GoalState> {
             max_agents: None,
             delivery_policy: GoalDeliveryPolicy::Local,
             merge_policy: GoalMergePolicy::Disabled,
+            slice_execution: false,
         },
     )
     .await

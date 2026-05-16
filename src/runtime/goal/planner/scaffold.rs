@@ -24,6 +24,7 @@ pub(crate) async fn create_goal_with_scaffold(
     let id = crate::runtime::goal::types::GoalId::generate();
     let id_string = id.to_string();
     let until_ready = options.until_ready;
+    let slice_execution = options.slice_execution;
     let budget = crate::runtime::goal::types::GoalBudget::from_options(options)?;
     let goal_dir = crate::runtime::goal::state::goals_dir().join(id.as_str());
     crate::runtime::config::ensure_private_dir(&goal_dir).await?;
@@ -60,6 +61,7 @@ pub(crate) async fn create_goal_with_scaffold(
         state_dir: goal_dir.clone(),
         cost_tracker_path: Some(goal_dir.join("cost.jsonl")),
         merge_policy: crate::runtime::goal::GoalMergePolicy::Disabled,
+        slice_execution,
     };
     FileSystemGoalStateStore::new().save(&state).await?;
 
