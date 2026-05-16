@@ -21,13 +21,13 @@
 
 <!-- Paste exact commands and result. Mark intentionally skipped gates. -->
 
-- [ ] `cargo fmt -- --check`
+- [ ] `cargo fmt --check`
 - [ ] `git diff --check`
-- [ ] `cargo check --all-targets`
+- [ ] `cargo check --all-targets --all-features`
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings`
 - [ ] `cargo test --all-features`
 - [ ] `cargo doc --no-deps`
-- [ ] `cargo deny --all-features check advisories licenses`
+- [ ] `cargo deny check advisories licenses sources --all-features`
 
 ## Risk
 

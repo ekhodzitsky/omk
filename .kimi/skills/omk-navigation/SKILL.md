@@ -21,7 +21,7 @@ Use this skill to reduce repository scanning and keep Kimi focused on the smalle
 
 - Use `explore` for read-only lookup, symbol mapping, and "where is this implemented?" questions.
 - Use `plan` when a change touches multiple areas, changes runtime behavior, or needs a test strategy.
-- Use `coder` only after the target files and verification commands are known.
+- Use `executor` only after the target files and verification commands are known.
 
 Keep `explore` read-only. Do not ask the implementation agent to rediscover the whole repository.
 

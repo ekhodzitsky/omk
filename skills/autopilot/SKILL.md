@@ -13,7 +13,7 @@ Execute tasks end-to-end with minimal ceremony.
 ## Phases
 
 1. **Expansion**: Broaden scope if it creates a better product. Challenge constraints.
-2. **Planning**: Create detailed implementation plan. Save to `.omk/plans/`.
+2. **Planning**: Create detailed implementation plan.
 3. **Execution**: Use Ralph + Ultrawork to implement. Parallelize where safe.
 4. **QA**: Run tests, lint, typecheck. Fix all errors.
 5. **Validation**: Architect + Security reviewer parallel validation.
@@ -22,4 +22,3 @@ Execute tasks end-to-end with minimal ceremony.
 ## State
 
 - Current phase tracked in `.omk/state/autopilot-state.json`
-- Plans stored in `.omk/plans/`

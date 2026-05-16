@@ -12,30 +12,20 @@ Never give up until the job is done and verified.
 
 ## Process
 
-1. Create `prd.json` with user stories and acceptance criteria.
-2. Implement stories one by one.
-3. After each story: run tests, verify criteria.
-4. If any story fails: fix, do not skip.
-5. After all stories pass: fresh reviewer verification (architect/critic).
+1. Define acceptance criteria from the task description.
+2. Implement changes incrementally.
+3. After each increment: run tests, verify criteria.
+4. If any check fails: fix, do not skip.
+5. After all checks pass: fresh reviewer verification (architect/security).
 6. Only then mark as complete.
 
-## PRD Format
+## State
 
-```json
-{
-  "user_stories": [
-    {
-      "id": "US-001",
-      "description": "...",
-      "acceptance_criteria": ["..."],
-      "status": "not_started|in_progress|implemented|verified|failed"
-    }
-  ]
-}
-```
+- Iteration count and evidence tracked in the run manifest.
+- Use `--max-iterations` to cap the verify/fix loop.
 
 ## Rules
 
-- Partial completion is failure. Every story must be verified.
+- Partial completion is failure. Every criterion must be verified.
 - If stuck after 3 attempts, escalate to architect.
 - Save state after every iteration.
