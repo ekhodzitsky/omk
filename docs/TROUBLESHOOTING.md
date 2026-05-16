@@ -33,6 +33,83 @@ The GitHub install script handles this automatically for common shells.
 
 ## Runtime Issues
 
+### Goal Recovery Workflow
+
+When a goal stops unexpectedly or blocks, use this ordered recovery path:
+
+**1. Inspect the current state:**
+
+```bash
+omk goal status latest
+omk goal show latest
+omk goal replay latest --format text
+```
+
+**2. If the goal is paused, resume it:**
+
+```bash
+omk goal resume latest
+```
+
+**3. If a slice PR failed CI or review:**
+
+Find the slice branch in the proof or task graph:
+
+```bash
+omk goal proof latest --format md
+# Look for slice branch names like omk/goal/.../...
+```
+
+Check out the branch, fix locally, commit and push. Then re-run review:
+
+```bash
+omk goal review latest
+```
+
+If the slice is irredeemable, reject it and plan a replacement:
+
+```bash
+omk goal reject latest --reason "slice N failed security review, needs rewrite"
+```
+
+**4. If the integrator branch has a merge conflict:**
+
+```bash
+omk goal proof latest --format md
+# Note conflict files from merge-conflict artifact
+```
+
+Manually rebase the conflicting slice branch onto the latest master, then:
+
+```bash
+omk goal verify latest   # re-run gates on integrator branch
+omk goal accept latest --summary "manual conflict resolution accepted"
+```
+
+**5. If the goal needs more budget:**
+
+```bash
+omk goal budget latest
+omk goal budget-add latest --time 2h --tokens 100000 --usd 5
+omk goal resume latest
+```
+
+**6. If workers are stale or the run looks hung:**
+
+```bash
+omk team cleanup --dry-run
+omk team cleanup --older-than 1
+omk goal resume latest
+```
+
+**7. If the goal is blocked on human oracle:**
+
+Refine the goal text with testable criteria and re-run:
+
+```bash
+omk goal run "Refined goal with explicit acceptance criteria" --until-ready
+```
+
 ### Kimi CLI not found
 
 Verify from the same shell where you run OMK:
