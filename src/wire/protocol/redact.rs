@@ -33,7 +33,7 @@ static SECRET_VALUE_PATTERNS: Lazy<std::result::Result<Vec<Regex>, regex::Error>
         patterns.iter().map(|&p| Regex::new(p)).collect()
     });
 
-fn scrub_secret_patterns(input: &str) -> Cow<'_, str> {
+pub fn scrub_secret_patterns(input: &str) -> Cow<'_, str> {
     let patterns = match SECRET_VALUE_PATTERNS.as_ref() {
         Ok(p) => p,
         Err(_) => return Cow::Borrowed(input),

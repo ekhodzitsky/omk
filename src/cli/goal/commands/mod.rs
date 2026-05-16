@@ -76,7 +76,11 @@ pub(super) async fn cmd_show(goal_id: &str, format: OutputFormat) -> Result<()> 
     let goal = crate::runtime::goal::resolve_goal(goal_id).await?;
 
     match format {
-        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&goal)?),
+        OutputFormat::Json => {
+            let value = serde_json::to_value(&goal)?;
+            let redacted = crate::wire::protocol::redact_wire_secrets(&value);
+            println!("{}", serde_json::to_string_pretty(&redacted)?);
+        }
         OutputFormat::Md => {
             println!("# Goal {}", goal.goal_id);
             println!();
@@ -140,7 +144,11 @@ pub(super) async fn cmd_proof(goal_id: &str, format: OutputFormat) -> Result<()>
     let proof = crate::runtime::goal::resolve_goal_proof(goal_id).await?;
 
     match format {
-        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&proof)?),
+        OutputFormat::Json => {
+            let value = serde_json::to_value(&proof)?;
+            let redacted = crate::wire::protocol::redact_wire_secrets(&value);
+            println!("{}", serde_json::to_string_pretty(&redacted)?);
+        }
         OutputFormat::Md => {
             println!("# Goal Proof {}", proof.goal_id);
             println!();
@@ -176,7 +184,11 @@ pub(super) async fn cmd_replay(goal_id: &str, format: OutputFormat) -> Result<()
     let replay = crate::runtime::goal::replay_goal(goal_id).await?;
 
     match format {
-        OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&replay)?),
+        OutputFormat::Json => {
+            let value = serde_json::to_value(&replay)?;
+            let redacted = crate::wire::protocol::redact_wire_secrets(&value);
+            println!("{}", serde_json::to_string_pretty(&redacted)?);
+        }
         OutputFormat::Md => {
             println!("# Goal Replay {}", replay.goal_id);
             println!();
