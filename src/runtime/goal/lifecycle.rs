@@ -461,10 +461,11 @@ async fn process_slice_delivery_and_review(
     if agent_execution_succeeded
         && state.delivery_policy != crate::runtime::goal::GoalDeliveryPolicy::Local
     {
+        let base_branch = super::control::resolve_base_branch(exec_project_dir).await;
         let delivery_options = super::delivery::SlicePrDeliveryOptions {
             policy: state.delivery_policy,
             dry_run: false,
-            base_branch: None,
+            base_branch,
         };
         let delivery =
             super::delivery::deliver_slice_pr(exec_project_dir, slice, state, delivery_options)
