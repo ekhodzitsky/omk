@@ -41,6 +41,7 @@ fn test_state(budget_time: Option<String>) -> GoalState {
         failure: None,
         state_dir: PathBuf::from("/tmp/goal-test-does-not-exist"),
         cost_tracker_path: None,
+        merge_policy: Default::default(),
     }
 }
 

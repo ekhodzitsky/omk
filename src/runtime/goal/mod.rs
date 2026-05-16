@@ -28,9 +28,10 @@ pub use budget::{
 };
 pub use control::{cancel_goal, pause_goal, resume_goal};
 pub use delivery::{
-    deliver_goal_open_pr_with_client, open_goal_pr_with_client, GoalDeliveryPolicy,
-    GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrDeliveryOptions,
+    deliver_goal_open_pr_with_client, open_goal_pr_with_client, poll_github_pr_checks,
+    GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrDeliveryOptions,
     GoalGithubPrDeliveryOutcome, GoalGithubPrMutation, GoalGithubPrOperation, GoalGithubPrRequest,
+    GoalMergePolicy,
 };
 pub use evidence::GoalGitEvidence;
 pub use lifecycle::{execute_goal, review_goal, verify_goal};
@@ -83,6 +84,7 @@ pub async fn plan_goal(goal: &str) -> anyhow::Result<GoalState> {
             budget_usd: None,
             max_agents: None,
             delivery_policy: GoalDeliveryPolicy::Local,
+            merge_policy: GoalMergePolicy::Disabled,
         },
     )
     .await

@@ -20,7 +20,9 @@ mod validate;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-pub(crate) use types::{map_open_pr_policy, OpenPrFormat, OpenPrPolicy, OutputFormat};
+pub(crate) use types::{
+    map_merge_policy, map_open_pr_policy, OpenPrFormat, OpenPrPolicy, OutputFormat,
+};
 use validate::{
     resolve_format, validate_budget_time, validate_decision_text, validate_goal_id,
     validate_goal_text, validate_optional_budget_tokens, validate_optional_budget_usd,
@@ -64,6 +66,9 @@ pub(crate) enum GoalCommands {
         /// Delivery policy: local, draft-pr, or auto-pr
         #[arg(long, value_enum, default_value = "local")]
         policy: types::OpenPrPolicy,
+        /// Merge policy: disabled, manual, or gated
+        #[arg(long, value_enum, default_value = "disabled")]
+        merge_policy: types::MergePolicy,
     },
     /// Create a durable plan/proof scaffold without execution intent
     #[command(after_help = help::GOAL_PLAN_AFTER_HELP)]
@@ -253,6 +258,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             budget_usd,
             max_agents,
             policy,
+            merge_policy,
         } => {
             let goal = validate_goal_text(&goal)?;
             let budget_time = validate_budget_time(budget_time.as_deref(), "--budget-time", false)?;
@@ -268,6 +274,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
                     budget_usd,
                     max_agents,
                     delivery_policy: map_open_pr_policy(policy),
+                    merge_policy: map_merge_policy(merge_policy),
                 },
             )
             .await
