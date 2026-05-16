@@ -25,3 +25,6 @@ Cargo.lock
 .dolt/
 *.db
 .beads-credential-key
+
+# Local module contract draft
+/MODULE_CONTRACT_PATTERN.ru.md
