@@ -346,6 +346,7 @@ omk goal execute [goal-id|latest]
 omk goal review [goal-id|latest]
 omk goal accept [goal-id|latest] --summary <text>
 omk goal reject [goal-id|latest] --reason <text>
+omk goal merge [goal-id|latest]
 ```
 
 Future command extensions are defined by the end-to-end delivery contract.

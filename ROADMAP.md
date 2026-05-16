@@ -46,7 +46,7 @@ Status: current beta MVP.
 
 Target: make goals durable and inspectable.
 
-- Add `.omk/goals/<goal-id>/` state layout.
+- Add `<omk-state-dir>/goals/<goal-id>/` state layout (XDG: `~/.local/state/omk/goals/`, legacy: `~/.omk/state/goals/`).
 - Add `omk goal run/status/show/list/proof/replay/budget/verify/execute/review/pause/resume/cancel`.
 - Persist normalized goal, constraints, budgets, and terminal criteria.
 - Emit goal lifecycle events.

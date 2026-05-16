@@ -199,8 +199,8 @@ real-world validation before they are considered fully closed:
       end-to-end validation with real GitHub PRs.
 - [ ] Document manual recovery for failed PR creation, failed CI, review
       blockers, merge conflicts, and partial acceptance.
-- [ ] Concurrent slice execution. Slices are currently serialized; overlapping
-      write scopes already block dispatch, but parallelism is deferred.
+- [x] Concurrent slice execution with non-overlapping write scopes in isolated
+      git worktrees. Overlapping scopes are still serialized.
 
 ## Phase 13 - Long-Horizon Reliability
 

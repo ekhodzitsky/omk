@@ -17,6 +17,10 @@ name = "omk"
 path = "src/lib.rs"
 
 [[bin]]
+name = "validate-contracts"
+path = "src/bin/validate-contracts.rs"
+
+[[bin]]
 name = "omk"
 path = "src/main.rs"
 

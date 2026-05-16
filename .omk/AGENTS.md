@@ -111,7 +111,7 @@ The code anchor is `src/wire/protocol.rs::KIMI_WIRE_PROTOCOL_VERSION`; update th
 // Client → Agent
 {"jsonrpc": "2.0", "method": "initialize", "id": "1", "params": {
   "protocol_version": "1.9",
-  "client": {"name": "omk", "version": "0.3.1"},
+  "client": {"name": "omk", "version": "0.4.0"},
   "capabilities": {"supports_question": true, "supports_plan_mode": true},
   "hooks": [
     {"id": "pre-tool", "event": "PreToolUse", "matcher": "Shell", "timeout": 30}
@@ -204,7 +204,7 @@ Experimental Rust implementation: `MoonshotAI/kimi-agent-rs`
 
 - [x] Wire protocol type definitions (`src/wire/protocol.rs`)
 - [x] Wire client scaffold (`src/wire/client.rs`)
-- [x] Wire-backed team runner (spawn workers via wire instead of tmux)
+- [x] Wire-backed team runner (spawn workers via wire)
 - [x] Event bridge (wire events -> OMK events.jsonl)
 - [ ] Approval proxy (OMK approves/rejects on behalf of user)
 - [ ] Hook integration (OMK hooks via wire HookRequest)

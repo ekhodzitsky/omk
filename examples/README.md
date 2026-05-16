@@ -2,16 +2,16 @@
 
 ## Kimi Team Run
 
-Run 3 coder workers to fix TypeScript errors:
+Run 3 executor workers to fix TypeScript errors:
 
 ```bash
-omk team run 3:coder "fix all TypeScript errors in src/"
+omk team run 3:executor "fix all TypeScript errors in src/"
 ```
 
 Check status:
 
 ```bash
-omk team status coder-abc123
+omk team status executor-abc123
 ```
 
 Shut down when done:
@@ -37,7 +37,7 @@ omk autopilot "build a Rust REST API for task management with CRUD endpoints"
 With Ralph persistence:
 
 ```bash
-omk autopilot --ralph "refactor the authentication module"
+omk ralph "refactor the authentication module"
 ```
 
 ## Ralph Mode
@@ -53,7 +53,7 @@ omk ralph "migrate from Express to Fastify"
 Get a second opinion from Kimi:
 
 ```bash
-omk ask kimi "review my database schema design"
+omk ask "review my database schema design"
 ```
 
 Multi-provider advisor flows are later. Keep the examples Kimi-first.

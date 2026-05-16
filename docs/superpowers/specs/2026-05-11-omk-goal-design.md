@@ -111,7 +111,7 @@ Responsibilities:
 
 ### Goal State Store
 
-Persists durable state under `.omk/goals/<goal-id>/`.
+Persists durable state under `<omk-state-dir>/goals/<goal-id>/` (XDG: `~/.local/state/omk/goals/`, legacy: `~/.omk/state/goals/`).
 
 Required files:
 
@@ -214,7 +214,7 @@ Runs required gates and stores evidence.
 Default Rust gates:
 
 ```bash
-cargo fmt -- --check
+cargo fmt --check
 cargo check --all-targets
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features

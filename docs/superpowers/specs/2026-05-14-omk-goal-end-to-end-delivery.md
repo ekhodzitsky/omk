@@ -83,7 +83,7 @@ Recommended policy shape:
 ```bash
 omk goal run "<goal>" \
   --until-ready \
-  --delivery auto-pr \
+  --policy auto-pr \
   --merge-policy gated \
   --max-agents 6
 ```

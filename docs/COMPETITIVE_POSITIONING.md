@@ -107,7 +107,7 @@ omk goal run "fix this repository until tests and proof pass" --until-ready
 
 Minimum competitive requirements:
 
-- create durable goal state under `.omk/goals/<goal-id>/`;
+- create durable goal state under `<omk-state-dir>/goals/<goal-id>/` (XDG: `~/.local/state/omk/goals/`, legacy: `~/.omk/state/goals/`);
 - write PRD, technical plan, test spec, and task graph;
 - execute bounded tasks through current Wire/team primitives;
 - run configured gates;

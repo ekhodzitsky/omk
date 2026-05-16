@@ -52,14 +52,14 @@ omk goal run "Build a tiny Rust CLI with tests and proof evidence" --until-ready
 
 # Or run with concurrent slices in isolated worktrees
 omk goal run "Add OAuth + rate-limiting to the API" \
-  --until-ready --slice-execution --delivery draft-pr --merge-policy gated
+  --until-ready --slice-execution --policy draft-pr --merge-policy gated
 
 # Inspect what happened
 omk goal proof latest --format md
 omk goal replay latest
 ```
 
-`--slice-execution` decomposes the goal into independent features, runs each in its own git worktree and branch, opens per-slice PRs, runs review/fix loops, and finally creates an integrator PR with reran gates. The CLI renders a live narrative with step icons so you can watch the orchestrator work.
+`--slice-execution` decomposes the goal into independent features and runs each in its own git worktree and branch. Combine it with `--policy draft-pr` or `--policy auto-pr` to open per-slice PRs, run review/fix loops, and finally create an integrator PR with reran gates. The CLI renders a live narrative with step icons so you can watch the orchestrator work.
 
 ## What You Get
 
