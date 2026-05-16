@@ -87,6 +87,7 @@ async fn setup_goal_state(budget_time: Option<String>) -> (GoalState, GoalTaskGr
         artifacts: vec![],
         failure: None,
         state_dir: state_dir.clone(),
+        cost_tracker_path: None,
     };
     FileSystemGoalStateStore::new().save(&state).await.unwrap();
 

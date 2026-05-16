@@ -106,6 +106,7 @@ fn progress_snapshot_from_goal_state_keeps_phase_status_and_proof_path() {
         }],
         failure: None,
         state_dir: state_dir.clone(),
+        cost_tracker_path: None,
     };
 
     let snapshot = GoalProgressSnapshot::from_goal_state(&state);

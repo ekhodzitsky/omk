@@ -22,6 +22,11 @@ use super::state::{
     GoalState, GoalStateStore, GoalStatus,
 };
 
+use crate::cost::estimator::{CostEstimate, PricingTier};
+use crate::cost::file_sink::JsonFileCostSink;
+use crate::cost::tracker::CostTracker;
+use crate::cost::types::SessionCost;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoalBudgetCheckpoint {
     pub version: u32,
@@ -71,6 +76,12 @@ pub struct GoalBudgetReport {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest: Option<GoalBudgetCheckpoint>,
     pub checkpoints: Vec<GoalBudgetCheckpoint>,
+    #[serde(default)]
+    pub spent_usd: f64,
+    #[serde(default)]
+    pub spent_tokens: u64,
+    #[serde(default)]
+    pub spent_seconds: u64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -93,6 +104,25 @@ pub async fn goal_budget(goal_id: &str) -> Result<GoalBudgetReport> {
     let state = super::resolve_goal(goal_id).await?;
     let checkpoints = read_budget_checkpoints(&state).await?;
     let usage = collect_goal_budget_usage(&state).await;
+
+    let (spent_usd, spent_tokens, spent_seconds) =
+        if let Ok(tracker) = init_goal_cost_tracker(&state) {
+            match tracker.load().await {
+                Ok(costs) => {
+                    let spent_usd = costs.iter().map(|c| c.estimate.estimated_usd).sum();
+                    let spent_tokens = costs
+                        .iter()
+                        .map(|c| c.estimate.input_tokens + c.estimate.output_tokens)
+                        .sum();
+                    let spent_seconds = costs.iter().map(|c| c.estimate.duration_secs).sum();
+                    (spent_usd, spent_tokens, spent_seconds)
+                }
+                Err(_) => (0.0, 0, 0),
+            }
+        } else {
+            (0.0, 0, 0)
+        };
+
     Ok(GoalBudgetReport {
         version: 1,
         goal_id: state.goal_id,
@@ -110,6 +140,9 @@ pub async fn goal_budget(goal_id: &str) -> Result<GoalBudgetReport> {
         remaining_budget_usd: remaining_usd(state.budget_usd, usage.estimated_cost_usd),
         latest: checkpoints.last().cloned(),
         checkpoints,
+        spent_usd,
+        spent_tokens,
+        spent_seconds,
     })
 }
 
@@ -229,6 +262,14 @@ pub async fn add_goal_budget_limits(goal_id: &str, add: GoalBudgetAdd) -> Result
     Ok(state)
 }
 
+pub(crate) fn init_goal_cost_tracker(state: &GoalState) -> Result<CostTracker<JsonFileCostSink>> {
+    let path = state
+        .cost_tracker_path
+        .clone()
+        .unwrap_or_else(|| state.state_dir.join("cost.jsonl"));
+    Ok(CostTracker::new(JsonFileCostSink::new(path)))
+}
+
 pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str) -> Result<()> {
     let now = Utc::now();
     let total_budget_secs = state
@@ -241,6 +282,26 @@ pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str)
         .max(0) as u64;
 
     let usage = collect_goal_budget_usage(state).await;
+
+    if let Ok(tracker) = init_goal_cost_tracker(state) {
+        let cost = SessionCost {
+            session_type: "budget_check".to_string(),
+            name: action.to_string(),
+            started_at: now,
+            ended_at: Some(now),
+            estimate: CostEstimate {
+                input_tokens: usage.used_tokens,
+                output_tokens: 0,
+                duration_secs: elapsed_since_created_secs,
+                worker_count: 1,
+                estimated_usd: usage.estimated_cost_usd,
+                tier: PricingTier::Standard,
+            },
+            actual_usd: None,
+        };
+        let _ = tracker.record(cost).await;
+    }
+
     let Some(exhaustion) =
         first_budget_exhaustion(state, total_budget_secs, elapsed_since_created_secs, usage)
     else {

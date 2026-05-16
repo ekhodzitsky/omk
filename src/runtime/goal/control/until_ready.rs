@@ -8,7 +8,9 @@ use crate::runtime::goal::delivery::{
     GoalGithubPrDeliveryOptions,
 };
 use crate::runtime::goal::proof::GoalProof;
-use crate::runtime::goal::state::{self, FileSystemGoalStateStore, GoalPhase, GoalStateStore, GoalStatus};
+use crate::runtime::goal::state::{
+    self, FileSystemGoalStateStore, GoalPhase, GoalStateStore, GoalStatus,
+};
 use crate::runtime::goal::task_graph::{goal_task_done, GoalTaskGraph, GoalTaskStatus};
 use crate::runtime::goal::types::{
     GoalControllerStep, GoalControllerStepKind, GoalRunUntilReadyOutcome,
@@ -345,8 +347,7 @@ async fn finalize_until_ready_delivery(
     FileSystemGoalStateStore::new().save(&state).await?;
 
     proof.status = GoalStatus::Ready;
-    proof.readiness =
-        "ready: integration and oracle evidence passed, GitHub PR merged".to_string();
+    proof.readiness = "ready: integration and oracle evidence passed, GitHub PR merged".to_string();
     proof.summary = format!(
         "Goal '{}' is proof-backed ready: gates, execution, review, and integration evidence passed.",
         state.normalized_goal

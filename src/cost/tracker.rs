@@ -25,6 +25,10 @@ impl<S: CostSink> CostTracker<S> {
         Ok(())
     }
 
+    pub async fn load(&self) -> Result<Vec<SessionCost>> {
+        self.sink.load().await
+    }
+
     pub async fn total_estimated(&self) -> Result<f64> {
         let costs = self.sink.load().await?;
         Ok(costs.iter().map(|c| c.estimate.estimated_usd).sum())

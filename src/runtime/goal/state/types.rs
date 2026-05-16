@@ -112,6 +112,8 @@ pub struct GoalState {
     pub budget_usd: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_agents: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_tracker_path: Option<PathBuf>,
     #[serde(default)]
     pub terminal_criteria: GoalTerminalCriteria,
     #[serde(default)]
