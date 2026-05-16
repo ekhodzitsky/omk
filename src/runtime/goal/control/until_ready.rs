@@ -741,8 +741,19 @@ async fn finalize_slice_integrator(
                     )
                     .await;
                 }
-                client.merge_pr(url).await?;
+                if let Err(e) = client.merge_pr(url).await {
+                    return finalize_until_ready_blocker(
+                        goal_id,
+                        steps,
+                        UntilReadyBlocker::policy(format!(
+                            "gated merge blocked: PR merge failed: {e}"
+                        )),
+                    )
+                    .await;
+                }
             }
+
+            cleanup_goal_worktrees(&state, project_dir).await;
 
             state.status = GoalStatus::Ready;
             state.phase = GoalPhase::Proof;
@@ -886,9 +897,105 @@ async fn merge_branch_into_integrator(
     )
     .await?;
     if output.status.success() {
+        return Ok(());
+    }
+
+    // Auto-rebase fallback: rebase the slice branch onto integrator, then retry merge.
+    let rebase = git_command(
+        repo_dir,
+        vec![
+            std::ffi::OsString::from("checkout"),
+            std::ffi::OsString::from(branch),
+        ],
+    )
+    .await?;
+    if !rebase.status.success() {
+        anyhow::bail!(
+            "git merge failed and rebase checkout failed: {}",
+            output_stderr(&output)
+        );
+    }
+    let rebase = git_command(
+        repo_dir,
+        vec![
+            std::ffi::OsString::from("rebase"),
+            std::ffi::OsString::from(integrator_branch),
+        ],
+    )
+    .await?;
+    if !rebase.status.success() {
+        // Abort rebase to leave repo clean
+        let _ = git_command(
+            repo_dir,
+            vec![
+                std::ffi::OsString::from("rebase"),
+                std::ffi::OsString::from("--abort"),
+            ],
+        )
+        .await;
+        let _ = git_command(
+            repo_dir,
+            vec![
+                std::ffi::OsString::from("checkout"),
+                std::ffi::OsString::from(integrator_branch),
+            ],
+        )
+        .await;
+        anyhow::bail!(
+            "git merge failed and auto-rebase failed: {}",
+            output_stderr(&output)
+        );
+    }
+
+    // Push rebased branch
+    let push = git_command(
+        repo_dir,
+        vec![
+            std::ffi::OsString::from("push"),
+            std::ffi::OsString::from("-f"),
+            std::ffi::OsString::from("origin"),
+            std::ffi::OsString::from(branch),
+        ],
+    )
+    .await?;
+    if !push.status.success() {
+        anyhow::bail!(
+            "git merge failed and rebase push failed: {}",
+            output_stderr(&push)
+        );
+    }
+
+    // Retry merge
+    let checkout = git_command(
+        repo_dir,
+        vec![
+            std::ffi::OsString::from("checkout"),
+            std::ffi::OsString::from(integrator_branch),
+        ],
+    )
+    .await?;
+    if !checkout.status.success() {
+        anyhow::bail!(
+            "git checkout integrator failed after rebase: {}",
+            output_stderr(&checkout)
+        );
+    }
+    let output = git_command(
+        repo_dir,
+        vec![
+            std::ffi::OsString::from("merge"),
+            std::ffi::OsString::from(branch),
+            std::ffi::OsString::from("--no-edit"),
+        ],
+    )
+    .await?;
+    if output.status.success() {
         Ok(())
     } else {
-        anyhow::bail!("git merge failed: {}", output_stderr(&output))
+        anyhow::bail!(
+            "git merge failed even after auto-rebase: {}",
+            output_stderr(&output)
+        );
     }
 }
 
@@ -1101,8 +1208,19 @@ async fn finalize_until_ready_delivery(
                     )
                     .await;
                 }
-                client.merge_pr(url).await?;
+                if let Err(e) = client.merge_pr(url).await {
+                    return finalize_until_ready_blocker(
+                        goal_id,
+                        steps,
+                        UntilReadyBlocker::policy(format!(
+                            "gated merge blocked: PR merge failed: {e}"
+                        )),
+                    )
+                    .await;
+                }
             }
+
+            cleanup_goal_worktrees(&state, project_dir).await;
 
             state.status = GoalStatus::Ready;
             state.phase = GoalPhase::Proof;
