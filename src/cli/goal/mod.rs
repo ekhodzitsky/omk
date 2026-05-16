@@ -61,6 +61,9 @@ pub(crate) enum GoalCommands {
         /// Maximum number of agents the controller may use (must be > 0)
         #[arg(long, value_name = "N")]
         max_agents: Option<usize>,
+        /// Delivery policy: local, draft-pr, or auto-pr
+        #[arg(long, value_enum, default_value = "local")]
+        policy: types::OpenPrPolicy,
     },
     /// Create a durable plan/proof scaffold without execution intent
     #[command(after_help = help::GOAL_PLAN_AFTER_HELP)]
@@ -231,6 +234,13 @@ pub(crate) enum GoalCommands {
         #[arg(default_value = "latest", value_name = "GOAL_ID")]
         goal_id: String,
     },
+    /// Merge the GitHub PR for a ready goal
+    #[command(after_help = help::GOAL_MERGE_AFTER_HELP)]
+    Merge {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest", value_name = "GOAL_ID")]
+        goal_id: String,
+    },
 }
 
 pub(crate) async fn run(args: Args) -> Result<()> {
@@ -242,6 +252,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             budget_tokens,
             budget_usd,
             max_agents,
+            policy,
         } => {
             let goal = validate_goal_text(&goal)?;
             let budget_time = validate_budget_time(budget_time.as_deref(), "--budget-time", false)?;
@@ -256,6 +267,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
                     budget_tokens,
                     budget_usd,
                     max_agents,
+                    delivery_policy: map_open_pr_policy(policy),
                 },
             )
             .await
@@ -366,6 +378,10 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         GoalCommands::Cancel { goal_id } => {
             let goal_id = validate_goal_id(&goal_id)?;
             commands::cmd_cancel(goal_id).await
+        }
+        GoalCommands::Merge { goal_id } => {
+            let goal_id = validate_goal_id(&goal_id)?;
+            commands::cmd_merge(goal_id).await
         }
     }
 }

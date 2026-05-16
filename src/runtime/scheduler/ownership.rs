@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use super::task::{Task, TaskId};
 
 /// Tracks which worker owns which file paths to prevent silent overwrites.
+#[derive(Debug)]
 pub struct OwnershipMap {
     /// path -> (owner_worker, task_id)
     writes: HashMap<String, (String, TaskId)>,

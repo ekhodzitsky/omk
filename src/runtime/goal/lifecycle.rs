@@ -12,6 +12,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     let mut state = super::resolve_goal(goal_id).await?;
     ensure_goal_can_continue(&state)?;
     budget::ensure_budget_available(&mut state, "goal verify").await?;
+    let phase_start = tokio::time::Instant::now();
     let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
     let gate_config = crate::runtime::gates::load_or_detect_gates(project_dir).await;
     let gate_artifacts = state
@@ -51,6 +52,26 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     append_proof_event(&state, &proof).await?;
     budget::append_budget_checkpoint(&state, "verify_completed").await?;
 
+    let phase_duration = tokio::time::Instant::now() - phase_start;
+    if let Ok(tracker) = budget::init_goal_cost_tracker(&state) {
+        let cost = crate::cost::types::SessionCost {
+            session_type: "verify".to_string(),
+            name: "goal verify".to_string(),
+            started_at: Utc::now(),
+            ended_at: Some(Utc::now()),
+            estimate: crate::cost::estimator::CostEstimate {
+                input_tokens: 0,
+                output_tokens: 0,
+                duration_secs: phase_duration.as_secs(),
+                worker_count: 1,
+                estimated_usd: 0.0,
+                tier: crate::cost::estimator::PricingTier::Standard,
+            },
+            actual_usd: None,
+        };
+        let _ = tracker.record(cost).await;
+    }
+
     Ok(proof)
 }
 
@@ -67,6 +88,7 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher>(
     let mut state = super::resolve_goal(goal_id).await?;
     ensure_goal_can_continue(&state)?;
     budget::ensure_budget_available(&mut state, "goal execute").await?;
+    let phase_start = tokio::time::Instant::now();
     state.status = GoalStatus::Running;
     state.phase = GoalPhase::Execution;
     state.updated_at = Utc::now();
@@ -145,7 +167,7 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher>(
     )
     .await?;
 
-    build_and_persist_execution_proof(
+    let result = build_and_persist_execution_proof(
         &state,
         &task_graph,
         proof_gates,
@@ -154,7 +176,31 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher>(
         post_mutation_gates_ran,
         now,
     )
-    .await
+    .await;
+
+    let phase_duration = tokio::time::Instant::now() - phase_start;
+    if let Ok(state) = super::resolve_goal(goal_id).await {
+        if let Ok(tracker) = budget::init_goal_cost_tracker(&state) {
+            let cost = crate::cost::types::SessionCost {
+                session_type: "execute".to_string(),
+                name: "goal execute".to_string(),
+                started_at: Utc::now(),
+                ended_at: Some(Utc::now()),
+                estimate: crate::cost::estimator::CostEstimate {
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    duration_secs: phase_duration.as_secs(),
+                    worker_count: 1,
+                    estimated_usd: 0.0,
+                    tier: crate::cost::estimator::PricingTier::Standard,
+                },
+                actual_usd: None,
+            };
+            let _ = tracker.record(cost).await;
+        }
+    }
+
+    result
 }
 
 async fn run_post_mutation_cycle(
@@ -264,6 +310,7 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     let mut state = super::resolve_goal(goal_id).await?;
     ensure_goal_can_continue(&state)?;
     budget::ensure_budget_available(&mut state, "goal review").await?;
+    let phase_start = tokio::time::Instant::now();
     state.status = GoalStatus::Running;
     state.phase = GoalPhase::VerificationDesign;
     state.updated_at = Utc::now();
@@ -326,6 +373,26 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     proof::write_json_artifact(&state.state_dir.join(state::GOAL_PROOF_FILE), &proof).await?;
     append_proof_event(&state, &proof).await?;
     budget::append_budget_checkpoint(&state, "review_completed").await?;
+
+    let phase_duration = tokio::time::Instant::now() - phase_start;
+    if let Ok(tracker) = budget::init_goal_cost_tracker(&state) {
+        let cost = crate::cost::types::SessionCost {
+            session_type: "review".to_string(),
+            name: "goal review".to_string(),
+            started_at: Utc::now(),
+            ended_at: Some(Utc::now()),
+            estimate: crate::cost::estimator::CostEstimate {
+                input_tokens: 0,
+                output_tokens: 0,
+                duration_secs: phase_duration.as_secs(),
+                worker_count: 1,
+                estimated_usd: 0.0,
+                tier: crate::cost::estimator::PricingTier::Standard,
+            },
+            actual_usd: None,
+        };
+        let _ = tracker.record(cost).await;
+    }
 
     Ok(proof)
 }

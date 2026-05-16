@@ -16,6 +16,7 @@ mod render;
 
 use guard::RawModeGuard;
 
+#[derive(Debug)]
 pub struct HudTui {
     hud_state: HudState,
     event_stream: EventStream,

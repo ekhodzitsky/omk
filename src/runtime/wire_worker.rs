@@ -17,6 +17,7 @@ const WIRE_TURN_TIMEOUT_SECS_ENV: &str = "OMK_WIRE_TURN_TIMEOUT_SECS";
 /// Adapts a worker spec to the Kimi Wire Protocol.
 /// Runs as a background task: polls inbox, spawns `kimi --wire`, processes messages,
 /// writes results to outbox, and maintains heartbeat.
+#[derive(Debug)]
 pub struct WireWorkerAdapter {
     spec: WorkerSpec,
     run_id: RunId,

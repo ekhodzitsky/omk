@@ -24,7 +24,7 @@ const WRITER_CHANNEL_CAPACITY: usize = 1024;
 ///
 /// The actor task lives until every cloned sender is dropped; that drains
 /// remaining queued messages, flushes the file, and exits naturally.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct JsonlWriter {
     tx: mpsc::Sender<WriterMsg>,
 }
@@ -112,7 +112,7 @@ async fn writer_task(path: PathBuf, mut rx: mpsc::Receiver<WriterMsg>) {
 ///
 /// Internally backed by a [`JsonlWriter`] actor so concurrent appends across
 /// any number of clones are guaranteed to be line-atomic and ordered.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct EventWriter {
     inner: JsonlWriter,
 }

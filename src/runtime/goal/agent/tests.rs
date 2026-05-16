@@ -21,6 +21,7 @@ fn state() -> GoalState {
         artifacts: Vec::new(),
         failure: None,
         state_dir: std::path::PathBuf::from("/tmp/goal-test"),
+        cost_tracker_path: None,
     }
 }
 

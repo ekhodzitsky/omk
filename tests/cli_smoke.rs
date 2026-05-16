@@ -390,6 +390,15 @@ fn test_goal_open_pr_help_lists_policy_and_base_branch() {
         .stdout(predicate::str::contains("--base-branch"));
 }
 
+#[test]
+fn test_goal_merge_help() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.arg("goal").arg("merge").arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Merge the GitHub PR"));
+}
+
 #[path = "fixtures/goal_end_to_end_cli_smoke_basic.rs"]
 mod goal_end_to_end_cli_smoke_basic;
 #[path = "fixtures/goal_end_to_end_cli_smoke_recovery.rs"]

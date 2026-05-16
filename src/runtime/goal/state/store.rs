@@ -26,6 +26,7 @@ pub trait GoalStateStore: Send + Sync {
 }
 
 /// Production implementation backed by the local filesystem.
+#[derive(Debug)]
 pub struct FileSystemGoalStateStore;
 
 impl FileSystemGoalStateStore {

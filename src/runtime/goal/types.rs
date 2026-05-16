@@ -103,6 +103,7 @@ pub(crate) enum GoalControllerStepKind {
     Verify,
     Execute,
     Review,
+    Deliver,
     Blocked,
 }
 
@@ -113,6 +114,7 @@ impl GoalControllerStepKind {
             Self::Verify => "verify",
             Self::Execute => "execute",
             Self::Review => "review",
+            Self::Deliver => "deliver",
             Self::Blocked => "blocked",
         }
     }

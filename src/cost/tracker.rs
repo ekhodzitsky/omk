@@ -8,6 +8,7 @@ use super::types::SessionCost;
 /// `CostTracker` knows nothing about files or I/O. All storage operations
 /// are delegated to the generic `S: CostSink` implementation, making the
 /// tracker fully testable with an in-memory backend.
+#[derive(Debug)]
 pub struct CostTracker<S: CostSink> {
     sink: S,
 }
@@ -22,6 +23,10 @@ impl<S: CostSink> CostTracker<S> {
         costs.push(cost);
         self.sink.save(&costs).await?;
         Ok(())
+    }
+
+    pub async fn load(&self) -> Result<Vec<SessionCost>> {
+        self.sink.load().await
     }
 
     pub async fn total_estimated(&self) -> Result<f64> {

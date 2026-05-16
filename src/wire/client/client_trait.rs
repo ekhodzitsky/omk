@@ -132,6 +132,7 @@ pub trait WireClient {
 ///
 /// Holds an internal queue of [`WireMessage`]s that `read_message` drains.
 /// Tests inject messages via [`InMemoryWireClient::inject`].
+#[derive(Debug)]
 pub struct InMemoryWireClient {
     incoming: Mutex<VecDeque<WireMessage>>,
     pending: Mutex<VecDeque<WireMessage>>,

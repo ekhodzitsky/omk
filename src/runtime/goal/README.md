@@ -141,6 +141,102 @@ surface:
       kind: unit-test
       target: runtime::goal::queries::tests
       command: cargo test --lib runtime::goal::queries
+  - name: GoalGithubPrClient
+    kind: trait
+    visibility: pub
+    contract: Trait for GitHub PR operations (create, update, merge) used by goal delivery. Enables testable PR delivery with mock implementations.
+    proof:
+      kind: unit-test
+      target: runtime::goal::delivery
+      command: cargo test --lib runtime::goal::delivery
+  - name: GoalGithubPrCommandClient
+    kind: struct
+    visibility: pub
+    contract: Production implementation of GoalGithubPrClient using the gh CLI command with a configurable timeout.
+    proof:
+      kind: unit-test
+      target: runtime::goal::delivery
+      command: cargo test --lib runtime::goal::delivery
+  - name: GoalDeliveryPolicy
+    kind: enum
+    visibility: pub
+    contract: Determines how a completed goal is delivered (local, draft-pr, or auto-pr).
+    proof:
+      kind: unit-test
+      target: runtime::goal::delivery
+      command: cargo test --lib runtime::goal::delivery
+  - name: GoalAgentTaskProposal
+    kind: struct
+    visibility: pub
+    contract: Proposed agent task with policy validation for a goal slice.
+    proof:
+      kind: integration-test
+      target: goal_test
+      command: cargo test --test goal_test
+  - name: GoalGitEvidence
+    kind: struct
+    visibility: pub
+    contract: Git evidence snapshot captured during goal execution (changed files, diff stats).
+    proof:
+      kind: integration-test
+      target: goal_test
+      command: cargo test --test goal_test
+  - name: GoalOpenPrDraft
+    kind: struct
+    visibility: pub
+    contract: Rendered PR draft (title, body, head branch) ready for GitHub delivery.
+    proof:
+      kind: integration-test
+      target: goal_test
+      command: cargo test --test goal_test
+  - name: GoalKind
+    kind: enum
+    visibility: pub
+    contract: Classification of the goal type (feature, fix, refactor, docs, etc.) used for planning and verification.
+    proof:
+      kind: integration-test
+      target: goal_test
+      command: cargo test --test goal_test
+  - name: GoalProgressSnapshot
+    kind: struct
+    visibility: pub
+    contract: Point-in-time progress summary with lines and current phase for HUD rendering.
+    proof:
+      kind: integration-test
+      target: goal_test
+      command: cargo test --test goal_test
+  - name: GoalReplay
+    kind: struct
+    visibility: pub
+    contract: Reconstructable replay log of a goal execution for debugging.
+    proof:
+      kind: integration-test
+      target: goal_test
+      command: cargo test --test goal_test
+  - name: CreateGoalOptions
+    kind: struct
+    visibility: pub
+    contract: Options bag for create_goal (budgets, delivery policy, until_ready flag).
+    proof:
+      kind: integration-test
+      target: goal_test
+      command: cargo test --test goal_test
+  - name: GoalBudget
+    kind: struct
+    visibility: pub
+    contract: Budget limits (time, tokens, USD) attached to a goal.
+    proof:
+      kind: integration-test
+      target: goal_test
+      command: cargo test --test goal_test
+  - name: GoalId
+    kind: struct
+    visibility: pub
+    contract: Unique goal identifier.
+    proof:
+      kind: integration-test
+      target: goal_test
+      command: cargo test --test goal_test
 dependencies:
   internal:
     - module: runtime::atomic
@@ -235,21 +331,24 @@ verification:
 | `queries.rs` | Query functions: `list_goals`, `resolve_goal`, `resolve_goal_proof`. |
 | `planner.rs` | `create_goal_with_scaffold` — builds initial goal + task graph. |
 | `lifecycle.rs` | Orchestrates execute → verify → review pipeline. |
-| `state/` | `GoalState` struct, persistence, constants. |
+| `state/` | `GoalState` struct, `GoalStateStore` trait, persistence, constants. |
 | `task_graph/` | `GoalTaskGraph`, delivery records, slice planning. |
 | `dispatch/` | Agent task wave execution. `mod.rs` and `tasks/mod.rs` are storefronts. |
 | `dispatch/tasks/` | Task payload builders, scheduler, results reader, wave runner. |
 | `agent.rs` | Task policy, proposals, validation. |
 | `budget.rs` | Budget tracking and evaluation. |
-| `evidence.rs` | Git evidence detection, mutation snapshots. |
-| `proof.rs` | Proof artifact loading, reconciliation, scaffold building. |
 | `control.rs` | Pause/resume/cancel operations. |
-| `delivery.rs` | PR delivery with GitHub client. |
+| `decision.rs` | Goal decision tracking and acceptance criteria. |
+| `delivery/` | PR delivery subsystem (`GoalGithubPrClient`, `GoalDeliveryPolicy`, `gh` command client). |
+| `evidence.rs` | Git evidence detection, mutation snapshots. |
+| `integration.rs` | Goal acceptance/rejection integration with external systems. |
+| `open_pr.rs` | Render PR draft (title, body, branch) for GitHub delivery. |
 | `oracle.rs` | Goal kind detection. |
 | `progress.rs` | Progress line tracking. |
+| `proof/` | Proof artifact helpers: review, sidecar, status. |
 | `replay.rs` | Goal replay for debugging. |
+| `verifier/` | Completion verification subsystem (local, review, security, tasks). |
 | `worktree.rs` | Worktree planning and conflict detection. |
-| `verifier.rs` | Completion verification logic. |
 | `types.rs` | Shared types (`GoalId`, `GoalBudget`). |
 
 ## Edit Rules

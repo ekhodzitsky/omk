@@ -6,11 +6,13 @@
 
 mod budget;
 mod integration;
+mod merge;
 mod open_pr;
 mod run;
 
 pub(super) use budget::{cmd_budget, cmd_budget_add};
 pub(super) use integration::{cmd_accept, cmd_reject};
+pub(super) use merge::cmd_merge;
 pub(super) use open_pr::cmd_open_pr;
 pub(super) use run::cmd_run;
 

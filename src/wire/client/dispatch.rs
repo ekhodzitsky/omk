@@ -20,6 +20,7 @@ pub enum WireMessage {
 }
 
 /// A response to be sent back to the agent.
+#[derive(Debug)]
 pub struct WireResponse {
     pub id: String,
     pub result: serde_json::Value,

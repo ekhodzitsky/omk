@@ -58,6 +58,7 @@ pub(crate) async fn create_goal_with_scaffold(
         artifacts: Vec::new(),
         failure,
         state_dir: goal_dir.clone(),
+        cost_tracker_path: Some(goal_dir.join("cost.jsonl")),
     };
     FileSystemGoalStateStore::new().save(&state).await?;
 

@@ -9,6 +9,7 @@ use super::types::SessionCost;
 ///
 /// Writes are performed via `crate::runtime::atomic::atomic_write` so readers
 /// never see partially-written files.
+#[derive(Debug)]
 pub struct JsonFileCostSink {
     path: PathBuf,
 }

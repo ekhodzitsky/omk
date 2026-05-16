@@ -4,6 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 
 use crate::runtime::events::{Event, EventReader};
 
+#[derive(Debug)]
 pub struct EventStream {
     path: PathBuf,
     last_position: u64,

@@ -4,6 +4,7 @@ mod core;
 mod events;
 mod helpers;
 
+#[derive(Debug)]
 pub struct ProofGenerator;
 
 pub use core::*;
