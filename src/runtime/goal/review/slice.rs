@@ -8,6 +8,18 @@ use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::{GoalDeliverySlice, GoalTaskGraph};
 use crate::runtime::goal::verifier::scan_goal_security_findings;
 
+/// Confidence threshold above which anti-slop issues are considered actionable.
+pub const ANTI_SLOP_ACTIONABLE_THRESHOLD: f64 = 0.5;
+
+/// A single review pass artifact for a slice.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SliceReviewArtifact {
+    pub kind: String,
+    pub passed: bool,
+    pub feedback: String,
+    pub severity: String,
+}
+
 /// Outcome of a per-slice review.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SliceReviewOutcome {
@@ -15,6 +27,29 @@ pub struct SliceReviewOutcome {
     pub review_path: Option<PathBuf>,
     pub security_review_path: Option<PathBuf>,
     pub feedback: Option<String>,
+    pub artifacts: Vec<SliceReviewArtifact>,
+}
+
+/// Compute anti-slop confidence from slice review artifacts.
+/// Returns a value in [0.0, 1.0] where higher means more likely slop.
+pub fn anti_slop_confidence(artifacts: &[SliceReviewArtifact]) -> f64 {
+    let mut confidence: f64 = 0.0;
+    for artifact in artifacts {
+        if artifact.kind == "anti-slop" {
+            continue;
+        }
+        if !artifact.passed {
+            confidence += match artifact.kind.as_str() {
+                "architect" => 0.20,
+                "code" => 0.20,
+                "test" => 0.20,
+                "performance" => 0.15,
+                "security" => 0.25,
+                _ => 0.0,
+            };
+        }
+    }
+    confidence.min(1.0_f64)
 }
 
 /// Run review gates and security scan in the slice worktree and produce
@@ -58,12 +93,120 @@ pub async fn review_slice(
         Some(parts.join(". "))
     };
 
+    let performance_ok = gates
+        .iter()
+        .filter(|gate| is_performance_gate(&gate.name))
+        .any(|gate| gate.passed);
+
+    let artifacts = vec![
+        SliceReviewArtifact {
+            kind: "architect".to_string(),
+            passed: gates_ok && !changed_files.is_empty(),
+            feedback: if gates_ok && !changed_files.is_empty() {
+                "Architecture review passed: changed-file evidence exists and gates passed"
+                    .to_string()
+            } else if changed_files.is_empty() {
+                "Architecture review blocked: no changed-file evidence".to_string()
+            } else {
+                "Architecture review blocked: gates failed".to_string()
+            },
+            severity: if gates_ok && !changed_files.is_empty() {
+                "low".to_string()
+            } else {
+                "high".to_string()
+            },
+        },
+        SliceReviewArtifact {
+            kind: "code".to_string(),
+            passed: !changed_files.is_empty(),
+            feedback: if changed_files.is_empty() {
+                "Code review blocked: no changed files to inspect".to_string()
+            } else {
+                format!(
+                    "Code review passed: {} changed file(s)",
+                    changed_files.len()
+                )
+            },
+            severity: if changed_files.is_empty() {
+                "high".to_string()
+            } else {
+                "low".to_string()
+            },
+        },
+        SliceReviewArtifact {
+            kind: "test".to_string(),
+            passed: gates_ok,
+            feedback: if gates_ok {
+                "Test review passed: all required verification gates passed".to_string()
+            } else {
+                "Test review blocked: required verification gates failed".to_string()
+            },
+            severity: if gates_ok {
+                "low".to_string()
+            } else {
+                "high".to_string()
+            },
+        },
+        SliceReviewArtifact {
+            kind: "security".to_string(),
+            passed: security_ok,
+            feedback: if security_ok {
+                "Security review passed: no high-confidence secret markers found".to_string()
+            } else {
+                format!(
+                    "Security review blocked: {} finding(s)",
+                    security_findings.len()
+                )
+            },
+            severity: if security_ok {
+                "low".to_string()
+            } else {
+                "critical".to_string()
+            },
+        },
+        SliceReviewArtifact {
+            kind: "performance".to_string(),
+            passed: performance_ok,
+            feedback: if performance_ok {
+                "Performance review passed: performance/benchmark gate passed".to_string()
+            } else {
+                "Performance review blocked: no performance or benchmark gate evidence".to_string()
+            },
+            severity: if performance_ok {
+                "low".to_string()
+            } else {
+                "medium".to_string()
+            },
+        },
+        SliceReviewArtifact {
+            kind: "anti-slop".to_string(),
+            passed: gates_ok && !changed_files.is_empty(),
+            feedback: if gates_ok && !changed_files.is_empty() {
+                "Anti-slop review passed: changed-file evidence and passing gates exist".to_string()
+            } else {
+                "Anti-slop review blocked: missing changed-file evidence or failing gates"
+                    .to_string()
+            },
+            severity: if gates_ok && !changed_files.is_empty() {
+                "low".to_string()
+            } else {
+                "medium".to_string()
+            },
+        },
+    ];
+
     Ok(SliceReviewOutcome {
         passed,
         review_path: None,
         security_review_path: None,
         feedback,
+        artifacts,
     })
+}
+
+fn is_performance_gate(name: &str) -> bool {
+    let normalized = name.to_ascii_lowercase();
+    normalized.contains("perf") || normalized.contains("bench")
 }
 
 #[cfg(test)]
@@ -77,6 +220,7 @@ mod tests {
             review_path: None,
             security_review_path: None,
             feedback: None,
+            artifacts: Vec::new(),
         };
         assert!(outcome.passed);
         assert!(outcome.feedback.is_none());
@@ -89,8 +233,112 @@ mod tests {
             review_path: None,
             security_review_path: None,
             feedback: Some("Gates failed: test".to_string()),
+            artifacts: Vec::new(),
         };
         assert!(!outcome.passed);
         assert_eq!(outcome.feedback, Some("Gates failed: test".to_string()));
+    }
+
+    #[test]
+    fn anti_slop_confidence_all_passed_is_zero() {
+        let artifacts = vec![
+            SliceReviewArtifact {
+                kind: "architect".to_string(),
+                passed: true,
+                feedback: "ok".to_string(),
+                severity: "low".to_string(),
+            },
+            SliceReviewArtifact {
+                kind: "code".to_string(),
+                passed: true,
+                feedback: "ok".to_string(),
+                severity: "low".to_string(),
+            },
+        ];
+        assert_eq!(anti_slop_confidence(&artifacts), 0.0);
+    }
+
+    #[test]
+    fn anti_slop_confidence_failed_reviews_increases() {
+        let artifacts = vec![
+            SliceReviewArtifact {
+                kind: "architect".to_string(),
+                passed: false,
+                feedback: "bad".to_string(),
+                severity: "high".to_string(),
+            },
+            SliceReviewArtifact {
+                kind: "code".to_string(),
+                passed: false,
+                feedback: "bad".to_string(),
+                severity: "high".to_string(),
+            },
+            SliceReviewArtifact {
+                kind: "security".to_string(),
+                passed: false,
+                feedback: "bad".to_string(),
+                severity: "high".to_string(),
+            },
+        ];
+        let confidence = anti_slop_confidence(&artifacts);
+        assert!(
+            confidence > ANTI_SLOP_ACTIONABLE_THRESHOLD,
+            "expected confidence {confidence} > threshold {ANTI_SLOP_ACTIONABLE_THRESHOLD}"
+        );
+    }
+
+    #[test]
+    fn anti_slop_confidence_ignores_anti_slop_itself() {
+        let artifacts = vec![SliceReviewArtifact {
+            kind: "anti-slop".to_string(),
+            passed: false,
+            feedback: "bad".to_string(),
+            severity: "high".to_string(),
+        }];
+        assert_eq!(anti_slop_confidence(&artifacts), 0.0);
+    }
+
+    #[test]
+    fn anti_slop_confidence_caps_at_one() {
+        let artifacts = vec![
+            SliceReviewArtifact {
+                kind: "architect".to_string(),
+                passed: false,
+                feedback: "bad".to_string(),
+                severity: "high".to_string(),
+            },
+            SliceReviewArtifact {
+                kind: "code".to_string(),
+                passed: false,
+                feedback: "bad".to_string(),
+                severity: "high".to_string(),
+            },
+            SliceReviewArtifact {
+                kind: "test".to_string(),
+                passed: false,
+                feedback: "bad".to_string(),
+                severity: "high".to_string(),
+            },
+            SliceReviewArtifact {
+                kind: "security".to_string(),
+                passed: false,
+                feedback: "bad".to_string(),
+                severity: "critical".to_string(),
+            },
+            SliceReviewArtifact {
+                kind: "performance".to_string(),
+                passed: false,
+                feedback: "bad".to_string(),
+                severity: "medium".to_string(),
+            },
+        ];
+        assert_eq!(anti_slop_confidence(&artifacts), 1.0);
+    }
+
+    #[test]
+    fn is_performance_gate_detects_perf_and_bench() {
+        assert!(is_performance_gate("perf-check"));
+        assert!(is_performance_gate("benchmark"));
+        assert!(!is_performance_gate("unit-test"));
     }
 }

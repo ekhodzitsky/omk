@@ -340,3 +340,60 @@ async fn append_task_graph_mutation_events(
 
     Ok(())
 }
+
+/// Append a cleanup task to the task graph and wire the original slice task
+/// to depend on it. Returns the cleanup task id when a new task was created,
+/// or `None` if a cleanup task for this slice already exists.
+pub(crate) fn spawn_cleanup_task(
+    task_graph: &mut GoalTaskGraph,
+    slice_task_id: &str,
+    feedback: &str,
+    changed_files: &[String],
+    generated_at: DateTime<Utc>,
+) -> Option<String> {
+    let cleanup_task_id = format!("goal-agent-cleanup-{slice_task_id}");
+    if task_graph
+        .tasks
+        .iter()
+        .any(|task| task.id == cleanup_task_id)
+    {
+        return None;
+    }
+    let cleanup_task = GoalTask {
+        id: cleanup_task_id.clone(),
+        title: format!("Cleanup slice {slice_task_id}"),
+        description: format!("Auto-cleanup task generated from review feedback:\n\n{feedback}"),
+        status: GoalTaskStatus::Pending,
+        owner_role: Some(GOAL_AGENT_WORKER_ROLE.to_string()),
+        completed_at: None,
+        evidence: vec![GoalTaskEvidence {
+            kind: "cleanup_proposal".to_string(),
+            path: PathBuf::new(),
+            summary: format!("Cleanup task spawned at {generated_at} for slice {slice_task_id}"),
+        }],
+        retry_count: 0,
+        max_retries: 0,
+        lease_expires_at: None,
+        dependencies: Vec::new(),
+        read_set: changed_files.to_vec(),
+        write_set: changed_files.to_vec(),
+        risk: "low".to_string(),
+        acceptance: vec![
+            "Address all review feedback items".to_string(),
+            "Re-run verification gates after cleanup".to_string(),
+        ],
+    };
+    task_graph.tasks.push(cleanup_task);
+    if let Some(task) = task_graph
+        .tasks
+        .iter_mut()
+        .find(|task| task.id == slice_task_id)
+    {
+        if !task.dependencies.contains(&cleanup_task_id) {
+            task.dependencies.push(cleanup_task_id.clone());
+        }
+        task.status = GoalTaskStatus::Pending;
+        task.completed_at = None;
+    }
+    Some(cleanup_task_id)
+}
