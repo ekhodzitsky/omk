@@ -23,6 +23,7 @@ fn state() -> GoalState {
         state_dir: std::path::PathBuf::from("/tmp/goal-test"),
         cost_tracker_path: None,
         merge_policy: Default::default(),
+        slice_execution: Default::default(),
     }
 }
 

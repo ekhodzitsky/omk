@@ -69,6 +69,9 @@ pub(crate) enum GoalCommands {
         /// Merge policy: disabled, manual, or gated
         #[arg(long, value_enum, default_value = "disabled")]
         merge_policy: types::MergePolicy,
+        /// Run agents in per-slice git worktrees instead of the main repo
+        #[arg(long)]
+        slice_execution: bool,
     },
     /// Create a durable plan/proof scaffold without execution intent
     #[command(after_help = help::GOAL_PLAN_AFTER_HELP)]
@@ -259,6 +262,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             max_agents,
             policy,
             merge_policy,
+            slice_execution,
         } => {
             let goal = validate_goal_text(&goal)?;
             let budget_time = validate_budget_time(budget_time.as_deref(), "--budget-time", false)?;
@@ -275,6 +279,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
                     max_agents,
                     delivery_policy: map_open_pr_policy(policy),
                     merge_policy: map_merge_policy(merge_policy),
+                    slice_execution,
                 },
             )
             .await

@@ -1,10 +1,10 @@
 use anyhow::Result;
 use chrono::Utc;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::proof::GoalProof;
 use super::state::{GoalPhase, GoalState, GoalStatus};
-use super::task_graph::{GoalTaskGraph, GoalTaskStatus};
+use super::task_graph::{ready_delivery_slices, GoalDeliverySlice, GoalTaskGraph, GoalTaskStatus};
 use super::{agent, budget, dispatch, evidence, proof, state, task_graph, verifier};
 use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 
@@ -110,9 +110,26 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher>(
         return Ok(verification_proof);
     };
 
+    // Slice execution: pick a ready slice and run the wave in its worktree
+    let exec_project_dir: PathBuf;
+    let active_slice: Option<GoalDeliverySlice>;
+    if state.slice_execution {
+        let ready = ready_delivery_slices(&state.state_dir, &task_graph).await?;
+        if let Some(slice) = ready.into_iter().next() {
+            exec_project_dir = slice.worktree_path.clone();
+            active_slice = Some(slice);
+        } else {
+            exec_project_dir = project_dir.to_path_buf();
+            active_slice = None;
+        }
+    } else {
+        exec_project_dir = project_dir.to_path_buf();
+        active_slice = None;
+    }
+
     let now = Utc::now();
     let agent_evidence = dispatcher
-        .execute_wave(&state, &task_graph, project_dir, now, &dispatch)
+        .execute_wave(&state, &task_graph, &exec_project_dir, now, &dispatch)
         .await?;
     match dispatch.kind {
         agent::GoalAgentWaveKind::Initial => {
@@ -143,7 +160,7 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher>(
     let (proof_gates, proof_git, proof_changed_files, post_mutation_gates_ran) =
         run_post_mutation_cycle(
             &state,
-            project_dir,
+            &exec_project_dir,
             &mut task_graph,
             verification_proof,
             agent_execution_succeeded,
@@ -151,6 +168,24 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher>(
             now,
         )
         .await?;
+
+    // Update slice delivery metadata if we executed in a worktree
+    if let Some(slice) = active_slice {
+        let slice_status = if agent_execution_succeeded {
+            task_graph::GoalTaskDeliveryStatus::Delivered
+        } else {
+            task_graph::GoalTaskDeliveryStatus::Blocked
+        };
+        task_graph::update_goal_task_delivery_metadata(
+            &state.state_dir,
+            &slice.task_id,
+            task_graph::GoalTaskDeliveryMetadataUpdate {
+                status: Some(slice_status),
+                ..Default::default()
+            },
+        )
+        .await?;
+    }
 
     proof::write_json_artifact(
         &state.state_dir.join(state::GOAL_TASK_GRAPH_FILE),

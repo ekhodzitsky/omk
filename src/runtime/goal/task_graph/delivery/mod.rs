@@ -15,6 +15,7 @@ pub use persist::{
     update_goal_task_delivery_metadata,
 };
 pub use slice::{
-    plan_goal_delivery_slices, record_goal_delivery_slice_plan, GoalDeliveryOverlapSerialization,
-    GoalDeliverySlice, GoalDeliverySlicePlan,
+    all_slices_done, plan_goal_delivery_slices, ready_delivery_slices,
+    record_goal_delivery_slice_plan, GoalDeliveryOverlapSerialization, GoalDeliverySlice,
+    GoalDeliverySlicePlan,
 };

@@ -132,6 +132,7 @@ mod tests {
             state_dir: std::path::PathBuf::from(format!("/tmp/omk/goals/{goal_id}")),
             cost_tracker_path: None,
             merge_policy: Default::default(),
+            slice_execution: Default::default(),
         }
     }
 
