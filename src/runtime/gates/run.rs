@@ -4,6 +4,7 @@ use tokio::process::Command;
 use tracing::{info, warn};
 
 use crate::runtime::gates::types::{GateDef, GateResult, VerificationConfig, SKIPPED_GATE_COMMAND};
+use crate::wire::protocol::scrub_secret_patterns;
 
 /// Run all configured gates and return results.
 pub async fn run_gates(config: &VerificationConfig, dir: &Path) -> Vec<GateResult> {
@@ -98,8 +99,8 @@ pub async fn run_gates_with_evidence(
             }
         };
 
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let stdout = scrub_secret_patterns(&String::from_utf8_lossy(&output.stdout)).into_owned();
+        let stderr = scrub_secret_patterns(&String::from_utf8_lossy(&output.stderr)).into_owned();
         let passed = output.status.success();
         let exit_code = output.status.code();
         let duration_ms = start.elapsed().as_millis() as u64;

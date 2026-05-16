@@ -8,6 +8,7 @@ use crate::runtime::goal::state::{GOAL_PROOF_FILE, GOAL_TASK_GRAPH_FILE};
 
 pub(crate) async fn write_json_artifact<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     let mut value = serde_json::to_value(value)?;
+    value = crate::wire::protocol::redact_wire_secrets(&value);
     enrich_goal_json_artifact(path, &mut value).await?;
     let json = serde_json::to_string_pretty(&value)?;
     crate::runtime::atomic::atomic_write(path, json.as_bytes()).await
