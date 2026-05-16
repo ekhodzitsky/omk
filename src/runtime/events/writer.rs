@@ -108,6 +108,14 @@ async fn writer_task(path: PathBuf, mut rx: mpsc::Receiver<WriterMsg>) {
     debug!(path = %path.display(), "JsonlWriter actor shutting down (all senders dropped)");
 }
 
+fn redact_event(event: &Event) -> Event {
+    let mut event = event.clone();
+    if let Some(ref mut payload) = event.payload {
+        *payload = crate::wire::protocol::redact_wire_secrets(payload);
+    }
+    event
+}
+
 /// Append-only JSONL writer for [`Event`] records.
 ///
 /// Internally backed by a [`JsonlWriter`] actor so concurrent appends across
@@ -126,7 +134,8 @@ impl EventWriter {
 
     /// Serialize one event and append it.
     pub async fn append(&self, event: &Event) -> Result<()> {
-        let mut buf = serde_json::to_vec(event)
+        let event = redact_event(event);
+        let mut buf = serde_json::to_vec(&event)
             .with_context(|| format!("failed to serialize event {}", event.id))?;
         buf.push(b'\n');
         self.inner
@@ -145,7 +154,8 @@ impl EventWriter {
     pub async fn append_many(&self, events: &[Event]) -> Result<()> {
         let mut buffer = Vec::new();
         for event in events {
-            serde_json::to_writer(&mut buffer, event)
+            let event = redact_event(event);
+            serde_json::to_writer(&mut buffer, &event)
                 .with_context(|| format!("failed to serialize event {}", event.id))?;
             buffer.push(b'\n');
         }
