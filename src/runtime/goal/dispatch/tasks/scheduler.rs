@@ -70,7 +70,11 @@ pub(super) fn goal_agent_task_prompt(
             .description
             .lines()
             .find(|line| line.contains("[review-feedback]"))
-            .map(|line| line.trim_start_matches("[review-feedback]").trim().to_string())
+            .map(|line| {
+                line.trim_start_matches("[review-feedback]")
+                    .trim()
+                    .to_string()
+            })
             .unwrap_or_default()
     } else {
         String::new()

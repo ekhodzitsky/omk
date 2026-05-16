@@ -6,8 +6,7 @@ use serde_json::Value;
 use std::path::Path;
 
 use super::state::{
-    GoalState, GoalStatus, GOAL_PROOF_FILE, GOAL_REVIEW_TASK_ID,
-    GOAL_SECURITY_REVIEW_TASK_ID,
+    GoalState, GoalStatus, GOAL_PROOF_FILE, GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_TASK_ID,
 };
 use super::task_graph::{
     goal_agent_execution_done, summarize_task_graph, GoalTaskGraph, GoalTaskGraphSummary,

@@ -8,8 +8,7 @@ use tokio::process::Command;
 use tokio::time::timeout;
 
 use super::{
-    GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient,
-    GoalGithubPrRequest,
+    GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrRequest,
 };
 use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::GoalDeliverySlice;
@@ -136,10 +135,7 @@ pub async fn commit_slice_changes(
     )
     .await?;
     if !sha_output.status.success() {
-        anyhow::bail!(
-            "git rev-parse failed: {}",
-            output_stderr(&sha_output)
-        );
+        anyhow::bail!("git rev-parse failed: {}", output_stderr(&sha_output));
     }
 
     Ok(output_stdout(&sha_output))
@@ -210,23 +206,21 @@ pub async fn open_slice_pr(
 async fn git_worktree_has_changes(worktree_path: &Path) -> Result<bool> {
     let output = git_output(
         worktree_path,
-        vec![
-            OsString::from("status"),
-            OsString::from("--porcelain"),
-        ],
+        vec![OsString::from("status"), OsString::from("--porcelain")],
         "check slice worktree for changes",
     )
     .await?;
     if !output.status.success() {
-        anyhow::bail!(
-            "git status failed: {}",
-            output_stderr(&output)
-        );
+        anyhow::bail!("git status failed: {}", output_stderr(&output));
     }
     Ok(!output_stdout(&output).is_empty())
 }
 
-async fn git_output(worktree_path: &Path, args: Vec<OsString>, description: &str) -> Result<Output> {
+async fn git_output(
+    worktree_path: &Path,
+    args: Vec<OsString>,
+    description: &str,
+) -> Result<Output> {
     let mut command = Command::new("git");
     command.arg("-C").arg(worktree_path).args(args);
     timeout(GIT_COMMAND_TIMEOUT, command.output())

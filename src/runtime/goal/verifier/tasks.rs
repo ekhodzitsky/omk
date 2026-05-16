@@ -46,8 +46,8 @@ pub(crate) fn apply_goal_security_review_task_result(
     evidence: &GoalReviewEvidence,
     completed_at: DateTime<Utc>,
 ) -> Option<GoalTask> {
-    let security_ok = goal_agent_execution_done(task_graph)
-        && evidence.security_findings.is_empty();
+    let security_ok =
+        goal_agent_execution_done(task_graph) && evidence.security_findings.is_empty();
     let task = task_graph
         .tasks
         .iter_mut()

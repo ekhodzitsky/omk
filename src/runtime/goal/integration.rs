@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use super::proof::{carry_goal_proof_sidecars, write_json_artifact, GoalProof};
 use super::state::{
     FileSystemGoalStateStore, GoalFailure, GoalPhase, GoalState, GoalStateStore, GoalStatus,
-    GOAL_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PROOF_FILE,
-    GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_TASK_ID,
+    GOAL_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PROOF_FILE, GOAL_REVIEW_TASK_ID,
+    GOAL_SECURITY_REVIEW_TASK_ID,
 };
 use super::task_graph::{goal_agent_execution_done, goal_task_done, GoalTaskGraph};
 use crate::runtime::events::{EventBuilder, EventWriter, RunId};

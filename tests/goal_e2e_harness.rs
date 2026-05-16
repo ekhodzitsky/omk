@@ -156,12 +156,20 @@ fn test_goal_slice_execution_creates_worktrees_and_delivery_metadata() {
         .iter()
         .filter(|t| t.get("delivery").is_some())
         .collect();
-    assert!(!agent_tasks.is_empty(), "should have agent tasks with delivery metadata for slices");
+    assert!(
+        !agent_tasks.is_empty(),
+        "should have agent tasks with delivery metadata for slices"
+    );
 
     // Each agent task should have delivery metadata with a real worktree path
     for task in &agent_tasks {
-        let delivery = task.get("delivery").expect("task should have delivery metadata");
-        assert!(delivery.get("slice_id").is_some(), "delivery should have slice_id");
+        let delivery = task
+            .get("delivery")
+            .expect("task should have delivery metadata");
+        assert!(
+            delivery.get("slice_id").is_some(),
+            "delivery should have slice_id"
+        );
         let wt_path = delivery
             .get("worktree_path")
             .and_then(|v| v.as_str())
@@ -170,8 +178,14 @@ fn test_goal_slice_execution_creates_worktrees_and_delivery_metadata() {
             std::path::Path::new(wt_path).exists(),
             "worktree_path should exist: {wt_path}"
         );
-        assert!(delivery.get("branch").is_some(), "delivery should have branch");
-        assert!(delivery.get("status").is_some(), "delivery should have status");
+        assert!(
+            delivery.get("branch").is_some(),
+            "delivery should have branch"
+        );
+        assert!(
+            delivery.get("status").is_some(),
+            "delivery should have status"
+        );
     }
 
     // Verify proof

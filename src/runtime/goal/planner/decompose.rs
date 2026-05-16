@@ -56,7 +56,9 @@ pub(crate) fn sanitize_feature_slug(feature: &str) -> String {
 }
 
 fn split_on(text: &str, delimiter: &str) -> Vec<String> {
-    text.split(delimiter).map(|s| s.trim().to_string()).collect()
+    text.split(delimiter)
+        .map(|s| s.trim().to_string())
+        .collect()
 }
 
 fn split_on_phrases(text: &str, max_features: usize) -> Vec<String> {
@@ -82,9 +84,9 @@ fn split_on_phrases(text: &str, max_features: usize) -> Vec<String> {
 
 static STOP_WORDS: &[&str] = &[
     "a", "an", "the", "and", "or", "but", "with", "for", "to", "of", "in", "on", "at", "by",
-    "from", "as", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
-    "do", "does", "did", "will", "would", "could", "should", "may", "might", "must", "can",
-    "this", "that", "these", "those", "it", "its", "i", "you", "he", "she", "we", "they",
+    "from", "as", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do",
+    "does", "did", "will", "would", "could", "should", "may", "might", "must", "can", "this",
+    "that", "these", "those", "it", "its", "i", "you", "he", "she", "we", "they",
 ];
 
 #[cfg(test)]
@@ -93,19 +95,13 @@ mod tests {
 
     #[test]
     fn test_decompose_and() {
-        let features = decompose_goal_for_slices(
-            "Build a CLI with config parsing and logging",
-            4,
-        );
+        let features = decompose_goal_for_slices("Build a CLI with config parsing and logging", 4);
         assert_eq!(features, vec!["build a cli with config parsing", "logging"]);
     }
 
     #[test]
     fn test_decompose_comma_and() {
-        let features = decompose_goal_for_slices(
-            "Add OAuth, rate limiting, and audit logging",
-            4,
-        );
+        let features = decompose_goal_for_slices("Add OAuth, rate limiting, and audit logging", 4);
         assert_eq!(
             features,
             vec!["add oauth", "rate limiting", "and audit logging"]
@@ -114,10 +110,8 @@ mod tests {
 
     #[test]
     fn test_decompose_respects_max_features() {
-        let features = decompose_goal_for_slices(
-            "Alpha and Beta and Gamma and Delta and Epsilon",
-            3,
-        );
+        let features =
+            decompose_goal_for_slices("Alpha and Beta and Gamma and Delta and Epsilon", 3);
         assert_eq!(features.len(), 3);
         assert_eq!(features, vec!["alpha", "beta", "gamma"]);
     }
@@ -132,9 +126,6 @@ mod tests {
     fn test_sanitize_feature_slug() {
         assert_eq!(sanitize_feature_slug("config parsing"), "config_parsing");
         assert_eq!(sanitize_feature_slug("OAuth 2.0"), "oauth_20");
-        assert_eq!(
-            sanitize_feature_slug("Rate-Limiting!"),
-            "ratelimiting"
-        );
+        assert_eq!(sanitize_feature_slug("Rate-Limiting!"), "ratelimiting");
     }
 }

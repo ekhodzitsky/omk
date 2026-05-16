@@ -3,6 +3,7 @@ use chrono::Utc;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
+use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, RunId};
 use crate::runtime::goal::delivery::{
     open_goal_pr_with_client, poll_github_pr_checks, GoalDeliveryPolicy, GoalGithubPrClient,
     GoalGithubPrCommandClient, GoalGithubPrDeliveryOptions, GoalMergePolicy,
@@ -19,7 +20,6 @@ use crate::runtime::goal::types::{
 };
 use crate::runtime::goal::worktree::remove_goal_worktrees;
 use crate::runtime::goal::{evidence, proof};
-use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, RunId};
 
 const MAX_EXECUTE_PASSES: usize = 8;
 const GIT_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -66,7 +66,13 @@ pub(crate) async fn run_goal_until_ready(
         status: state.status,
         summary: "created durable goal scaffold and planning artifacts".to_string(),
     };
-    emit_narrative(&event_writer, &event_builder, &RunId(state.goal_id.clone()), &plan_step.summary).await;
+    emit_narrative(
+        &event_writer,
+        &event_builder,
+        &RunId(state.goal_id.clone()),
+        &plan_step.summary,
+    )
+    .await;
     let mut steps = vec![plan_step];
 
     let proof = GoalProof::load(&state.state_dir).await?;
@@ -81,7 +87,13 @@ pub(crate) async fn run_goal_until_ready(
             status: state.status,
             summary: blocker.clone(),
         });
-        emit_narrative(&event_writer, &event_builder, &RunId(state.goal_id.clone()), &format!("blocked: {blocker}")).await;
+        emit_narrative(
+            &event_writer,
+            &event_builder,
+            &RunId(state.goal_id.clone()),
+            &format!("blocked: {blocker}"),
+        )
+        .await;
         return Ok(GoalRunUntilReadyOutcome {
             state,
             proof,
@@ -98,7 +110,13 @@ pub(crate) async fn run_goal_until_ready(
         status: verified.status,
         summary: verify_summary.clone(),
     });
-    emit_narrative(&event_writer, &event_builder, &RunId(state.goal_id.clone()), &format!("verify: {verify_summary}")).await;
+    emit_narrative(
+        &event_writer,
+        &event_builder,
+        &RunId(state.goal_id.clone()),
+        &format!("verify: {verify_summary}"),
+    )
+    .await;
     if !verification_can_continue(&verified) {
         return finalize_until_ready_blocker(
             &state.goal_id,
@@ -116,7 +134,13 @@ pub(crate) async fn run_goal_until_ready(
             status: executed.status,
             summary: exec_summary.clone(),
         });
-        emit_narrative(&event_writer, &event_builder, &RunId(state.goal_id.clone()), &exec_summary).await;
+        emit_narrative(
+            &event_writer,
+            &event_builder,
+            &RunId(state.goal_id.clone()),
+            &exec_summary,
+        )
+        .await;
         if !proof_can_continue(&executed) {
             return finalize_until_ready_blocker(
                 &state.goal_id,
@@ -146,7 +170,13 @@ pub(crate) async fn run_goal_until_ready(
         status: reviewed.status,
         summary: "attached controller review and security-review evidence".to_string(),
     });
-    emit_narrative(&event_writer, &event_builder, &RunId(state.goal_id.clone()), "review completed").await;
+    emit_narrative(
+        &event_writer,
+        &event_builder,
+        &RunId(state.goal_id.clone()),
+        "review completed",
+    )
+    .await;
     let blocker = readiness_blocker(&state.goal_id, &reviewed).await?;
     if blocker.reason.contains("manual integration acceptance")
         && options.delivery_policy != GoalDeliveryPolicy::Local
@@ -366,8 +396,7 @@ async fn finalize_slice_integrator(
 
     // Collect delivered slice branches
     let records =
-        crate::runtime::goal::task_graph::load_goal_task_delivery_records(&state.state_dir)
-            .await?;
+        crate::runtime::goal::task_graph::load_goal_task_delivery_records(&state.state_dir).await?;
     let slice_branches: Vec<String> = records
         .iter()
         .filter(|r| {
@@ -394,14 +423,14 @@ async fn finalize_slice_integrator(
     let integrator_branch = format!("integrator/{}", state.goal_id);
 
     // Create integrator branch from current master/main
-    let base_branch = resolve_base_branch(project_dir).await.unwrap_or_else(|| "master".to_string());
+    let base_branch = resolve_base_branch(project_dir)
+        .await
+        .unwrap_or_else(|| "master".to_string());
     if let Err(e) = create_integrator_branch(project_dir, &integrator_branch, &base_branch).await {
         return finalize_until_ready_blocker(
             goal_id,
             steps,
-            UntilReadyBlocker::policy(format!(
-                "integrator branch creation failed: {e}"
-            )),
+            UntilReadyBlocker::policy(format!("integrator branch creation failed: {e}")),
         )
         .await;
     }
@@ -477,15 +506,11 @@ async fn finalize_slice_integrator(
         "integrator branch passed {} verification gate(s)",
         integrator_gates.len()
     );
-    let integrator_event_writer = EventWriter::new(
-        state.state_dir.join(crate::runtime::config::EVENTS_FILE),
-    );
-    if let Ok(event) = Event::new(
-        RunId(state.goal_id.clone()),
-        EventKind::TaskOutput,
-    )
-    .with_actor("controller")
-    .with_message(&integrator_narrative)
+    let integrator_event_writer =
+        EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
+    if let Ok(event) = Event::new(RunId(state.goal_id.clone()), EventKind::TaskOutput)
+        .with_actor("controller")
+        .with_message(&integrator_narrative)
     {
         let _ = integrator_event_writer.append(&event).await;
     }
@@ -585,7 +610,8 @@ async fn finalize_slice_integrator(
             let instruction = if let Some(ref url) = pr_url {
                 format!("run `gh pr merge {url} --squash --delete-branch` after CI passes")
             } else {
-                "no integrator PR was created; inspect the goal state for delivery evidence".to_string()
+                "no integrator PR was created; inspect the goal state for delivery evidence"
+                    .to_string()
             };
             state.status = GoalStatus::BlockedOnHuman;
             state.phase = GoalPhase::Proof;
@@ -788,7 +814,10 @@ async fn merge_branch_into_integrator(
     )
     .await?;
     if !checkout.status.success() {
-        anyhow::bail!("git checkout integrator failed: {}", output_stderr(&checkout));
+        anyhow::bail!(
+            "git checkout integrator failed: {}",
+            output_stderr(&checkout)
+        );
     }
 
     let output = git_command(
@@ -825,7 +854,10 @@ async fn push_branch(repo_dir: &Path, branch: &str) -> anyhow::Result<()> {
     }
 }
 
-async fn git_command(repo_dir: &Path, args: Vec<std::ffi::OsString>) -> anyhow::Result<std::process::Output> {
+async fn git_command(
+    repo_dir: &Path,
+    args: Vec<std::ffi::OsString>,
+) -> anyhow::Result<std::process::Output> {
     let mut command = tokio::process::Command::new("git");
     command.arg("-C").arg(repo_dir).args(args);
     tokio::time::timeout(GIT_COMMAND_TIMEOUT, command.output())

@@ -259,7 +259,10 @@ fn until_ready_goal_run_skips_worktree_materialization_on_dirty_baseline() {
 
     // Worktrees should NOT be materialized when the baseline is dirty.
     let goal_dir = latest_goal_dir(&envs);
-    assert!(!goal_dir.join("worktrees").exists(), "worktrees should be skipped on dirty baseline");
+    assert!(
+        !goal_dir.join("worktrees").exists(),
+        "worktrees should be skipped on dirty baseline"
+    );
 }
 
 fn latest_goal_dir(envs: &[(&'static str, PathBuf)]) -> PathBuf {

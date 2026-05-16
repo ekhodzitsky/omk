@@ -252,7 +252,10 @@ fn goal_agent_dispatch_plan_with_run_key(
     })
 }
 
-fn proposal_from_task(state: &GoalState, task: &super::task_graph::GoalTask) -> GoalAgentTaskProposal {
+fn proposal_from_task(
+    state: &GoalState,
+    task: &super::task_graph::GoalTask,
+) -> GoalAgentTaskProposal {
     GoalAgentTaskProposal {
         id: task.id.clone(),
         title: task.title.clone(),

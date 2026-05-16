@@ -1,7 +1,9 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-use crate::runtime::gates::{detect_changed_files, gates_passed, load_or_detect_gates, run_gates_with_evidence};
+use crate::runtime::gates::{
+    detect_changed_files, gates_passed, load_or_detect_gates, run_gates_with_evidence,
+};
 use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::{GoalDeliverySlice, GoalTaskGraph};
 use crate::runtime::goal::verifier::scan_goal_security_findings;

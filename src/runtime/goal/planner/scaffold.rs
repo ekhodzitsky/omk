@@ -189,9 +189,7 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
                     GOAL_TEST_SPEC_FILE.to_string(),
                     GOAL_TASK_GRAPH_FILE.to_string(),
                 ],
-                write_set: vec![
-                    format!("src/{slug}/"),
-                ],
+                write_set: vec![format!("src/{slug}/")],
                 risk: "moderate".to_string(),
                 acceptance: vec![
                     format!("Implementation for {feature} is complete in src/{slug}/."),
@@ -324,7 +322,9 @@ fn scaffold_local_verify_task() -> GoalTask {
     GoalTask {
         id: GOAL_LOCAL_VERIFY_TASK_ID.to_string(),
         title: "Run local verification wall".to_string(),
-        description: "Run configured local gates, capture gate evidence, and refresh the goal proof.".to_string(),
+        description:
+            "Run configured local gates, capture gate evidence, and refresh the goal proof."
+                .to_string(),
         status: GoalTaskStatus::Pending,
         owner_role: None,
         completed_at: None,
@@ -422,7 +422,9 @@ fn scaffold_security_review_task(agent_dependency: &str) -> GoalTask {
     GoalTask {
         id: GOAL_SECURITY_REVIEW_TASK_ID.to_string(),
         title: "Run security evidence check".to_string(),
-        description: "Run a bounded controller security review over goal evidence and changed files.".to_string(),
+        description:
+            "Run a bounded controller security review over goal evidence and changed files."
+                .to_string(),
         status: GoalTaskStatus::Pending,
         owner_role: None,
         completed_at: None,
@@ -437,9 +439,7 @@ fn scaffold_security_review_task(agent_dependency: &str) -> GoalTask {
             "changed files".to_string(),
         ],
         write_set: vec![
-            format!(
-                "{GOAL_ARTIFACTS_DIR}/{GOAL_REVIEW_ARTIFACTS_DIR}/{GOAL_SECURITY_REVIEW_FILE}"
-            ),
+            format!("{GOAL_ARTIFACTS_DIR}/{GOAL_REVIEW_ARTIFACTS_DIR}/{GOAL_SECURITY_REVIEW_FILE}"),
             GOAL_TASK_GRAPH_FILE.to_string(),
             GOAL_PROOF_FILE.to_string(),
         ],
