@@ -12,11 +12,10 @@ OMK is inspired by [oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claud
 
 [![CI](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml)
 [![Coverage](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/coverage.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/coverage.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/ekhodzitsky/oh-my-kimi?label=github%20release&sort=semver)](https://github.com/ekhodzitsky/oh-my-kimi/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/ekhodzitsky/oh-my-kimi?label=release&sort=semver)](https://github.com/ekhodzitsky/oh-my-kimi/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust MSRV](https://img.shields.io/badge/MSRV-1.78%2B-orange.svg)](https://www.rust-lang.org)
-[![Runtime: Wire-first](https://img.shields.io/badge/runtime-Wire--first-2563eb.svg)](#features)
-[![Install: GitHub only](https://img.shields.io/badge/install-GitHub%20only-0ea5e9.svg)](#install)
+[![Install: GitHub](https://img.shields.io/badge/install-GitHub-0ea5e9.svg)](#install)
 [![crates.io](https://img.shields.io/badge/crates.io-not%20published-lightgrey.svg)](#install)
 [![Status: beta MVP](https://img.shields.io/badge/status-beta%20MVP-0f172a.svg)](#mvp-status)
 
@@ -110,10 +109,11 @@ The goal controller scaffold is in place. Today it:
 - supports explicit local integrator `accept` / `reject`, where `ready`
   requires gates, agent execution, review wall, integration, and oracle
   evidence;
-- renders proof-backed PR title/body drafts through
-  `omk goal open-pr latest --dry-run` without GitHub/network side effects.
+- renders proof-backed PR title/body drafts with `omk goal open-pr latest --dry-run`;
+- creates real GitHub PRs via `omk goal open-pr latest --policy auto-pr` using the `gh` CLI;
+- supports `draft-pr` policy for draft PRs and `local` policy for safe dry-run rendering (default).
 
-Human PR merge/publish remains explicit and outside the automatic proof path.
+Human PR merge remains explicit for now; automatic merge is on the near-term roadmap.
 The current `team run`, event log, gates, and proof systems remain the
 execution foundation. The design lives in [SPEC.md](SPEC.md), the delivery path
 in [ROADMAP.md](ROADMAP.md), the backlog in [TODO.md](TODO.md), and the
@@ -193,9 +193,9 @@ omk goal proof latest --format md
 
 `omk setup` creates config/state/data directories. `omk doctor` verifies the
 local environment. The first `goal run --until-ready` command writes durable
-goal state, terminal replay, and a proof-backed readiness result. In the current
-beta, a scaffold-only proof is expected to remain `not_ready` until execution,
-review, and integration evidence exist.
+goal state, terminal replay, and a proof-backed readiness result. In the current beta, the proof starts as `not_ready` and progresses through
+`verify` → `execute` → `review`. With `--policy auto-pr`, a passing goal can
+open a real GitHub PR directly from the proof bundle.
 
 For a CI-safe dry-run with no real Kimi API calls:
 
@@ -295,7 +295,8 @@ omk goal review latest
 omk goal accept latest --summary "local integrator accepted the proof"
 omk goal reject latest --reason "manual review found a blocker"
 omk goal open-pr latest --dry-run --format markdown
-omk goal open-pr latest --dry-run --format json
+omk goal open-pr latest --policy auto-pr
+omk goal open-pr latest --policy draft-pr --base-branch main
 omk goal pause latest
 omk goal resume latest
 omk goal cancel latest
@@ -305,9 +306,10 @@ omk goal cancel latest
 evidence into `goals/<goal-id>/`. Proof artifacts stay honestly `not_ready`
 until execution, review, oracle, and explicit integration evidence exist. When
 run inside a git worktree, proofs also record best-effort git branch, HEAD
-commit, and dirty-state. `omk goal open-pr` turns that proof into a dry-run PR
-draft with status, readiness, task summary, delivery metadata, verification
-wall, review/oracle/integration evidence, known gaps, changed files, and
+commit, and dirty-state. `omk goal open-pr` turns that proof into a PR draft (default `--policy local`)
+or creates a real GitHub PR via `gh` CLI (`--policy auto-pr` or `--policy draft-pr`).
+The rendered PR includes status, readiness, task summary, delivery metadata,
+verification wall, review/security evidence, known gaps, changed files, and
 artifacts.
 
 ## Features
