@@ -69,10 +69,13 @@ Examples:
   omk goal open-pr latest --dry-run --draft
   omk goal open-pr latest --dry-run --format json
   omk goal open-pr goal-20260514-085416-149-ea263039 --dry-run --format md
+  omk goal open-pr latest --policy auto-pr --dry-run
+  omk goal open-pr latest --policy draft-pr --base-branch main
 
-Renders a local PR title/body draft from persisted goal proof evidence. This
-release does not create GitHub PRs; keep --dry-run explicit until a separate
-creation mode exists. Use --draft to mark the rendered PR metadata as a draft.";
+Renders a local PR title/body draft from persisted goal proof evidence. Use
+--policy local (default) to render without network mutation. Use --policy
+auto-pr or --policy draft-pr to create or update a real GitHub PR via the gh
+CLI. Use --draft to mark the rendered PR metadata as a draft.";
 
 pub(super) const GOAL_REPLAY_AFTER_HELP: &str = "\
 Examples:

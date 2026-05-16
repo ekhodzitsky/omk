@@ -264,18 +264,102 @@ fn goal_open_pr_draft_dry_run_marks_draft_metadata() {
 }
 
 #[test]
-fn goal_open_pr_requires_dry_run_until_creation_is_supported() {
+fn goal_open_pr_default_local_policy_renders_without_dry_run() {
     let (_tmp, envs) = isolated_env();
     let (_project, _goal_dir) = init_project_with_goal(&envs);
 
-    omk_cmd(&envs)
+    let output = omk_cmd(&envs)
         .args(["goal", "open-pr", "latest"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("only supports dry-run"))
-        .stderr(predicate::str::contains(
-            "Next: omk goal open-pr latest --dry-run",
-        ));
+        .output()
+        .expect("omk goal open-pr failed");
+
+    assert!(
+        output.status.success(),
+        "open-pr failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout utf8");
+    assert!(stdout.contains("Title: Goal proof: Render a GitHub PR from goal proof evidence"));
+}
+
+#[test]
+fn goal_open_pr_auto_pr_dry_run_renders_without_mutation() {
+    let (_tmp, envs) = isolated_env();
+    let (_project, _goal_dir) = init_project_with_goal(&envs);
+
+    let output = omk_cmd(&envs)
+        .args([
+            "goal",
+            "open-pr",
+            "latest",
+            "--policy",
+            "auto-pr",
+            "--dry-run",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("omk goal open-pr failed");
+
+    assert!(
+        output.status.success(),
+        "open-pr auto-pr dry-run failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: Value = serde_json::from_slice(&output.stdout).expect("open-pr JSON should parse");
+    assert_eq!(json["dry_run"], true);
+    assert_eq!(
+        json["title"],
+        "Goal proof: Render a GitHub PR from goal proof evidence"
+    );
+}
+
+#[test]
+fn goal_open_pr_local_policy_dry_run_false_is_same_as_default() {
+    let (_tmp, envs) = isolated_env();
+    let (_project, _goal_dir) = init_project_with_goal(&envs);
+
+    let output = omk_cmd(&envs)
+        .args(["goal", "open-pr", "latest", "--policy", "local"])
+        .output()
+        .expect("omk goal open-pr failed");
+
+    assert!(
+        output.status.success(),
+        "open-pr local policy failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout utf8");
+    assert!(stdout.contains("Title: Goal proof: Render a GitHub PR from goal proof evidence"));
+}
+
+#[test]
+fn goal_open_pr_auto_pr_without_dry_run_fails_when_gh_not_authenticated() {
+    let (_tmp, envs) = isolated_env();
+    let (_project, _goal_dir) = init_project_with_goal(&envs);
+
+    let output = omk_cmd(&envs)
+        .args(["goal", "open-pr", "latest", "--policy", "auto-pr"])
+        .output()
+        .expect("omk goal open-pr failed");
+
+    assert!(
+        !output.status.success(),
+        "open-pr auto-pr without dry-run should fail when gh is not authenticated"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let helpful = stderr.contains("gh")
+        || stderr.contains("failed")
+        || stderr.contains("dry-run")
+        || stderr.contains("dry_run");
+    assert!(
+        helpful,
+        "stderr should contain a helpful message, got: {}",
+        stderr
+    );
 }
 
 #[test]

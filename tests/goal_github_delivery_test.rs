@@ -60,10 +60,10 @@ impl GoalGithubPrClient for MockGithubClient {
     }
 }
 
-fn draft(existing_pr_url: Option<&str>) -> GoalOpenPrDraft {
+fn draft(existing_pr_url: Option<&str>, dry_run: bool) -> GoalOpenPrDraft {
     GoalOpenPrDraft {
         goal_id: "goal-delivery-test".to_string(),
-        dry_run: true,
+        dry_run,
         draft: false,
         title: "Goal proof: ship GitHub delivery".to_string(),
         body: "## Goal\n- Goal id: `goal-delivery-test`\n".to_string(),
@@ -86,7 +86,7 @@ fn options(policy: GoalDeliveryPolicy, dry_run: bool) -> GoalGithubPrDeliveryOpt
 async fn local_policy_never_calls_github_even_when_not_dry_run() {
     let mut client = MockGithubClient::default();
     let outcome = deliver_goal_open_pr_with_client(
-        &draft(None),
+        &draft(None, true),
         options(GoalDeliveryPolicy::Local, false),
         &mut client,
     )
@@ -104,7 +104,7 @@ async fn local_policy_never_calls_github_even_when_not_dry_run() {
 async fn dry_run_auto_pr_policy_never_calls_github() {
     let mut client = MockGithubClient::default();
     let outcome = deliver_goal_open_pr_with_client(
-        &draft(None),
+        &draft(None, true),
         options(GoalDeliveryPolicy::AutoPr, true),
         &mut client,
     )
@@ -121,7 +121,7 @@ async fn dry_run_auto_pr_policy_never_calls_github() {
 async fn explicit_auto_pr_policy_creates_github_pr() {
     let mut client = MockGithubClient::default();
     let outcome = deliver_goal_open_pr_with_client(
-        &draft(None),
+        &draft(None, true),
         options(GoalDeliveryPolicy::AutoPr, false),
         &mut client,
     )
@@ -147,7 +147,7 @@ async fn explicit_auto_pr_policy_creates_github_pr() {
 async fn draft_pr_policy_updates_existing_pr_as_draft() {
     let mut client = MockGithubClient::default();
     let outcome = deliver_goal_open_pr_with_client(
-        &draft(Some("https://github.com/example/omk/pull/7")),
+        &draft(Some("https://github.com/example/omk/pull/7"), true),
         options(GoalDeliveryPolicy::DraftPr, false),
         &mut client,
     )
@@ -167,8 +167,46 @@ async fn draft_pr_policy_updates_existing_pr_as_draft() {
 }
 
 #[tokio::test]
+async fn auto_pr_policy_propagates_base_branch_to_request() {
+    let mut client = MockGithubClient::default();
+    let d = draft(None, false);
+    let opts = GoalGithubPrDeliveryOptions {
+        policy: GoalDeliveryPolicy::AutoPr,
+        dry_run: false,
+        draft: false,
+        base_branch: Some("develop".to_string()),
+    };
+    let outcome = deliver_goal_open_pr_with_client(&d, opts, &mut client)
+        .await
+        .unwrap();
+
+    assert!(outcome.mutated);
+    assert_eq!(
+        client.calls[0].request.base_branch.as_deref(),
+        Some("develop")
+    );
+}
+
+#[tokio::test]
+async fn draft_pr_policy_with_dry_run_skips_mutation() {
+    let mut client = MockGithubClient::default();
+    let outcome = deliver_goal_open_pr_with_client(
+        &draft(None, true),
+        options(GoalDeliveryPolicy::DraftPr, true),
+        &mut client,
+    )
+    .await
+    .expect("draft-pr dry-run should produce a skipped delivery outcome");
+
+    assert_eq!(client.call_count(), 0);
+    assert!(!outcome.mutated);
+    assert_eq!(outcome.policy, GoalDeliveryPolicy::DraftPr);
+    assert!(outcome.reason.contains("dry-run"));
+}
+
+#[tokio::test]
 async fn mutating_policy_requires_head_branch() {
-    let mut missing_branch = draft(None);
+    let mut missing_branch = draft(None, true);
     missing_branch.head_branch = None;
     let mut client = MockGithubClient::default();
 
