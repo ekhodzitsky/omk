@@ -8,6 +8,7 @@ use super::types::SessionCost;
 /// `CostTracker` knows nothing about files or I/O. All storage operations
 /// are delegated to the generic `S: CostSink` implementation, making the
 /// tracker fully testable with an in-memory backend.
+#[derive(Debug)]
 pub struct CostTracker<S: CostSink> {
     sink: S,
 }

@@ -21,6 +21,7 @@ pub const RUNNER_POLL_INTERVAL_SECS: u64 = 1;
 
 /// Orchestrates a team run using the scheduler: claims tasks, dispatches to
 /// workers via inbox/outbox, and drives the run to completion.
+#[derive(Debug)]
 pub struct TeamRunner {
     pub(crate) manifest: RunManifest,
     pub(crate) claim_store: ClaimStore,

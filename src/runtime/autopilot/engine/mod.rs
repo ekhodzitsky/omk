@@ -6,6 +6,7 @@ use crate::runtime::autopilot::types::{AutopilotPhase, AutopilotState, PhaseLog}
 use crate::runtime::gates::{detect_changed_files, gates_passed, DoneContract};
 
 /// Autopilot engine that drives the 6-phase pipeline.
+#[derive(Debug)]
 pub struct Autopilot {
     pub name: String,
     pub task: String,

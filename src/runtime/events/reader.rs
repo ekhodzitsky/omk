@@ -6,6 +6,7 @@ use tracing::warn;
 use crate::runtime::events::{Event, EventKind};
 
 /// Event reader that tolerates partial or corrupt trailing lines.
+#[derive(Debug)]
 pub struct EventReader;
 
 impl EventReader {

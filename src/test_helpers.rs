@@ -3,6 +3,8 @@
 //! Intended for use in integration tests to avoid polluting the user's
 //! real home directory with test artifacts.
 
+#![allow(clippy::unwrap_used)]
+
 use std::path::PathBuf;
 
 /// Sets up isolated `HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`,

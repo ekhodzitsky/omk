@@ -8,6 +8,7 @@ use crate::runtime::events::{
 };
 
 /// Convenience builder for common event patterns.
+#[derive(Debug)]
 pub struct EventBuilder {
     run_id: RunId,
 }

@@ -65,6 +65,7 @@ pub struct HealthReport {
 }
 
 /// Watchdog checks worker health and records events.
+#[derive(Debug)]
 pub struct Watchdog {
     config: WatchdogConfig,
     worker_states: Mutex<WorkerStateMap>,

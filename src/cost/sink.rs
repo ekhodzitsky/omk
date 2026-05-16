@@ -19,6 +19,7 @@ pub trait CostSink {
 ///
 /// Stores data in a `tokio::sync::Mutex<Vec<SessionCost>>` so it can be shared
 /// across async tasks without blocking the executor.
+#[derive(Debug)]
 pub struct InMemoryCostSink {
     inner: tokio::sync::Mutex<Vec<SessionCost>>,
 }

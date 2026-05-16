@@ -11,6 +11,7 @@ pub const DEFAULT_LEASE_SECS: u64 = 300; // 5 minutes
 
 /// In-memory claim store with file-backed persistence.
 /// Tracks tasks, claims, and stale-lease recovery.
+#[derive(Debug)]
 pub struct ClaimStore {
     tasks: HashMap<TaskId, Task>,
     lease_seconds: i64,

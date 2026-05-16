@@ -17,6 +17,7 @@ pub struct Subtask {
 }
 
 /// Decomposes a high-level task into parallel subtasks via a Kimi lead agent.
+#[derive(Debug)]
 pub struct LeadDecomposer;
 
 impl LeadDecomposer {
@@ -32,6 +33,7 @@ impl LeadDecomposer {
 }
 
 /// Synthesis agent that combines worker results into a final summary.
+#[derive(Debug)]
 pub struct SynthesisAgent;
 
 impl SynthesisAgent {

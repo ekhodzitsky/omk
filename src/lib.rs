@@ -2,6 +2,8 @@
 #![warn(clippy::dbg_macro)]
 #![warn(clippy::wildcard_imports)]
 #![warn(clippy::unused_async)]
+#![cfg_attr(not(test), deny(clippy::unwrap_used))]
+#![warn(missing_debug_implementations)]
 
 pub mod agents;
 pub mod cli;

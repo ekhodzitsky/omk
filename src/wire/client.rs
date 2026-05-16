@@ -25,6 +25,7 @@ const LEGACY_NO_HANDSHAKE_PROTOCOL_VERSION: &str = "legacy/no-handshake";
 pub(crate) const MAX_WIRE_LINE_LENGTH: usize = 16 * 1024 * 1024;
 
 /// A client for communicating with Kimi Code CLI in wire mode via a child process.
+#[derive(Debug)]
 pub struct ProcessWireClient {
     pub(crate) child: Child,
     pub(crate) stdin: ChildStdin,
