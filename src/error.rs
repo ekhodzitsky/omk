@@ -49,6 +49,19 @@ pub enum OmkError {
 
     #[error("operation timed out after {secs}s")]
     Timeout { secs: u64 },
+
+    #[error("MCP transport error for server '{server}': {reason}")]
+    McpTransport { server: String, reason: String },
+
+    #[error("MCP tool call failed on server '{server}' tool '{tool}': {reason}")]
+    McpToolCall {
+        server: String,
+        tool: String,
+        reason: String,
+    },
+
+    #[error("MCP config error at {path}: {reason}")]
+    McpConfig { path: PathBuf, reason: String },
 }
 
 impl OmkError {
@@ -69,6 +82,9 @@ impl OmkError {
             OmkError::ProviderNotInstalled { .. } => 503,
             OmkError::SynthesisFailed { .. } => 500,
             OmkError::Timeout { .. } => 504,
+            OmkError::McpTransport { .. } => 502,
+            OmkError::McpToolCall { .. } => 500,
+            OmkError::McpConfig { .. } => 400,
         }
     }
 
@@ -84,6 +100,8 @@ impl OmkError {
             OmkError::ProviderNotInstalled { .. }
             | OmkError::SynthesisFailed { .. }
             | OmkError::Timeout { .. } => "runtime",
+            OmkError::McpTransport { .. } | OmkError::McpToolCall { .. } => "mcp",
+            OmkError::McpConfig { .. } => "validation",
         }
     }
 }

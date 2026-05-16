@@ -4,7 +4,7 @@ use clap_complete::{generate, Shell};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
-use super::{setup, update, Commands, Omk, ShellArg};
+use super::{mcp_cmd, setup, update, Commands, Omk, ShellArg};
 use crate::cli::kimi_native_cmd;
 use crate::cli::{
     ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, goal, hud, logs, marketplace,
@@ -75,6 +75,7 @@ async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
         Commands::Hud(args) => hud::run(args).await,
         Commands::Setup => setup::run_setup().await,
         Commands::Update(args) => update::run_update(args).await,
+        Commands::Mcp(args) => mcp_cmd::run(args).await,
         Commands::McpServer => crate::mcp::run_mcp_server().await,
         Commands::Completions(args) => {
             let shell = match args.shell {

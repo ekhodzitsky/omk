@@ -174,6 +174,7 @@ pub(super) async fn setup_wire_workers(
             outbox: worker_dir.join("outbox.jsonl"),
             heartbeat: worker_dir.join("heartbeat.json"),
             project_dir: Some(config.dir.to_path_buf()),
+            external_tools: None,
         };
         worker_spec.save().await?;
         worker_specs.push(worker_spec.clone());

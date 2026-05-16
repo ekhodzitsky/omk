@@ -13,6 +13,8 @@ pub struct WorkerSpec {
     pub heartbeat: PathBuf,
     #[serde(default)]
     pub project_dir: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_tools: Option<Vec<serde_json::Value>>,
 }
 
 impl WorkerSpec {
@@ -122,6 +124,7 @@ mod tests {
             outbox: dir.path().join("outbox.jsonl"),
             heartbeat: dir.path().join("heartbeat.json"),
             project_dir: None,
+            external_tools: None,
         };
 
         spec.save().await.unwrap();
@@ -140,6 +143,7 @@ mod tests {
             outbox: dir.path().join("outbox.jsonl"),
             heartbeat: dir.path().join("heartbeat.json"),
             project_dir: None,
+            external_tools: None,
         };
 
         let task = WorkerTask {
@@ -184,6 +188,7 @@ mod tests {
             outbox: dir.path().join("outbox.jsonl"),
             heartbeat: dir.path().join("heartbeat.json"),
             project_dir: None,
+            external_tools: None,
         };
 
         let result = WorkerResult {
@@ -214,6 +219,7 @@ mod tests {
             outbox: dir.path().join("outbox.jsonl"),
             heartbeat: dir.path().join("heartbeat.json"),
             project_dir: None,
+            external_tools: None,
         };
 
         spec.send_result(&WorkerResult {

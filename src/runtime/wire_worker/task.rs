@@ -57,13 +57,19 @@ impl WireWorkerAdapter {
         let project_dir = self.spec.project_dir.as_deref();
         let mut client = ProcessWireClient::spawn(kimi_bin, project_dir, None, None)?;
 
+        let external_tools = if let Some(bridge) = &self.mcp_bridge {
+            Some(bridge.external_tools().await)
+        } else {
+            self.spec.external_tools.clone()
+        };
+
         let init_params = crate::wire::protocol::InitializeParams {
             protocol_version: crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string(),
             client: Some(crate::wire::protocol::ClientInfo {
                 name: "omk-wire-worker".to_string(),
                 version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
-            external_tools: None,
+            external_tools,
             capabilities: None,
             hooks: None,
         };
@@ -194,6 +200,53 @@ impl WireWorkerAdapter {
                         }
                         Ok(WireMessage::Request(req)) => match req.params.to_request() {
                             Ok(request) => {
+                                if let crate::wire::protocol::Request::ToolCallRequest(ref tool_call) = request {
+                                    if let Some(bridge) = &self.mcp_bridge {
+                                        if bridge.is_mcp_tool(&tool_call.name).await {
+                                            let args = match &tool_call.arguments {
+                                                Some(s) => serde_json::from_str(s).unwrap_or(serde_json::Value::Null),
+                                                None => serde_json::Value::Null,
+                                            };
+                                            let result = bridge.handle_tool_call(&tool_call.name, args).await;
+                                            let response = match result {
+                                                Ok(value) => serde_json::json!({
+                                                    "tool_call_id": tool_call.id,
+                                                    "return_value": crate::wire::protocol::ToolReturnValue {
+                                                        is_error: false,
+                                                        output: serde_json::to_string(&value).unwrap_or_default(),
+                                                        message: String::new(),
+                                                        display: None,
+                                                        extras: None,
+                                                    }
+                                                }),
+                                                Err(e) => serde_json::json!({
+                                                    "tool_call_id": tool_call.id,
+                                                    "return_value": crate::wire::protocol::ToolReturnValue {
+                                                        is_error: true,
+                                                        output: String::new(),
+                                                        message: e.to_string(),
+                                                        display: Some(vec![crate::wire::protocol::DisplayBlock::Brief(
+                                                            crate::wire::protocol::BriefDisplayBlock {
+                                                                text: "MCP tool call failed".to_string(),
+                                                            }
+                                                        )]),
+                                                        extras: None,
+                                                    }
+                                                }),
+                                            };
+                                            self.record_wire_request(task, &req.id, &req.params, &request, &response).await?;
+                                            client.send_response(&req.id, response).await?;
+                                            info!(
+                                                worker = %self.spec.name,
+                                                request_id = %req.id,
+                                                request_type = request.kind(),
+                                                tool_name = %tool_call.name,
+                                                "Handled MCP tool call via bridge"
+                                            );
+                                            continue;
+                                        }
+                                    }
+                                }
                                 let response = request.default_response();
                                 self.record_wire_request(task, &req.id, &req.params, &request, &response)
                                     .await?;

@@ -6,6 +6,7 @@ use super::{
     proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
 };
 
+mod mcp_cmd;
 mod run;
 mod setup;
 mod update;
@@ -45,7 +46,10 @@ pub(super) enum Commands {
     Setup,
     /// Update OMK
     Update(UpdateArgs),
-    /// Run MCP server
+    /// MCP integration (client, registry, server)
+    #[command(name = "mcp", visible_alias = "m")]
+    Mcp(mcp_cmd::Args),
+    /// Run MCP server (backward compat)
     McpServer,
     /// Generate shell completions
     Completions(CompletionsArgs),
