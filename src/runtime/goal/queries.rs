@@ -131,6 +131,7 @@ mod tests {
             failure: None,
             state_dir: std::path::PathBuf::from(format!("/tmp/omk/goals/{goal_id}")),
             cost_tracker_path: None,
+            delivery_policy: Default::default(),
             merge_policy: Default::default(),
             slice_execution: Default::default(),
         }

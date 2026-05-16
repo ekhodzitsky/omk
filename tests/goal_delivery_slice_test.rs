@@ -4,7 +4,6 @@ use omk::runtime::goal::{
     plan_goal_delivery_slices, record_goal_delivery_slice_plan, GoalTask, GoalTaskGraph,
     GoalTaskStatus, GOAL_TASK_GRAPH_FILE,
 };
-use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -239,7 +238,7 @@ fn until_ready_goal_run_materializes_delivery_worktrees_without_pr_side_effects(
 }
 
 #[test]
-fn until_ready_goal_run_rejects_dirty_baseline_before_materializing() {
+fn until_ready_goal_run_skips_worktree_materialization_on_dirty_baseline() {
     let (_xdg, envs) = omk::test_helpers::isolated_xdg_env();
     let repo = temp_git_repo();
     fs::write(repo.path().join("dirty.txt"), "untracked").expect("dirty file");
@@ -256,8 +255,14 @@ fn until_ready_goal_run_rejects_dirty_baseline_before_materializing() {
             "--until-ready",
         ])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("requires a clean git worktree"));
+        .success();
+
+    // Worktrees should NOT be materialized when the baseline is dirty.
+    let goal_dir = latest_goal_dir(&envs);
+    assert!(
+        !goal_dir.join("worktrees").exists(),
+        "worktrees should be skipped on dirty baseline"
+    );
 }
 
 fn latest_goal_dir(envs: &[(&'static str, PathBuf)]) -> PathBuf {

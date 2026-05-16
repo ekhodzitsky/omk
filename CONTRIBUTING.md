@@ -40,7 +40,7 @@ after merge, docs build outside the PR fast path, coverage uploads from
 push/scheduled/manual runs, and release artifacts are produced only by the
 release workflow.
 
-External trackers (Beads, GitHub Issues, Linear, …) are optional and never a
+External trackers (GitHub Issues, Linear, …) are optional and never a
 prerequisite for building, testing, or reviewing the project. The canonical
 handoff surface is the branch/worktree plus the PR body. Agents must not
 silently initialize a tracker or make tracker state a runtime dependency.

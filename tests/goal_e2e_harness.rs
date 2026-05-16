@@ -99,6 +99,187 @@ fn test_goal_run_until_ready_first_user_path_records_progress_and_proof() {
 }
 
 #[test]
+fn test_goal_slice_execution_creates_worktrees_and_delivery_metadata() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path());
+    seed_git_project(project.path());
+    commit_all_if_changed(project.path(), "add gate config");
+
+    let run = omk_cmd(&envs)
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WRITE_FILE", "agent-output.txt")
+        .env("MOCK_KIMI_WRITE_BODY", "slice-execution-e2e\n")
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args([
+            "goal",
+            "run",
+            "Build a tiny local Rust CLI fixture until it has proof-backed setup",
+            "--until-ready",
+            "--slice-execution",
+        ])
+        .output()
+        .expect("omk goal run should launch");
+    assert!(
+        run.status.success(),
+        "goal run failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let run_stdout = String::from_utf8(run.stdout).expect("run stdout should be UTF-8");
+    // Narrative section from orchestrator TUI (Iteration 4)
+    assert!(
+        run_stdout.contains("Narrative:"),
+        "stdout should contain Narrative section: {run_stdout}"
+    );
+
+    let goal_dir = only_goal_dir(&envs);
+    assert_goal_scaffold_artifacts(&goal_dir);
+
+    // Verify worktrees directory exists
+    let worktrees_dir = goal_dir.join("worktrees");
+    assert!(
+        worktrees_dir.exists(),
+        "worktrees dir should exist: {}",
+        worktrees_dir.display()
+    );
+
+    // Verify delivery records in task graph
+    let task_graph: Value = serde_json::from_str(
+        &fs::read_to_string(goal_dir.join("task-graph.json")).expect("missing task graph"),
+    )
+    .expect("task graph should be JSON");
+
+    let tasks = task_graph["tasks"].as_array().expect("tasks array");
+    let agent_tasks: Vec<&Value> = tasks
+        .iter()
+        .filter(|t| t.get("delivery").is_some())
+        .collect();
+    assert!(
+        !agent_tasks.is_empty(),
+        "should have agent tasks with delivery metadata for slices"
+    );
+
+    // Each agent task should have delivery metadata with a real worktree path
+    for task in &agent_tasks {
+        let delivery = task
+            .get("delivery")
+            .expect("task should have delivery metadata");
+        assert!(
+            delivery.get("slice_id").is_some(),
+            "delivery should have slice_id"
+        );
+        let wt_path = delivery
+            .get("worktree_path")
+            .and_then(|v| v.as_str())
+            .expect("delivery should have worktree_path");
+        assert!(
+            std::path::Path::new(wt_path).exists(),
+            "worktree_path should exist: {wt_path}"
+        );
+        assert!(
+            delivery.get("branch").is_some(),
+            "delivery should have branch"
+        );
+        assert!(
+            delivery.get("status").is_some(),
+            "delivery should have status"
+        );
+    }
+
+    // Verify proof
+    let proof = goal_proof_json(&envs, project.path());
+    assert_eq!(proof["status"], "not_ready");
+    // In slice-execution mode with mock kimi, changed_files may be empty
+    // because the mock writes untracked files; the important contract is
+    // that worktrees and delivery metadata were created.
+}
+
+#[test]
+fn test_goal_concurrent_slice_execution_does_not_regress_with_max_agents() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().expect("temp project");
+    write_gate_config(project.path());
+    seed_git_project(project.path());
+    commit_all_if_changed(project.path(), "add gate config");
+
+    // Use a multi-feature goal to trigger decomposition into non-overlapping slices
+    let run = omk_cmd(&envs)
+        .env("MOCK_KIMI", mock_kimi_path())
+        .env("MOCK_KIMI_WRITE_FILE", "agent-output.txt")
+        .env("MOCK_KIMI_WRITE_BODY", "concurrent-slice-e2e\n")
+        .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
+        .current_dir(project.path())
+        .args([
+            "goal",
+            "run",
+            "Build a tiny fixture with config parsing and logging",
+            "--until-ready",
+            "--slice-execution",
+            "--max-agents",
+            "2",
+        ])
+        .output()
+        .expect("omk goal run should launch");
+    assert!(
+        run.status.success(),
+        "goal run failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let run_stdout = String::from_utf8(run.stdout).expect("run stdout should be UTF-8");
+    assert!(
+        run_stdout.contains("Narrative:"),
+        "stdout should contain Narrative section: {run_stdout}"
+    );
+
+    let goal_dir = only_goal_dir(&envs);
+    assert_goal_scaffold_artifacts(&goal_dir);
+
+    // Worktrees should be created
+    let worktrees_dir = goal_dir.join("worktrees");
+    assert!(
+        worktrees_dir.exists(),
+        "worktrees dir should exist: {}",
+        worktrees_dir.display()
+    );
+
+    // Verify multiple implement tasks were created and completed
+    let task_graph: Value = serde_json::from_str(
+        &fs::read_to_string(goal_dir.join("task-graph.json")).expect("missing task graph"),
+    )
+    .expect("task graph should be JSON");
+
+    let tasks = task_graph["tasks"].as_array().expect("tasks array");
+    let implement_tasks: Vec<&Value> = tasks
+        .iter()
+        .filter(|t| {
+            t.get("id")
+                .and_then(|v| v.as_str())
+                .is_some_and(|id| id.starts_with("goal-agent-implement-"))
+        })
+        .collect();
+    assert!(
+        implement_tasks.len() >= 2,
+        "should have at least 2 implement tasks for concurrent execution, found {}",
+        implement_tasks.len()
+    );
+
+    for task in &implement_tasks {
+        assert_eq!(
+            task.get("status").and_then(|v| v.as_str()),
+            Some("done"),
+            "implement task {} should be done",
+            task.get("id").and_then(|v| v.as_str()).unwrap_or("unknown")
+        );
+    }
+
+    let has_delivery = tasks.iter().any(|t| t.get("delivery").is_some());
+    assert!(has_delivery, "task graph should contain delivery metadata");
+}
+
+#[test]
 fn test_goal_north_star_e2e_harness_reaches_open_pr_dry_run_render() {
     let (_tmp, envs) = isolated_env();
     let project = tempfile::tempdir().expect("temp project");

@@ -21,6 +21,21 @@ pub(super) async fn materialize_delivery_slices(
         return Ok(());
     }
 
+    // Skip worktree materialization if the repo has uncommitted changes.
+    // This keeps `omk goal run --until-ready` usable on real projects
+    // that naturally have untracked files.
+    let clean = tokio::process::Command::new("git")
+        .arg("-C")
+        .arg(project_dir)
+        .args(["status", "--porcelain"])
+        .output()
+        .await
+        .map(|out| out.status.success() && String::from_utf8_lossy(&out.stdout).trim().is_empty())
+        .unwrap_or(false);
+    if !clean {
+        return Ok(());
+    }
+
     let task_ids = plan
         .slices
         .iter()

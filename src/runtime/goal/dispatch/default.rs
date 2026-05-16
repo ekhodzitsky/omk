@@ -11,6 +11,7 @@ use crate::runtime::goal::evidence::GoalAgentRunEvidence;
 use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph};
 
+#[derive(Clone)]
 pub struct DefaultGoalDispatcher;
 
 impl GoalDispatcher for DefaultGoalDispatcher {

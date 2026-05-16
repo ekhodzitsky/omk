@@ -7,20 +7,20 @@ use crate::runtime::goal::evidence::GoalAgentRunEvidence;
 use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph};
 
-pub trait GoalDispatcher: Send {
-    async fn execute_wave(
+pub trait GoalDispatcher: Send + Clone {
+    fn execute_wave(
         &self,
         state: &GoalState,
         task_graph: &GoalTaskGraph,
         project_dir: &Path,
         started_at: DateTime<Utc>,
         dispatch: &GoalAgentDispatchPlan,
-    ) -> Result<GoalAgentRunEvidence>;
+    ) -> impl std::future::Future<Output = Result<GoalAgentRunEvidence>> + Send;
 
-    async fn append_execution_events(
+    fn append_execution_events(
         &self,
         state: &GoalState,
         task: &GoalTask,
         evidence: &GoalAgentRunEvidence,
-    ) -> Result<()>;
+    ) -> impl std::future::Future<Output = Result<()>> + Send;
 }

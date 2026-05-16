@@ -117,6 +117,8 @@ pub struct GoalState {
     #[serde(default)]
     pub terminal_criteria: GoalTerminalCriteria,
     #[serde(default)]
+    pub delivery_policy: super::super::GoalDeliveryPolicy,
+    #[serde(default)]
     pub merge_policy: super::super::GoalMergePolicy,
     #[serde(default)]
     pub slice_execution: bool,

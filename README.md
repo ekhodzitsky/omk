@@ -62,7 +62,7 @@ What is ready enough to use now:
 | Proof reports | Beta MVP: `omk proof show latest`, cached/regenerated proof, Markdown/text/JSON formats. |
 | Verification gates | Ready for local gates and `.omk/gates.toml` customization, including full stdout/stderr evidence capture for large-output gates. |
 | HUD | Text, JSON, and TUI are usable; web dashboard is still scaffold-level. |
-| `omk goal` controller | Beta MVP. Creates durable goal state with PRD/plan/test/task/proof artifacts, classifies goal oracles, runs bounded Wire-backed agent waves, enforces budgets with `budget-add`, supports pause/resume/cancel, reruns gates after mutations, records review/security/integration evidence, renders PR drafts, and only marks `ready` when proof evidence passes. |
+| `omk goal` controller | Beta MVP. Creates durable goal state with PRD/plan/test/task/proof artifacts, classifies goal oracles, runs bounded Wire-backed agent waves with optional `--slice-execution` in isolated git worktrees, emits terminal narrative with orchestrator step icons, auto-commits/pushes per-slice PRs under explicit delivery policy, runs lightweight per-slice review/fix loops, creates integrator branch/PR when all slices are delivered, reruns verification gates on the integrator branch, enforces budgets with `budget-add`, supports pause/resume/cancel, reruns gates after mutations, records review/security/integration evidence, renders PR drafts, and only marks `ready` when proof evidence passes. |
 | Autopilot, Ralph, Ultrawork | Power-user MVP: useful, but less polished than the Kimi asset + team/proof path. |
 | MCP server, marketplace, web dashboard | Secondary/scaffold surfaces. |
 
@@ -187,6 +187,7 @@ Requirements:
 omk setup
 omk doctor
 omk goal run "Build a tiny local-only Rust CLI with tests and proof evidence" --until-ready
+omk goal run "Add OAuth + rate-limiting to the API" --until-ready --slice-execution --delivery draft-pr --merge-policy gated
 omk goal replay latest
 omk goal proof latest --format md
 ```
@@ -194,8 +195,11 @@ omk goal proof latest --format md
 `omk setup` creates config/state/data directories. `omk doctor` verifies the
 local environment. The first `goal run --until-ready` command writes durable
 goal state, terminal replay, and a proof-backed readiness result. In the current beta, the proof starts as `not_ready` and progresses through
-`verify` → `execute` → `review`. With `--policy auto-pr`, a passing goal can
-open a real GitHub PR directly from the proof bundle.
+`verify` → `execute` → `review`. With `--delivery auto-pr`, a passing goal can
+open a real GitHub PR directly from the proof bundle. With `--slice-execution`,
+each agent task runs in an isolated git worktree on its own branch; the CLI
+renders a live `Narrative:` section with emoji step icons as the orchestrator
+works through plan, verify, execute, review, deliver, and blocked steps.
 
 For a CI-safe dry-run with no real Kimi API calls:
 
@@ -215,7 +219,7 @@ and deliberately tracker-agnostic:
   `claude/<task-slug>`.
 - The PR declares task, owner, write scope, verification evidence, and known
   gaps. The PR body — not an external tracker — is the durable handoff surface.
-- External trackers (Beads, GitHub Issues, Linear, …) are **optional** and must
+- External trackers (GitHub Issues, Linear, …) are **optional** and must
   never become a hard prerequisite for building, testing, or reviewing OMK.
 
 Bootstrap example:
@@ -325,7 +329,7 @@ artifacts.
 | Run timelines | `events.jsonl` timeline, text/JSON output, worker/task/kind filters, malformed-line warnings. | Current |
 | HUD | Text snapshots, JSON, TUI, and web dashboard scaffold. | Current/Scaffold |
 | Cleanup and recovery | Team cleanup, backups, rollback, watchdog events, and interrupted-run failure artifacts. | Current |
-| Goal runtime (`omk goal`) | Durable goal state, oracle-aware planning artifacts, bounded Wire-backed execution waves, post-mutation verification gates, review/security/integration evidence, task-scoped delivery metadata, deterministic replay, git evidence, PR dry-run rendering, and honest proof/failure artifacts. | Beta MVP |
+| Goal runtime (`omk goal`) | Durable goal state, oracle-aware planning artifacts, bounded Wire-backed execution waves with optional per-slice worktree isolation, terminal narrative with orchestrator step icons, post-mutation verification gates, per-slice PR delivery and review/fix loop, integrator branch/PR creation with integrator gate rerun, review/security/integration evidence, task-scoped delivery metadata, deterministic replay, git evidence, PR dry-run rendering, and honest proof/failure artifacts. | Beta MVP |
 | Autopilot | Single-lead autonomous execution with verification gates and resume/yolo options. | Power-user MVP |
 | Ralph | Persistent verify/fix loop with iteration limits and completion evidence. | Power-user MVP |
 | Ultrawork | Parallel burst prompts from args, files, or globs, with JSON output support. | Power-user MVP |

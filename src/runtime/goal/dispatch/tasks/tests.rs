@@ -88,6 +88,7 @@ async fn setup_goal_state(budget_time: Option<String>) -> (GoalState, GoalTaskGr
         failure: None,
         state_dir: state_dir.clone(),
         cost_tracker_path: None,
+        delivery_policy: Default::default(),
         merge_policy: Default::default(),
         slice_execution: Default::default(),
     };

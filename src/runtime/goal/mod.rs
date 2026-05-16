@@ -14,6 +14,7 @@ mod progress;
 mod proof;
 mod queries;
 mod replay;
+mod review;
 mod state;
 mod task_graph;
 mod types;
@@ -55,7 +56,7 @@ pub use task_graph::{
     GoalTaskDeliveryMetadata, GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryRecord,
     GoalTaskDeliveryStatus, GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
 };
-pub use types::{GoalBudget, GoalId};
+pub use types::{GoalBudget, GoalControllerStepKind, GoalId};
 pub use worktree::{
     detect_goal_merge_conflicts, materialize_goal_worktrees, plan_goal_worktree,
     plan_goal_worktrees, GoalMergeConflictCheckRequest, GoalMergeConflictEvidence,

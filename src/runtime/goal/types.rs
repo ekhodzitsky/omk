@@ -98,7 +98,7 @@ impl GoalBudget {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum GoalControllerStepKind {
+pub enum GoalControllerStepKind {
     Plan,
     Verify,
     Execute,
@@ -121,10 +121,11 @@ impl GoalControllerStepKind {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct GoalControllerStep {
-    pub(crate) kind: GoalControllerStepKind,
+    pub kind: GoalControllerStepKind,
     pub(crate) status: super::state::GoalStatus,
-    pub(crate) summary: String,
+    pub summary: String,
 }
 
 #[derive(Debug, Clone)]

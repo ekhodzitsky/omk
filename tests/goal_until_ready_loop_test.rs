@@ -124,11 +124,11 @@ fn run_until_ready_drives_controller_loop_and_stops_before_manual_acceptance() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Goal run completed"))
-        .stdout(predicate::str::contains("Controller steps:"))
-        .stdout(predicate::str::contains("plan:"))
-        .stdout(predicate::str::contains("verify:"))
-        .stdout(predicate::str::contains("execute:"))
-        .stdout(predicate::str::contains("review:"))
+        .stdout(predicate::str::contains("Narrative:"))
+        .stdout(predicate::str::contains("plan"))
+        .stdout(predicate::str::contains("verify"))
+        .stdout(predicate::str::contains("execute"))
+        .stdout(predicate::str::contains("review"))
         .stdout(predicate::str::contains("manual integration acceptance"))
         .stdout(predicate::str::contains("GitHub mutation: disabled"))
         .stdout(predicate::str::contains("omk goal verify latest").not())
@@ -245,8 +245,8 @@ fn run_until_ready_dispatches_accepted_agent_followup_before_review() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("execute:").count(2))
-        .stdout(predicate::str::contains("review:"))
+        .stdout(predicate::str::contains("execute").count(2))
+        .stdout(predicate::str::contains("review"))
         .stdout(predicate::str::contains("manual integration acceptance"));
 
     let dirs = goal_dirs(&envs);

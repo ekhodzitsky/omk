@@ -119,11 +119,11 @@ fn run_until_ready_with_local_policy_stops_at_manual_integration_blocker() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Goal run completed"))
-        .stdout(predicate::str::contains("Controller steps:"))
-        .stdout(predicate::str::contains("plan:"))
-        .stdout(predicate::str::contains("verify:"))
-        .stdout(predicate::str::contains("execute:"))
-        .stdout(predicate::str::contains("review:"))
+        .stdout(predicate::str::contains("Narrative:"))
+        .stdout(predicate::str::contains("plan"))
+        .stdout(predicate::str::contains("verify"))
+        .stdout(predicate::str::contains("execute"))
+        .stdout(predicate::str::contains("review"))
         .stdout(predicate::str::contains("manual integration acceptance"))
         .stdout(predicate::str::contains("GitHub mutation: disabled"));
 
