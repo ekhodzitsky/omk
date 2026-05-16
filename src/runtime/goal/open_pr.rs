@@ -21,7 +21,11 @@ pub struct GoalOpenPrDraft {
     pub proof_path: PathBuf,
 }
 
-pub(crate) async fn render_goal_open_pr(goal_id: &str, draft: bool) -> Result<GoalOpenPrDraft> {
+pub(crate) async fn render_goal_open_pr(
+    goal_id: &str,
+    draft: bool,
+    dry_run: bool,
+) -> Result<GoalOpenPrDraft> {
     let state = super::resolve_goal(goal_id).await?;
     let proof_path = state.state_dir.join(GOAL_PROOF_FILE);
     if !tokio::fs::try_exists(&proof_path).await? {
@@ -53,7 +57,7 @@ pub(crate) async fn render_goal_open_pr(goal_id: &str, draft: bool) -> Result<Go
     let body = render_pr_body(&state, &proof, &task_graph, &delivery_metadata, draft);
     Ok(GoalOpenPrDraft {
         goal_id: state.goal_id,
-        dry_run: true,
+        dry_run,
         draft,
         title,
         body,

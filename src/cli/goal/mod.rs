@@ -14,11 +14,13 @@
 
 mod commands;
 mod help;
+mod types;
 mod validate;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+pub(crate) use types::{map_open_pr_policy, OpenPrFormat, OpenPrPolicy, OutputFormat};
 use validate::{
     resolve_format, validate_budget_time, validate_decision_text, validate_goal_id,
     validate_goal_text, validate_optional_budget_tokens, validate_optional_budget_usd,
@@ -85,7 +87,7 @@ pub(crate) enum GoalCommands {
         goal_id: String,
         /// Output format
         #[arg(short, long, value_enum, default_value = "text")]
-        format: OutputFormat,
+        format: types::OutputFormat,
         /// Shortcut for `--format json`
         #[arg(long, conflicts_with = "format")]
         json: bool,
@@ -98,7 +100,7 @@ pub(crate) enum GoalCommands {
         goal_id: String,
         /// Output format
         #[arg(short, long, value_enum, default_value = "text")]
-        format: OutputFormat,
+        format: types::OutputFormat,
         /// Shortcut for `--format json`
         #[arg(long, conflicts_with = "format")]
         json: bool,
@@ -115,9 +117,15 @@ pub(crate) enum GoalCommands {
         /// Render metadata for a GitHub draft PR
         #[arg(long)]
         draft: bool,
+        /// Delivery policy: local, draft-pr, or auto-pr
+        #[arg(long, value_enum, default_value = "local")]
+        policy: types::OpenPrPolicy,
+        /// Base branch for the PR
+        #[arg(long, value_name = "BRANCH")]
+        base_branch: Option<String>,
         /// Output format
         #[arg(short, long, value_enum, default_value = "markdown")]
-        format: OpenPrFormat,
+        format: types::OpenPrFormat,
     },
     /// Accept a proof-backed goal after explicit local integrator review
     #[command(after_help = help::GOAL_ACCEPT_AFTER_HELP)]
@@ -147,7 +155,7 @@ pub(crate) enum GoalCommands {
         goal_id: String,
         /// Output format
         #[arg(short, long, value_enum, default_value = "text")]
-        format: OutputFormat,
+        format: types::OutputFormat,
         /// Shortcut for `--format json`
         #[arg(long, conflicts_with = "format")]
         json: bool,
@@ -160,7 +168,7 @@ pub(crate) enum GoalCommands {
         goal_id: String,
         /// Output format
         #[arg(short, long, value_enum, default_value = "text")]
-        format: OutputFormat,
+        format: types::OutputFormat,
         /// Shortcut for `--format json`
         #[arg(long, conflicts_with = "format")]
         json: bool,
@@ -225,27 +233,6 @@ pub(crate) enum GoalCommands {
     },
 }
 
-#[derive(Copy, Clone, Debug, clap::ValueEnum)]
-pub(crate) enum OutputFormat {
-    /// Human-readable text (default)
-    Text,
-    /// Machine-readable JSON
-    Json,
-    /// Markdown for documentation pipelines
-    Md,
-}
-
-#[derive(Copy, Clone, Debug, clap::ValueEnum)]
-pub(crate) enum OpenPrFormat {
-    /// Human-readable text
-    Text,
-    /// Machine-readable JSON
-    Json,
-    /// Markdown PR title/body draft
-    #[value(alias = "md")]
-    Markdown,
-}
-
 pub(crate) async fn run(args: Args) -> Result<()> {
     match args.command {
         GoalCommands::Run {
@@ -302,10 +289,12 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             goal_id,
             dry_run,
             draft,
+            policy,
+            base_branch,
             format,
         } => {
             let goal_id = validate_goal_id(&goal_id)?;
-            commands::cmd_open_pr(goal_id, dry_run, draft, format).await
+            commands::cmd_open_pr(goal_id, dry_run, draft, policy, base_branch, format).await
         }
         GoalCommands::Accept { goal_id, summary } => {
             let goal_id = validate_goal_id(&goal_id)?;

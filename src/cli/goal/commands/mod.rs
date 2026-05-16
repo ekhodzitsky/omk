@@ -6,16 +6,18 @@
 
 mod budget;
 mod integration;
+mod open_pr;
 mod run;
 
 pub(super) use budget::{cmd_budget, cmd_budget_add};
 pub(super) use integration::{cmd_accept, cmd_reject};
+pub(super) use open_pr::cmd_open_pr;
 pub(super) use run::cmd_run;
 
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
-use super::{OpenPrFormat, OutputFormat};
+use super::OutputFormat;
 
 pub(super) async fn cmd_plan(goal: &str) -> Result<()> {
     let state = crate::runtime::goal::plan_goal(goal).await?;
@@ -162,41 +164,6 @@ pub(super) async fn cmd_proof(goal_id: &str, format: OutputFormat) -> Result<()>
                     println!("  - {gap}");
                 }
             }
-        }
-    }
-
-    Ok(())
-}
-
-pub(super) async fn cmd_open_pr(
-    goal_id: &str,
-    dry_run: bool,
-    draft: bool,
-    format: OpenPrFormat,
-) -> Result<()> {
-    if !dry_run {
-        anyhow::bail!(
-            "`omk goal open-pr` only supports dry-run rendering in this release.\nNext: omk goal open-pr {goal_id} --dry-run"
-        );
-    }
-
-    let draft = crate::runtime::goal::render_goal_open_pr(goal_id, draft).await?;
-
-    match format {
-        OpenPrFormat::Json => println!("{}", serde_json::to_string_pretty(&draft)?),
-        OpenPrFormat::Markdown => {
-            println!("Title: {}", draft.title);
-            println!("Dry-run: {}", draft.dry_run);
-            println!("Draft: {}", draft.draft);
-            println!();
-            print!("{}", draft.body);
-        }
-        OpenPrFormat::Text => {
-            println!("PR title: {}", draft.title);
-            println!("Dry-run: {}", draft.dry_run);
-            println!("Draft: {}", draft.draft);
-            println!("PR body:");
-            print!("{}", draft.body);
         }
     }
 

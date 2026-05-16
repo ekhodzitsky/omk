@@ -173,7 +173,7 @@ where
     C: GoalGithubPrClient,
 {
     let render_as_draft = options.draft || options.policy == GoalDeliveryPolicy::DraftPr;
-    let draft = render_goal_open_pr(goal_id, render_as_draft).await?;
+    let draft = render_goal_open_pr(goal_id, render_as_draft, options.dry_run).await?;
     deliver_goal_open_pr_with_client(&draft, options, client).await
 }
 
