@@ -7,7 +7,7 @@ use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 
 mod until_ready;
 
-pub(crate) use until_ready::run_goal_until_ready;
+pub(crate) use until_ready::{resolve_base_branch, run_goal_until_ready};
 
 pub async fn pause_goal(goal_id: &str) -> Result<GoalState> {
     let mut state = super::resolve_goal(goal_id).await?;

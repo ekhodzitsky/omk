@@ -8,7 +8,8 @@ use tokio::process::Command;
 use tokio::time::timeout;
 
 use super::{
-    GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrRequest,
+    GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrOperation,
+    GoalGithubPrRequest,
 };
 use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::GoalDeliverySlice;
@@ -193,7 +194,15 @@ pub async fn open_slice_pr(
     };
 
     let mut client = GoalGithubPrCommandClient::default();
-    let mutation = client.create_pr(request).await?;
+    let operation = if request.existing_pr_url.is_some() {
+        GoalGithubPrOperation::Update
+    } else {
+        GoalGithubPrOperation::Create
+    };
+    let mutation = match operation {
+        GoalGithubPrOperation::Create => client.create_pr(request).await?,
+        GoalGithubPrOperation::Update => client.update_pr(request).await?,
+    };
 
     Ok(SlicePrDeliveryOutcome {
         commit_sha: Some(commit_sha.to_string()),

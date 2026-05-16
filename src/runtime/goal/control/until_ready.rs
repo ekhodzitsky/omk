@@ -435,6 +435,20 @@ async fn finalize_slice_integrator(
         .await;
     }
 
+    // Pre-check merge-tree for conflicts before attempting actual merges
+    for branch in &slice_branches {
+        if let Err(e) = merge_tree_is_clean(project_dir, branch, &integrator_branch).await {
+            return finalize_until_ready_blocker(
+                goal_id,
+                steps,
+                UntilReadyBlocker::policy(format!(
+                    "integrator merge-tree pre-check failed for branch {branch}: {e}"
+                )),
+            )
+            .await;
+        }
+    }
+
     // Merge each slice branch into the integrator
     for branch in &slice_branches {
         if let Err(e) = merge_branch_into_integrator(project_dir, branch, &integrator_branch).await
@@ -559,6 +573,22 @@ async fn finalize_slice_integrator(
 
     let pr_url = pr_outcome.pr_url.clone();
 
+    // Record integrator metadata artifact
+    let integrator_metadata = serde_json::json!({
+        "integrator_branch": integrator_branch,
+        "pr_url": pr_url,
+        "slice_branches": slice_branches,
+        "recorded_at": now,
+    });
+    let integrator_metadata_path = state.state_dir.join("integrator-metadata.json");
+    proof::write_json_artifact(&integrator_metadata_path, &integrator_metadata).await?;
+    evidence::record_artifact_path_once(
+        &mut state,
+        "integrator_metadata",
+        integrator_metadata_path,
+        now,
+    );
+
     // Apply merge policy
     match merge_policy {
         GoalMergePolicy::Disabled => {
@@ -663,6 +693,8 @@ async fn finalize_slice_integrator(
                 summary: instruction.clone(),
             });
 
+            cleanup_goal_worktrees(&state, project_dir).await;
+
             Ok(GoalRunUntilReadyOutcome {
                 state,
                 proof,
@@ -757,7 +789,7 @@ async fn finalize_slice_integrator(
     }
 }
 
-async fn resolve_base_branch(repo_dir: &Path) -> Option<String> {
+pub(crate) async fn resolve_base_branch(repo_dir: &Path) -> Option<String> {
     for branch in ["main", "master"] {
         let output = git_command(
             repo_dir,
@@ -797,6 +829,30 @@ async fn create_integrator_branch(
     } else {
         anyhow::bail!("git checkout -b failed: {}", output_stderr(&output))
     }
+}
+
+async fn merge_tree_is_clean(
+    repo_dir: &Path,
+    branch: &str,
+    integrator_branch: &str,
+) -> anyhow::Result<()> {
+    let output = git_command(
+        repo_dir,
+        vec![
+            std::ffi::OsString::from("merge-tree"),
+            std::ffi::OsString::from(integrator_branch),
+            std::ffi::OsString::from(branch),
+        ],
+    )
+    .await?;
+    if !output.status.success() {
+        anyhow::bail!("git merge-tree failed: {}", output_stderr(&output));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.contains("<<<<<<<") || stdout.contains("=======") || stdout.contains(">>>>>>>") {
+        anyhow::bail!("merge-tree predicts conflicts between {integrator_branch} and {branch}");
+    }
+    Ok(())
 }
 
 async fn merge_branch_into_integrator(
