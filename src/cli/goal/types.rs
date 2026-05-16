@@ -31,10 +31,28 @@ pub(crate) enum OpenPrPolicy {
     AutoPr,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum MergePolicy {
+    /// Do not merge; stop after PR creation
+    Disabled,
+    /// Stop before merge and record the exact human action needed
+    Manual,
+    /// Merge only after proof, CI, and required reviews are green
+    Gated,
+}
+
 pub(crate) fn map_open_pr_policy(policy: OpenPrPolicy) -> crate::runtime::goal::GoalDeliveryPolicy {
     match policy {
         OpenPrPolicy::Local => crate::runtime::goal::GoalDeliveryPolicy::Local,
         OpenPrPolicy::DraftPr => crate::runtime::goal::GoalDeliveryPolicy::DraftPr,
         OpenPrPolicy::AutoPr => crate::runtime::goal::GoalDeliveryPolicy::AutoPr,
+    }
+}
+
+pub(crate) fn map_merge_policy(policy: MergePolicy) -> crate::runtime::goal::GoalMergePolicy {
+    match policy {
+        MergePolicy::Disabled => crate::runtime::goal::GoalMergePolicy::Disabled,
+        MergePolicy::Manual => crate::runtime::goal::GoalMergePolicy::Manual,
+        MergePolicy::Gated => crate::runtime::goal::GoalMergePolicy::Gated,
     }
 }

@@ -35,6 +35,29 @@ impl GoalDeliveryPolicy {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum GoalMergePolicy {
+    #[default]
+    Disabled,
+    Manual,
+    Gated,
+}
+
+impl GoalMergePolicy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            GoalMergePolicy::Disabled => "disabled",
+            GoalMergePolicy::Manual => "manual",
+            GoalMergePolicy::Gated => "gated",
+        }
+    }
+
+    pub fn permits_merge(self) -> bool {
+        matches!(self, GoalMergePolicy::Gated)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GoalGithubPrOperation {
@@ -372,6 +395,53 @@ fn pr_url_from_stdout(stdout: &str) -> Option<String> {
         .map(str::trim)
         .find(|line| line.starts_with("http://") || line.starts_with("https://"))
         .map(str::to_string)
+}
+
+/// Poll GitHub PR required checks via `gh pr checks`.
+/// Returns `Ok(true)` when all required checks pass.
+/// Returns `Ok(false)` while checks are pending.
+/// Returns `Err(...)` if a required check fails or the command errors.
+pub async fn poll_github_pr_checks(pr_url: &str, timeout: Duration) -> Result<bool> {
+    let mut command = Command::new("gh");
+    command.arg("pr").arg("checks").arg(pr_url);
+    let output = tokio::time::timeout(timeout, command.output())
+        .await
+        .with_context(|| format!("timed out waiting for gh pr checks {pr_url}"))?
+        .with_context(|| format!("failed to start gh pr checks {pr_url}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("no checks reported") {
+            return Ok(false);
+        }
+        anyhow::bail!("gh pr checks failed: {}", stderr.trim());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<_> = stdout.lines().collect();
+    if lines.is_empty() {
+        return Ok(false);
+    }
+
+    let mut all_pass = true;
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        // gh pr checks output format: "check-name  pass/fail/pending  time  url"
+        let parts: Vec<_> = trimmed.split_whitespace().collect();
+        if parts.len() >= 2 {
+            let state = parts[1];
+            if state == "fail" {
+                anyhow::bail!("required check '{}' failed", parts[0]);
+            }
+            if state != "pass" {
+                all_pass = false;
+            }
+        }
+    }
+    Ok(all_pass)
 }
 
 #[cfg(test)]
