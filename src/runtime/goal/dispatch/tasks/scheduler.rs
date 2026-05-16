@@ -58,8 +58,41 @@ pub(super) fn goal_agent_task_prompt(
         .find(|task| task.id == GOAL_LOCAL_VERIFY_TASK_ID)
         .map(|task| task.status.to_string())
         .unwrap_or_else(|| "unknown".to_string());
+
+    let policy_text = if state.slice_execution {
+        "Stay inside the current repository, keep the diff minimal, do not push, do not touch secrets, and summarize changed files plus verification still needed for production readiness. The controller will auto-commit your changes after the wave."
+    } else {
+        "Stay inside the current repository, keep the diff minimal, do not commit, do not publish, do not touch secrets, and summarize changed files plus verification still needed for production readiness."
+    };
+
+    let review_feedback = if state.slice_execution {
+        proposal
+            .description
+            .lines()
+            .find(|line| line.contains("[review-feedback]"))
+            .map(|line| line.trim_start_matches("[review-feedback]").trim().to_string())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let feedback_section = if review_feedback.is_empty() {
+        String::new()
+    } else {
+        format!("\n\nPrevious review feedback — address these issues:\n{review_feedback}")
+    };
+
+    let write_scope_section = if proposal.write_set.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n\nAllowed write paths:\n- {}",
+            proposal.write_set.join("\n- ")
+        )
+    };
+
     format!(
-        "Goal ID: {}\nGenerated: {generated_at}\n\nOriginal goal:\n{}\n\nNormalized goal:\n{}\n\nController task: {}\nTitle: {}\nBudget: {} seconds\nRisk: {}\n\nTask:\n{}\n\nAcceptance criteria:\n- {}\n\nPolicy:\nStay inside the current repository, keep the diff minimal, do not commit, do not publish, do not touch secrets, and summarize changed files plus verification still needed for production readiness.\n\nLocal verification task status: {local_status}",
+        "Goal ID: {}\nGenerated: {generated_at}\n\nOriginal goal:\n{}\n\nNormalized goal:\n{}\n\nController task: {}\nTitle: {}\nBudget: {} seconds\nRisk: {}\n\nTask:\n{}\n\nAcceptance criteria:\n- {}\n\nPolicy:\n{policy_text}{feedback_section}{write_scope_section}\n\nLocal verification task status: {local_status}",
         state.goal_id,
         state.original_goal,
         state.normalized_goal,

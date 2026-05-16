@@ -63,14 +63,10 @@ fn print_until_ready_outcome(outcome: &crate::runtime::goal::GoalRunUntilReadyOu
             .display()
     );
     println!();
-    println!("Controller steps:");
-    for step in &outcome.steps {
-        println!(
-            "  {}: {} -- {}",
-            step.kind.as_str(),
-            step.status,
-            step.summary
-        );
+    println!("Narrative:");
+    for (idx, step) in outcome.steps.iter().enumerate() {
+        let icon = step_icon(step.kind);
+        println!("  {idx}. {icon} {} — {}", step.kind.as_str(), step.summary);
     }
     if let Some(blocker) = &outcome.blocker {
         println!();
@@ -85,5 +81,17 @@ fn print_until_ready_outcome(outcome: &crate::runtime::goal::GoalRunUntilReadyOu
                 println!("Policy evidence: {}", path.display());
             }
         }
+    }
+}
+
+fn step_icon(kind: crate::runtime::goal::GoalControllerStepKind) -> &'static str {
+    use crate::runtime::goal::GoalControllerStepKind;
+    match kind {
+        GoalControllerStepKind::Plan => "📋",
+        GoalControllerStepKind::Verify => "🔍",
+        GoalControllerStepKind::Execute => "⚡",
+        GoalControllerStepKind::Review => "👁 ",
+        GoalControllerStepKind::Deliver => "🚀",
+        GoalControllerStepKind::Blocked => "🚧",
     }
 }

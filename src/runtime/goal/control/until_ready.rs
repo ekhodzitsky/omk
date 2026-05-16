@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::Utc;
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -19,8 +19,10 @@ use crate::runtime::goal::types::{
 };
 use crate::runtime::goal::worktree::remove_goal_worktrees;
 use crate::runtime::goal::{evidence, proof};
+use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, RunId};
 
 const MAX_EXECUTE_PASSES: usize = 8;
+const GIT_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 const MANUAL_INTEGRATION_BLOCKER_FILE: &str = "artifacts/policy/manual-integration-blocker.json";
 const UNTIL_READY_BLOCKER_FILE: &str = "artifacts/policy/until-ready-blocker.json";
 
@@ -55,11 +57,18 @@ pub(crate) async fn run_goal_until_ready(
     project_dir: &Path,
 ) -> Result<GoalRunUntilReadyOutcome> {
     let state = crate::runtime::goal::create_goal(goal, options.clone()).await?;
-    let mut steps = vec![GoalControllerStep {
+    let events_path = state.state_dir.join(crate::runtime::config::EVENTS_FILE);
+    let event_writer = EventWriter::new(events_path);
+    let event_builder = EventBuilder::new(RunId(state.goal_id.clone()));
+
+    let plan_step = GoalControllerStep {
         kind: GoalControllerStepKind::Plan,
         status: state.status,
         summary: "created durable goal scaffold and planning artifacts".to_string(),
-    }];
+    };
+    emit_narrative(&event_writer, &event_builder, &RunId(state.goal_id.clone()), &plan_step.summary).await;
+    let mut steps = vec![plan_step];
+
     let proof = GoalProof::load(&state.state_dir).await?;
     if state.status == GoalStatus::BlockedOnHuman {
         let blocker = state
@@ -72,6 +81,7 @@ pub(crate) async fn run_goal_until_ready(
             status: state.status,
             summary: blocker.clone(),
         });
+        emit_narrative(&event_writer, &event_builder, &RunId(state.goal_id.clone()), &format!("blocked: {blocker}")).await;
         return Ok(GoalRunUntilReadyOutcome {
             state,
             proof,
@@ -82,11 +92,13 @@ pub(crate) async fn run_goal_until_ready(
     }
 
     let verified = crate::runtime::goal::verify_goal(&state.goal_id, project_dir).await?;
+    let verify_summary = verification_summary(&verified);
     steps.push(GoalControllerStep {
         kind: GoalControllerStepKind::Verify,
         status: verified.status,
-        summary: verification_summary(&verified),
+        summary: verify_summary.clone(),
     });
+    emit_narrative(&event_writer, &event_builder, &RunId(state.goal_id.clone()), &format!("verify: {verify_summary}")).await;
     if !verification_can_continue(&verified) {
         return finalize_until_ready_blocker(
             &state.goal_id,
@@ -98,11 +110,13 @@ pub(crate) async fn run_goal_until_ready(
 
     for pass in 1..=MAX_EXECUTE_PASSES {
         let executed = crate::runtime::goal::execute_goal(&state.goal_id, project_dir).await?;
+        let exec_summary = format!("execution pass {pass}: {}", executed.summary);
         steps.push(GoalControllerStep {
             kind: GoalControllerStepKind::Execute,
             status: executed.status,
-            summary: format!("ran controller execution pass {pass}"),
+            summary: exec_summary.clone(),
         });
+        emit_narrative(&event_writer, &event_builder, &RunId(state.goal_id.clone()), &exec_summary).await;
         if !proof_can_continue(&executed) {
             return finalize_until_ready_blocker(
                 &state.goal_id,
@@ -132,6 +146,7 @@ pub(crate) async fn run_goal_until_ready(
         status: reviewed.status,
         summary: "attached controller review and security-review evidence".to_string(),
     });
+    emit_narrative(&event_writer, &event_builder, &RunId(state.goal_id.clone()), "review completed").await;
     let blocker = readiness_blocker(&state.goal_id, &reviewed).await?;
     if blocker.reason.contains("manual integration acceptance")
         && options.delivery_policy != GoalDeliveryPolicy::Local
@@ -267,7 +282,7 @@ fn review_wall_blocker(proof: &GoalProof) -> Option<String> {
 
 fn manual_integration_acceptance_required(task_graph: &GoalTaskGraph, proof: &GoalProof) -> bool {
     goal_task_done(task_graph, state::GOAL_LOCAL_VERIFY_TASK_ID)
-        && goal_task_done(task_graph, state::GOAL_AGENT_EXECUTE_TASK_ID)
+        && crate::runtime::goal::task_graph::goal_agent_execution_done(task_graph)
         && goal_task_done(task_graph, state::GOAL_REVIEW_TASK_ID)
         && goal_task_done(task_graph, state::GOAL_SECURITY_REVIEW_TASK_ID)
         && !proof.changed_files.is_empty()
@@ -338,6 +353,491 @@ async fn finalize_until_ready_blocker(
     })
 }
 
+async fn finalize_slice_integrator(
+    goal_id: &str,
+    mut steps: Vec<GoalControllerStep>,
+    policy: GoalDeliveryPolicy,
+    merge_policy: GoalMergePolicy,
+    project_dir: &Path,
+) -> Result<GoalRunUntilReadyOutcome> {
+    let mut state = crate::runtime::goal::resolve_goal(goal_id).await?;
+    let mut proof = GoalProof::load(&state.state_dir).await?;
+    let now = Utc::now();
+
+    // Collect delivered slice branches
+    let records =
+        crate::runtime::goal::task_graph::load_goal_task_delivery_records(&state.state_dir)
+            .await?;
+    let slice_branches: Vec<String> = records
+        .iter()
+        .filter(|r| {
+            r.metadata.status.as_ref().is_some_and(|s| {
+                matches!(
+                    s,
+                    crate::runtime::goal::task_graph::GoalTaskDeliveryStatus::Delivered
+                        | crate::runtime::goal::task_graph::GoalTaskDeliveryStatus::Merged
+                )
+            })
+        })
+        .filter_map(|r| r.metadata.branch.clone())
+        .collect();
+
+    if slice_branches.is_empty() {
+        return finalize_until_ready_blocker(
+            goal_id,
+            steps,
+            UntilReadyBlocker::policy("no delivered slices found for integrator"),
+        )
+        .await;
+    }
+
+    let integrator_branch = format!("integrator/{}", state.goal_id);
+
+    // Create integrator branch from current master/main
+    let base_branch = resolve_base_branch(project_dir).await.unwrap_or_else(|| "master".to_string());
+    if let Err(e) = create_integrator_branch(project_dir, &integrator_branch, &base_branch).await {
+        return finalize_until_ready_blocker(
+            goal_id,
+            steps,
+            UntilReadyBlocker::policy(format!(
+                "integrator branch creation failed: {e}"
+            )),
+        )
+        .await;
+    }
+
+    // Merge each slice branch into the integrator
+    for branch in &slice_branches {
+        if let Err(e) = merge_branch_into_integrator(project_dir, branch, &integrator_branch).await
+        {
+            return finalize_until_ready_blocker(
+                goal_id,
+                steps,
+                UntilReadyBlocker::policy(format!(
+                    "integrator merge failed for branch {branch}: {e}"
+                )),
+            )
+            .await;
+        }
+    }
+
+    // Push integrator branch
+    if let Err(e) = push_branch(project_dir, &integrator_branch).await {
+        return finalize_until_ready_blocker(
+            goal_id,
+            steps,
+            UntilReadyBlocker::policy(format!("integrator push failed: {e}")),
+        )
+        .await;
+    }
+
+    // Run verification wall on the integrator branch
+    let integrator_gate_config = crate::runtime::gates::load_or_detect_gates(project_dir).await;
+    let integrator_gate_artifacts = state
+        .state_dir
+        .join(state::GOAL_ARTIFACTS_DIR)
+        .join(state::GOAL_GATE_ARTIFACTS_DIR)
+        .join("integrator");
+    let integrator_gates = crate::runtime::gates::run_gates_with_evidence(
+        &integrator_gate_config,
+        project_dir,
+        Some(&integrator_gate_artifacts),
+    )
+    .await;
+    let _ = crate::runtime::goal::verifier::append_gate_events(&state, &integrator_gates).await;
+    let integrator_gates_ok =
+        !integrator_gates.is_empty() && crate::runtime::gates::gates_passed(&integrator_gates);
+    if !integrator_gates_ok {
+        let _ = git_command(
+            project_dir,
+            vec![
+                std::ffi::OsString::from("checkout"),
+                std::ffi::OsString::from(&base_branch),
+            ],
+        )
+        .await;
+        return finalize_until_ready_blocker(
+            goal_id,
+            steps,
+            UntilReadyBlocker::policy(
+                "integrator verification gates failed; switched back to base branch".to_string(),
+            ),
+        )
+        .await;
+    }
+    steps.push(GoalControllerStep {
+        kind: GoalControllerStepKind::Verify,
+        status: GoalStatus::Ready,
+        summary: format!(
+            "integrator verification wall passed ({} gate(s))",
+            integrator_gates.len()
+        ),
+    });
+    let integrator_narrative = format!(
+        "integrator branch passed {} verification gate(s)",
+        integrator_gates.len()
+    );
+    let integrator_event_writer = EventWriter::new(
+        state.state_dir.join(crate::runtime::config::EVENTS_FILE),
+    );
+    if let Ok(event) = Event::new(
+        RunId(state.goal_id.clone()),
+        EventKind::TaskOutput,
+    )
+    .with_actor("controller")
+    .with_message(&integrator_narrative)
+    {
+        let _ = integrator_event_writer.append(&event).await;
+    }
+
+    // Open integrator PR
+    let title = format!("[Integrator] {}", state.normalized_goal);
+    let body = format!(
+        "Integrator PR combining {} slice(s) for goal `{}`.\n\nSlices:\n{}",
+        slice_branches.len(),
+        state.goal_id,
+        slice_branches
+            .iter()
+            .map(|b| format!("- `{}`", b))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+
+    let pr_request = crate::runtime::goal::delivery::GoalGithubPrRequest {
+        title,
+        body,
+        head_branch: integrator_branch.clone(),
+        base_branch: Some(base_branch),
+        draft: policy == GoalDeliveryPolicy::DraftPr,
+        existing_pr_url: None,
+    };
+
+    let mut client = GoalGithubPrCommandClient::default();
+    let pr_outcome = match client.create_pr(pr_request).await {
+        Ok(mutation) => crate::runtime::goal::delivery::GoalGithubPrDeliveryOutcome {
+            policy,
+            dry_run: false,
+            mutated: true,
+            operation: Some(mutation.operation),
+            pr_url: mutation.url.clone(),
+            reason: format!("GitHub PR {} completed", mutation.operation.as_str()),
+        },
+        Err(e) => {
+            return finalize_until_ready_blocker(
+                goal_id,
+                steps,
+                UntilReadyBlocker::policy(format!("integrator PR creation failed: {e}")),
+            )
+            .await;
+        }
+    };
+
+    let pr_url = pr_outcome.pr_url.clone();
+
+    // Apply merge policy
+    match merge_policy {
+        GoalMergePolicy::Disabled => {
+            state.status = GoalStatus::Ready;
+            state.phase = GoalPhase::Proof;
+            state.completed_at = Some(now);
+            state.updated_at = now;
+            FileSystemGoalStateStore::new().save(&state).await?;
+
+            proof.status = GoalStatus::Ready;
+            proof.readiness =
+                "ready: all slices delivered; integrator PR created; merge disabled by policy"
+                    .to_string();
+            proof.summary = format!(
+                "Goal '{}' is proof-backed ready with {} slice(s). Integrator PR created. Merge is disabled by policy.",
+                state.normalized_goal,
+                slice_branches.len()
+            );
+            proof.generated_at = now;
+            proof.artifacts = state.artifacts.clone();
+            proof.known_gaps.clear();
+            proof.human_decisions_required.clear();
+            proof.git = super::super::evidence::detect_git_evidence(project_dir)
+                .await
+                .or(proof.git);
+            proof::write_json_artifact(&state.state_dir.join(state::GOAL_PROOF_FILE), &proof)
+                .await?;
+
+            steps.push(GoalControllerStep {
+                kind: GoalControllerStepKind::Deliver,
+                status: GoalStatus::Ready,
+                summary: format!(
+                    "Integrator PR created under {} policy; merge disabled",
+                    policy.as_str()
+                ),
+            });
+
+            cleanup_goal_worktrees(&state, project_dir).await;
+
+            Ok(GoalRunUntilReadyOutcome {
+                state,
+                proof,
+                steps,
+                blocker: None,
+                policy_evidence_path: None,
+            })
+        }
+        GoalMergePolicy::Manual => {
+            let instruction = if let Some(ref url) = pr_url {
+                format!("run `gh pr merge {url} --squash --delete-branch` after CI passes")
+            } else {
+                "no integrator PR was created; inspect the goal state for delivery evidence".to_string()
+            };
+            state.status = GoalStatus::BlockedOnHuman;
+            state.phase = GoalPhase::Proof;
+            state.completed_at = Some(now);
+            state.updated_at = now;
+            FileSystemGoalStateStore::new().save(&state).await?;
+
+            proof.status = GoalStatus::BlockedOnHuman;
+            proof.readiness =
+                "blocked: manual merge required before goal is fully delivered".to_string();
+            proof.summary = format!(
+                "Goal '{}' passed gates, execution, review, and integration evidence. Manual merge of the integrator PR is required.",
+                state.normalized_goal
+            );
+            proof.generated_at = now;
+            proof.artifacts = state.artifacts.clone();
+            proof.human_decisions_required.push(instruction.clone());
+            proof.git = super::super::evidence::detect_git_evidence(project_dir)
+                .await
+                .or(proof.git);
+            proof::write_json_artifact(&state.state_dir.join(state::GOAL_PROOF_FILE), &proof)
+                .await?;
+
+            let artifact = json!({
+                "status": "blocked",
+                "reason": &instruction,
+                "delivery_policy": policy.as_str(),
+                "merge_policy": merge_policy.as_str(),
+                "github_mutation": pr_outcome.mutated,
+                "integrator_acceptance": "manual",
+                "proof": state::GOAL_PROOF_FILE,
+                "recorded_at": now,
+            });
+            proof::write_json_artifact(
+                &state.state_dir.join(MANUAL_INTEGRATION_BLOCKER_FILE),
+                &artifact,
+            )
+            .await?;
+            evidence::record_artifact_path_once(
+                &mut state,
+                "policy_blocker",
+                PathBuf::from(MANUAL_INTEGRATION_BLOCKER_FILE),
+                now,
+            );
+
+            steps.push(GoalControllerStep {
+                kind: GoalControllerStepKind::Blocked,
+                status: GoalStatus::BlockedOnHuman,
+                summary: instruction.clone(),
+            });
+
+            Ok(GoalRunUntilReadyOutcome {
+                state,
+                proof,
+                steps,
+                blocker: Some(instruction),
+                policy_evidence_path: Some(PathBuf::from(MANUAL_INTEGRATION_BLOCKER_FILE)),
+            })
+        }
+        GoalMergePolicy::Gated => {
+            if let Some(ref url) = pr_url {
+                let check_timeout = std::time::Duration::from_secs(120);
+                let poll_interval = std::time::Duration::from_secs(10);
+                let mut checks_pass = false;
+                for _ in 0..36 {
+                    match poll_github_pr_checks(url, check_timeout).await {
+                        Ok(true) => {
+                            checks_pass = true;
+                            break;
+                        }
+                        Ok(false) => {
+                            tokio::time::sleep(poll_interval).await;
+                            continue;
+                        }
+                        Err(e) => {
+                            return finalize_until_ready_blocker(
+                                goal_id,
+                                steps,
+                                UntilReadyBlocker::policy(format!(
+                                    "gated merge blocked: required CI check failed: {e}"
+                                )),
+                            )
+                            .await;
+                        }
+                    }
+                }
+                if !checks_pass {
+                    return finalize_until_ready_blocker(
+                        goal_id,
+                        steps,
+                        UntilReadyBlocker::policy(
+                            "gated merge blocked: required CI checks did not pass within timeout"
+                                .to_string(),
+                        ),
+                    )
+                    .await;
+                }
+                client.merge_pr(url).await?;
+            }
+
+            state.status = GoalStatus::Ready;
+            state.phase = GoalPhase::Proof;
+            state.completed_at = Some(now);
+            state.updated_at = now;
+            FileSystemGoalStateStore::new().save(&state).await?;
+
+            proof.status = GoalStatus::Ready;
+            proof.readiness =
+                "ready: all slices delivered, integrator PR merged after gated checks".to_string();
+            proof.summary = format!(
+                "Goal '{}' is proof-backed ready: gates, execution, review, integration evidence passed, and integrator PR was merged after required checks passed.",
+                state.normalized_goal
+            );
+            proof.generated_at = now;
+            proof.artifacts = state.artifacts.clone();
+            proof.known_gaps.clear();
+            proof.human_decisions_required.clear();
+            proof.git = super::super::evidence::detect_git_evidence(project_dir)
+                .await
+                .or(proof.git);
+            proof::write_json_artifact(&state.state_dir.join(state::GOAL_PROOF_FILE), &proof)
+                .await?;
+
+            steps.push(GoalControllerStep {
+                kind: GoalControllerStepKind::Deliver,
+                status: GoalStatus::Ready,
+                summary: format!(
+                    "Integrator PR created and merged under {} policy after gated checks",
+                    policy.as_str()
+                ),
+            });
+
+            cleanup_goal_worktrees(&state, project_dir).await;
+
+            Ok(GoalRunUntilReadyOutcome {
+                state,
+                proof,
+                steps,
+                blocker: None,
+                policy_evidence_path: None,
+            })
+        }
+    }
+}
+
+async fn resolve_base_branch(repo_dir: &Path) -> Option<String> {
+    for branch in ["main", "master"] {
+        let output = git_command(
+            repo_dir,
+            vec![
+                std::ffi::OsString::from("show-ref"),
+                std::ffi::OsString::from("--verify"),
+                std::ffi::OsString::from("--quiet"),
+                std::ffi::OsString::from(format!("refs/heads/{branch}")),
+            ],
+        )
+        .await
+        .ok()?;
+        if output.status.success() {
+            return Some(branch.to_string());
+        }
+    }
+    None
+}
+
+async fn create_integrator_branch(
+    repo_dir: &Path,
+    integrator_branch: &str,
+    base_branch: &str,
+) -> anyhow::Result<()> {
+    let output = git_command(
+        repo_dir,
+        vec![
+            std::ffi::OsString::from("checkout"),
+            std::ffi::OsString::from("-b"),
+            std::ffi::OsString::from(integrator_branch),
+            std::ffi::OsString::from(base_branch),
+        ],
+    )
+    .await?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!("git checkout -b failed: {}", output_stderr(&output))
+    }
+}
+
+async fn merge_branch_into_integrator(
+    repo_dir: &Path,
+    branch: &str,
+    integrator_branch: &str,
+) -> anyhow::Result<()> {
+    // Ensure we're on the integrator branch
+    let checkout = git_command(
+        repo_dir,
+        vec![
+            std::ffi::OsString::from("checkout"),
+            std::ffi::OsString::from(integrator_branch),
+        ],
+    )
+    .await?;
+    if !checkout.status.success() {
+        anyhow::bail!("git checkout integrator failed: {}", output_stderr(&checkout));
+    }
+
+    let output = git_command(
+        repo_dir,
+        vec![
+            std::ffi::OsString::from("merge"),
+            std::ffi::OsString::from(branch),
+            std::ffi::OsString::from("--no-edit"),
+        ],
+    )
+    .await?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!("git merge failed: {}", output_stderr(&output))
+    }
+}
+
+async fn push_branch(repo_dir: &Path, branch: &str) -> anyhow::Result<()> {
+    let output = git_command(
+        repo_dir,
+        vec![
+            std::ffi::OsString::from("push"),
+            std::ffi::OsString::from("-u"),
+            std::ffi::OsString::from("origin"),
+            std::ffi::OsString::from(branch),
+        ],
+    )
+    .await?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!("git push failed: {}", output_stderr(&output))
+    }
+}
+
+async fn git_command(repo_dir: &Path, args: Vec<std::ffi::OsString>) -> anyhow::Result<std::process::Output> {
+    let mut command = tokio::process::Command::new("git");
+    command.arg("-C").arg(repo_dir).args(args);
+    tokio::time::timeout(GIT_COMMAND_TIMEOUT, command.output())
+        .await
+        .with_context(|| "Timed out while running git command")?
+        .with_context(|| "Failed to run git command")
+}
+
+fn output_stderr(output: &std::process::Output) -> String {
+    String::from_utf8_lossy(&output.stderr).trim().to_string()
+}
+
 async fn finalize_until_ready_delivery(
     goal_id: &str,
     mut steps: Vec<GoalControllerStep>,
@@ -345,6 +845,12 @@ async fn finalize_until_ready_delivery(
     merge_policy: GoalMergePolicy,
     project_dir: &Path,
 ) -> Result<GoalRunUntilReadyOutcome> {
+    let state = crate::runtime::goal::resolve_goal(goal_id).await?;
+
+    if state.slice_execution && policy != GoalDeliveryPolicy::Local {
+        return finalize_slice_integrator(goal_id, steps, policy, merge_policy, project_dir).await;
+    }
+
     let mut state = crate::runtime::goal::resolve_goal(goal_id).await?;
     let mut proof = GoalProof::load(&state.state_dir).await?;
 
@@ -559,5 +1065,19 @@ async fn finalize_until_ready_delivery(
 fn push_unique(values: &mut Vec<String>, value: String) {
     if !values.iter().any(|existing| existing == &value) {
         values.push(value);
+    }
+}
+
+async fn emit_narrative(
+    writer: &EventWriter,
+    _builder: &EventBuilder,
+    run_id: &RunId,
+    message: &str,
+) {
+    if let Ok(event) = Event::new(run_id.clone(), EventKind::TaskOutput)
+        .with_actor("controller")
+        .with_message(message)
+    {
+        let _ = writer.append(&event).await;
     }
 }

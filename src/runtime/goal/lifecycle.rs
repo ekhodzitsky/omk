@@ -4,8 +4,12 @@ use std::path::{Path, PathBuf};
 
 use super::proof::GoalProof;
 use super::state::{GoalPhase, GoalState, GoalStatus};
-use super::task_graph::{ready_delivery_slices, GoalDeliverySlice, GoalTaskGraph, GoalTaskStatus};
-use super::{agent, budget, dispatch, evidence, proof, state, task_graph, verifier};
+use super::task_graph::{
+    ready_delivery_slices, GoalDeliverySlice, GoalTaskGraph, GoalTaskStatus,
+};
+use super::{
+    agent, budget, dispatch, evidence, proof, review, state, task_graph, verifier,
+};
 use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 
 pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
@@ -80,7 +84,7 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     execute_goal_with_dispatcher(goal_id, project_dir, &dispatcher).await
 }
 
-async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher>(
+async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 'static>(
     goal_id: &str,
     project_dir: &Path,
     dispatcher: &D,
@@ -110,82 +114,229 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher>(
         return Ok(verification_proof);
     };
 
-    // Slice execution: pick a ready slice and run the wave in its worktree
-    let exec_project_dir: PathBuf;
-    let active_slice: Option<GoalDeliverySlice>;
-    if state.slice_execution {
-        let ready = ready_delivery_slices(&state.state_dir, &task_graph).await?;
-        if let Some(slice) = ready.into_iter().next() {
-            exec_project_dir = slice.worktree_path.clone();
-            active_slice = Some(slice);
+    let now = Utc::now();
+
+    // Decide serial vs concurrent slice execution
+    let max_agents = state.max_agents.unwrap_or(1);
+    let use_concurrent_slices = state.slice_execution && max_agents > 1;
+    let ready_slices = if use_concurrent_slices {
+        ready_delivery_slices(&state.state_dir, &task_graph).await?
+    } else {
+        Vec::new()
+    };
+
+    let (
+        agent_evidence,
+        proof_gates,
+        proof_git,
+        proof_changed_files,
+        post_mutation_gates_ran,
+    ) = if use_concurrent_slices && ready_slices.len() > 1 {
+        // Concurrent path: run up to max_agents slices in parallel
+        let concurrency_limit = max_agents;
+        let slices_to_run: Vec<_> = ready_slices.into_iter().take(concurrency_limit).collect();
+
+        let mut handles = Vec::with_capacity(slices_to_run.len());
+        for slice in slices_to_run {
+            let state = state.clone();
+            let task_graph = task_graph.clone();
+            let dispatcher = dispatcher.clone();
+            let handle = tokio::spawn(async move {
+                let dispatch = agent::goal_agent_slice_dispatch_plan(
+                    &state,
+                    &task_graph,
+                    &slice.task_id,
+                )
+                .ok_or_else(|| anyhow::anyhow!("no dispatch plan for slice {}", slice.task_id))?;
+                let evidence = dispatcher
+                    .execute_wave(&state, &task_graph, &slice.worktree_path, now, &dispatch)
+                    .await?;
+                Ok::<_, anyhow::Error>((slice, dispatch, evidence))
+            });
+            handles.push(handle);
+        }
+
+        let mut slice_results = Vec::with_capacity(handles.len());
+        for handle in handles {
+            match handle.await {
+                Ok(Ok(result)) => slice_results.push(result),
+                Ok(Err(e)) => {
+                    tracing::warn!("slice wave failed: {e}");
+                }
+                Err(e) => {
+                    tracing::warn!("slice wave panicked: {e}");
+                }
+            }
+        }
+
+        // Process results sequentially to avoid task graph races
+        let mut all_gates = verification_proof.gates.clone();
+        let mut all_changed_files = Vec::new();
+        let mut post_mutation_ran = false;
+        let mut primary_evidence: Option<evidence::GoalAgentRunEvidence> = None;
+
+        for (slice, dispatch, agent_evidence) in &slice_results {
+            match dispatch.kind {
+                agent::GoalAgentWaveKind::Initial => {
+                    if let Some(task) = task_graph::apply_agent_task_result_by_id(
+                        &mut task_graph,
+                        &slice.task_id,
+                        agent_evidence,
+                        now,
+                    ) {
+                        dispatcher
+                            .append_execution_events(&state, &task, agent_evidence)
+                            .await?;
+                    }
+                }
+                agent::GoalAgentWaveKind::FollowUp => {
+                    task_graph::apply_agent_followup_task_results(
+                        &mut task_graph,
+                        agent_evidence,
+                        now,
+                    );
+                }
+            }
+            task_graph::apply_agent_proposed_task_mutations(
+                &state,
+                &mut task_graph,
+                agent_evidence,
+                now,
+            )
+            .await?;
+
+            let succeeded = agent_evidence.summary.completed == agent_evidence.summary.total
+                && agent_evidence.summary.failed == 0;
+
+            let (gates, _git, changed, ran) = run_post_mutation_cycle(
+                &state,
+                &slice.worktree_path,
+                &mut task_graph,
+                verification_proof.clone(),
+                succeeded,
+                agent_evidence,
+                now,
+            )
+            .await?;
+
+            all_gates = gates;
+            all_changed_files.extend(changed);
+            post_mutation_ran |= ran;
+
+            if primary_evidence.is_none() {
+                primary_evidence = Some(agent_evidence.clone());
+            }
+
+            process_slice_delivery_and_review(
+                &state,
+                &mut task_graph,
+                slice,
+                succeeded,
+                &slice.worktree_path,
+            )
+            .await?;
+        }
+
+        let git = evidence::detect_git_evidence(project_dir).await;
+        let evidence = primary_evidence.unwrap_or_else(|| {
+            evidence::GoalAgentRunEvidence {
+                summary: crate::runtime::scheduler::runner::RunSummary {
+                    run_id: format!("{goal_id}-concurrent-fallback"),
+                    completed: 0,
+                    failed: 0,
+                    cancelled: 0,
+                    total: 0,
+                },
+                run_path: PathBuf::new(),
+                task_policy_path: PathBuf::new(),
+                agent_task_proposals_path: PathBuf::new(),
+                worker_outbox_path: PathBuf::new(),
+                wire_events_path: PathBuf::new(),
+                mutation_diff_path: PathBuf::new(),
+                changed_files_path: PathBuf::new(),
+                changed_files: Vec::new(),
+                accepted_task_count: 0,
+                rejected_task_count: 0,
+                accepted_task_ids: Vec::new(),
+                agent_proposed_tasks: Vec::new(),
+                worker_results: Vec::new(),
+                worker_summary: None,
+            }
+        });
+
+        (evidence, all_gates, git, all_changed_files, post_mutation_ran)
+    } else {
+        // Serial path (original behavior)
+        let exec_project_dir: PathBuf;
+        let active_slice: Option<GoalDeliverySlice>;
+        if state.slice_execution {
+            if let Some(slice) = ready_slices.into_iter().next() {
+                exec_project_dir = slice.worktree_path.clone();
+                active_slice = Some(slice);
+            } else {
+                exec_project_dir = project_dir.to_path_buf();
+                active_slice = None;
+            }
         } else {
             exec_project_dir = project_dir.to_path_buf();
             active_slice = None;
         }
-    } else {
-        exec_project_dir = project_dir.to_path_buf();
-        active_slice = None;
-    }
 
-    let now = Utc::now();
-    let agent_evidence = dispatcher
-        .execute_wave(&state, &task_graph, &exec_project_dir, now, &dispatch)
-        .await?;
-    match dispatch.kind {
-        agent::GoalAgentWaveKind::Initial => {
-            if let Some(task) =
-                task_graph::apply_agent_execution_task_result(&mut task_graph, &agent_evidence, now)
-            {
-                dispatcher
-                    .append_execution_events(&state, &task, &agent_evidence)
-                    .await?;
+        let agent_evidence = dispatcher
+            .execute_wave(&state, &task_graph, &exec_project_dir, now, &dispatch)
+            .await?;
+        match dispatch.kind {
+            agent::GoalAgentWaveKind::Initial => {
+                if let Some(task) =
+                    task_graph::apply_agent_execution_task_result(&mut task_graph, &agent_evidence, now)
+                {
+                    dispatcher
+                        .append_execution_events(&state, &task, &agent_evidence)
+                        .await?;
+                }
+            }
+            agent::GoalAgentWaveKind::FollowUp => {
+                task_graph::apply_agent_followup_task_results(&mut task_graph, &agent_evidence, now);
             }
         }
-        agent::GoalAgentWaveKind::FollowUp => {
-            task_graph::apply_agent_followup_task_results(&mut task_graph, &agent_evidence, now);
-        }
-    }
-    task_graph::apply_agent_proposed_task_mutations(&state, &mut task_graph, &agent_evidence, now)
-        .await?;
+        task_graph::apply_agent_proposed_task_mutations(&state, &mut task_graph, &agent_evidence, now)
+            .await?;
 
-    let agent_execution_succeeded = agent_evidence.summary.completed
-        == agent_evidence.summary.total
-        && agent_evidence.summary.failed == 0;
+        let agent_execution_succeeded = agent_evidence.summary.completed
+            == agent_evidence.summary.total
+            && agent_evidence.summary.failed == 0;
+
+        let (proof_gates, proof_git, proof_changed_files, post_mutation_gates_ran) =
+            run_post_mutation_cycle(
+                &state,
+                &exec_project_dir,
+                &mut task_graph,
+                verification_proof,
+                agent_execution_succeeded,
+                &agent_evidence,
+                now,
+            )
+            .await?;
+
+        if let Some(slice) = active_slice {
+            process_slice_delivery_and_review(
+                &state,
+                &mut task_graph,
+                &slice,
+                agent_execution_succeeded,
+                &exec_project_dir,
+            )
+            .await?;
+        }
+
+        (agent_evidence, proof_gates, proof_git, proof_changed_files, post_mutation_gates_ran)
+    };
+
     let latest_state = super::resolve_goal(&state.goal_id).await?;
     let preserve_interrupted_status = matches!(
         latest_state.status,
         GoalStatus::Paused | GoalStatus::Cancelled | GoalStatus::NeedsMoreBudget
     );
-
-    let (proof_gates, proof_git, proof_changed_files, post_mutation_gates_ran) =
-        run_post_mutation_cycle(
-            &state,
-            &exec_project_dir,
-            &mut task_graph,
-            verification_proof,
-            agent_execution_succeeded,
-            &agent_evidence,
-            now,
-        )
-        .await?;
-
-    // Update slice delivery metadata if we executed in a worktree
-    if let Some(slice) = active_slice {
-        let slice_status = if agent_execution_succeeded {
-            task_graph::GoalTaskDeliveryStatus::Delivered
-        } else {
-            task_graph::GoalTaskDeliveryStatus::Blocked
-        };
-        task_graph::update_goal_task_delivery_metadata(
-            &state.state_dir,
-            &slice.task_id,
-            task_graph::GoalTaskDeliveryMetadataUpdate {
-                status: Some(slice_status),
-                ..Default::default()
-            },
-        )
-        .await?;
-    }
 
     proof::write_json_artifact(
         &state.state_dir.join(state::GOAL_TASK_GRAPH_FILE),
@@ -287,6 +438,119 @@ async fn run_post_mutation_cycle(
         proof_changed_files,
         post_mutation_gates_ran,
     ))
+}
+
+async fn process_slice_delivery_and_review(
+    state: &GoalState,
+    task_graph: &mut GoalTaskGraph,
+    slice: &GoalDeliverySlice,
+    agent_execution_succeeded: bool,
+    exec_project_dir: &Path,
+) -> Result<()> {
+    if agent_execution_succeeded
+        && state.delivery_policy != crate::runtime::goal::GoalDeliveryPolicy::Local
+    {
+        let delivery_options = super::delivery::SlicePrDeliveryOptions {
+            policy: state.delivery_policy,
+            dry_run: false,
+            base_branch: None,
+        };
+        let delivery = super::delivery::deliver_slice_pr(
+            exec_project_dir,
+            slice,
+            state,
+            delivery_options,
+        )
+        .await;
+
+        let review = review::review_slice(slice, state, task_graph, exec_project_dir).await;
+
+        let (slice_status, _feedback) = match (delivery, review) {
+            (Ok(d), Ok(r)) => {
+                let mut extra = serde_json::Map::new();
+                if !r.passed {
+                    if let Some(ref fb) = r.feedback {
+                        extra.insert(
+                            "review_feedback".to_string(),
+                            serde_json::Value::String(fb.clone()),
+                        );
+                    }
+                }
+                let status = if r.passed {
+                    task_graph::GoalTaskDeliveryStatus::Delivered
+                } else {
+                    if let Some(task) = task_graph.tasks.iter_mut().find(|t| t.id == slice.task_id) {
+                        task.status = GoalTaskStatus::Pending;
+                        task.completed_at = None;
+                        if let Some(ref fb) = r.feedback {
+                            task.description = format!(
+                                "{}\n\n[review-feedback] {}",
+                                task.description, fb
+                            );
+                        }
+                    }
+                    task_graph::GoalTaskDeliveryStatus::Blocked
+                };
+                (
+                    task_graph::GoalTaskDeliveryMetadataUpdate {
+                        status: Some(status),
+                        pr_url: d.pr_url,
+                        commit_sha: d.commit_sha,
+                        extra,
+                        ..Default::default()
+                    },
+                    None::<String>,
+                )
+            }
+            (Err(e), _) | (_, Err(e)) => {
+                let mut extra = serde_json::Map::new();
+                let error_msg = format!("Slice delivery/review error: {e}");
+                extra.insert(
+                    "review_feedback".to_string(),
+                    serde_json::Value::String(error_msg.clone()),
+                );
+                if let Some(task) = task_graph.tasks.iter_mut().find(|t| t.id == slice.task_id) {
+                    task.status = GoalTaskStatus::Pending;
+                    task.completed_at = None;
+                    task.description = format!(
+                        "{}\n\n[review-feedback] {}",
+                        task.description, error_msg
+                    );
+                }
+                (
+                    task_graph::GoalTaskDeliveryMetadataUpdate {
+                        status: Some(task_graph::GoalTaskDeliveryStatus::Blocked),
+                        extra,
+                        ..Default::default()
+                    },
+                    None,
+                )
+            }
+        };
+
+        task_graph::update_goal_task_delivery_metadata(
+            &state.state_dir,
+            &slice.task_id,
+            slice_status,
+        )
+        .await?;
+    } else {
+        let slice_status = if agent_execution_succeeded {
+            task_graph::GoalTaskDeliveryStatus::Delivered
+        } else {
+            task_graph::GoalTaskDeliveryStatus::Blocked
+        };
+        task_graph::update_goal_task_delivery_metadata(
+            &state.state_dir,
+            &slice.task_id,
+            task_graph::GoalTaskDeliveryMetadataUpdate {
+                status: Some(slice_status),
+                ..Default::default()
+            },
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 async fn finalize_execution_state(

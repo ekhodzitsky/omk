@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 use super::proof::{carry_goal_proof_sidecars, write_json_artifact, GoalProof};
 use super::state::{
     FileSystemGoalStateStore, GoalFailure, GoalPhase, GoalState, GoalStateStore, GoalStatus,
-    GOAL_AGENT_EXECUTE_TASK_ID, GOAL_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PROOF_FILE,
+    GOAL_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PROOF_FILE,
     GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_TASK_ID,
 };
-use super::task_graph::{goal_task_done, GoalTaskGraph};
+use super::task_graph::{goal_agent_execution_done, goal_task_done, GoalTaskGraph};
 use crate::runtime::events::{EventBuilder, EventWriter, RunId};
 use crate::runtime::gates::gates_passed;
 
@@ -188,24 +188,17 @@ fn missing_ready_evidence(task_graph: &GoalTaskGraph, proof: &GoalProof) -> Vec<
     if proof.gates.is_empty() || !gates_passed(&proof.gates) {
         missing.push("required verification gates are missing or failing".to_string());
     }
-    for (task_id, gap) in [
-        (
-            GOAL_LOCAL_VERIFY_TASK_ID,
-            "local verification task evidence is missing",
-        ),
-        (
-            GOAL_AGENT_EXECUTE_TASK_ID,
-            "agent execution task evidence is missing",
-        ),
-        (GOAL_REVIEW_TASK_ID, "review task evidence is missing"),
-        (
-            GOAL_SECURITY_REVIEW_TASK_ID,
-            "security review task evidence is missing",
-        ),
-    ] {
-        if !goal_task_done(task_graph, task_id) {
-            missing.push(gap.to_string());
-        }
+    if !goal_task_done(task_graph, GOAL_LOCAL_VERIFY_TASK_ID) {
+        missing.push("local verification task evidence is missing".to_string());
+    }
+    if !goal_agent_execution_done(task_graph) {
+        missing.push("agent execution task evidence is missing".to_string());
+    }
+    if !goal_task_done(task_graph, GOAL_REVIEW_TASK_ID) {
+        missing.push("review task evidence is missing".to_string());
+    }
+    if !goal_task_done(task_graph, GOAL_SECURITY_REVIEW_TASK_ID) {
+        missing.push("security review task evidence is missing".to_string());
     }
     if proof.changed_files.is_empty() {
         missing.push("changed-file evidence is missing".to_string());

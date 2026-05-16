@@ -6,11 +6,12 @@ use crate::runtime::events::{
 };
 use crate::runtime::goal::evidence::GoalReviewEvidence;
 use crate::runtime::goal::state::{
-    GoalState, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_CONTROLLER_ACTOR, GOAL_LOCAL_VERIFY_TASK_ID,
-    GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_TASK_ID,
+    GoalState, GOAL_CONTROLLER_ACTOR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_REVIEW_TASK_ID,
+    GOAL_SECURITY_REVIEW_TASK_ID,
 };
 use crate::runtime::goal::task_graph::{
-    goal_task_done, GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus,
+    goal_agent_execution_done, goal_task_done, GoalTask, GoalTaskEvidence, GoalTaskGraph,
+    GoalTaskStatus,
 };
 
 pub(crate) fn apply_goal_review_task_result(
@@ -19,7 +20,7 @@ pub(crate) fn apply_goal_review_task_result(
     completed_at: DateTime<Utc>,
 ) -> Option<GoalTask> {
     let review_ok = goal_task_done(task_graph, GOAL_LOCAL_VERIFY_TASK_ID)
-        && goal_task_done(task_graph, GOAL_AGENT_EXECUTE_TASK_ID);
+        && goal_agent_execution_done(task_graph);
     let task = task_graph
         .tasks
         .iter_mut()
@@ -45,7 +46,7 @@ pub(crate) fn apply_goal_security_review_task_result(
     evidence: &GoalReviewEvidence,
     completed_at: DateTime<Utc>,
 ) -> Option<GoalTask> {
-    let security_ok = goal_task_done(task_graph, GOAL_AGENT_EXECUTE_TASK_ID)
+    let security_ok = goal_agent_execution_done(task_graph)
         && evidence.security_findings.is_empty();
     let task = task_graph
         .tasks

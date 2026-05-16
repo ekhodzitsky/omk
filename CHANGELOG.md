@@ -87,6 +87,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`omk goal` rejection rollback plans**: local integrator rejection now writes
   a rollback-plan artifact that preserves the rejected reason and changed-file
   scope before the proof is finalized as `not_ready`.
+- **`omk goal` gated merge policy**: `--merge-policy gated` polls required CI
+  checks on the opened PR and auto-merges after they pass; `manual` blocks on
+  human decision; `disabled` opens the PR without merge.
+- **`omk goal` per-slice execution in worktrees**: `--slice-execution` runs each
+  agent task in an isolated git worktree with a deterministic branch, serializes
+  overlapping write scopes, and cleans up worktrees on successful delivery.
+- **`omk goal` per-slice PRs and review/fix loop**: when slice execution is
+  combined with `--policy draft-pr|auto-pr`, each slice is auto-committed,
+  pushed, and opened as a dedicated PR; a per-slice review runs gates and
+  security scan; failed slices are reset to `Pending` with review feedback
+  injected into the next agent prompt for automatic retry.
+- **`omk goal` integrator PR**: after all slices are `Delivered`, the controller
+  creates an `integrator/{goal-id}` branch from current master, merges all slice
+  branches into it, pushes, and opens an integrator PR that follows the chosen
+  `merge_policy`.
+- **`omk goal` controller narrative**: `run_goal_until_ready` now emits
+  `TaskOutput` events after each controller step; the CLI renders a numbered
+  `Narrative:` section with emoji icons for plan, verify, execute, review,
+  deliver, and blocked steps.
 
 ### Changed
 

@@ -71,7 +71,7 @@ omk CLI (Rust)
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
-| `runtime/goal/` | Goal controller scaffold: durable state, validated task graph with retry/lease metadata, bounded Wire-backed execution waves with per-task budgets, pause/resume/cancel with worker interruption, budget enforcement and recovery, post-mutation gate reruns, deterministic event replay, and proof state. |
+| `runtime/goal/` | Goal controller: durable state, validated task graph with retry/lease metadata, bounded Wire-backed execution waves with per-task budgets and optional per-slice worktree isolation, pause/resume/cancel with worker interruption, budget enforcement and recovery, per-slice PR delivery and review/fix loop, integrator branch/PR creation, controller narrative emission, post-mutation gate reruns, deterministic event replay, and proof state. |
 
 ## Data Flow
 
@@ -101,10 +101,16 @@ intake + oracle classifier
 planner artifacts -> task graph -> decisions
   |
   v
-verify gates -> execute scheduler/Wire wave -> review wall
+verify gates -> execute scheduler/Wire wave (worktrees if --slice-execution)
   |
   v
-integrator accept/reject -> proof.json -> open-pr --dry-run
+per-slice commit / push / PR / review (non-Local policy)
+  |
+  v
+integrator branch + PR when all slices Delivered
+  |
+  v
+review wall -> integrator accept/reject -> proof.json -> open-pr --dry-run
 ```
 
 1. User runs `omk goal run "large outcome" --until-ready`.
@@ -150,15 +156,29 @@ integrator accept/reject -> proof.json -> open-pr --dry-run
 11. `omk goal accept` / `reject` records explicit local integration evidence;
    only accepted goals with gates, execution, review, oracle, mutation, and
    integration evidence can become `ready`.
-12. Task-scoped worktree helpers create deterministic branch/worktree names and
-   record owner, write scope, branch, worktree path, PR URL, verification
-   summary, and delivery status in the task graph.
-13. `omk goal open-pr --dry-run` renders a PR title/body from local proof
+12. `--slice-execution` runs each agent task in an isolated git worktree on a
+    deterministic branch (`goal/{goal_id}/slice/{task_id}`), serializes
+    overlapping write scopes, and cleans up worktrees on successful delivery.
+    Delivery metadata (slice id, worktree path, branch, status, PR URL) is
+    recorded in the task graph per task.
+13. Per-slice PR delivery: when slice execution is combined with a non-Local
+    `--policy`, each slice is auto-committed, pushed, and opened as a dedicated
+    PR; a lightweight per-slice review runs gates and a security scan. Failed
+    slices are reset to `Pending` with `[review-feedback]` injected into the
+    next agent prompt for automatic retry.
+14. Integrator PR: after all slices reach `Delivered`, the controller creates
+    an `integrator/{goal_id}` branch from current master, merges all slice
+    branches, pushes, and opens an integrator PR that follows the chosen
+    `merge_policy` (`gated`, `manual`, or `disabled`).
+15. Controller narrative: `run_goal_until_ready` emits `TaskOutput` events after
+    each controller step; the CLI renders a numbered `Narrative:` section with
+    emoji icons for plan, verify, execute, review, deliver, and blocked steps.
+16. `omk goal open-pr --dry-run` renders a PR title/body from local proof
    evidence without pushing or creating a GitHub PR.
-14. Operators inspect with `omk goal list/status/show/proof`, or attach a
+17. Operators inspect with `omk goal list/status/show/proof`, or attach a
    no-dependency watcher to the files documented in
    [GOAL_NOTIFICATIONS.md](GOAL_NOTIFICATIONS.md).
-15. `omk goal cancel` writes `failure.json`.
+18. `omk goal cancel` writes `failure.json`.
 
 Planned later flow keeps GitHub mutation explicit: draft PR creation may be
 added, but dry-run rendering remains the default safe path.
@@ -174,7 +194,7 @@ added, but dry-run rendering remains the default safe path.
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Current scaffold for durable goal state, planning artifacts, validated task graph, bounded Wire-backed execution waves, verification gates with post-mutation reruns, controller review/security evidence, budget enforcement, and honest proof artifacts. Planned controller for long-running proof-backed engineering goals. |
+| `omk goal ...` | Durable goal controller: planning artifacts, validated task graph with retry/lease metadata, bounded Wire-backed execution waves with optional per-slice worktree isolation, verification gates with post-mutation reruns, per-slice PR delivery and review/fix loop, integrator PR merging, controller narrative emission, budget enforcement, and honest proof artifacts. Local, repo-native, proof-backed runtime—not a hosted coding-agent clone. |
 
 ## MCP Integration
 

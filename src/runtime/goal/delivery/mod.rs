@@ -7,12 +7,17 @@ use tokio::process::Command;
 
 use super::open_pr::{render_goal_open_pr, GoalOpenPrDraft};
 
+mod slice_pr;
+
+pub use slice_pr::{deliver_slice_pr, SlicePrDeliveryOptions};
+
 pub type GoalGithubPrFuture<'a> =
     Pin<Box<dyn Future<Output = Result<GoalGithubPrMutation>> + Send + 'a>>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum GoalDeliveryPolicy {
+    #[default]
     Local,
     DraftPr,
     AutoPr,
@@ -66,7 +71,7 @@ pub enum GoalGithubPrOperation {
 }
 
 impl GoalGithubPrOperation {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             GoalGithubPrOperation::Create => "create",
             GoalGithubPrOperation::Update => "update",

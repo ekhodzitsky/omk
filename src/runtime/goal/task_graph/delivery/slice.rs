@@ -30,6 +30,7 @@ pub struct GoalDeliverySlice {
     pub worktree_path: PathBuf,
     pub gates: Vec<String>,
     pub review_needs: Vec<String>,
+    pub pr_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,6 +96,7 @@ pub fn plan_goal_delivery_slices(
             worktree_path: worktree.worktree_path,
             gates: gates_for_task(task),
             review_needs: review_needs_for_task(task),
+            pr_url: None,
         });
     }
 
@@ -414,6 +416,7 @@ pub async fn ready_delivery_slices(
             worktree_path: record.metadata.worktree_path.unwrap_or_default(),
             gates: record.metadata.gates,
             review_needs: record.metadata.review_needs,
+            pr_url: record.metadata.pr_url,
         });
     }
 

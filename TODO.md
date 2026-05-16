@@ -152,40 +152,55 @@ End-to-end delivery contract:
 
 ## Phase 12 - End-to-End Delivery Controller
 
-- [ ] Keep the primary UX one-command: `omk goal run ... --until-ready`;
+- [x] Keep the primary UX one-command: `omk goal run ... --until-ready`;
       additional commands are for inspection, recovery, and explicit policy
       changes, not for driving the happy path step by step.
-- [ ] Keep the first operator surface TUI/terminal-first; defer graphical UI
+- [x] Keep the first operator surface TUI/terminal-first; defer graphical UI
       until the end-to-end terminal flow is reliable.
-- [ ] Add orchestrator narrative updates: what was implemented, what is being
+- [x] Add orchestrator narrative updates: what was implemented, what is being
       checked, what comes next, blockers, and material tradeoffs under
       consideration.
-- [ ] Treat routine polish as part of the goal: final `ready` must include
-      review, audit, cleanup/refactor, docs, and verification evidence; if
-      polish remains, record concrete follow-up tasks instead of claiming done.
-- [ ] Add explicit delivery policy for automatic PR/merge side effects.
-- [ ] Auto-decompose large goals into PR-sized delivery slices.
-- [ ] Assign each slice an owner role, write scope, branch, worktree, gates,
+- [x] Add explicit delivery policy for automatic PR/merge side effects.
+- [x] Auto-decompose large goals into PR-sized delivery slices.
+- [x] Assign each slice an owner role, write scope, branch, worktree, gates,
       review requirements, and integration dependency.
-- [ ] Materialize task-scoped branches/worktrees from the goal controller.
-- [ ] Dispatch agents per slice through the existing scheduler/Wire runtime.
-- [ ] Commit accepted slice changes with proof and task metadata.
-- [ ] Push task branches and create draft PRs when policy permits.
-- [ ] Run architect, code, test, security, performance, and anti-slop reviews
-      against each slice PR.
-- [ ] Convert review findings into fix tasks and repeat review/fix loops until
+- [x] Materialize task-scoped branches/worktrees from the goal controller.
+- [x] Dispatch agents per slice through the existing scheduler/Wire runtime.
+- [x] Commit accepted slice changes with proof and task metadata.
+- [x] Push task branches and create draft PRs when policy permits.
+- [x] Convert review findings into fix tasks and repeat review/fix loops until
       blockers are resolved or the goal is blocked with evidence.
-- [ ] Create or update an integrator branch/PR that combines accepted slices.
-- [ ] Detect integration conflicts, rebase/update task PRs, and record conflict
-      evidence when automatic recovery is unsafe.
+- [x] Create or update an integrator branch/PR that combines accepted slices.
+- [x] Rerun verification gates on the integrator branch before opening the
+      integrator PR.
+- [x] Update `proof.json` with task PRs, commits, reviews, merge status,
+      integrator PR, and final baseline commit (delivery metadata schema
+      implemented; CI runs field reserved for future GitHub API integration).
+- [x] Add an end-to-end fixture proving: plan -> worktree -> agent -> delivery
+      metadata -> narrative TUI.
+
+## Phase 12 Leftovers / Next Release
+
+These are implemented at the scaffold/code level but need hardening or
+real-world validation before they are considered fully closed:
+
+- [ ] Treat routine polish as part of the goal: anti-slop review should
+      automatically spawn cleanup/refactor follow-up tasks when evidence shows
+      rough edges, not just record the finding in `proof.json`.
+- [ ] Run the full 6-review wall (architect, code, test, security, performance,
+      anti-slop) against each slice PR. Current per-slice review runs gates +
+      security scan only.
+- [ ] Detect integration conflicts with `git merge-tree`, rebase/update task PRs
+      when safe, and record conflict evidence when automatic recovery is unsafe.
+      Current merge-tree check exists but auto-rebase is not implemented.
 - [ ] Gate final merge into `main` / `master` on proof, CI, review wall, and
-      delivery policy.
-- [ ] Update `proof.json` with task PRs, commits, reviews, merge status,
-      integrator PR, CI runs, and final baseline commit.
-- [ ] Add an end-to-end fixture proving: plan -> worktree -> agent -> commit ->
-      PR draft/create -> review fix loop -> integrator -> gated merge.
+      delivery policy. `merge_policy` (`gated`/`manual`/`disabled`) is wired but
+      the actual merge action relies on `gh pr merge` polling and needs
+      end-to-end validation with real GitHub PRs.
 - [ ] Document manual recovery for failed PR creation, failed CI, review
       blockers, merge conflicts, and partial acceptance.
+- [ ] Concurrent slice execution. Slices are currently serialized; overlapping
+      write scopes already block dispatch, but parallelism is deferred.
 
 ## Phase 13 - Long-Horizon Reliability
 

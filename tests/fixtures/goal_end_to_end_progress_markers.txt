@@ -3,5 +3,5 @@ Status: not_ready
 Phase:  proof
 State:
 Proof:
-Controller steps:
+Narrative:
 manual integration acceptance

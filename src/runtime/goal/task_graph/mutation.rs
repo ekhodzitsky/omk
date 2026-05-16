@@ -27,6 +27,30 @@ pub(crate) fn goal_task_done(task_graph: &GoalTaskGraph, task_id: &str) -> bool 
         .any(|task| task.id == task_id && task.status == GoalTaskStatus::Done)
 }
 
+/// Returns true when the agent execution phase is considered complete.
+/// In non-slice mode this checks the single `goal-agent-execute` task.
+/// In slice mode it checks that all `goal-agent-implement-{i}` tasks are done.
+pub(crate) fn goal_agent_execution_done(task_graph: &GoalTaskGraph) -> bool {
+    if task_graph
+        .tasks
+        .iter()
+        .any(|task| task.id == GOAL_AGENT_EXECUTE_TASK_ID)
+    {
+        return goal_task_done(task_graph, GOAL_AGENT_EXECUTE_TASK_ID);
+    }
+    let implement_tasks: Vec<_> = task_graph
+        .tasks
+        .iter()
+        .filter(|task| task.id.starts_with("goal-agent-implement-"))
+        .collect();
+    if implement_tasks.is_empty() {
+        return false;
+    }
+    implement_tasks
+        .iter()
+        .all(|task| task.status == GoalTaskStatus::Done)
+}
+
 fn goal_task_dependencies_done(task_graph: &GoalTaskGraph, task: &GoalTask) -> bool {
     task.dependencies
         .iter()
@@ -90,10 +114,24 @@ pub(crate) fn apply_agent_execution_task_result(
     evidence: &GoalAgentRunEvidence,
     completed_at: DateTime<Utc>,
 ) -> Option<GoalTask> {
+    apply_agent_task_result_by_id(
+        task_graph,
+        GOAL_AGENT_EXECUTE_TASK_ID,
+        evidence,
+        completed_at,
+    )
+}
+
+pub(crate) fn apply_agent_task_result_by_id(
+    task_graph: &mut GoalTaskGraph,
+    task_id: &str,
+    evidence: &GoalAgentRunEvidence,
+    completed_at: DateTime<Utc>,
+) -> Option<GoalTask> {
     let task = task_graph
         .tasks
         .iter_mut()
-        .find(|task| task.id == GOAL_AGENT_EXECUTE_TASK_ID)?;
+        .find(|task| task.id == task_id)?;
     let success =
         evidence.summary.completed == evidence.summary.total && evidence.summary.failed == 0;
 

@@ -6,11 +6,12 @@ use serde_json::Value;
 use std::path::Path;
 
 use super::state::{
-    GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_PROOF_FILE, GOAL_REVIEW_TASK_ID,
+    GoalState, GoalStatus, GOAL_PROOF_FILE, GOAL_REVIEW_TASK_ID,
     GOAL_SECURITY_REVIEW_TASK_ID,
 };
 use super::task_graph::{
-    summarize_task_graph, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
+    goal_agent_execution_done, summarize_task_graph, GoalTaskGraph, GoalTaskGraphSummary,
+    GoalTaskStatus,
 };
 use crate::runtime::gates::{gates_passed, GateResult};
 
@@ -189,10 +190,7 @@ pub(crate) fn build_verified_proof(
     generated_at: DateTime<Utc>,
 ) -> GoalProof {
     let gates_ok = !gates.is_empty() && gates_passed(&gates);
-    let agent_execution_done = task_graph
-        .tasks
-        .iter()
-        .any(|task| task.id == GOAL_AGENT_EXECUTE_TASK_ID && task.status == GoalTaskStatus::Done);
+    let agent_execution_done = goal_agent_execution_done(task_graph);
     let review_done = task_graph
         .tasks
         .iter()

@@ -107,6 +107,7 @@ fn progress_snapshot_from_goal_state_keeps_phase_status_and_proof_path() {
         failure: None,
         state_dir: state_dir.clone(),
         cost_tracker_path: None,
+        delivery_policy: Default::default(),
         merge_policy: Default::default(),
         slice_execution: Default::default(),
     };

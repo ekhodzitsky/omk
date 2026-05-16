@@ -6,11 +6,11 @@ use crate::runtime::goal::proof::{build_scaffold_proof, write_json_artifact};
 use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 use crate::runtime::goal::state::{
     GoalFailure, GoalPhase, GoalState, GoalStatus, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_AGENT_RUNS_DIR,
-    GOAL_ARTIFACTS_DIR, GOAL_CONTROLLER_ACTOR, GOAL_DECISIONS_FILE, GOAL_FAILURE_FILE,
-    GOAL_GATE_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PRD_FILE, GOAL_PROOF_FILE,
-    GOAL_REVIEW_ARTIFACTS_DIR, GOAL_REVIEW_FILE, GOAL_REVIEW_TASK_ID, GOAL_SECURITY_REVIEW_FILE,
-    GOAL_SECURITY_REVIEW_TASK_ID, GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE,
-    GOAL_TEST_SPEC_FILE,
+    GOAL_AGENT_VERIFY_TASK_ID, GOAL_ARTIFACTS_DIR, GOAL_CONTROLLER_ACTOR, GOAL_DECISIONS_FILE,
+    GOAL_FAILURE_FILE, GOAL_GATE_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PRD_FILE,
+    GOAL_PROOF_FILE, GOAL_REVIEW_ARTIFACTS_DIR, GOAL_REVIEW_FILE, GOAL_REVIEW_TASK_ID,
+    GOAL_SECURITY_REVIEW_FILE, GOAL_SECURITY_REVIEW_TASK_ID, GOAL_TASK_GRAPH_FILE,
+    GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
 };
 use crate::runtime::goal::task_graph::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
 use anyhow::Result;
@@ -25,6 +25,8 @@ pub(crate) async fn create_goal_with_scaffold(
     let id_string = id.to_string();
     let until_ready = options.until_ready;
     let slice_execution = options.slice_execution;
+    let delivery_policy = options.delivery_policy;
+    let merge_policy = options.merge_policy;
     let budget = crate::runtime::goal::types::GoalBudget::from_options(options)?;
     let goal_dir = crate::runtime::goal::state::goals_dir().join(id.as_str());
     crate::runtime::config::ensure_private_dir(&goal_dir).await?;
@@ -60,7 +62,8 @@ pub(crate) async fn create_goal_with_scaffold(
         failure,
         state_dir: goal_dir.clone(),
         cost_tracker_path: Some(goal_dir.join("cost.jsonl")),
-        merge_policy: crate::runtime::goal::GoalMergePolicy::Disabled,
+        delivery_policy,
+        merge_policy,
         slice_execution,
     };
     FileSystemGoalStateStore::new().save(&state).await?;
@@ -146,109 +149,34 @@ async fn write_blocked_goal_failure_artifact(state: &GoalState) -> Result<()> {
 }
 
 async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Result<GoalTaskGraph> {
-    let graph = GoalTaskGraph {
-        version: 1,
-        goal_id: state.goal_id.clone(),
-        generated_at,
-        tasks: vec![
-            GoalTask {
-                id: "goal-intake".to_string(),
-                title: "Clarify durable goal intent".to_string(),
-                description: "Preserve the original request, normalized goal, assumptions, and current execution boundary.".to_string(),
-                status: GoalTaskStatus::Done,
-                owner_role: Some(GOAL_CONTROLLER_ACTOR.to_string()),
-                completed_at: Some(generated_at),
-                evidence: vec![GoalTaskEvidence {
-                    kind: "artifact".to_string(),
-                    path: PathBuf::from(GOAL_PRD_FILE),
-                    summary: "Goal brief records the original and normalized goal.".to_string(),
-                }],
-                retry_count: 0,
-                max_retries: 0,
-                lease_expires_at: None,
-                dependencies: Vec::new(),
-                read_set: vec!["goal.json".to_string()],
-                write_set: vec![GOAL_PRD_FILE.to_string()],
-                risk: "low".to_string(),
-                acceptance: vec![
-                    "goal brief exists".to_string(),
-                    "original and normalized goals are recorded".to_string(),
-                ],
-            },
-            GoalTask {
-                id: "goal-plan".to_string(),
-                title: "Design controller work plan".to_string(),
-                description: "Persist a technical plan and explicit verification expectations for the goal controller.".to_string(),
-                status: GoalTaskStatus::Done,
-                owner_role: Some(GOAL_CONTROLLER_ACTOR.to_string()),
-                completed_at: Some(generated_at),
-                evidence: vec![
-                    GoalTaskEvidence {
-                        kind: "artifact".to_string(),
-                        path: PathBuf::from(GOAL_TECHNICAL_PLAN_FILE),
-                        summary: "Technical plan records controller phases and execution boundary.".to_string(),
-                    },
-                    GoalTaskEvidence {
-                        kind: "artifact".to_string(),
-                        path: PathBuf::from(GOAL_TASK_GRAPH_FILE),
-                        summary: "Task graph records the first controller-owned work graph.".to_string(),
-                    },
-                    GoalTaskEvidence {
-                        kind: "artifact".to_string(),
-                        path: PathBuf::from(GOAL_TEST_SPEC_FILE),
-                        summary: "Test spec records readiness expectations.".to_string(),
-                    },
-                ],
-                retry_count: 0,
-                max_retries: 0,
-                lease_expires_at: None,
-                dependencies: vec!["goal-intake".to_string()],
-                read_set: vec![GOAL_PRD_FILE.to_string()],
-                write_set: vec![
-                    GOAL_TECHNICAL_PLAN_FILE.to_string(),
-                    GOAL_TEST_SPEC_FILE.to_string(),
-                ],
-                risk: "medium".to_string(),
-                acceptance: vec![
-                    "technical plan exists".to_string(),
-                    "test spec describes readiness gates".to_string(),
-                ],
-            },
-            GoalTask {
-                id: GOAL_LOCAL_VERIFY_TASK_ID.to_string(),
-                title: "Run local verification wall".to_string(),
-                description: "Run configured local gates, capture gate evidence, and refresh the goal proof.".to_string(),
+    let mut tasks = vec![
+        scaffold_intake_task(generated_at),
+        scaffold_plan_task(generated_at),
+        scaffold_local_verify_task(),
+    ];
+
+    let slice_mode = state.slice_execution;
+    let max_features = state.max_agents.unwrap_or(2).max(2);
+    let features = if slice_mode {
+        super::decompose_goal_for_slices(&state.normalized_goal, max_features)
+    } else {
+        Vec::new()
+    };
+
+    let agent_verify_dependency = if slice_mode && features.len() > 1 {
+        let mut implement_task_ids = Vec::new();
+        for (i, feature) in features.iter().enumerate() {
+            let slug = super::sanitize_feature_slug(feature);
+            let task_id = format!("goal-agent-implement-{i}");
+            implement_task_ids.push(task_id.clone());
+            tasks.push(GoalTask {
+                id: task_id,
+                title: format!("Implement: {feature}"),
+                description: format!(
+                    "Implement {feature} as part of the goal. Write changes to src/{slug}/."
+                ),
                 status: GoalTaskStatus::Pending,
-                owner_role: None,
-                completed_at: None,
-                evidence: Vec::new(),
-                retry_count: 0,
-                max_retries: 0,
-                lease_expires_at: None,
-                dependencies: vec!["goal-plan".to_string()],
-                read_set: vec![
-                    GOAL_PRD_FILE.to_string(),
-                    GOAL_TECHNICAL_PLAN_FILE.to_string(),
-                    GOAL_TEST_SPEC_FILE.to_string(),
-                    ".omk/gates.toml".to_string(),
-                ],
-                write_set: vec![
-                    format!("{GOAL_ARTIFACTS_DIR}/{GOAL_GATE_ARTIFACTS_DIR}"),
-                    GOAL_TASK_GRAPH_FILE.to_string(),
-                    GOAL_PROOF_FILE.to_string(),
-                ],
-                risk: "medium".to_string(),
-                acceptance: vec![
-                    "all required gates pass".to_string(),
-                    "proof cites gate evidence".to_string(),
-                ],
-            },
-            GoalTask {
-                id: GOAL_AGENT_EXECUTE_TASK_ID.to_string(),
-                title: "Execute agent-owned implementation tasks".to_string(),
-                description: "Run bounded agent work through Wire, allow minimal project mutations, and capture mutation evidence before readiness can be claimed.".to_string(),
-                status: GoalTaskStatus::Pending,
-                owner_role: None,
+                owner_role: Some("executor".to_string()),
                 completed_at: None,
                 evidence: Vec::new(),
                 retry_count: 0,
@@ -262,81 +190,265 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
                     GOAL_TASK_GRAPH_FILE.to_string(),
                 ],
                 write_set: vec![
-                    "project files".to_string(),
-                    GOAL_TASK_GRAPH_FILE.to_string(),
-                    GOAL_PROOF_FILE.to_string(),
+                    format!("src/{slug}/"),
                 ],
-                risk: "high".to_string(),
+                risk: "moderate".to_string(),
                 acceptance: vec![
-                    "agent execution produces task and mutation evidence".to_string(),
-                    "proof status becomes ready only with evidence".to_string(),
+                    format!("Implementation for {feature} is complete in src/{slug}/."),
+                    "Do not commit, publish, or touch secrets.".to_string(),
+                    "Summarize changed files and verification still needed.".to_string(),
                 ],
-            },
-            GoalTask {
-                id: GOAL_REVIEW_TASK_ID.to_string(),
-                title: "Review goal execution evidence".to_string(),
-                description: "Check that local verification and agent execution evidence are present before any readiness claim.".to_string(),
-                status: GoalTaskStatus::Pending,
-                owner_role: None,
-                completed_at: None,
-                evidence: Vec::new(),
-                retry_count: 0,
-                max_retries: 0,
-                lease_expires_at: None,
-                dependencies: vec![GOAL_AGENT_EXECUTE_TASK_ID.to_string()],
-                read_set: vec![
-                    GOAL_PRD_FILE.to_string(),
-                    GOAL_TECHNICAL_PLAN_FILE.to_string(),
-                    GOAL_TEST_SPEC_FILE.to_string(),
-                    GOAL_TASK_GRAPH_FILE.to_string(),
-                    GOAL_PROOF_FILE.to_string(),
-                    format!("{GOAL_ARTIFACTS_DIR}/{GOAL_AGENT_RUNS_DIR}"),
-                ],
-                write_set: vec![
-                    format!("{GOAL_ARTIFACTS_DIR}/{GOAL_REVIEW_ARTIFACTS_DIR}/{GOAL_REVIEW_FILE}"),
-                    GOAL_TASK_GRAPH_FILE.to_string(),
-                    GOAL_PROOF_FILE.to_string(),
-                ],
-                risk: "medium".to_string(),
-                acceptance: vec![
-                    "review artifact cites task and gate evidence".to_string(),
-                    "review task remains blocked when execution evidence is missing".to_string(),
-                ],
-            },
-            GoalTask {
-                id: GOAL_SECURITY_REVIEW_TASK_ID.to_string(),
-                title: "Run security evidence check".to_string(),
-                description: "Run a bounded controller security review over goal evidence and changed files.".to_string(),
-                status: GoalTaskStatus::Pending,
-                owner_role: None,
-                completed_at: None,
-                evidence: Vec::new(),
-                retry_count: 0,
-                max_retries: 0,
-                lease_expires_at: None,
-                dependencies: vec![GOAL_AGENT_EXECUTE_TASK_ID.to_string()],
-                read_set: vec![
-                    GOAL_PROOF_FILE.to_string(),
-                    GOAL_TASK_GRAPH_FILE.to_string(),
-                    "changed files".to_string(),
-                ],
-                write_set: vec![
-                    format!(
-                        "{GOAL_ARTIFACTS_DIR}/{GOAL_REVIEW_ARTIFACTS_DIR}/{GOAL_SECURITY_REVIEW_FILE}"
-                    ),
-                    GOAL_TASK_GRAPH_FILE.to_string(),
-                    GOAL_PROOF_FILE.to_string(),
-                ],
-                risk: "high".to_string(),
-                acceptance: vec![
-                    "security review artifact exists".to_string(),
-                    "high-confidence secret findings block the task".to_string(),
-                ],
-            },
-        ],
+            });
+        }
+
+        let mut verify_read_set = vec![
+            GOAL_PRD_FILE.to_string(),
+            GOAL_TECHNICAL_PLAN_FILE.to_string(),
+            GOAL_TEST_SPEC_FILE.to_string(),
+            GOAL_TASK_GRAPH_FILE.to_string(),
+        ];
+        for slug in features.iter().map(|f| super::sanitize_feature_slug(f)) {
+            verify_read_set.push(format!("src/{slug}/"));
+        }
+
+        tasks.push(GoalTask {
+            id: GOAL_AGENT_VERIFY_TASK_ID.to_string(),
+            title: "Verify agent implementations".to_string(),
+            description: "Inspect all implementation results and summarize verification, review, or hardening follow-up that still blocks readiness.".to_string(),
+            status: GoalTaskStatus::Pending,
+            owner_role: None,
+            completed_at: None,
+            evidence: Vec::new(),
+            retry_count: 0,
+            max_retries: 0,
+            lease_expires_at: None,
+            dependencies: implement_task_ids,
+            read_set: verify_read_set,
+            write_set: vec![GOAL_ARTIFACTS_DIR.to_string()],
+            risk: "low".to_string(),
+            acceptance: vec![
+                "Review all bounded project changes and call out remaining verification gaps.".to_string(),
+                "Do not make broad follow-up mutations without a new controller-approved task.".to_string(),
+                "Keep the goal proof honest when production readiness is still blocked.".to_string(),
+            ],
+        });
+        GOAL_AGENT_VERIFY_TASK_ID.to_string()
+    } else {
+        tasks.push(scaffold_agent_execute_task());
+        GOAL_AGENT_EXECUTE_TASK_ID.to_string()
+    };
+
+    tasks.push(scaffold_review_task(&agent_verify_dependency));
+    tasks.push(scaffold_security_review_task(&agent_verify_dependency));
+
+    let graph = GoalTaskGraph {
+        version: 1,
+        goal_id: state.goal_id.clone(),
+        generated_at,
+        tasks,
     };
     write_json_artifact(&state.state_dir.join(GOAL_TASK_GRAPH_FILE), &graph).await?;
     Ok(graph)
+}
+
+fn scaffold_intake_task(generated_at: DateTime<Utc>) -> GoalTask {
+    GoalTask {
+        id: "goal-intake".to_string(),
+        title: "Clarify durable goal intent".to_string(),
+        description: "Preserve the original request, normalized goal, assumptions, and current execution boundary.".to_string(),
+        status: GoalTaskStatus::Done,
+        owner_role: Some(GOAL_CONTROLLER_ACTOR.to_string()),
+        completed_at: Some(generated_at),
+        evidence: vec![GoalTaskEvidence {
+            kind: "artifact".to_string(),
+            path: PathBuf::from(GOAL_PRD_FILE),
+            summary: "Goal brief records the original and normalized goal.".to_string(),
+        }],
+        retry_count: 0,
+        max_retries: 0,
+        lease_expires_at: None,
+        dependencies: Vec::new(),
+        read_set: vec!["goal.json".to_string()],
+        write_set: vec![GOAL_PRD_FILE.to_string()],
+        risk: "low".to_string(),
+        acceptance: vec![
+            "goal brief exists".to_string(),
+            "original and normalized goals are recorded".to_string(),
+        ],
+    }
+}
+
+fn scaffold_plan_task(generated_at: DateTime<Utc>) -> GoalTask {
+    GoalTask {
+        id: "goal-plan".to_string(),
+        title: "Design controller work plan".to_string(),
+        description: "Persist a technical plan and explicit verification expectations for the goal controller.".to_string(),
+        status: GoalTaskStatus::Done,
+        owner_role: Some(GOAL_CONTROLLER_ACTOR.to_string()),
+        completed_at: Some(generated_at),
+        evidence: vec![
+            GoalTaskEvidence {
+                kind: "artifact".to_string(),
+                path: PathBuf::from(GOAL_TECHNICAL_PLAN_FILE),
+                summary: "Technical plan records controller phases and execution boundary.".to_string(),
+            },
+            GoalTaskEvidence {
+                kind: "artifact".to_string(),
+                path: PathBuf::from(GOAL_TASK_GRAPH_FILE),
+                summary: "Task graph records the first controller-owned work graph.".to_string(),
+            },
+            GoalTaskEvidence {
+                kind: "artifact".to_string(),
+                path: PathBuf::from(GOAL_TEST_SPEC_FILE),
+                summary: "Test spec records readiness expectations.".to_string(),
+            },
+        ],
+        retry_count: 0,
+        max_retries: 0,
+        lease_expires_at: None,
+        dependencies: vec!["goal-intake".to_string()],
+        read_set: vec![GOAL_PRD_FILE.to_string()],
+        write_set: vec![
+            GOAL_TECHNICAL_PLAN_FILE.to_string(),
+            GOAL_TEST_SPEC_FILE.to_string(),
+        ],
+        risk: "medium".to_string(),
+        acceptance: vec![
+            "technical plan exists".to_string(),
+            "test spec describes readiness gates".to_string(),
+        ],
+    }
+}
+
+fn scaffold_local_verify_task() -> GoalTask {
+    GoalTask {
+        id: GOAL_LOCAL_VERIFY_TASK_ID.to_string(),
+        title: "Run local verification wall".to_string(),
+        description: "Run configured local gates, capture gate evidence, and refresh the goal proof.".to_string(),
+        status: GoalTaskStatus::Pending,
+        owner_role: None,
+        completed_at: None,
+        evidence: Vec::new(),
+        retry_count: 0,
+        max_retries: 0,
+        lease_expires_at: None,
+        dependencies: vec!["goal-plan".to_string()],
+        read_set: vec![
+            GOAL_PRD_FILE.to_string(),
+            GOAL_TECHNICAL_PLAN_FILE.to_string(),
+            GOAL_TEST_SPEC_FILE.to_string(),
+            ".omk/gates.toml".to_string(),
+        ],
+        write_set: vec![
+            format!("{GOAL_ARTIFACTS_DIR}/{GOAL_GATE_ARTIFACTS_DIR}"),
+            GOAL_TASK_GRAPH_FILE.to_string(),
+            GOAL_PROOF_FILE.to_string(),
+        ],
+        risk: "medium".to_string(),
+        acceptance: vec![
+            "all required gates pass".to_string(),
+            "proof cites gate evidence".to_string(),
+        ],
+    }
+}
+
+fn scaffold_agent_execute_task() -> GoalTask {
+    GoalTask {
+        id: GOAL_AGENT_EXECUTE_TASK_ID.to_string(),
+        title: "Execute agent-owned implementation tasks".to_string(),
+        description: "Run bounded agent work through Wire, allow minimal project mutations, and capture mutation evidence before readiness can be claimed.".to_string(),
+        status: GoalTaskStatus::Pending,
+        owner_role: None,
+        completed_at: None,
+        evidence: Vec::new(),
+        retry_count: 0,
+        max_retries: 0,
+        lease_expires_at: None,
+        dependencies: vec![GOAL_LOCAL_VERIFY_TASK_ID.to_string()],
+        read_set: vec![
+            GOAL_PRD_FILE.to_string(),
+            GOAL_TECHNICAL_PLAN_FILE.to_string(),
+            GOAL_TEST_SPEC_FILE.to_string(),
+            GOAL_TASK_GRAPH_FILE.to_string(),
+        ],
+        write_set: vec![
+            "project files".to_string(),
+            GOAL_TASK_GRAPH_FILE.to_string(),
+            GOAL_PROOF_FILE.to_string(),
+        ],
+        risk: "high".to_string(),
+        acceptance: vec![
+            "agent execution produces task and mutation evidence".to_string(),
+            "proof status becomes ready only with evidence".to_string(),
+        ],
+    }
+}
+
+fn scaffold_review_task(agent_dependency: &str) -> GoalTask {
+    GoalTask {
+        id: GOAL_REVIEW_TASK_ID.to_string(),
+        title: "Review goal execution evidence".to_string(),
+        description: "Check that local verification and agent execution evidence are present before any readiness claim.".to_string(),
+        status: GoalTaskStatus::Pending,
+        owner_role: None,
+        completed_at: None,
+        evidence: Vec::new(),
+        retry_count: 0,
+        max_retries: 0,
+        lease_expires_at: None,
+        dependencies: vec![agent_dependency.to_string()],
+        read_set: vec![
+            GOAL_PRD_FILE.to_string(),
+            GOAL_TECHNICAL_PLAN_FILE.to_string(),
+            GOAL_TEST_SPEC_FILE.to_string(),
+            GOAL_TASK_GRAPH_FILE.to_string(),
+            GOAL_PROOF_FILE.to_string(),
+            format!("{GOAL_ARTIFACTS_DIR}/{GOAL_AGENT_RUNS_DIR}"),
+        ],
+        write_set: vec![
+            format!("{GOAL_ARTIFACTS_DIR}/{GOAL_REVIEW_ARTIFACTS_DIR}/{GOAL_REVIEW_FILE}"),
+            GOAL_TASK_GRAPH_FILE.to_string(),
+            GOAL_PROOF_FILE.to_string(),
+        ],
+        risk: "medium".to_string(),
+        acceptance: vec![
+            "review artifact cites task and gate evidence".to_string(),
+            "review task remains blocked when execution evidence is missing".to_string(),
+        ],
+    }
+}
+
+fn scaffold_security_review_task(agent_dependency: &str) -> GoalTask {
+    GoalTask {
+        id: GOAL_SECURITY_REVIEW_TASK_ID.to_string(),
+        title: "Run security evidence check".to_string(),
+        description: "Run a bounded controller security review over goal evidence and changed files.".to_string(),
+        status: GoalTaskStatus::Pending,
+        owner_role: None,
+        completed_at: None,
+        evidence: Vec::new(),
+        retry_count: 0,
+        max_retries: 0,
+        lease_expires_at: None,
+        dependencies: vec![agent_dependency.to_string()],
+        read_set: vec![
+            GOAL_PROOF_FILE.to_string(),
+            GOAL_TASK_GRAPH_FILE.to_string(),
+            "changed files".to_string(),
+        ],
+        write_set: vec![
+            format!(
+                "{GOAL_ARTIFACTS_DIR}/{GOAL_REVIEW_ARTIFACTS_DIR}/{GOAL_SECURITY_REVIEW_FILE}"
+            ),
+            GOAL_TASK_GRAPH_FILE.to_string(),
+            GOAL_PROOF_FILE.to_string(),
+        ],
+        risk: "high".to_string(),
+        acceptance: vec![
+            "security review artifact exists".to_string(),
+            "high-confidence secret findings block the task".to_string(),
+        ],
+    }
 }
 
 pub(crate) async fn append_controller_task_events(
