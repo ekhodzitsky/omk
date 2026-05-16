@@ -51,12 +51,30 @@ omk goal replay latest --format text
 omk goal resume latest
 ```
 
-**3. If a slice PR failed CI or review:**
+**3. If PR creation failed:**
 
-Find the slice branch in the proof or task graph:
+Check delivery policy and GitHub auth:
+
+```bash
+omk goal show latest --format json | jq '.delivery_policy'
+omk doctor  # verify gh CLI auth and repo push access
+```
+
+If the PR exists but OMK lost the URL, record it manually:
 
 ```bash
 omk goal proof latest --format md
+# Find the slice branch, open PR via gh pr create or GitHub UI
+# Then resume: omk goal resume latest
+```
+
+**4. If a slice PR failed CI or review:**
+
+Find the slice branch and review artifacts:
+
+```bash
+omk goal proof latest --format md
+omk goal show latest --format json | jq '.artifacts[] | select(.kind | contains("review"))'
 # Look for slice branch names like omk/goal/.../...
 ```
 
@@ -66,27 +84,72 @@ Check out the branch, fix locally, commit and push. Then re-run review:
 omk goal review latest
 ```
 
+If CI is flaky (not a real code failure), retry the slice:
+
+```bash
+omk goal verify latest   # re-run gates locally first
+omk goal execute latest  # re-dispatch the slice agent if needed
+```
+
 If the slice is irredeemable, reject it and plan a replacement:
 
 ```bash
 omk goal reject latest --reason "slice N failed security review, needs rewrite"
 ```
 
-**4. If the integrator branch has a merge conflict:**
+**5. If review blockers persist after multiple cycles:**
+
+Inspect the review wall confidence and anti-slop score:
+
+```bash
+omk goal proof latest --format json | jq '.known_gaps'
+# Look for anti_slop_confidence > 0.5 — this spawns a cleanup task automatically
+```
+
+If the controller keeps creating cleanup tasks but never converges, consider:
+- Narrowing the slice write scope
+- Adding explicit acceptance criteria to the task graph
+- Accepting the blocker as a known gap with `--reason`
+
+**6. If the integrator branch has a merge conflict:**
 
 ```bash
 omk goal proof latest --format md
 # Note conflict files from merge-conflict artifact
 ```
 
-Manually rebase the conflicting slice branch onto the latest master, then:
+Manually rebase the conflicting slice branch onto the latest master:
+
+```bash
+git checkout <slice-branch>
+git rebase origin/master
+# Resolve conflicts, then:
+git push --force-with-lease
+```
+
+Then re-verify and accept:
 
 ```bash
 omk goal verify latest   # re-run gates on integrator branch
 omk goal accept latest --summary "manual conflict resolution accepted"
 ```
 
-**5. If the goal needs more budget:**
+**7. If partial acceptance is needed (some slices good, some bad):**
+
+Reject the bad slices individually:
+
+```bash
+omk goal reject latest --reason "slice B failed architect review"
+```
+
+Accept the good slices and create an integrator with the subset:
+
+```bash
+omk goal accept latest --summary "accept slices A, C, D; reject B"
+omk goal execute latest  # re-run integrator with remaining slices
+```
+
+**8. If the goal needs more budget:**
 
 ```bash
 omk goal budget latest
@@ -94,7 +157,7 @@ omk goal budget-add latest --time 2h --tokens 100000 --usd 5
 omk goal resume latest
 ```
 
-**6. If workers are stale or the run looks hung:**
+**9. If workers are stale or the run looks hung:**
 
 ```bash
 omk team cleanup --dry-run
@@ -102,7 +165,7 @@ omk team cleanup --older-than 1
 omk goal resume latest
 ```
 
-**7. If the goal is blocked on human oracle:**
+**10. If the goal is blocked on human oracle:**
 
 Refine the goal text with testable criteria and re-run:
 
