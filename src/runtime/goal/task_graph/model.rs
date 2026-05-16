@@ -155,23 +155,23 @@ impl GoalTaskGraph {
     }
 }
 
-fn dependency_cycle_from(
-    task_id: &str,
-    tasks_by_id: &HashMap<&str, &GoalTask>,
-    visiting: &mut HashSet<String>,
-    visited: &mut HashSet<String>,
+fn dependency_cycle_from<'a>(
+    task_id: &'a str,
+    tasks_by_id: &HashMap<&'a str, &'a GoalTask>,
+    visiting: &mut HashSet<&'a str>,
+    visited: &mut HashSet<&'a str>,
 ) -> bool {
     if visited.contains(task_id) {
         return false;
     }
-    if !visiting.insert(task_id.to_string()) {
+    if !visiting.insert(task_id) {
         return true;
     }
 
     if let Some(task) = tasks_by_id.get(task_id) {
         for dependency in &task.dependencies {
             if tasks_by_id.contains_key(dependency.as_str())
-                && dependency_cycle_from(dependency, tasks_by_id, visiting, visited)
+                && dependency_cycle_from(dependency.as_str(), tasks_by_id, visiting, visited)
             {
                 return true;
             }
@@ -179,7 +179,7 @@ fn dependency_cycle_from(
     }
 
     visiting.remove(task_id);
-    visited.insert(task_id.to_string());
+    visited.insert(task_id);
     false
 }
 
