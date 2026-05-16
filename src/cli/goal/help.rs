@@ -34,6 +34,7 @@ pub(super) const GOAL_RUN_AFTER_HELP: &str = "\
 Examples:
   omk goal run \"Fix all failing cargo tests\"
   omk goal run \"Ship CLI UX polish PR\" --until-ready
+  omk goal run \"Ship CLI UX polish PR\" --until-ready --policy auto-pr
   omk goal run \"Migrate Python to Rust\" --until-ready --budget-time 7d --budget-tokens 2000000 --budget-usd 25 --max-agents 3
 
 Without --until-ready, the command creates a durable scaffold for inspection.
@@ -143,6 +144,14 @@ Examples:
   omk goal cancel latest
 
 Records a `failure.json` artifact and stops further execution.";
+
+pub(super) const GOAL_MERGE_AFTER_HELP: &str = "\
+Examples:
+  omk goal merge
+  omk goal merge latest
+
+Merges the GitHub PR associated with the goal using `gh pr merge --squash --delete-branch`.
+Requires a pr_url or pr_link in the goal delivery metadata.";
 
 pub(super) const GOAL_PLAN_AFTER_HELP: &str = "\
 Examples:

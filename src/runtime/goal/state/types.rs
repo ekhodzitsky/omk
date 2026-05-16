@@ -137,4 +137,18 @@ pub struct CreateGoalOptions {
     pub budget_tokens: Option<u64>,
     pub budget_usd: Option<f64>,
     pub max_agents: Option<usize>,
+    pub delivery_policy: super::super::GoalDeliveryPolicy,
+}
+
+impl Default for CreateGoalOptions {
+    fn default() -> Self {
+        Self {
+            until_ready: false,
+            budget_time: None,
+            budget_tokens: None,
+            budget_usd: None,
+            max_agents: None,
+            delivery_policy: super::super::GoalDeliveryPolicy::Local,
+        }
+    }
 }

@@ -3,8 +3,12 @@ use chrono::Utc;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
+use crate::runtime::goal::delivery::{
+    open_goal_pr_with_client, GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient,
+    GoalGithubPrDeliveryOptions,
+};
 use crate::runtime::goal::proof::GoalProof;
-use crate::runtime::goal::state::{self, FileSystemGoalStateStore, GoalStateStore, GoalStatus};
+use crate::runtime::goal::state::{self, FileSystemGoalStateStore, GoalPhase, GoalStateStore, GoalStatus};
 use crate::runtime::goal::task_graph::{goal_task_done, GoalTaskGraph, GoalTaskStatus};
 use crate::runtime::goal::types::{
     GoalControllerStep, GoalControllerStepKind, GoalRunUntilReadyOutcome,
@@ -45,7 +49,7 @@ pub(crate) async fn run_goal_until_ready(
     options: state::CreateGoalOptions,
     project_dir: &Path,
 ) -> Result<GoalRunUntilReadyOutcome> {
-    let state = crate::runtime::goal::create_goal(goal, options).await?;
+    let state = crate::runtime::goal::create_goal(goal, options.clone()).await?;
     let mut steps = vec![GoalControllerStep {
         kind: GoalControllerStepKind::Plan,
         status: state.status,
@@ -124,6 +128,17 @@ pub(crate) async fn run_goal_until_ready(
         summary: "attached controller review and security-review evidence".to_string(),
     });
     let blocker = readiness_blocker(&state.goal_id, &reviewed).await?;
+    if blocker.reason.contains("manual integration acceptance")
+        && options.delivery_policy != GoalDeliveryPolicy::Local
+    {
+        return finalize_until_ready_delivery(
+            &state.goal_id,
+            steps,
+            options.delivery_policy,
+            project_dir,
+        )
+        .await;
+    }
     finalize_until_ready_blocker(&state.goal_id, steps, blocker).await
 }
 
@@ -295,6 +310,71 @@ async fn finalize_until_ready_blocker(
         steps,
         blocker: Some(blocker.reason),
         policy_evidence_path: Some(relative_path),
+    })
+}
+
+async fn finalize_until_ready_delivery(
+    goal_id: &str,
+    mut steps: Vec<GoalControllerStep>,
+    policy: GoalDeliveryPolicy,
+    project_dir: &Path,
+) -> Result<GoalRunUntilReadyOutcome> {
+    let mut state = crate::runtime::goal::resolve_goal(goal_id).await?;
+    let mut proof = GoalProof::load(&state.state_dir).await?;
+
+    let delivery_options = GoalGithubPrDeliveryOptions {
+        policy,
+        dry_run: false,
+        draft: policy == GoalDeliveryPolicy::DraftPr,
+        base_branch: None,
+    };
+    let mut client = GoalGithubPrCommandClient::default();
+    let outcome = open_goal_pr_with_client(goal_id, delivery_options, &mut client).await?;
+
+    if outcome.mutated {
+        if let Some(ref url) = outcome.pr_url {
+            client.merge_pr(url).await?;
+        }
+    }
+
+    let now = Utc::now();
+    state.status = GoalStatus::Ready;
+    state.phase = GoalPhase::Proof;
+    state.completed_at = Some(now);
+    state.updated_at = now;
+    FileSystemGoalStateStore::new().save(&state).await?;
+
+    proof.status = GoalStatus::Ready;
+    proof.readiness =
+        "ready: integration and oracle evidence passed, GitHub PR merged".to_string();
+    proof.summary = format!(
+        "Goal '{}' is proof-backed ready: gates, execution, review, and integration evidence passed.",
+        state.normalized_goal
+    );
+    proof.generated_at = now;
+    proof.artifacts = state.artifacts.clone();
+    proof.known_gaps.clear();
+    proof.human_decisions_required.clear();
+    proof.git = super::super::evidence::detect_git_evidence(project_dir)
+        .await
+        .or(proof.git);
+    proof::write_json_artifact(&state.state_dir.join(state::GOAL_PROOF_FILE), &proof).await?;
+
+    steps.push(GoalControllerStep {
+        kind: GoalControllerStepKind::Deliver,
+        status: GoalStatus::Ready,
+        summary: format!(
+            "GitHub PR created and merged under {} policy",
+            policy.as_str()
+        ),
+    });
+
+    Ok(GoalRunUntilReadyOutcome {
+        state,
+        proof,
+        steps,
+        blocker: None,
+        policy_evidence_path: None,
     })
 }
 

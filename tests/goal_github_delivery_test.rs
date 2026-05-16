@@ -58,6 +58,29 @@ impl GoalGithubPrClient for MockGithubClient {
             })
         })
     }
+
+    fn merge_pr<'a>(
+        &'a mut self,
+        pr_url: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<GoalGithubPrMutation>> + Send + 'a>> {
+        self.calls.push(RecordedCall {
+            operation: GoalGithubPrOperation::Create,
+            request: GoalGithubPrRequest {
+                title: "merge".to_string(),
+                body: pr_url.to_string(),
+                head_branch: "merge".to_string(),
+                base_branch: None,
+                draft: false,
+                existing_pr_url: Some(pr_url.to_string()),
+            },
+        });
+        Box::pin(async move {
+            Ok(GoalGithubPrMutation {
+                operation: GoalGithubPrOperation::Create,
+                url: Some(pr_url.to_string()),
+            })
+        })
+    }
 }
 
 fn draft(existing_pr_url: Option<&str>, dry_run: bool) -> GoalOpenPrDraft {
@@ -220,4 +243,18 @@ async fn mutating_policy_requires_head_branch() {
 
     assert_eq!(client.call_count(), 0);
     assert!(error.to_string().contains("head branch"));
+}
+
+#[tokio::test]
+async fn merge_pr_calls_gh_merge() {
+    let mut client = MockGithubClient::default();
+    let url = "https://github.com/example/omk/pull/7";
+    let result = client.merge_pr(url).await.expect("merge_pr should succeed");
+
+    assert_eq!(client.call_count(), 1);
+    assert_eq!(result.url, Some(url.to_string()));
+    let call = &client.calls[0];
+    assert_eq!(call.operation, GoalGithubPrOperation::Create);
+    assert_eq!(call.request.body, url);
+    assert_eq!(call.request.existing_pr_url, Some(url.to_string()));
 }

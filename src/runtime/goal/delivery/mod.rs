@@ -74,6 +74,8 @@ pub trait GoalGithubPrClient {
     fn create_pr<'a>(&'a mut self, request: GoalGithubPrRequest) -> GoalGithubPrFuture<'a>;
 
     fn update_pr<'a>(&'a mut self, request: GoalGithubPrRequest) -> GoalGithubPrFuture<'a>;
+
+    fn merge_pr<'a>(&'a mut self, pr_url: &'a str) -> GoalGithubPrFuture<'a>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,6 +163,34 @@ impl GoalGithubPrClient for GoalGithubPrCommandClient {
 
     fn update_pr<'a>(&'a mut self, request: GoalGithubPrRequest) -> GoalGithubPrFuture<'a> {
         Box::pin(async move { self.run_gh_pr(GoalGithubPrOperation::Update, request).await })
+    }
+
+    fn merge_pr<'a>(&'a mut self, pr_url: &'a str) -> GoalGithubPrFuture<'a> {
+        Box::pin(async move {
+            let mut command = Command::new("gh");
+            command
+                .arg("pr")
+                .arg("merge")
+                .arg(pr_url)
+                .arg("--squash")
+                .arg("--delete-branch");
+            let output = tokio::time::timeout(self.timeout, command.output())
+                .await
+                .with_context(|| format!("timed out waiting for gh pr merge {pr_url}"))?
+                .with_context(|| format!("failed to start gh pr merge {pr_url}"))?;
+
+            if !output.status.success() {
+                anyhow::bail!(
+                    "gh pr merge failed: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                );
+            }
+
+            Ok(GoalGithubPrMutation {
+                operation: GoalGithubPrOperation::Create,
+                url: Some(pr_url.to_string()),
+            })
+        })
     }
 }
 
