@@ -13,9 +13,12 @@ pub async fn pause_goal(goal_id: &str) -> Result<GoalState> {
     let mut state = super::resolve_goal(goal_id).await?;
     if matches!(state.status, GoalStatus::Ready | GoalStatus::Cancelled) {
         anyhow::bail!(
-            "Goal '{}' is terminal ({}) and cannot be paused",
+            "Goal '{}' is terminal ({}) and cannot be paused. \
+             Use 'omk goal show {}' to inspect it, or 'omk goal cancel {}' if you need to terminate an active run.",
             state.goal_id,
-            state.status
+            state.status,
+            state.goal_id,
+            state.goal_id
         );
     }
 
@@ -33,9 +36,12 @@ pub async fn resume_goal(goal_id: &str) -> Result<GoalState> {
     let mut state = super::resolve_goal(goal_id).await?;
     if state.status != GoalStatus::Paused {
         anyhow::bail!(
-            "Goal '{}' is not paused (status: {})",
+            "Goal '{}' is not paused (status: {}). \
+             Pause it first with 'omk goal pause {}', or check status with 'omk goal status {}'.",
             state.goal_id,
-            state.status
+            state.status,
+            state.goal_id,
+            state.goal_id
         );
     }
 
