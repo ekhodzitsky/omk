@@ -145,63 +145,62 @@ pub(super) async fn check_hooks(
 }
 
 pub(super) async fn check_hook_configs(dir: &Path, kimi_dir: &Path, results: &mut Vec<DiagResult>) {
-    // Check hook configs reference existing scripts (L1-033)
-    let hook_configs_to_check = ["hooks.toml.example", "config.toml"];
-    for config_name in &hook_configs_to_check {
-        let config_path = kimi_dir.join(config_name);
-        if config_path.exists() {
-            match tokio::fs::read_to_string(&config_path).await {
-                Ok(content) => match toml::from_str::<HookConfigWrapper>(&content) {
-                    Ok(wrapper) => {
-                        let mut dangling = vec![];
-                        for hook in &wrapper.hooks {
-                            let cmd_path = dir.join(&hook.command);
-                            if !cmd_path.exists() {
-                                dangling.push(hook.command.clone());
-                            }
-                        }
-                        if dangling.is_empty() {
-                            results.push(DiagResult {
-                                severity: Severity::Ok,
-                                message: format!(
-                                    "Hook config '{}' references valid scripts",
-                                    config_name
-                                ),
-                                fix_hint: None,
-                            });
-                        } else {
-                            results.push(DiagResult {
-                                severity: Severity::Warning,
-                                message: format!(
-                                    "Hook config '{}' references missing scripts: {}",
-                                    config_name,
-                                    dangling.join(", ")
-                                ),
-                                fix_hint: Some(
-                                    "Run `omk kimi sync` to restore missing hook scripts"
-                                        .to_string(),
-                                ),
-                            });
+    // Check hook configs reference existing scripts (L1-033).
+    // config.toml is already validated in detail by check_hooks, so only
+    // check the example file here to avoid duplicate diagnostics.
+    let config_path = kimi_dir.join("hooks.toml.example");
+    if config_path.exists() {
+        match tokio::fs::read_to_string(&config_path).await {
+            Ok(content) => match toml::from_str::<HookConfigWrapper>(&content) {
+                Ok(wrapper) => {
+                    let mut dangling = vec![];
+                    for hook in &wrapper.hooks {
+                        let cmd_path = dir.join(&hook.command);
+                        if !cmd_path.exists() {
+                            dangling.push(hook.command.clone());
                         }
                     }
-                    Err(e) => {
+                    if dangling.is_empty() {
+                        results.push(DiagResult {
+                            severity: Severity::Ok,
+                            message: format!(
+                                "Hook config '{}' references valid scripts",
+                                config_path.display()
+                            ),
+                            fix_hint: None,
+                        });
+                    } else {
                         results.push(DiagResult {
                             severity: Severity::Warning,
                             message: format!(
-                                "Hook config '{}' is invalid TOML: {}",
-                                config_name, e
+                                "Hook config '{}' references missing scripts: {}",
+                                config_path.display(),
+                                dangling.join(", ")
                             ),
-                            fix_hint: Some(format!("Review and fix {}", config_path.display())),
+                            fix_hint: Some(
+                                "Run `omk kimi sync` to restore missing hook scripts".to_string(),
+                            ),
                         });
                     }
-                },
+                }
                 Err(e) => {
                     results.push(DiagResult {
                         severity: Severity::Warning,
-                        message: format!("Cannot read hook config '{}': {}", config_name, e),
-                        fix_hint: None,
+                        message: format!(
+                            "Hook config '{}' is invalid TOML: {}",
+                            config_path.display(),
+                            e
+                        ),
+                        fix_hint: Some(format!("Review and fix {}", config_path.display())),
                     });
                 }
+            },
+            Err(e) => {
+                results.push(DiagResult {
+                    severity: Severity::Warning,
+                    message: format!("Cannot read hook config '{}': {}", config_path.display(), e),
+                    fix_hint: None,
+                });
             }
         }
     }

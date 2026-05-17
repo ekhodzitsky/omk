@@ -70,9 +70,16 @@ async fn test_discover_hooks_fallback_to_defaults() {
     let subs = discover_hook_subscriptions(Some(tmp.path())).await;
     assert_eq!(subs.len(), 1);
     assert_eq!(subs[0].event, "PreToolUse");
+    assert_eq!(subs[0].id, "pre_tool_use-writefile|strreplacefile");
+    assert_eq!(
+        subs[0].matcher,
+        Some("WriteFile|StrReplaceFile".to_string())
+    );
+    assert_eq!(subs[0].timeout, Some(10));
 }
 
 #[tokio::test]
+#[cfg(unix)]
 async fn test_discover_hooks_skips_non_executable() {
     let tmp = TempDir::new().unwrap();
     let hooks_dir = tmp.path().join(".kimi").join("hooks");
@@ -87,6 +94,76 @@ async fn test_discover_hooks_skips_non_executable() {
 }
 
 #[tokio::test]
+async fn test_discover_hooks_malformed_config_ignores_hooks() {
+    let tmp = TempDir::new().unwrap();
+    let kimi = tmp.path().join(".kimi");
+    let hooks_dir = kimi.join("hooks");
+    std::fs::create_dir_all(&hooks_dir).unwrap();
+
+    make_script(&hooks_dir, "safety-check.sh", "#!/bin/bash\nexit 0\n");
+
+    // Invalid TOML
+    std::fs::write(kimi.join("config.toml"), "[[hooks\nevent = bad").unwrap();
+
+    let subs = discover_hook_subscriptions(Some(tmp.path())).await;
+    // Malformed config logs a warning and returns empty subscriptions
+    assert!(subs.is_empty());
+}
+
+#[tokio::test]
+async fn test_discover_hooks_empty_hooks_list() {
+    let tmp = TempDir::new().unwrap();
+    let kimi = tmp.path().join(".kimi");
+    std::fs::create_dir_all(kimi.join("hooks")).unwrap();
+
+    std::fs::write(kimi.join("config.toml"), "hooks = []\n").unwrap();
+
+    let subs = discover_hook_subscriptions(Some(tmp.path())).await;
+    assert!(subs.is_empty());
+}
+
+#[tokio::test]
+async fn test_discover_hooks_timeout_clamped_to_300() {
+    let tmp = TempDir::new().unwrap();
+    let hooks_dir = tmp.path().join(".kimi").join("hooks");
+    std::fs::create_dir_all(&hooks_dir).unwrap();
+
+    make_script(&hooks_dir, "safety-check.sh", "#!/bin/bash\nexit 0\n");
+
+    let config = r#"
+[[hooks]]
+event = "PreToolUse"
+command = ".kimi/hooks/safety-check.sh"
+timeout = 500
+"#;
+    std::fs::write(tmp.path().join(".kimi").join("config.toml"), config).unwrap();
+
+    let subs = discover_hook_subscriptions(Some(tmp.path())).await;
+    assert_eq!(subs[0].timeout, Some(300));
+}
+
+#[tokio::test]
+async fn test_discover_hooks_zero_timeout_clamped_to_1() {
+    let tmp = TempDir::new().unwrap();
+    let hooks_dir = tmp.path().join(".kimi").join("hooks");
+    std::fs::create_dir_all(&hooks_dir).unwrap();
+
+    make_script(&hooks_dir, "safety-check.sh", "#!/bin/bash\nexit 0\n");
+
+    let config = r#"
+[[hooks]]
+event = "PreToolUse"
+command = ".kimi/hooks/safety-check.sh"
+timeout = 0
+"#;
+    std::fs::write(tmp.path().join(".kimi").join("config.toml"), config).unwrap();
+
+    let subs = discover_hook_subscriptions(Some(tmp.path())).await;
+    assert_eq!(subs[0].timeout, Some(1));
+}
+
+#[tokio::test]
+#[cfg(unix)]
 async fn test_hook_executor_allow_on_exit_zero() {
     let tmp = TempDir::new().unwrap();
     let hooks_dir = tmp.path().join(".kimi").join("hooks");
@@ -113,6 +190,7 @@ async fn test_hook_executor_allow_on_exit_zero() {
 }
 
 #[tokio::test]
+#[cfg(unix)]
 async fn test_hook_executor_block_on_exit_one() {
     let tmp = TempDir::new().unwrap();
     let hooks_dir = tmp.path().join(".kimi").join("hooks");
@@ -139,6 +217,7 @@ async fn test_hook_executor_block_on_exit_one() {
 }
 
 #[tokio::test]
+#[cfg(unix)]
 async fn test_hook_executor_block_on_nonzero_exit() {
     let tmp = TempDir::new().unwrap();
     let hooks_dir = tmp.path().join(".kimi").join("hooks");
@@ -166,6 +245,7 @@ async fn test_hook_executor_block_on_nonzero_exit() {
 }
 
 #[tokio::test]
+#[cfg(unix)]
 async fn test_hook_executor_timeout() {
     let tmp = TempDir::new().unwrap();
     let hooks_dir = tmp.path().join(".kimi").join("hooks");
@@ -191,7 +271,7 @@ timeout = 1
         input_data: serde_json::json!({}),
     };
 
-    let start = tokio::time::Instant::now();
+    let start = std::time::Instant::now();
     let result = executor.run(&request).await.unwrap();
     let elapsed = start.elapsed();
 
@@ -220,6 +300,124 @@ async fn test_hook_executor_default_allow_when_no_match() {
     assert!(result.reason.contains("No matching hook"));
 }
 
+#[tokio::test]
+#[cfg(unix)]
+async fn test_hook_executor_subscription_id_fast_path() {
+    let tmp = TempDir::new().unwrap();
+    let hooks_dir = tmp.path().join(".kimi").join("hooks");
+    std::fs::create_dir_all(&hooks_dir).unwrap();
+
+    make_script(
+        &hooks_dir,
+        "safety-check.sh",
+        "#!/bin/bash\necho 'fast'\nexit 0\n",
+    );
+
+    let config = r#"
+[[hooks]]
+event = "PreToolUse"
+command = ".kimi/hooks/safety-check.sh"
+matcher = "WriteFile|StrReplaceFile"
+timeout = 10
+"#;
+    std::fs::write(tmp.path().join(".kimi").join("config.toml"), config).unwrap();
+
+    let executor = HookExecutor::new(tmp.path());
+    // Use subscription_id to match directly, bypassing regex matcher
+    let request = HookRequest {
+        id: "hook_1".to_string(),
+        subscription_id: "pre_tool_use-writefile|strreplacefile".to_string(),
+        event: "PreToolUse".to_string(),
+        target: "ReadFile".to_string(), // target does NOT match the regex
+        input_data: serde_json::json!({}),
+    };
+
+    let result = executor.run(&request).await.unwrap();
+    assert_eq!(result.action, omk::wire::protocol::HookAction::Allow);
+    assert_eq!(result.reason, "fast");
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn test_hook_executor_regex_matcher_matching() {
+    let tmp = TempDir::new().unwrap();
+    let hooks_dir = tmp.path().join(".kimi").join("hooks");
+    std::fs::create_dir_all(&hooks_dir).unwrap();
+
+    make_script(
+        &hooks_dir,
+        "safety-check.sh",
+        "#!/bin/bash\necho 'regex-match'\nexit 0\n",
+    );
+
+    let config = r#"
+[[hooks]]
+event = "PreToolUse"
+command = ".kimi/hooks/safety-check.sh"
+matcher = "Write.*"
+timeout = 10
+"#;
+    std::fs::write(tmp.path().join(".kimi").join("config.toml"), config).unwrap();
+
+    let executor = HookExecutor::new(tmp.path());
+
+    // Positive match
+    let req_match = HookRequest {
+        id: "hook_1".to_string(),
+        subscription_id: "".to_string(),
+        event: "PreToolUse".to_string(),
+        target: "WriteFile".to_string(),
+        input_data: serde_json::json!({}),
+    };
+    let result = executor.run(&req_match).await.unwrap();
+    assert_eq!(result.action, omk::wire::protocol::HookAction::Allow);
+    assert_eq!(result.reason, "regex-match");
+
+    // Negative match — should default allow
+    let req_no_match = HookRequest {
+        id: "hook_2".to_string(),
+        subscription_id: "".to_string(),
+        event: "PreToolUse".to_string(),
+        target: "ReadFile".to_string(),
+        input_data: serde_json::json!({}),
+    };
+    let result = executor.run(&req_no_match).await.unwrap();
+    assert_eq!(result.action, omk::wire::protocol::HookAction::Allow);
+    assert!(result.reason.contains("No matching hook"));
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn test_hook_executor_stdin_input_delivery() {
+    let tmp = TempDir::new().unwrap();
+    let hooks_dir = tmp.path().join(".kimi").join("hooks");
+    std::fs::create_dir_all(&hooks_dir).unwrap();
+
+    make_script(&hooks_dir, "echo-stdin.sh", "#!/bin/bash\ncat\nexit 0\n");
+
+    let config = r#"
+[[hooks]]
+event = "PreToolUse"
+command = ".kimi/hooks/echo-stdin.sh"
+timeout = 10
+"#;
+    std::fs::write(tmp.path().join(".kimi").join("config.toml"), config).unwrap();
+
+    let executor = HookExecutor::new(tmp.path());
+    let request = HookRequest {
+        id: "hook_1".to_string(),
+        subscription_id: "".to_string(),
+        event: "PreToolUse".to_string(),
+        target: "WriteFile".to_string(),
+        input_data: serde_json::json!({"key": "value"}),
+    };
+
+    let result = executor.run(&request).await.unwrap();
+    assert_eq!(result.action, omk::wire::protocol::HookAction::Allow);
+    assert!(result.reason.contains("key"));
+    assert!(result.reason.contains("value"));
+}
+
 #[test]
 fn test_hook_result_response_value() {
     let result = HookResult {
@@ -241,7 +439,7 @@ fn test_hook_result_response_value() {
 }
 
 #[tokio::test]
-async fn test_hook_event_emission_to_jsonl() {
+async fn test_hook_event_writer_serialization() {
     let tmp = TempDir::new().unwrap();
     let events_path = tmp.path().join("events.jsonl");
     let writer = EventWriter::new(&events_path);

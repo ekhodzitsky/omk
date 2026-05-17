@@ -5,7 +5,9 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::runtime::events::{Event, EventBuilder, EventKind, JsonlWriter, TaskId, WorkerId};
-use crate::runtime::wire_worker::hook_executor::{discover_hook_subscriptions, HookExecutor};
+use crate::runtime::wire_worker::hook_executor::{
+    discover_hook_subscriptions, HookExecutor, HookResult,
+};
 use crate::runtime::wire_worker::WireWorkerAdapter;
 use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
 use crate::wire::client::{ProcessWireClient, WireClient, WireMessage};
@@ -64,11 +66,7 @@ impl WireWorkerAdapter {
             self.spec.external_tools.clone()
         };
 
-        let hooks = if let Some(dir) = project_dir {
-            discover_hook_subscriptions(Some(dir)).await
-        } else {
-            Vec::new()
-        };
+        let hooks = discover_hook_subscriptions(project_dir).await;
 
         let init_params = crate::wire::protocol::InitializeParams {
             protocol_version: crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string(),
@@ -183,7 +181,9 @@ impl WireWorkerAdapter {
                                                 "target": target,
                                                 "hook_count": hook_count,
                                             }))?;
-                                        self.event_writer.append(&hook_event).await?;
+                                        if let Err(e) = self.event_writer.append(&hook_event).await {
+                                            warn!(error = %e, "Failed to emit hook_triggered event");
+                                        }
                                     }
                                     crate::wire::protocol::Event::HookResolved { event, target, action, reason, duration_ms } => {
                                         let hook_event = Event::new(self.run_id.clone(), EventKind::HookResolved)
@@ -197,7 +197,9 @@ impl WireWorkerAdapter {
                                                 "reason": reason,
                                                 "duration_ms": duration_ms,
                                             }))?;
-                                        self.event_writer.append(&hook_event).await?;
+                                        if let Err(e) = self.event_writer.append(&hook_event).await {
+                                            warn!(error = %e, "Failed to emit hook_resolved event");
+                                        }
                                     }
                                     _ => {}
                                 },
@@ -222,8 +224,10 @@ impl WireWorkerAdapter {
                                             }
                                         }
                                         "turn_begin" | "step_begin" | "tool_call" | "tool_call_part"
-                                        | "tool_result" | "status_update" | "approval_response"
-                                        | "hook_triggered" | "hook_resolved" => {}
+                                        | "tool_result" | "status_update" | "approval_response" => {}
+                                        "hook_triggered" | "hook_resolved" => {
+                                            tracing::debug!(event_type = %ev.params.event_type, "Known hook event failed deserialization");
+                                        }
                                         other => warn!(event_type = %other, "Unknown wire event kind"),
                                     }
                                 }
@@ -235,15 +239,25 @@ impl WireWorkerAdapter {
                         Ok(WireMessage::Request(req)) => match req.params.to_request() {
                             Ok(request) => {
                                 if let crate::wire::protocol::Request::HookRequest(ref hook_req) = request {
-                                    let hook_executor = if let Some(dir) = project_dir {
-                                        HookExecutor::new(dir)
+                                    let hook_result = if let Some(dir) = project_dir {
+                                        match HookExecutor::new(dir).run(hook_req).await {
+                                            Ok(result) => result,
+                                            Err(e) => {
+                                                warn!(error = %e, "Hook execution failed");
+                                                HookResult {
+                                                    action: crate::wire::protocol::HookAction::Block,
+                                                    reason: format!("hook execution failed: {e}"),
+                                                }
+                                            }
+                                        }
                                     } else {
-                                        HookExecutor::new(".")
+                                        HookResult::default_allow()
                                     };
-                                    let hook_result = hook_executor.run(hook_req).await?;
                                     let response = hook_result.to_response_value(&hook_req.id);
-                                    self.record_wire_request(task, &req.id, &req.params, &request, &response).await?;
                                     client.send_response(&req.id, &response).await?;
+                                    if let Err(e) = self.record_wire_request(task, &req.id, &req.params, &request, &response).await {
+                                        warn!(error = %e, "Failed to record hook wire request");
+                                    }
                                     info!(
                                         worker = %self.spec.name,
                                         request_id = %req.id,

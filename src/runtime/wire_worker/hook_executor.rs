@@ -1,13 +1,12 @@
-#![allow(dead_code)]
-
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
+use tracing::warn;
 
 use crate::kimi_native::hook_spec::{default_project_hooks, HookConfig};
-use crate::wire::protocol::{HookAction, HookRequest, WireHookSubscription};
+use crate::wire::protocol::{redact_wire_secrets, HookAction, HookRequest, WireHookSubscription};
 
 /// Discover active hook subscriptions for the given project directory.
 ///
@@ -26,6 +25,7 @@ pub async fn discover_hook_subscriptions(project_dir: Option<&Path>) -> Vec<Wire
 struct ActiveHook {
     subscription: WireHookSubscription,
     script_path: PathBuf,
+    regex: Option<regex::Regex>,
 }
 
 /// TOML wrapper for parsing the `[[hooks]]` table.
@@ -46,9 +46,15 @@ async fn discover_active_hooks(project_dir: Option<&Path>) -> Vec<ActiveHook> {
         Ok(true) => match tokio::fs::read_to_string(&config_path).await {
             Ok(content) => match toml::from_str::<HookConfigWrapper>(&content) {
                 Ok(wrapper) => wrapper.hooks,
-                Err(_) => Vec::new(),
+                Err(e) => {
+                    warn!(path = %config_path.display(), error = %e, "Malformed hook config; falling back to defaults");
+                    Vec::new()
+                }
             },
-            Err(_) => Vec::new(),
+            Err(e) => {
+                warn!(path = %config_path.display(), error = %e, "Cannot read hook config; falling back to defaults");
+                Vec::new()
+            }
         },
         _ => {
             let defs = default_project_hooks();
@@ -74,7 +80,20 @@ async fn discover_active_hooks(project_dir: Option<&Path>) -> Vec<ActiveHook> {
             pascal_to_snake(&event_str)
         };
 
-        let timeout = hook.timeout.map(|t| (t.min(300)) as u32).unwrap_or(30);
+        let timeout = hook
+            .timeout
+            .map(|t| t.clamp(1, 300) as u32)
+            .unwrap_or(30);
+
+        let regex = hook.matcher.as_ref().and_then(|pattern| {
+            match regex::Regex::new(pattern) {
+                Ok(re) => Some(re),
+                Err(e) => {
+                    warn!(pattern = %pattern, error = %e, "Invalid hook matcher regex; matcher will be ignored");
+                    None
+                }
+            }
+        });
 
         active.push(ActiveHook {
             subscription: WireHookSubscription {
@@ -84,6 +103,7 @@ async fn discover_active_hooks(project_dir: Option<&Path>) -> Vec<ActiveHook> {
                 timeout: Some(timeout),
             },
             script_path,
+            regex,
         });
     }
 
@@ -150,9 +170,9 @@ impl HookExecutor {
                 return true;
             }
             h.subscription.event == request.event
-                && h.subscription.matcher.as_ref().map_or(true, |pattern| {
-                    regex::Regex::new(pattern).is_ok_and(|re| re.is_match(&request.target))
-                })
+                && h.regex
+                    .as_ref()
+                    .map_or(true, |re| re.is_match(&request.target))
         });
 
         let matched = match matched {
@@ -160,13 +180,15 @@ impl HookExecutor {
             None => return Ok(HookResult::default_allow()),
         };
 
-        let timeout_secs = matched.subscription.timeout.unwrap_or(30).min(300);
-        let timeout = std::time::Duration::from_secs(timeout_secs as u64);
+        let timeout =
+            std::time::Duration::from_secs(matched.subscription.timeout.unwrap_or(30) as u64);
 
-        let input_json = serde_json::to_string(&request.input_data)
+        let redacted_input = redact_wire_secrets(&request.input_data);
+        let input_json = serde_json::to_string(&redacted_input)
             .context("Failed to serialize hook input data")?;
 
         let mut child = match tokio::process::Command::new(&matched.script_path)
+            .current_dir(&self.project_dir)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -187,6 +209,12 @@ impl HookExecutor {
                 return Ok(HookResult {
                     action: HookAction::Block,
                     reason: format!("failed to write hook input: {e}"),
+                });
+            }
+            if let Err(e) = stdin.flush().await {
+                return Ok(HookResult {
+                    action: HookAction::Block,
+                    reason: format!("failed to flush hook input: {e}"),
                 });
             }
             // Dropping stdin closes the pipe and signals EOF to the child.
@@ -226,7 +254,7 @@ impl HookExecutor {
             }
             Ok(Err(e)) => Ok(HookResult {
                 action: HookAction::Block,
-                reason: format!("failed to spawn hook: {e}"),
+                reason: format!("failed to collect hook output: {e}"),
             }),
             Err(_) => Ok(HookResult {
                 action: HookAction::Block,
