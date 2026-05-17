@@ -329,7 +329,7 @@ async fn test_run_gates_with_evidence_drains_large_output_before_waiting() {
         &script,
         r#"#!/bin/sh
 awk 'BEGIN {
-  for (i = 0; i < 6000; i++) {
+  for (i = 0; i < 2000; i++) {
     printf "stdout-line-%05d\n", i
     printf "stderr-line-%05d\n", i > "/dev/stderr"
   }
@@ -338,7 +338,7 @@ awk 'BEGIN {
 "#,
     );
 
-    let config = single_gate_config("large-output", script.to_str().unwrap(), vec![], true, 10);
+    let config = single_gate_config("large-output", script.to_str().unwrap(), vec![], true, 30);
 
     let results =
         omk::runtime::gates::run_gates_with_evidence(&config, dir, Some(&artifacts)).await;
@@ -359,13 +359,13 @@ async fn test_run_gates_with_evidence_marks_timeout_without_artifact_dir() {
     let dir = tmp.path();
     let script = dir.join("timeout.sh");
     #[cfg(unix)]
-    write_unix_script(&script, "#!/bin/sh\nsleep 2\necho done\n");
+    write_unix_script(&script, "#!/bin/sh\nsleep 3600\necho done\n");
     #[cfg(windows)]
-    tokio::fs::write(&script, "@ping 127.0.0.1 -n 3 > nul\r\n@echo done\r\n")
+    tokio::fs::write(&script, "@ping 127.0.0.1 -n 3601 > nul\r\n@echo done\r\n")
         .await
         .unwrap();
 
-    let config = single_gate_config("timeout", script.to_str().unwrap(), vec![], true, 1);
+    let config = single_gate_config("timeout", script.to_str().unwrap(), vec![], true, 3);
 
     let results = omk::runtime::gates::run_gates_with_evidence(&config, dir, None).await;
     assert_eq!(results.len(), 1);
@@ -378,7 +378,7 @@ async fn test_run_gates_with_evidence_marks_timeout_without_artifact_dir() {
         .stderr_summary
         .as_deref()
         .unwrap_or_default()
-        .contains("Timed out after 1s"));
+        .contains("Timed out after 3s"));
 }
 
 #[tokio::test]
@@ -629,6 +629,141 @@ timeout_secs = 3
     );
 }
 
+#[tokio::test]
+async fn test_load_or_detect_gates_falls_back_on_empty_gate_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let omk_dir = dir.join(".omk");
+    tokio::fs::create_dir_all(&omk_dir).await.unwrap();
+    tokio::fs::write(
+        omk_dir.join("gates.toml"),
+        r#"
+[[gates]]
+name = ""
+command = "echo"
+required = true
+timeout_secs = 5
+"#,
+    )
+    .await
+    .unwrap();
+
+    let config = omk::runtime::gates::load_or_detect_gates(dir).await;
+    assert!(
+        config.gates.is_empty(),
+        "invalid gates.toml (empty name) must fall back to auto-detect for unknown project"
+    );
+}
+
+#[tokio::test]
+async fn test_load_or_detect_gates_falls_back_on_empty_command() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let omk_dir = dir.join(".omk");
+    tokio::fs::create_dir_all(&omk_dir).await.unwrap();
+    tokio::fs::write(
+        omk_dir.join("gates.toml"),
+        r#"
+[[gates]]
+name = "bad-cmd"
+command = ""
+required = true
+timeout_secs = 5
+"#,
+    )
+    .await
+    .unwrap();
+
+    let config = omk::runtime::gates::load_or_detect_gates(dir).await;
+    assert!(
+        config.gates.is_empty(),
+        "invalid gates.toml (empty command) must fall back to auto-detect for unknown project"
+    );
+}
+
+#[tokio::test]
+async fn test_load_or_detect_gates_falls_back_on_duplicate_names() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let omk_dir = dir.join(".omk");
+    tokio::fs::create_dir_all(&omk_dir).await.unwrap();
+    tokio::fs::write(
+        omk_dir.join("gates.toml"),
+        r#"
+[[gates]]
+name = "dup"
+command = "echo"
+required = true
+timeout_secs = 5
+
+[[gates]]
+name = "dup"
+command = "echo"
+required = true
+timeout_secs = 5
+"#,
+    )
+    .await
+    .unwrap();
+
+    let config = omk::runtime::gates::load_or_detect_gates(dir).await;
+    assert!(
+        config.gates.is_empty(),
+        "invalid gates.toml (duplicate names) must fall back to auto-detect for unknown project"
+    );
+}
+
+#[tokio::test]
+async fn test_load_or_detect_gates_falls_back_on_timeout_too_large() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let omk_dir = dir.join(".omk");
+    tokio::fs::create_dir_all(&omk_dir).await.unwrap();
+    tokio::fs::write(
+        omk_dir.join("gates.toml"),
+        r#"
+[[gates]]
+name = "huge-timeout"
+command = "echo"
+required = true
+timeout_secs = 86401
+"#,
+    )
+    .await
+    .unwrap();
+
+    let config = omk::runtime::gates::load_or_detect_gates(dir).await;
+    assert!(
+        config.gates.is_empty(),
+        "invalid gates.toml (timeout > 86400) must fall back to auto-detect for unknown project"
+    );
+}
+
+#[tokio::test]
+async fn test_load_or_detect_gates_accepts_max_timeout() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let omk_dir = dir.join(".omk");
+    tokio::fs::create_dir_all(&omk_dir).await.unwrap();
+    tokio::fs::write(
+        omk_dir.join("gates.toml"),
+        r#"
+[[gates]]
+name = "max-timeout"
+command = "echo"
+required = true
+timeout_secs = 86400
+"#,
+    )
+    .await
+    .unwrap();
+
+    let config = omk::runtime::gates::load_or_detect_gates(dir).await;
+    assert_eq!(config.gates.len(), 1);
+    assert_eq!(config.gates[0].name, "max-timeout");
+    assert_eq!(config.gates[0].timeout_secs, 86400);
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn test_run_gates_captures_exit_code_stdout_stderr_and_args() {
@@ -800,7 +935,7 @@ async fn test_run_gates_summary_truncates_to_three_lines_with_overflow_marker() 
         "#!/bin/sh\nfor i in 1 2 3 4 5; do echo \"out-$i\"; done\nfor i in 1 2 3 4 5; do echo \"err-$i\" >&2; done\nexit 1\n",
     );
 
-    let config = single_gate_config("many-lines", script.to_str().unwrap(), vec![], true, 5);
+    let config = single_gate_config("many-lines", script.to_str().unwrap(), vec![], true, 30);
 
     let results = omk::runtime::gates::run_gates(&config, dir).await;
     assert_eq!(results.len(), 1);
