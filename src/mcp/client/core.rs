@@ -89,7 +89,10 @@ impl McpClient {
                 Ok(Ok(Some(l))) => l,
                 Ok(Ok(None)) => bail!("MCP server {} closed connection", self.server_name),
                 Ok(Err(e)) => bail!("MCP transport recv error for {}: {e}", self.server_name),
-                Err(_) => bail!("MCP request timeout for {method} on {} after 60s", self.server_name),
+                Err(_) => bail!(
+                    "MCP request timeout for {method} on {} after 60s",
+                    self.server_name
+                ),
             };
 
             // Demux: skip notifications and responses that don't match our id.

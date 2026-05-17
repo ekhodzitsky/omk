@@ -141,9 +141,7 @@ impl McpRegistry {
             })?;
         if !handle.tools.iter().any(|t| t.name == tool_name) {
             return Err(OmkError::InvalidInput {
-                reason: format!(
-                    "MCP tool '{tool_name}' not found on server '{server_name}'"
-                ),
+                reason: format!("MCP tool '{tool_name}' not found on server '{server_name}'"),
             });
         }
         let result = handle
