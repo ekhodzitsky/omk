@@ -464,6 +464,8 @@ async fn test_wire_worker_adapter_cancellation_stops_idle_worker() {
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: Some(project_dir),
         external_tools: None,
+        approval_policy: omk::runtime::wire_worker::ApprovalPolicy::default(),
+        approval_timeout_secs: omk::runtime::worker::default_approval_timeout_secs(),
     };
     spec.save().await.unwrap();
 
@@ -507,6 +509,8 @@ async fn test_wire_worker_adapter_times_out_stalled_turn_and_writes_failed_resul
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: Some(project_dir),
         external_tools: None,
+        approval_policy: omk::runtime::wire_worker::ApprovalPolicy::default(),
+        approval_timeout_secs: omk::runtime::worker::default_approval_timeout_secs(),
     };
     spec.save().await.unwrap();
 
@@ -589,6 +593,8 @@ async fn test_wire_worker_adapter_enforces_task_budget_timeout() {
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: Some(project_dir),
         external_tools: None,
+        approval_policy: omk::runtime::wire_worker::ApprovalPolicy::default(),
+        approval_timeout_secs: omk::runtime::worker::default_approval_timeout_secs(),
     };
     spec.save().await.unwrap();
 
@@ -701,6 +707,8 @@ async fn test_wire_worker_adapter_handles_mid_task_crash_after_turn_begin() {
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: Some(project_dir),
         external_tools: None,
+        approval_policy: omk::runtime::wire_worker::ApprovalPolicy::default(),
+        approval_timeout_secs: omk::runtime::worker::default_approval_timeout_secs(),
     };
     spec.save().await.unwrap();
 

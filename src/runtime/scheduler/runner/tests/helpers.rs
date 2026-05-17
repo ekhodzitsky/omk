@@ -48,6 +48,8 @@ pub async fn make_spec(tmp: &TempDir, name: &str) -> WorkerSpec {
         heartbeat: dir.join("heartbeat.json"),
         project_dir: None,
         external_tools: None,
+        approval_policy: crate::runtime::wire_worker::ApprovalPolicy::default(),
+        approval_timeout_secs: crate::runtime::worker::default_approval_timeout_secs(),
     }
 }
 
