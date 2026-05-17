@@ -318,7 +318,7 @@ impl WireWorkerAdapter {
                                 }
                                 match &request {
                                     Request::ApprovalRequest(approval_req) => {
-                                        self.handle_approval_request(task, &req.id, approval_req, &mut client).await?;
+                                        self.handle_approval_request(task, &req.id, approval_req, &mut client, outer_cancel, timeout_cancel).await?;
                                     }
                                     _ => {
                                         let resp = request.default_response();
@@ -514,8 +514,10 @@ impl WireWorkerAdapter {
         request_id: &str,
         approval_req: &ApprovalRequest,
         client: &mut ProcessWireClient,
+        outer_cancel: &CancellationToken,
+        timeout_cancel: &CancellationToken,
     ) -> Result<()> {
-        let requested = Event::new(self.run_id.clone(), EventKind::ApprovalRequested)
+        let requested = match Event::new(self.run_id.clone(), EventKind::ApprovalRequested)
             .with_actor(&self.spec.name)
             .with_payload(serde_json::json!({
                 "task_id": task.id,
@@ -529,17 +531,43 @@ impl WireWorkerAdapter {
                 "source_kind": approval_req.source_kind,
                 "agent_id": approval_req.agent_id,
                 "subagent_type": approval_req.subagent_type,
-            }))?;
-        self.event_writer.append(&requested).await?;
+            })) {
+            Ok(ev) => ev,
+            Err(e) => {
+                warn!(error = %e, "Failed to build approval_requested event; sending rejection");
+                let fallback = serde_json::json!({
+                    "request_id": approval_req.id,
+                    "response": crate::wire::protocol::ApprovalResponseType::Reject,
+                    "feedback": "OMK internal error building approval event.",
+                });
+                client.send_response(request_id, fallback).await?;
+                return Ok(());
+            }
+        };
+        if let Err(e) = self.event_writer.append(&requested).await {
+            warn!(error = %e, "Failed to emit approval_requested event; continuing");
+        }
 
-        let decision = self.approval_proxy.decide(approval_req).await;
+        let decision = tokio::select! {
+            biased;
+            _ = outer_cancel.cancelled() => {
+                info!(worker = %self.spec.name, "Approval cancelled by worker shutdown");
+                super::ApprovalDecision::Reject
+            }
+            _ = timeout_cancel.cancelled() => {
+                info!(worker = %self.spec.name, "Approval cancelled by task budget timeout");
+                super::ApprovalDecision::Reject
+            }
+            d = self.approval_proxy.decide(approval_req) => d,
+        };
+
         let response_type = decision.to_response_type();
         let feedback = match &decision {
-            super::ApprovalDecision::Approve => "OMK approved this request.".to_string(),
+            super::ApprovalDecision::Approve => "OMK approved this request.",
             super::ApprovalDecision::ApproveForSession => {
-                "OMK approved this request for the session.".to_string()
+                "OMK approved this request for the session."
             }
-            super::ApprovalDecision::Reject => "OMK rejected this request.".to_string(),
+            super::ApprovalDecision::Reject => "OMK rejected this request.",
         };
 
         let response = serde_json::json!({
@@ -548,7 +576,7 @@ impl WireWorkerAdapter {
             "feedback": feedback,
         });
 
-        let decided = Event::new(self.run_id.clone(), EventKind::ApprovalDecided)
+        if let Ok(decided) = Event::new(self.run_id.clone(), EventKind::ApprovalDecided)
             .with_actor(&self.spec.name)
             .with_payload(serde_json::json!({
                 "task_id": task.id,
@@ -561,20 +589,39 @@ impl WireWorkerAdapter {
                     crate::wire::protocol::ApprovalResponseType::Reject => "reject",
                 },
                 "feedback": feedback,
-            }))?;
-        self.event_writer.append(&decided).await?;
+            }))
+        {
+            if let Err(e) = self.event_writer.append(&decided).await {
+                warn!(error = %e, "Failed to emit approval_decided event; continuing");
+            }
+        }
 
-        self.record_wire_request(
-            task,
-            request_id,
-            &RequestParams {
+        let request_params = match serde_json::to_value(approval_req) {
+            Ok(payload) => RequestParams {
                 request_type: "ApprovalRequest".to_string(),
-                payload: serde_json::to_value(approval_req)?,
+                payload,
             },
-            &Request::ApprovalRequest(approval_req.clone()),
-            &response,
-        )
-        .await?;
+            Err(e) => {
+                warn!(error = %e, "Failed to serialize approval request for logging; skipping record_wire_request");
+                RequestParams {
+                    request_type: "ApprovalRequest".to_string(),
+                    payload: serde_json::json!({"error": "serialization failed"}),
+                }
+            }
+        };
+
+        if let Err(e) = self
+            .record_wire_request(
+                task,
+                request_id,
+                &request_params,
+                &Request::ApprovalRequest(approval_req.clone()),
+                &response,
+            )
+            .await
+        {
+            warn!(error = %e, "Failed to record wire request; continuing");
+        }
 
         client.send_response(request_id, response).await?;
 

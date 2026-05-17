@@ -1,4 +1,7 @@
+use super::transport_trait::McpTransport;
 use anyhow::{Context, Result};
+use std::future::Future;
+use std::pin::Pin;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tracing::{debug, info, warn};
@@ -133,6 +136,20 @@ impl StdioMcpTransport {
             Err(e) => warn!(error = %e, "failed to start_kill MCP child"),
         }
         Ok(())
+    }
+}
+
+impl McpTransport for StdioMcpTransport {
+    fn send(&mut self, message: String) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move { self.send(message).await })
+    }
+
+    fn recv(&mut self) -> Pin<Box<dyn Future<Output = Result<Option<String>>> + Send + '_>> {
+        Box::pin(async move { self.recv().await })
+    }
+
+    fn close(&mut self) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move { self.close().await })
     }
 }
 

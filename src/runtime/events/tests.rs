@@ -371,6 +371,8 @@ fn event_serde_roundtrip_across_kinds_and_actor_shapes() {
         EventKind::GoalBudgetExhausted,
         EventKind::GoalBudgetExtended,
         EventKind::BudgetCheckpoint,
+        EventKind::ApprovalRequested,
+        EventKind::ApprovalDecided,
     ];
     let cases = [
         ("run-a", None),
