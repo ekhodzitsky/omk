@@ -72,11 +72,24 @@ pub struct ApprovalChannel {
 }
 
 /// Per-worker approval proxy that evaluates `ApprovalRequest`s against a policy.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ApprovalProxy {
     policy: ApprovalPolicy,
     timeout: std::time::Duration,
     channel: Option<ApprovalChannel>,
+    /// Pre-compiled regexes for `Pattern` policy to avoid recompilation on every call.
+    compiled_patterns: Vec<regex::Regex>,
+}
+
+impl std::fmt::Debug for ApprovalProxy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ApprovalProxy")
+            .field("policy", &self.policy)
+            .field("timeout", &self.timeout)
+            .field("channel", &self.channel)
+            .field("compiled_patterns", &self.compiled_patterns.len())
+            .finish()
+    }
 }
 
 /// Set of tool names considered read-only for `ApprovalPolicy::Safe`.
@@ -102,10 +115,18 @@ fn mutating_tools() -> HashSet<&'static str> {
 
 impl ApprovalProxy {
     pub fn new(policy: ApprovalPolicy, timeout_secs: u64) -> Self {
+        let compiled_patterns = match &policy {
+            ApprovalPolicy::Pattern { patterns } => patterns
+                .iter()
+                .filter_map(|p| regex::Regex::new(p).ok())
+                .collect(),
+            _ => Vec::new(),
+        };
         Self {
             policy,
             timeout: std::time::Duration::from_secs(timeout_secs),
             channel: None,
+            compiled_patterns,
         }
     }
 
@@ -163,13 +184,12 @@ impl ApprovalProxy {
                     self.wait_for_human(request).await
                 }
             }
-            ApprovalPolicy::Pattern { patterns } => {
-                if patterns.iter().any(|p| {
-                    regex::Regex::new(p)
-                        .ok()
-                        .map(|re| re.is_match(&request.action))
-                        .unwrap_or(false)
-                }) {
+            ApprovalPolicy::Pattern { .. } => {
+                if self
+                    .compiled_patterns
+                    .iter()
+                    .any(|re| re.is_match(&request.action))
+                {
                     info!(
                         request_id = %request.id,
                         action = %request.action,
