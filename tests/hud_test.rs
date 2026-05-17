@@ -27,6 +27,8 @@ async fn setup_mock_team_state(name: &str) -> (tempfile::TempDir, PathBuf) {
             heartbeat: worker_dir.join("heartbeat.json"),
             project_dir: None,
             external_tools: None,
+            approval_policy: omk::runtime::wire_worker::ApprovalPolicy::default(),
+            approval_timeout_secs: omk::runtime::worker::default_approval_timeout_secs(),
         };
         spec.save().await.unwrap();
 
@@ -262,6 +264,8 @@ async fn test_hud_worker_display_stalled_and_dead() {
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: None,
         external_tools: None,
+        approval_policy: omk::runtime::wire_worker::ApprovalPolicy::default(),
+        approval_timeout_secs: omk::runtime::worker::default_approval_timeout_secs(),
     };
     spec.save().await.unwrap();
 
@@ -300,6 +304,8 @@ async fn test_hud_worker_display_heartbeat_from_event() {
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: None,
         external_tools: None,
+        approval_policy: omk::runtime::wire_worker::ApprovalPolicy::default(),
+        approval_timeout_secs: omk::runtime::worker::default_approval_timeout_secs(),
     };
     spec.save().await.unwrap();
 

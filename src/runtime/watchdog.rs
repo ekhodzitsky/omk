@@ -298,6 +298,8 @@ mod tests {
             heartbeat: tmp.path().join("heartbeat.json"),
             project_dir: None,
             external_tools: None,
+            approval_policy: crate::runtime::wire_worker::ApprovalPolicy::default(),
+            approval_timeout_secs: crate::runtime::worker::default_approval_timeout_secs(),
         };
 
         // Write a fresh heartbeat
@@ -325,6 +327,8 @@ mod tests {
             heartbeat: tmp.path().join("heartbeat.json"),
             project_dir: None,
             external_tools: None,
+            approval_policy: crate::runtime::wire_worker::ApprovalPolicy::default(),
+            approval_timeout_secs: crate::runtime::worker::default_approval_timeout_secs(),
         };
 
         // Heartbeat file does not exist
@@ -344,6 +348,8 @@ mod tests {
             heartbeat: tmp.path().join("heartbeat.json"),
             project_dir: None,
             external_tools: None,
+            approval_policy: crate::runtime::wire_worker::ApprovalPolicy::default(),
+            approval_timeout_secs: crate::runtime::worker::default_approval_timeout_secs(),
         };
 
         // Write an old heartbeat
