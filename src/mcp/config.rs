@@ -10,13 +10,41 @@ pub struct McpConfig {
     pub servers: HashMap<String, McpServerConfig>,
 }
 
+/// Transport configuration for an MCP server.
+///
+/// Uses `#[serde(untagged)]` so that legacy stdio configs (which omit any
+/// transport discriminator) continue to deserialize correctly.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum TransportType {
+    SseHttp {
+        url: String,
+        #[serde(default)]
+        headers: HashMap<String, String>,
+    },
+    Stdio {
+        command: String,
+        #[serde(default)]
+        args: Vec<String>,
+        #[serde(default)]
+        env: HashMap<String, String>,
+    },
+}
+
+impl Default for TransportType {
+    fn default() -> Self {
+        TransportType::Stdio {
+            command: String::new(),
+            args: Vec::new(),
+            env: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct McpServerConfig {
-    pub command: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub env: HashMap<String, String>,
+    #[serde(flatten)]
+    pub transport: TransportType,
 }
 
 impl McpConfig {

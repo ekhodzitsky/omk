@@ -34,6 +34,8 @@ pub(crate) async fn execute_wave_run(
             .await?;
     }
 
+    let mcp_bridge = crate::mcp::bridge::maybe_create_bridge().await;
+
     let cancel = CancellationToken::new();
     let mut handles = Vec::with_capacity(worker_specs.len());
     for spec in &worker_specs {
@@ -42,7 +44,8 @@ pub(crate) async fn execute_wave_run(
             RunId(run_id.to_string()),
             event_writer.clone(),
             cancel.clone(),
-        );
+        )
+        .with_mcp_bridge(mcp_bridge.clone());
         handles.push(adapter.spawn());
     }
 

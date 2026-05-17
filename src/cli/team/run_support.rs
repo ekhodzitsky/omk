@@ -159,6 +159,8 @@ pub(super) async fn setup_wire_workers(
     );
     state.save().await?;
 
+    let mcp_bridge = crate::mcp::bridge::maybe_create_bridge().await;
+
     let mut worker_specs = Vec::new();
     let mut handles = Vec::new();
 
@@ -186,7 +188,8 @@ pub(super) async fn setup_wire_workers(
             config.run_id.clone(),
             config.event_writer.clone(),
             config.cancel_token.clone(),
-        );
+        )
+        .with_mcp_bridge(mcp_bridge.clone());
         let handle = adapter.spawn();
         handles.push(handle);
 
