@@ -463,6 +463,7 @@ async fn test_wire_worker_adapter_cancellation_stops_idle_worker() {
         outbox: worker_dir.join("outbox.jsonl"),
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: Some(project_dir),
+        external_tools: None,
     };
     spec.save().await.unwrap();
 
@@ -505,6 +506,7 @@ async fn test_wire_worker_adapter_times_out_stalled_turn_and_writes_failed_resul
         outbox: worker_dir.join("outbox.jsonl"),
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: Some(project_dir),
+        external_tools: None,
     };
     spec.save().await.unwrap();
 
@@ -586,6 +588,7 @@ async fn test_wire_worker_adapter_enforces_task_budget_timeout() {
         outbox: worker_dir.join("outbox.jsonl"),
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: Some(project_dir),
+        external_tools: None,
     };
     spec.save().await.unwrap();
 
@@ -697,6 +700,7 @@ async fn test_wire_worker_adapter_handles_mid_task_crash_after_turn_begin() {
         outbox: worker_dir.join("outbox.jsonl"),
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: Some(project_dir),
+        external_tools: None,
     };
     spec.save().await.unwrap();
 

@@ -1,6 +1,13 @@
-#![allow(dead_code)]
-
+pub mod bridge;
+pub mod client;
+pub mod config;
+pub mod registry;
 pub mod server;
 pub mod tools;
-
+pub use bridge::WireWorkerMcpBridge;
+pub use client::transport::StdioMcpTransport;
+pub use client::types::{CallToolResult, InitializeResult, Tool};
+pub use client::McpClient;
+pub use config::{McpConfig, McpServerConfig};
+pub use registry::McpRegistry;
 pub use server::run_mcp_server;

@@ -57,6 +57,7 @@ pub(crate) async fn prepare_goal_agent_workers(
             outbox: worker_dir.join(OUTBOX_FILE),
             heartbeat: worker_dir.join(HEARTBEAT_FILE),
             project_dir: Some(project_dir.to_path_buf()),
+            external_tools: None,
         };
         spec.save().await?;
         tokio::fs::write(&spec.inbox, b"").await?;

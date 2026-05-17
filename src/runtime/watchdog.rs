@@ -297,6 +297,7 @@ mod tests {
             outbox: tmp.path().join("outbox.jsonl"),
             heartbeat: tmp.path().join("heartbeat.json"),
             project_dir: None,
+            external_tools: None,
         };
 
         // Write a fresh heartbeat
@@ -323,6 +324,7 @@ mod tests {
             outbox: tmp.path().join("outbox.jsonl"),
             heartbeat: tmp.path().join("heartbeat.json"),
             project_dir: None,
+            external_tools: None,
         };
 
         // Heartbeat file does not exist
@@ -341,6 +343,7 @@ mod tests {
             outbox: tmp.path().join("outbox.jsonl"),
             heartbeat: tmp.path().join("heartbeat.json"),
             project_dir: None,
+            external_tools: None,
         };
 
         // Write an old heartbeat

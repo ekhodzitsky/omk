@@ -24,6 +24,7 @@ pub struct WireWorkerAdapter {
     event_writer: EventWriter,
     active_turn_timeout: std::time::Duration,
     cancel_token: CancellationToken,
+    mcp_bridge: Option<std::sync::Arc<crate::mcp::bridge::WireWorkerMcpBridge>>,
 }
 
 impl WireWorkerAdapter {
@@ -43,7 +44,16 @@ impl WireWorkerAdapter {
             event_writer,
             active_turn_timeout: resolve_active_turn_timeout(),
             cancel_token,
+            mcp_bridge: None,
         }
+    }
+
+    pub fn with_mcp_bridge(
+        mut self,
+        mcp_bridge: Option<std::sync::Arc<crate::mcp::bridge::WireWorkerMcpBridge>>,
+    ) -> Self {
+        self.mcp_bridge = mcp_bridge;
+        self
     }
 
     /// Spawn the adapter as a background Tokio task.

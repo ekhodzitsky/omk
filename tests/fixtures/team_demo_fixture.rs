@@ -119,6 +119,7 @@ edition = "2021"
                 outbox: worker_dir.join("outbox.jsonl"),
                 heartbeat: worker_dir.join("heartbeat.json"),
                 project_dir: Some(project_dir.clone()),
+                external_tools: None,
             };
             spec.save().await.unwrap();
             worker_specs.push(spec.clone());
