@@ -112,7 +112,6 @@ async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
         Commands::Version => {
             println!("omk {}", env!("CARGO_PKG_VERSION"));
             println!("  Repository: {}", env!("CARGO_PKG_REPOSITORY"));
-            println!("  Rust: {}", rustc_version_runtime::version());
             Ok(())
         }
     }

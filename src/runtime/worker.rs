@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::info;
 
+use crate::runtime::wire_worker::ApprovalPolicy;
+
 /// Specification for a single worker in a team
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerSpec {
@@ -15,6 +17,14 @@ pub struct WorkerSpec {
     pub project_dir: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_tools: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub approval_policy: ApprovalPolicy,
+    #[serde(default = "default_approval_timeout_secs")]
+    pub approval_timeout_secs: u64,
+}
+
+pub fn default_approval_timeout_secs() -> u64 {
+    300
 }
 
 impl WorkerSpec {
@@ -125,6 +135,8 @@ mod tests {
             heartbeat: dir.path().join("heartbeat.json"),
             project_dir: None,
             external_tools: None,
+            approval_policy: ApprovalPolicy::default(),
+            approval_timeout_secs: default_approval_timeout_secs(),
         };
 
         spec.save().await.unwrap();
@@ -144,6 +156,8 @@ mod tests {
             heartbeat: dir.path().join("heartbeat.json"),
             project_dir: None,
             external_tools: None,
+            approval_policy: ApprovalPolicy::default(),
+            approval_timeout_secs: default_approval_timeout_secs(),
         };
 
         let task = WorkerTask {
@@ -189,6 +203,8 @@ mod tests {
             heartbeat: dir.path().join("heartbeat.json"),
             project_dir: None,
             external_tools: None,
+            approval_policy: ApprovalPolicy::default(),
+            approval_timeout_secs: default_approval_timeout_secs(),
         };
 
         let result = WorkerResult {
@@ -220,6 +236,8 @@ mod tests {
             heartbeat: dir.path().join("heartbeat.json"),
             project_dir: None,
             external_tools: None,
+            approval_policy: ApprovalPolicy::default(),
+            approval_timeout_secs: default_approval_timeout_secs(),
         };
 
         spec.send_result(&WorkerResult {
