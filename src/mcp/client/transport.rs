@@ -1,4 +1,7 @@
+use super::transport_trait::McpTransport;
 use anyhow::{Context, Result};
+use std::future::Future;
+use std::pin::Pin;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tracing::{debug, info, warn};
@@ -56,62 +59,77 @@ impl StdioMcpTransport {
             server_name,
         })
     }
+}
 
-    pub async fn send(&mut self, message: String) -> Result<()> {
-        self.stdin
-            .write_all(message.as_bytes())
-            .await
-            .context("failed to write to MCP server stdin")?;
-        self.stdin
-            .write_all(b"\n")
-            .await
-            .context("failed to write newline to MCP server stdin")?;
-        self.stdin
-            .flush()
-            .await
-            .context("failed to flush MCP server stdin")?;
-        debug!(server = %self.server_name, len = message.len(), "MCP transport send");
-        Ok(())
+impl Drop for StdioMcpTransport {
+    fn drop(&mut self) {
+        let _ = self.child.start_kill();
+    }
+}
+
+impl McpTransport for StdioMcpTransport {
+    fn send(&mut self, message: String) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move {
+            self.stdin
+                .write_all(message.as_bytes())
+                .await
+                .context("failed to write to MCP server stdin")?;
+            self.stdin
+                .write_all(b"\n")
+                .await
+                .context("failed to write newline to MCP server stdin")?;
+            self.stdin
+                .flush()
+                .await
+                .context("failed to flush MCP server stdin")?;
+            debug!(server = %self.server_name, len = message.len(), "MCP transport send");
+            Ok(())
+        })
     }
 
-    pub async fn recv(&mut self) -> Result<Option<String>> {
-        let mut line = String::new();
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(60),
-            self.stdout_reader.read_line(&mut line),
-        )
-        .await
-        {
-            Ok(Ok(0)) => {
-                info!(server = %self.server_name, "MCP server stdout closed");
-                Ok(None)
-            }
-            Ok(Ok(_)) => {
-                let line = line.trim_end().to_string();
-                if line.is_empty() {
-                    return Ok(None);
+    fn recv(&mut self) -> Pin<Box<dyn Future<Output = Result<Option<String>>> + Send + '_>> {
+        Box::pin(async move {
+            let mut line = String::new();
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                self.stdout_reader.read_line(&mut line),
+            )
+            .await
+            {
+                Ok(Ok(0)) => {
+                    info!(server = %self.server_name, "MCP server stdout closed");
+                    Ok(None)
                 }
-                debug!(server = %self.server_name, len = line.len(), "MCP transport recv");
-                Ok(Some(line))
+                Ok(Ok(_)) => {
+                    let line = line.trim_end().to_string();
+                    if line.is_empty() {
+                        return Ok(None);
+                    }
+                    debug!(server = %self.server_name, len = line.len(), "MCP transport recv");
+                    Ok(Some(line))
+                }
+                Ok(Err(e)) => {
+                    Err(anyhow::Error::new(e).context("failed to read from MCP server stdout"))
+                }
+                Err(_) => {
+                    warn!(server = %self.server_name, "MCP transport recv timeout");
+                    Err(anyhow::anyhow!("MCP transport recv timeout after 60s"))
+                }
             }
-            Ok(Err(e)) => {
-                Err(anyhow::Error::new(e).context("failed to read from MCP server stdout"))
-            }
-            Err(_) => {
-                warn!(server = %self.server_name, "MCP transport recv timeout");
-                Err(anyhow::anyhow!("MCP transport recv timeout after 60s"))
-            }
-        }
+        })
     }
 
-    pub async fn close(&mut self) -> Result<()> {
-        match self.child.start_kill() {
-            Ok(()) => {
-                let _ = tokio::time::timeout(std::time::Duration::from_secs(5), self.child.wait())
-                    .await;
+    fn close(&mut self) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move {
+            match self.child.start_kill() {
+                Ok(()) => {
+                    let _ =
+                        tokio::time::timeout(std::time::Duration::from_secs(5), self.child.wait())
+                            .await;
+                }
+                Err(e) => warn!(error = %e, "failed to start_kill MCP child"),
             }
-            Err(e) => warn!(error = %e, "failed to start_kill MCP child"),
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }

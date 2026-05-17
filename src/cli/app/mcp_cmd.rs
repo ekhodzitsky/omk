@@ -1,4 +1,4 @@
-use crate::mcp::config::McpConfig;
+use crate::mcp::config::{McpConfig, TransportType};
 use crate::mcp::registry::McpRegistry;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -45,10 +45,14 @@ async fn cmd_list() -> Result<()> {
     }
     println!("Configured MCP servers:");
     for (name, server_config) in &config.servers {
-        println!(
-            "  {}: {} {:?}",
-            name, server_config.command, server_config.args
-        );
+        match &server_config.transport {
+            TransportType::Stdio { command, args, .. } => {
+                println!("  {}: stdio {} {:?}", name, command, args);
+            }
+            TransportType::SseHttp { url, .. } => {
+                println!("  {}: sse_http {}", name, url);
+            }
+        }
     }
     println!("\nDiscovering tools...");
     let registry = McpRegistry::from_config(&config).await?;
@@ -106,8 +110,18 @@ async fn try_start_server(
     config: &crate::mcp::config::McpServerConfig,
 ) -> Result<Vec<String>> {
     use crate::mcp::client::transport::StdioMcpTransport;
+    use crate::mcp::client::transport_trait::McpTransport;
     use crate::mcp::client::McpClient;
-    let transport = StdioMcpTransport::spawn(name, &config.command, &config.args, &config.env)?;
+    use crate::mcp::config::TransportType;
+
+    let transport: Box<dyn McpTransport> = match &config.transport {
+        TransportType::Stdio { command, args, env } => {
+            Box::new(StdioMcpTransport::spawn(name, command, args, env)?)
+        }
+        TransportType::SseHttp { url, headers } => Box::new(
+            crate::mcp::client::http_transport::HttpMcpTransport::new(url, headers.clone())?,
+        ),
+    };
     let mut client = McpClient::new(transport, name);
     client.initialize().await?;
     let tools = client.list_tools().await?;

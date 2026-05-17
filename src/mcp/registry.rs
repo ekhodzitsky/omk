@@ -1,7 +1,8 @@
 use super::client::transport::StdioMcpTransport;
+use super::client::transport_trait::McpTransport;
 use super::client::types::Tool;
 use super::client::McpClient;
-use super::config::{McpConfig, McpServerConfig};
+use super::config::{McpConfig, McpServerConfig, TransportType};
 use crate::error::OmkError;
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -9,15 +10,15 @@ use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
 #[derive(Debug)]
-struct McpServerHandle {
-    name: String,
-    client: McpClient,
-    tools: Vec<Tool>,
+pub(crate) struct McpServerHandle {
+    pub(crate) name: String,
+    pub(crate) client: McpClient<Box<dyn McpTransport>>,
+    pub(crate) tools: Vec<Tool>,
 }
 
 #[derive(Debug)]
 pub struct McpRegistry {
-    servers: HashMap<String, McpServerHandle>,
+    pub(crate) servers: HashMap<String, McpServerHandle>,
 }
 
 impl McpRegistry {
@@ -39,8 +40,16 @@ impl McpRegistry {
     }
 
     async fn start_server(&mut self, name: String, config: &McpServerConfig) -> Result<()> {
-        let transport = StdioMcpTransport::spawn(&name, &config.command, &config.args, &config.env)
-            .with_context(|| format!("failed to spawn MCP server '{name}'"))?;
+        let transport: Box<dyn McpTransport> = match &config.transport {
+            TransportType::Stdio { command, args, env } => Box::new(
+                StdioMcpTransport::spawn(&name, command, args, env)
+                    .with_context(|| format!("failed to spawn MCP server '{name}'"))?,
+            ),
+            TransportType::SseHttp { url, headers } => Box::new(
+                super::client::http_transport::HttpMcpTransport::new(url, headers.clone())
+                    .with_context(|| format!("failed to create HTTP MCP transport for '{name}'"))?,
+            ),
+        };
         let mut client = McpClient::new(transport, name.clone());
         client
             .initialize()
@@ -142,5 +151,149 @@ impl McpRegistry {
 impl Default for McpRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mcp::client::transport_trait::McpTransport;
+    use std::collections::VecDeque;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Debug)]
+    struct MockTransport {
+        responses: Arc<Mutex<VecDeque<String>>>,
+    }
+
+    impl MockTransport {
+        fn new(responses: Vec<String>) -> Self {
+            Self {
+                responses: Arc::new(Mutex::new(responses.into_iter().collect())),
+            }
+        }
+    }
+
+    impl McpTransport for MockTransport {
+        fn send(
+            &mut self,
+            _message: String,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
+            Box::pin(async move { Ok(()) })
+        }
+
+        fn recv(&mut self) -> Pin<Box<dyn Future<Output = Result<Option<String>>> + Send + '_>> {
+            let responses = self.responses.clone();
+            Box::pin(async move { Ok(responses.lock().unwrap().pop_front()) })
+        }
+
+        fn close(&mut self) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
+            Box::pin(async move { Ok(()) })
+        }
+    }
+
+    fn make_init_response(id: u64) -> String {
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "serverInfo": {"name": "test", "version": "1.0"},
+                "capabilities": {}
+            }
+        })
+        .to_string()
+    }
+
+    fn make_tools_response(id: u64, tools: Vec<Tool>) -> String {
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {"tools": tools}
+        })
+        .to_string()
+    }
+
+    #[tokio::test]
+    async fn test_registry_routing() {
+        let mut registry = McpRegistry::new();
+
+        let init = make_init_response(1);
+        let tools = make_tools_response(
+            2,
+            vec![Tool {
+                name: "tool-a".to_string(),
+                description: None,
+                input_schema: None,
+            }],
+        );
+        let transport: Box<dyn McpTransport> = Box::new(MockTransport::new(vec![init, tools]));
+        let client = McpClient::new(transport, "server-a");
+        registry.servers.insert(
+            "server-a".to_string(),
+            McpServerHandle {
+                name: "server-a".to_string(),
+                client,
+                tools: vec![Tool {
+                    name: "tool-a".to_string(),
+                    description: None,
+                    input_schema: None,
+                }],
+            },
+        );
+
+        assert_eq!(registry.server_count(), 1);
+        assert_eq!(registry.find_server_for_tool("tool-a"), Some("server-a"));
+        assert_eq!(registry.find_server_for_tool("missing"), None);
+
+        let all = registry.all_tools();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].0, "server-a");
+        assert_eq!(all[0].1.name, "tool-a");
+    }
+
+    #[tokio::test]
+    async fn test_registry_call_tool() {
+        let mut registry = McpRegistry::new();
+
+        let call_resp = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "content": [{"type": "text", "text": "result"}],
+                "isError": false
+            }
+        })
+        .to_string();
+        let transport: Box<dyn McpTransport> = Box::new(MockTransport::new(vec![call_resp]));
+        let client = McpClient::new(transport, "server-a");
+        registry.servers.insert(
+            "server-a".to_string(),
+            McpServerHandle {
+                name: "server-a".to_string(),
+                client,
+                tools: vec![Tool {
+                    name: "tool-a".to_string(),
+                    description: None,
+                    input_schema: None,
+                }],
+            },
+        );
+
+        let result = registry
+            .call_tool("tool-a", serde_json::json!({}))
+            .await
+            .unwrap();
+        assert_eq!(result["texts"], serde_json::json![["result"]]);
+        assert_eq!(result["is_error"], false);
+    }
+
+    #[tokio::test]
+    async fn test_registry_tool_not_found() {
+        let mut registry = McpRegistry::new();
+        let result = registry.call_tool("missing", serde_json::json!({})).await;
+        assert!(matches!(result, Err(OmkError::InvalidInput { .. })));
     }
 }
