@@ -29,15 +29,12 @@ pub struct HttpMcpTransport {
 impl HttpMcpTransport {
     pub fn new(base_url: impl Into<String>, headers: HashMap<String, String>) -> Result<Self> {
         let base_url = base_url.into();
-        let post_url = if base_url.ends_with("/sse") {
-            format!("{}/message", base_url.trim_end_matches("/sse"))
+        let trimmed = base_url.trim_end_matches('/');
+        let (post_url, sse_url) = if trimmed.ends_with("/sse") {
+            let without_sse = trimmed.trim_end_matches("/sse");
+            (format!("{}/message", without_sse), trimmed.to_string())
         } else {
-            base_url.clone()
-        };
-        let sse_url = if base_url.ends_with("/sse") {
-            base_url.clone()
-        } else {
-            format!("{}/sse", base_url.trim_end_matches('/'))
+            (base_url.clone(), format!("{}/sse", trimmed))
         };
 
         let client = reqwest::Client::builder()
@@ -204,10 +201,10 @@ impl McpTransport for HttpMcpTransport {
 
             if !response.status().is_success() {
                 let status = response.status();
-                let body = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "(unreadable)".to_string());
+                let body = match response.text().await {
+                    Ok(b) => b,
+                    Err(_) => "(unreadable)".to_string(),
+                };
                 anyhow::bail!("MCP HTTP transport POST returned {status}: {body}");
             }
 
@@ -286,6 +283,13 @@ mod tests {
     fn test_url_derivation_trailing_slash() {
         let t = HttpMcpTransport::new("https://example.com/mcp/", HashMap::new()).unwrap();
         assert_eq!(t.post_url, "https://example.com/mcp/");
+        assert_eq!(t.sse_url, "https://example.com/mcp/sse");
+    }
+
+    #[test]
+    fn test_url_derivation_sse_with_trailing_slash() {
+        let t = HttpMcpTransport::new("https://example.com/mcp/sse/", HashMap::new()).unwrap();
+        assert_eq!(t.post_url, "https://example.com/mcp/message");
         assert_eq!(t.sse_url, "https://example.com/mcp/sse");
     }
 
