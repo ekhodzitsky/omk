@@ -1,9 +1,13 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::time::Duration;
 use tokio::process::Command;
 use tracing::{info, warn};
 
 use crate::runtime::gates::types::{GateResult, VerificationConfig};
+
+/// Maximum allowed timeout for a gate in seconds (24 hours).
+const MAX_TIMEOUT_SECS: u64 = 86400;
 
 /// Detect project type and return default gates.
 pub fn detect_gates(dir: &Path) -> VerificationConfig {
@@ -23,16 +27,49 @@ pub fn detect_gates(dir: &Path) -> VerificationConfig {
     }
 }
 
+/// Validate a gate configuration loaded from TOML.
+///
+/// Returns `Ok(())` if the config is valid, or `Err` with a description
+/// of the first problem encountered.
+fn validate_config(config: &VerificationConfig) -> Result<(), String> {
+    let mut seen_names = HashSet::new();
+
+    for gate in &config.gates {
+        if gate.name.trim().is_empty() {
+            return Err("gate name must not be empty".to_string());
+        }
+        if !seen_names.insert(&gate.name) {
+            return Err(format!("duplicate gate name: {}", gate.name));
+        }
+        if gate.command.trim().is_empty() {
+            return Err(format!("gate '{}' command must not be empty", gate.name));
+        }
+        if gate.timeout_secs > MAX_TIMEOUT_SECS {
+            return Err(format!(
+                "gate '{}' timeout_secs {} exceeds maximum {}",
+                gate.name, gate.timeout_secs, MAX_TIMEOUT_SECS
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 /// Load explicit gate config if present, otherwise auto-detect.
 pub async fn load_or_detect_gates(dir: &Path) -> VerificationConfig {
     let explicit = dir.join(".omk").join("gates.toml");
     if explicit.exists() {
         match tokio::fs::read_to_string(&explicit).await {
             Ok(content) => match toml::from_str(&content) {
-                Ok(config) => {
-                    info!(path = %explicit.display(), "Loaded explicit gate config");
-                    return config;
-                }
+                Ok(config) => match validate_config(&config) {
+                    Ok(()) => {
+                        info!(path = %explicit.display(), "Loaded explicit gate config");
+                        return config;
+                    }
+                    Err(e) => {
+                        warn!(path = %explicit.display(), error = %e, "Invalid gates.toml schema, falling back to auto-detect");
+                    }
+                },
                 Err(e) => {
                     warn!(path = %explicit.display(), error = %e, "Failed to parse gates.toml, falling back to auto-detect");
                 }
