@@ -5,6 +5,7 @@ use tokio_util::sync::CancellationToken;
 mod approval_proxy;
 pub use approval_proxy::{ApprovalChannel, ApprovalDecision, ApprovalPolicy, ApprovalProxy};
 
+pub mod hook_executor;
 mod loop_impl;
 mod task;
 
