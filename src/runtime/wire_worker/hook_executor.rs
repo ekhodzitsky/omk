@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Context;
 use serde_json::Value;
@@ -203,18 +206,21 @@ impl HookExecutor {
 
         if let Some(mut stdin) = child.stdin.take() {
             if let Err(e) = stdin.write_all(input_json.as_bytes()).await {
-                return Ok(HookResult {
-                    action: HookAction::Block,
-                    reason: format!("failed to write hook input: {e}"),
-                });
+                if e.kind() != ErrorKind::BrokenPipe {
+                    return Ok(HookResult {
+                        action: HookAction::Block,
+                        reason: format!("failed to write hook input: {e}"),
+                    });
+                }
+            } else if let Err(e) = stdin.flush().await {
+                if e.kind() != ErrorKind::BrokenPipe {
+                    return Ok(HookResult {
+                        action: HookAction::Block,
+                        reason: format!("failed to flush hook input: {e}"),
+                    });
+                }
             }
-            if let Err(e) = stdin.flush().await {
-                return Ok(HookResult {
-                    action: HookAction::Block,
-                    reason: format!("failed to flush hook input: {e}"),
-                });
-            }
-            // Dropping stdin closes the pipe and signals EOF to the child.
+            // Dropping stdin closes the pipe and signals EOF to hooks that read stdin.
         }
 
         let output_result = tokio::time::timeout(timeout, child.wait_with_output()).await;
