@@ -132,6 +132,48 @@ impl McpRegistry {
         Ok(output)
     }
 
+    pub async fn call_tool_on_server(
+        &mut self,
+        server_name: &str,
+        tool_name: &str,
+        arguments: Value,
+    ) -> Result<Value, OmkError> {
+        let handle = self
+            .servers
+            .get_mut(server_name)
+            .ok_or_else(|| OmkError::InvalidInput {
+                reason: format!("MCP server '{server_name}' not found"),
+            })?;
+        if !handle.tools.iter().any(|t| t.name == tool_name) {
+            return Err(OmkError::InvalidInput {
+                reason: format!("MCP tool '{tool_name}' not found on server '{server_name}'"),
+            });
+        }
+        let result = handle
+            .client
+            .call_tool(tool_name, arguments)
+            .await
+            .map_err(|e| OmkError::McpToolCall {
+                server: server_name.to_string(),
+                tool: tool_name.to_string(),
+                reason: e.to_string(),
+            })?;
+        let mut texts = Vec::new();
+        let mut is_error = false;
+        for content in &result.content {
+            match content {
+                super::client::types::ToolContent::Text { text } => texts.push(text.clone()),
+                super::client::types::ToolContent::Unknown => {}
+            }
+        }
+        if result.is_error == Some(true) {
+            is_error = true;
+        }
+        let output = serde_json::json!({"texts": texts, "is_error": is_error});
+        debug!(server = %server_name, tool = %tool_name, "MCP tool call completed");
+        Ok(output)
+    }
+
     pub fn server_count(&self) -> usize {
         self.servers.len()
     }
