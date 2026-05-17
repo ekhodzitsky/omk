@@ -58,6 +58,8 @@ pub(crate) async fn prepare_goal_agent_workers(
             heartbeat: worker_dir.join(HEARTBEAT_FILE),
             project_dir: Some(project_dir.to_path_buf()),
             external_tools: None,
+            approval_policy: crate::runtime::wire_worker::ApprovalPolicy::default(),
+            approval_timeout_secs: crate::runtime::worker::default_approval_timeout_secs(),
         };
         spec.save().await?;
         tokio::fs::write(&spec.inbox, b"").await?;

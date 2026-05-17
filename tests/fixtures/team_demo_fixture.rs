@@ -120,6 +120,8 @@ edition = "2021"
                 heartbeat: worker_dir.join("heartbeat.json"),
                 project_dir: Some(project_dir.clone()),
                 external_tools: None,
+                approval_policy: omk::runtime::wire_worker::ApprovalPolicy::default(),
+                approval_timeout_secs: omk::runtime::worker::default_approval_timeout_secs(),
             };
             spec.save().await.unwrap();
             worker_specs.push(spec.clone());
