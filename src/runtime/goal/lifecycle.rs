@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use std::path::{Path, PathBuf};
+use tokio_util::sync::CancellationToken;
 
 use super::proof::GoalProof;
 use super::state::{GoalPhase, GoalState, GoalStatus};
@@ -9,6 +10,14 @@ use super::{agent, budget, dispatch, evidence, proof, review, state, task_graph,
 use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
 
 pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof> {
+    verify_goal_with_slices(goal_id, project_dir, None).await
+}
+
+pub async fn verify_goal_with_slices(
+    goal_id: &str,
+    project_dir: &Path,
+    slices: Option<&[GoalDeliverySlice]>,
+) -> Result<GoalProof> {
     let mut state = super::resolve_goal(goal_id).await?;
     ensure_goal_can_continue(&state)?;
     budget::ensure_budget_available(&mut state, "goal verify").await?;
@@ -19,13 +28,43 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
         .state_dir
         .join(state::GOAL_ARTIFACTS_DIR)
         .join(state::GOAL_GATE_ARTIFACTS_DIR);
-    let gates = crate::runtime::gates::run_gates_with_evidence(
+    let mut gates = crate::runtime::gates::run_gates_with_evidence(
         &gate_config,
         project_dir,
         Some(&gate_artifacts),
     )
     .await;
-    let changed_files = crate::runtime::gates::detect_changed_files(project_dir).await;
+    let mut changed_files = crate::runtime::gates::detect_changed_files(project_dir).await;
+
+    // Optionally run gates on slice worktrees in parallel
+    if let Some(slices) = slices {
+        let mut gate_set = tokio::task::JoinSet::new();
+        for slice in slices {
+            let wp = slice.worktree_path.clone();
+            let cfg = gate_config.clone();
+            let ga = gate_artifacts.join("slice").join(&slice.task_id);
+            gate_set.spawn(async move {
+                let slice_gates =
+                    crate::runtime::gates::run_gates_with_evidence(&cfg, &wp, Some(&ga)).await;
+                let slice_changed = crate::runtime::gates::detect_changed_files(&wp).await;
+                (slice_gates, slice_changed)
+            });
+        }
+        while let Some(res) = gate_set.join_next().await {
+            match res {
+                Ok((slice_gates, slice_changed)) => {
+                    gates = merge_gate_results(&gates, &slice_gates);
+                    changed_files.extend(slice_changed);
+                }
+                Err(e) => {
+                    tracing::warn!("slice gate task failed: {e}");
+                }
+            }
+        }
+        changed_files.sort();
+        changed_files.dedup();
+    }
+
     let now = Utc::now();
 
     verifier::append_gate_events(&state, &gates).await?;
@@ -54,6 +93,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
 
     let phase_duration = tokio::time::Instant::now() - phase_start;
     if let Ok(tracker) = budget::init_goal_cost_tracker(&state) {
+        let worker_count = slices.map(|s| s.len()).unwrap_or(1);
         let cost = crate::cost::types::SessionCost {
             session_type: "verify".to_string(),
             name: "goal verify".to_string(),
@@ -63,7 +103,7 @@ pub async fn verify_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
                 input_tokens: 0,
                 output_tokens: 0,
                 duration_secs: phase_duration.as_secs(),
-                worker_count: 1,
+                worker_count,
                 estimated_usd: 0.0,
                 tier: crate::cost::estimator::PricingTier::Standard,
             },
@@ -80,7 +120,7 @@ pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof
     execute_goal_with_dispatcher(goal_id, project_dir, &dispatcher).await
 }
 
-async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 'static>(
+pub async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 'static>(
     goal_id: &str,
     project_dir: &Path,
     dispatcher: &D,
@@ -95,7 +135,23 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 'sta
     state.completed_at = None;
     FileSystemGoalStateStore::new().save(&state).await?;
 
-    let verification_proof = verify_goal(goal_id, project_dir).await?;
+    let now = Utc::now();
+    let max_agents = state.max_agents.unwrap_or(1);
+    let use_concurrent_slices = state.slice_execution && max_agents > 1;
+    let task_graph = GoalTaskGraph::load(&state.state_dir).await?;
+    let ready_slices = if use_concurrent_slices {
+        ready_delivery_slices(&state.state_dir, &task_graph).await?
+    } else {
+        Vec::new()
+    };
+    let ready_slice_count = ready_slices.len();
+
+    let verification_proof = if use_concurrent_slices && !ready_slices.is_empty() {
+        verify_goal_with_slices(goal_id, project_dir, Some(&ready_slices)).await?
+    } else {
+        verify_goal_with_slices(goal_id, project_dir, None).await?
+    };
+
     let state = super::resolve_goal(goal_id).await?;
     let mut task_graph = GoalTaskGraph::load(&state.state_dir).await?;
     let local_verify_done = task_graph.tasks.iter().any(|task| {
@@ -110,29 +166,26 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 'sta
         return Ok(verification_proof);
     };
 
-    let now = Utc::now();
-
-    // Decide serial vs concurrent slice execution
-    let max_agents = state.max_agents.unwrap_or(1);
-    let use_concurrent_slices = state.slice_execution && max_agents > 1;
-    let ready_slices = if use_concurrent_slices {
-        ready_delivery_slices(&state.state_dir, &task_graph).await?
+    let actual_worker_count = if use_concurrent_slices && ready_slice_count > 1 {
+        max_agents.min(ready_slice_count) as u64
     } else {
-        Vec::new()
+        1
     };
 
     let (agent_evidence, proof_gates, proof_git, proof_changed_files, post_mutation_gates_ran) =
-        if use_concurrent_slices && ready_slices.len() > 1 {
+        if use_concurrent_slices && ready_slice_count > 1 {
             // Concurrent path: run up to max_agents slices in parallel
             let concurrency_limit = max_agents;
             let slices_to_run: Vec<_> = ready_slices.into_iter().take(concurrency_limit).collect();
 
-            let mut handles = Vec::with_capacity(slices_to_run.len());
+            // 1. Spawn waves via JoinSet with CancellationToken
+            let cancel = CancellationToken::new();
+            let mut wave_set = tokio::task::JoinSet::new();
             for slice in slices_to_run {
                 let state = state.clone();
                 let task_graph = task_graph.clone();
                 let dispatcher = dispatcher.clone();
-                let handle = tokio::spawn(async move {
+                wave_set.spawn(async move {
                     let dispatch =
                         agent::goal_agent_slice_dispatch_plan(&state, &task_graph, &slice.task_id)
                             .ok_or_else(|| {
@@ -143,114 +196,135 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 'sta
                         .await?;
                     Ok::<_, anyhow::Error>((slice, dispatch, evidence))
                 });
-                handles.push(handle);
             }
 
-            let mut slice_results = Vec::with_capacity(handles.len());
-            for handle in handles {
-                match handle.await {
+            let mut slice_results = Vec::with_capacity(wave_set.len());
+            while let Some(res) = wave_set.join_next().await {
+                match res {
                     Ok(Ok(result)) => slice_results.push(result),
                     Ok(Err(e)) => {
                         tracing::warn!("slice wave failed: {e}");
+                        cancel.cancel();
                     }
                     Err(e) => {
                         tracing::warn!("slice wave panicked: {e}");
+                        cancel.cancel();
+                    }
+                }
+            }
+            eprintln!("DEBUG slice_results.len()={}", slice_results.len());
+
+            // 2. Parallel post-processing per slice with isolated task_graph clones
+            struct SlicePostResult {
+                task_graph: GoalTaskGraph,
+                gates: Vec<crate::runtime::gates::GateResult>,
+                changed_files: Vec<String>,
+                post_mutation_gates_ran: bool,
+                agent_evidence: evidence::GoalAgentRunEvidence,
+            }
+
+            let mut post_set = tokio::task::JoinSet::new();
+            for (slice, dispatch, agent_evidence) in slice_results {
+                let state = state.clone();
+                let mut tg = task_graph.clone();
+                let vp = verification_proof.clone();
+                let ev = agent_evidence.clone();
+                let sl = slice.clone();
+                let dispatcher = dispatcher.clone();
+                post_set.spawn(async move {
+                    match dispatch.kind {
+                        agent::GoalAgentWaveKind::Initial => {
+                            if let Some(task) = task_graph::apply_agent_task_result_by_id(
+                                &mut tg,
+                                &sl.task_id,
+                                &ev,
+                                now,
+                            ) {
+                                dispatcher
+                                    .append_execution_events(&state, &task, &ev)
+                                    .await?;
+                            }
+                        }
+                        agent::GoalAgentWaveKind::FollowUp => {
+                            task_graph::apply_agent_followup_task_results(&mut tg, &ev, now);
+                        }
+                    }
+                    task_graph::apply_agent_proposed_task_mutations(&state, &mut tg, &ev, now)
+                        .await?;
+
+                    let succeeded =
+                        ev.summary.completed == ev.summary.total && ev.summary.failed == 0;
+
+                    let (gates, _git, changed, ran) = run_post_mutation_cycle(
+                        &state,
+                        &sl.worktree_path,
+                        &mut tg,
+                        vp,
+                        succeeded,
+                        &ev,
+                        now,
+                    )
+                    .await?;
+
+                    process_slice_delivery_and_review(
+                        &state,
+                        &mut tg,
+                        &sl,
+                        succeeded,
+                        &sl.worktree_path,
+                    )
+                    .await?;
+
+                    Ok::<_, anyhow::Error>(SlicePostResult {
+                        task_graph: tg,
+                        gates,
+                        changed_files: changed,
+                        post_mutation_gates_ran: ran,
+                        agent_evidence: ev,
+                    })
+                });
+            }
+
+            let mut post_results = Vec::with_capacity(post_set.len());
+            while let Some(res) = post_set.join_next().await {
+                match res {
+                    Ok(Ok(result)) => post_results.push(result),
+                    Ok(Err(e)) => {
+                        tracing::warn!("slice post-processing failed: {e}");
+                    }
+                    Err(e) => {
+                        tracing::warn!("slice post-processing panicked: {e}");
+                    }
+                }
+            }
+            eprintln!("DEBUG post_results.len()={}", post_results.len());
+            for (i, r) in post_results.iter().enumerate() {
+                for t in &r.task_graph.tasks {
+                    if t.id.starts_with("goal-agent-implement-") {
+                        eprintln!("DEBUG post_result[{i}] task {} status={:?}", t.id, t.status);
                     }
                 }
             }
 
-            // Process results sequentially to avoid task graph races
+            // 3. Atomically merge all deltas back into the main task_graph
+            let deltas: Vec<GoalTaskGraph> =
+                post_results.iter().map(|r| r.task_graph.clone()).collect();
+            task_graph::merge_concurrent_slice_task_graphs(&mut task_graph, &deltas);
+
             let mut all_gates = verification_proof.gates.clone();
             let mut all_changed_files = Vec::new();
             let mut post_mutation_ran = false;
-            let mut primary_evidence: Option<evidence::GoalAgentRunEvidence> = None;
+            let mut evidence_refs: Vec<&evidence::GoalAgentRunEvidence> = Vec::new();
 
-            for (slice, dispatch, agent_evidence) in &slice_results {
-                match dispatch.kind {
-                    agent::GoalAgentWaveKind::Initial => {
-                        if let Some(task) = task_graph::apply_agent_task_result_by_id(
-                            &mut task_graph,
-                            &slice.task_id,
-                            agent_evidence,
-                            now,
-                        ) {
-                            dispatcher
-                                .append_execution_events(&state, &task, agent_evidence)
-                                .await?;
-                        }
-                    }
-                    agent::GoalAgentWaveKind::FollowUp => {
-                        task_graph::apply_agent_followup_task_results(
-                            &mut task_graph,
-                            agent_evidence,
-                            now,
-                        );
-                    }
-                }
-                task_graph::apply_agent_proposed_task_mutations(
-                    &state,
-                    &mut task_graph,
-                    agent_evidence,
-                    now,
-                )
-                .await?;
-
-                let succeeded = agent_evidence.summary.completed == agent_evidence.summary.total
-                    && agent_evidence.summary.failed == 0;
-
-                let (gates, _git, changed, ran) = run_post_mutation_cycle(
-                    &state,
-                    &slice.worktree_path,
-                    &mut task_graph,
-                    verification_proof.clone(),
-                    succeeded,
-                    agent_evidence,
-                    now,
-                )
-                .await?;
-
-                all_gates = gates;
-                all_changed_files.extend(changed);
-                post_mutation_ran |= ran;
-
-                if primary_evidence.is_none() {
-                    primary_evidence = Some(agent_evidence.clone());
-                }
-
-                process_slice_delivery_and_review(
-                    &state,
-                    &mut task_graph,
-                    slice,
-                    succeeded,
-                    &slice.worktree_path,
-                )
-                .await?;
+            for r in &post_results {
+                all_gates = merge_gate_results(&all_gates, &r.gates);
+                all_changed_files.extend(r.changed_files.iter().cloned());
+                post_mutation_ran |= r.post_mutation_gates_ran;
+                evidence_refs.push(&r.agent_evidence);
             }
 
             let git = evidence::detect_git_evidence(project_dir).await;
-            let evidence = primary_evidence.unwrap_or_else(|| evidence::GoalAgentRunEvidence {
-                summary: crate::runtime::scheduler::runner::RunSummary {
-                    run_id: format!("{goal_id}-concurrent-fallback"),
-                    completed: 0,
-                    failed: 0,
-                    cancelled: 0,
-                    total: 0,
-                },
-                run_path: PathBuf::new(),
-                task_policy_path: PathBuf::new(),
-                agent_task_proposals_path: PathBuf::new(),
-                worker_outbox_path: PathBuf::new(),
-                wire_events_path: PathBuf::new(),
-                mutation_diff_path: PathBuf::new(),
-                changed_files_path: PathBuf::new(),
-                changed_files: Vec::new(),
-                accepted_task_count: 0,
-                rejected_task_count: 0,
-                accepted_task_ids: Vec::new(),
-                agent_proposed_tasks: Vec::new(),
-                worker_results: Vec::new(),
-                worker_summary: None,
-            });
+            let evidence = aggregate_agent_evidence(&evidence_refs, goal_id);
 
             (
                 evidence,
@@ -387,7 +461,7 @@ async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 'sta
                     input_tokens: 0,
                     output_tokens: 0,
                     duration_secs: phase_duration.as_secs(),
-                    worker_count: 1,
+                    worker_count: actual_worker_count as usize,
                     estimated_usd: 0.0,
                     tier: crate::cost::estimator::PricingTier::Standard,
                 },
@@ -749,6 +823,120 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> Result<GoalProof>
     }
 
     Ok(proof)
+}
+
+/// Merge gate results from multiple worktrees. A gate passes only if it passes
+/// in ALL result sets where it appears.
+fn merge_gate_results(
+    base: &[crate::runtime::gates::GateResult],
+    extra: &[crate::runtime::gates::GateResult],
+) -> Vec<crate::runtime::gates::GateResult> {
+    use std::collections::HashMap;
+
+    let mut merged: HashMap<String, crate::runtime::gates::GateResult> =
+        base.iter().map(|g| (g.name.clone(), g.clone())).collect();
+    for g in extra {
+        merged
+            .entry(g.name.clone())
+            .and_modify(|existing| {
+                existing.passed &= g.passed;
+                if !g.passed {
+                    existing.stderr = g.stderr.to_string();
+                }
+            })
+            .or_insert_with(|| g.clone());
+    }
+    merged.into_values().collect()
+}
+
+/// Aggregate evidence from multiple concurrent slices into a single
+/// `GoalAgentRunEvidence` representing the whole swarm.
+fn aggregate_agent_evidence(
+    slices: &[&evidence::GoalAgentRunEvidence],
+    goal_id: &str,
+) -> evidence::GoalAgentRunEvidence {
+    use crate::runtime::scheduler::runner::RunSummary;
+
+    let mut combined = evidence::GoalAgentRunEvidence {
+        summary: RunSummary {
+            run_id: format!("{goal_id}-concurrent"),
+            completed: slices.iter().map(|e| e.summary.completed).sum(),
+            failed: slices.iter().map(|e| e.summary.failed).sum(),
+            cancelled: slices.iter().map(|e| e.summary.cancelled).sum(),
+            total: slices.iter().map(|e| e.summary.total).sum(),
+        },
+        run_path: PathBuf::new(),
+        task_policy_path: PathBuf::new(),
+        agent_task_proposals_path: PathBuf::new(),
+        worker_outbox_path: PathBuf::new(),
+        wire_events_path: PathBuf::new(),
+        mutation_diff_path: PathBuf::new(),
+        changed_files_path: PathBuf::new(),
+        changed_files: Vec::new(),
+        accepted_task_count: 0,
+        rejected_task_count: 0,
+        accepted_task_ids: Vec::new(),
+        agent_proposed_tasks: Vec::new(),
+        worker_results: Vec::new(),
+        worker_summary: None,
+    };
+
+    for ev in slices {
+        combined
+            .changed_files
+            .extend(ev.changed_files.iter().cloned());
+        combined.accepted_task_count += ev.accepted_task_count;
+        combined.rejected_task_count += ev.rejected_task_count;
+        combined
+            .accepted_task_ids
+            .extend(ev.accepted_task_ids.iter().cloned());
+        combined
+            .agent_proposed_tasks
+            .extend(ev.agent_proposed_tasks.iter().cloned());
+        combined
+            .worker_results
+            .extend(ev.worker_results.iter().cloned());
+        if combined.worker_summary.is_none() && ev.worker_summary.is_some() {
+            combined.worker_summary = ev.worker_summary.clone();
+        }
+        if combined.run_path.as_os_str().is_empty() && !ev.run_path.as_os_str().is_empty() {
+            combined.run_path = ev.run_path.clone();
+        }
+        if combined.task_policy_path.as_os_str().is_empty()
+            && !ev.task_policy_path.as_os_str().is_empty()
+        {
+            combined.task_policy_path = ev.task_policy_path.clone();
+        }
+        if combined.agent_task_proposals_path.as_os_str().is_empty()
+            && !ev.agent_task_proposals_path.as_os_str().is_empty()
+        {
+            combined.agent_task_proposals_path = ev.agent_task_proposals_path.clone();
+        }
+        if combined.worker_outbox_path.as_os_str().is_empty()
+            && !ev.worker_outbox_path.as_os_str().is_empty()
+        {
+            combined.worker_outbox_path = ev.worker_outbox_path.clone();
+        }
+        if combined.wire_events_path.as_os_str().is_empty()
+            && !ev.wire_events_path.as_os_str().is_empty()
+        {
+            combined.wire_events_path = ev.wire_events_path.clone();
+        }
+        if combined.mutation_diff_path.as_os_str().is_empty()
+            && !ev.mutation_diff_path.as_os_str().is_empty()
+        {
+            combined.mutation_diff_path = ev.mutation_diff_path.clone();
+        }
+        if combined.changed_files_path.as_os_str().is_empty()
+            && !ev.changed_files_path.as_os_str().is_empty()
+        {
+            combined.changed_files_path = ev.changed_files_path.clone();
+        }
+    }
+
+    combined.changed_files.sort();
+    combined.changed_files.dedup();
+    combined
 }
 
 fn ensure_goal_can_continue(state: &GoalState) -> Result<()> {
