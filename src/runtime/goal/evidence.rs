@@ -22,22 +22,22 @@ pub struct GoalGitEvidence {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct GoalAgentRunEvidence {
-    pub(crate) summary: RunSummary,
-    pub(crate) run_path: PathBuf,
-    pub(crate) task_policy_path: PathBuf,
-    pub(crate) agent_task_proposals_path: PathBuf,
-    pub(crate) worker_outbox_path: PathBuf,
-    pub(crate) wire_events_path: PathBuf,
-    pub(crate) mutation_diff_path: PathBuf,
-    pub(crate) changed_files_path: PathBuf,
-    pub(crate) changed_files: Vec<String>,
-    pub(crate) accepted_task_count: usize,
-    pub(crate) rejected_task_count: usize,
-    pub(crate) accepted_task_ids: Vec<String>,
-    pub(crate) agent_proposed_tasks: Vec<super::agent::GoalAgentTaskProposal>,
-    pub(crate) worker_results: Vec<WorkerResult>,
-    pub(crate) worker_summary: Option<String>,
+pub struct GoalAgentRunEvidence {
+    pub summary: RunSummary,
+    pub run_path: PathBuf,
+    pub task_policy_path: PathBuf,
+    pub agent_task_proposals_path: PathBuf,
+    pub worker_outbox_path: PathBuf,
+    pub wire_events_path: PathBuf,
+    pub mutation_diff_path: PathBuf,
+    pub changed_files_path: PathBuf,
+    pub changed_files: Vec<String>,
+    pub accepted_task_count: usize,
+    pub rejected_task_count: usize,
+    pub accepted_task_ids: Vec<String>,
+    pub agent_proposed_tasks: Vec<super::agent::GoalAgentTaskProposal>,
+    pub worker_results: Vec<WorkerResult>,
+    pub worker_summary: Option<String>,
 }
 
 #[derive(Debug, Clone)]

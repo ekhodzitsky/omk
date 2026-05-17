@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::process::{Child, ChildStdin, Command};
 use tracing::{debug, info, warn};
 
 #[derive(Debug)]
 pub struct StdioMcpTransport {
     stdin: ChildStdin,
-    stdout_reader: BufReader<ChildStdout>,
+    lines_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
     child: Child,
     server_name: String,
 }
@@ -48,10 +48,47 @@ impl StdioMcpTransport {
                 }
             });
         }
+
+        let (lines_tx, lines_rx) = tokio::sync::mpsc::unbounded_channel();
+        let name = server_name.clone();
+        tokio::spawn(async move {
+            let mut reader = BufReader::new(stdout);
+            let mut buf = String::new();
+            loop {
+                buf.clear();
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(60),
+                    reader.read_line(&mut buf),
+                )
+                .await
+                {
+                    Ok(Ok(0)) => break,
+                    Ok(Ok(_)) => {
+                        let line = buf.trim_end().to_string();
+                        if line.is_empty() {
+                            continue;
+                        }
+                        if lines_tx.send(line).is_err() {
+                            break;
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        warn!(server = %name, error = %e, "MCP stdout read error");
+                        break;
+                    }
+                    Err(_) => {
+                        warn!(server = %name, "MCP stdout read timeout");
+                        break;
+                    }
+                }
+            }
+            debug!(server = %name, "MCP stdout reader task ended");
+        });
+
         info!(server = %server_name, "MCP stdio transport spawned");
         Ok(Self {
             stdin,
-            stdout_reader: BufReader::new(stdout),
+            lines_rx,
             child,
             server_name,
         })
@@ -75,31 +112,14 @@ impl StdioMcpTransport {
     }
 
     pub async fn recv(&mut self) -> Result<Option<String>> {
-        let mut line = String::new();
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(60),
-            self.stdout_reader.read_line(&mut line),
-        )
-        .await
-        {
-            Ok(Ok(0)) => {
-                info!(server = %self.server_name, "MCP server stdout closed");
-                Ok(None)
-            }
-            Ok(Ok(_)) => {
-                let line = line.trim_end().to_string();
-                if line.is_empty() {
-                    return Ok(None);
-                }
+        match self.lines_rx.recv().await {
+            Some(line) => {
                 debug!(server = %self.server_name, len = line.len(), "MCP transport recv");
                 Ok(Some(line))
             }
-            Ok(Err(e)) => {
-                Err(anyhow::Error::new(e).context("failed to read from MCP server stdout"))
-            }
-            Err(_) => {
-                warn!(server = %self.server_name, "MCP transport recv timeout");
-                Err(anyhow::anyhow!("MCP transport recv timeout after 60s"))
+            None => {
+                info!(server = %self.server_name, "MCP transport line channel closed");
+                Ok(None)
             }
         }
     }
@@ -113,5 +133,13 @@ impl StdioMcpTransport {
             Err(e) => warn!(error = %e, "failed to start_kill MCP child"),
         }
         Ok(())
+    }
+}
+
+impl Drop for StdioMcpTransport {
+    fn drop(&mut self) {
+        // Best-effort kill so the child does not outlive the transport.
+        // Graceful shutdown should be done via close().await before drop.
+        let _ = self.child.start_kill();
     }
 }
