@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
+use crate::runtime::wire_worker::ApprovalPolicy;
+
 /// Directory name for team state.
 pub const TEAM_DIR: &str = "team";
 /// Directory name for worker state within a team/run.
@@ -57,6 +59,18 @@ pub struct OmkConfig {
     /// Notification webhook URLs
     #[serde(default)]
     pub webhooks: Option<crate::notifications::WebhookConfig>,
+
+    /// Default approval policy for wire workers
+    #[serde(default)]
+    pub approval_policy: ApprovalPolicy,
+
+    /// Default approval timeout in seconds
+    #[serde(default = "default_approval_timeout_secs")]
+    pub approval_timeout_secs: u64,
+}
+
+fn default_approval_timeout_secs() -> u64 {
+    300
 }
 
 impl Default for OmkConfig {
@@ -69,6 +83,8 @@ impl Default for OmkConfig {
             enable_metrics: true,
             registries: vec![],
             webhooks: None,
+            approval_policy: ApprovalPolicy::default(),
+            approval_timeout_secs: default_approval_timeout_secs(),
         }
     }
 }
@@ -253,6 +269,7 @@ mod tests {
         assert!(!config.default_yolo);
         assert!(config.enable_metrics);
         assert!(config.registries.is_empty());
+        assert_eq!(config.approval_timeout_secs, 300);
     }
 
     #[test]

@@ -141,6 +141,8 @@ async fn show() -> Result<()> {
     } else {
         println!("  kimi_binary:       (auto-detect)");
     }
+    println!("  approval.policy:   {:?}", config.approval_policy);
+    println!("  approval.timeout:  {}", config.approval_timeout_secs);
     if !config.extra_skill_dirs.is_empty() {
         println!("  extra_skill_dirs:");
         for dir in &config.extra_skill_dirs {
@@ -189,8 +191,27 @@ async fn set(key: &str, value: &str) -> Result<()> {
             }
             config.kimi_binary = Some(value.to_string());
         }
+        "approval.policy" => {
+            let policy = crate::runtime::wire_worker::ApprovalPolicy::parse_name(value)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Invalid approval policy: {}. Valid: never, safe, yolo",
+                        value
+                    )
+                })?;
+            config.approval_policy = policy;
+        }
+        "approval.timeout" => {
+            let secs: u64 = value
+                .parse()
+                .map_err(|e| anyhow::anyhow!("Invalid number for approval.timeout: {}", e))?;
+            if secs == 0 {
+                anyhow::bail!("approval.timeout must be greater than 0");
+            }
+            config.approval_timeout_secs = secs;
+        }
         _ => {
-            anyhow::bail!("Unknown config key: {}. Known keys: default_team_size, default_yolo, enable_metrics, kimi_binary", key);
+            anyhow::bail!("Unknown config key: {}. Known keys: default_team_size, default_yolo, enable_metrics, kimi_binary, approval.policy, approval.timeout", key);
         }
     }
 
