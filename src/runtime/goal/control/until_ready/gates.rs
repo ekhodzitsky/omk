@@ -30,15 +30,10 @@ pub(super) async fn run_integrator_gates(
     if !integrator_gates_ok {
         let _ = super::git::git_command(
             project_dir,
-            vec![
-                OsString::from("checkout"),
-                OsString::from(base_branch),
-            ],
+            vec![OsString::from("checkout"), OsString::from(base_branch)],
         )
         .await;
-        anyhow::bail!(
-            "integrator verification gates failed; switched back to base branch"
-        );
+        anyhow::bail!("integrator verification gates failed; switched back to base branch");
     }
     steps.push(GoalControllerStep {
         kind: GoalControllerStepKind::Verify,

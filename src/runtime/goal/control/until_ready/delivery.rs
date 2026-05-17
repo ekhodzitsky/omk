@@ -31,7 +31,11 @@ pub(crate) async fn finalize_until_ready_delivery(
 
     if state.slice_execution && policy != GoalDeliveryPolicy::Local {
         return super::integrator::finalize_slice_integrator(
-            goal_id, steps, policy, merge_policy, project_dir,
+            goal_id,
+            steps,
+            policy,
+            merge_policy,
+            project_dir,
         )
         .await;
     }

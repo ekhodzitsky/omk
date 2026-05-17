@@ -106,10 +106,7 @@ pub(crate) async fn merge_branch_into_integrator(
 
     let rebase = git_command(
         repo_dir,
-        vec![
-            OsString::from("checkout"),
-            OsString::from(branch),
-        ],
+        vec![OsString::from("checkout"), OsString::from(branch)],
     )
     .await?;
     if !rebase.status.success() {
@@ -120,19 +117,13 @@ pub(crate) async fn merge_branch_into_integrator(
     }
     let rebase = git_command(
         repo_dir,
-        vec![
-            OsString::from("rebase"),
-            OsString::from(integrator_branch),
-        ],
+        vec![OsString::from("rebase"), OsString::from(integrator_branch)],
     )
     .await?;
     if !rebase.status.success() {
         let _ = git_command(
             repo_dir,
-            vec![
-                OsString::from("rebase"),
-                OsString::from("--abort"),
-            ],
+            vec![OsString::from("rebase"), OsString::from("--abort")],
         )
         .await;
         let _ = git_command(
@@ -217,7 +208,10 @@ pub(crate) async fn push_branch(repo_dir: &Path, branch: &str) -> anyhow::Result
     }
 }
 
-pub(super) async fn git_command(repo_dir: &Path, args: Vec<OsString>) -> Result<std::process::Output> {
+pub(super) async fn git_command(
+    repo_dir: &Path,
+    args: Vec<OsString>,
+) -> Result<std::process::Output> {
     let mut command = tokio::process::Command::new("git");
     command.arg("-C").arg(repo_dir).args(args);
     tokio::time::timeout(GIT_COMMAND_TIMEOUT, command.output())

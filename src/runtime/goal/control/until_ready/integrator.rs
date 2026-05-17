@@ -112,18 +112,18 @@ pub(crate) async fn finalize_slice_integrator(
         .await;
     }
 
-    let gate_count =
-        match run_integrator_gates(&mut steps, project_dir, &state, &base_branch).await {
-            Ok(count) => count,
-            Err(e) => {
-                return finalize_until_ready_blocker(
-                    goal_id,
-                    steps,
-                    UntilReadyBlocker::policy(e.to_string()),
-                )
-                .await;
-            }
-        };
+    let gate_count = match run_integrator_gates(&mut steps, project_dir, &state, &base_branch).await
+    {
+        Ok(count) => count,
+        Err(e) => {
+            return finalize_until_ready_blocker(
+                goal_id,
+                steps,
+                UntilReadyBlocker::policy(e.to_string()),
+            )
+            .await;
+        }
+    };
 
     let integrator_narrative = format!(
         "integrator branch passed {} verification gate(s)",
