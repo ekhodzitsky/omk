@@ -80,10 +80,7 @@ async fn discover_active_hooks(project_dir: Option<&Path>) -> Vec<ActiveHook> {
             pascal_to_snake(&event_str)
         };
 
-        let timeout = hook
-            .timeout
-            .map(|t| t.clamp(1, 300) as u32)
-            .unwrap_or(30);
+        let timeout = hook.timeout.map(|t| t.clamp(1, 300) as u32).unwrap_or(30);
 
         let regex = hook.matcher.as_ref().and_then(|pattern| {
             match regex::Regex::new(pattern) {
