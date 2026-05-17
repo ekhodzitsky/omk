@@ -52,13 +52,13 @@ pub(crate) struct GoalAgentTaskPolicy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum GoalAgentWaveKind {
+pub enum GoalAgentWaveKind {
     Initial,
     FollowUp,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct GoalAgentDispatchPlan {
+pub struct GoalAgentDispatchPlan {
     pub(crate) run_key: String,
     pub(crate) kind: GoalAgentWaveKind,
     pub(crate) proposals: Vec<GoalAgentTaskProposal>,

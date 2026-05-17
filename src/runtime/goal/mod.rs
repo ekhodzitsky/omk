@@ -35,7 +35,7 @@ pub use delivery::{
     GoalMergePolicy,
 };
 pub use evidence::GoalGitEvidence;
-pub use lifecycle::{execute_goal, review_goal, verify_goal};
+pub use lifecycle::{execute_goal, review_goal, verify_goal, verify_goal_with_slices};
 pub use open_pr::GoalOpenPrDraft;
 pub use oracle::GoalKind;
 pub use progress::{GoalProgressLine, GoalProgressLineKind, GoalProgressSnapshot};
@@ -69,6 +69,11 @@ pub(crate) use integration::{accept_goal, reject_goal};
 pub(crate) use open_pr::render_goal_open_pr;
 pub(crate) use state::parse_budget_duration;
 pub(crate) use types::GoalRunUntilReadyOutcome;
+
+pub use agent::{GoalAgentDispatchPlan, GoalAgentWaveKind};
+pub use dispatch::GoalDispatcher;
+pub use evidence::GoalAgentRunEvidence;
+pub use lifecycle::execute_goal_with_dispatcher;
 
 // Facade functions
 pub async fn create_goal(goal: &str, options: CreateGoalOptions) -> anyhow::Result<GoalState> {

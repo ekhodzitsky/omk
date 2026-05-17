@@ -134,6 +134,7 @@ pub(crate) fn apply_agent_task_result_by_id(
         .find(|task| task.id == task_id)?;
     let success =
         evidence.summary.completed == evidence.summary.total && evidence.summary.failed == 0;
+    eprintln!("DEBUG apply_agent_task_result_by_id task_id={task_id} completed={} total={} failed={} success={}", evidence.summary.completed, evidence.summary.total, evidence.summary.failed, success);
 
     task.status = if success {
         GoalTaskStatus::Done
@@ -396,4 +397,162 @@ pub(crate) fn spawn_cleanup_task(
         task.completed_at = None;
     }
     Some(cleanup_task_id)
+}
+
+/// Merge task graph deltas produced by concurrent slice post-processing
+/// back into the main task graph. Assumes slices are non-conflicting
+/// (i.e. they do not write to overlapping tasks), but defensively
+/// deduplicates new tasks and merges evidence.
+pub(crate) fn merge_concurrent_slice_task_graphs(
+    main: &mut GoalTaskGraph,
+    deltas: &[GoalTaskGraph],
+) {
+    use std::collections::HashMap;
+
+    // Collect new tasks (by id) from all deltas
+    let mut new_tasks_by_id: HashMap<String, GoalTask> = HashMap::new();
+    for delta in deltas {
+        for task in &delta.tasks {
+            if !main.tasks.iter().any(|t| t.id == task.id) {
+                new_tasks_by_id
+                    .entry(task.id.clone())
+                    .or_insert_with(|| task.clone());
+            }
+        }
+    }
+    for task in new_tasks_by_id.into_values() {
+        main.tasks.push(task);
+    }
+
+    // Update existing tasks with the most advanced status and merged evidence
+    for task in main.tasks.iter_mut() {
+        for delta in deltas {
+            if let Some(dt) = delta.tasks.iter().find(|t| t.id == task.id) {
+                let precedence = |s: GoalTaskStatus| match s {
+                    GoalTaskStatus::Done => 2,
+                    GoalTaskStatus::Blocked => 1,
+                    GoalTaskStatus::Pending => 0,
+                };
+                if precedence(dt.status) > precedence(task.status) {
+                    task.status = dt.status;
+                    task.completed_at = dt.completed_at;
+                    task.owner_role = dt.owner_role.clone();
+                }
+                for ev in &dt.evidence {
+                    if !task
+                        .evidence
+                        .iter()
+                        .any(|e| e.kind == ev.kind && e.path == ev.path && e.summary == ev.summary)
+                    {
+                        task.evidence.push(ev.clone());
+                    }
+                }
+                task.retry_count = dt.retry_count;
+                task.lease_expires_at = dt.lease_expires_at;
+                for dep in &dt.dependencies {
+                    if !task.dependencies.contains(dep) {
+                        task.dependencies.push(dep.clone());
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+    use crate::runtime::goal::evidence::GoalAgentRunEvidence;
+    use crate::runtime::scheduler::runner::RunSummary;
+
+    fn task(id: &str, status: GoalTaskStatus) -> GoalTask {
+        GoalTask {
+            id: id.to_string(),
+            title: format!("Task {id}"),
+            description: format!("Task {id} description"),
+            status,
+            owner_role: None,
+            completed_at: None,
+            evidence: vec![],
+            retry_count: 0,
+            max_retries: 0,
+            lease_expires_at: None,
+            dependencies: vec![],
+            read_set: vec![],
+            write_set: vec!["src".to_string()],
+            risk: "low".to_string(),
+            acceptance: vec![format!("Task {id} acceptance")],
+        }
+    }
+
+    fn graph(tasks: Vec<GoalTask>) -> GoalTaskGraph {
+        GoalTaskGraph {
+            version: 1,
+            goal_id: "goal-test".to_string(),
+            generated_at: Utc::now(),
+            tasks,
+        }
+    }
+
+    fn evidence(task_id: &str, completed: usize, failed: usize) -> GoalAgentRunEvidence {
+        GoalAgentRunEvidence {
+            summary: RunSummary {
+                run_id: format!("run-{task_id}"),
+                completed,
+                failed,
+                cancelled: 0,
+                total: completed + failed,
+            },
+            run_path: PathBuf::new(),
+            task_policy_path: PathBuf::new(),
+            agent_task_proposals_path: PathBuf::new(),
+            worker_outbox_path: PathBuf::new(),
+            wire_events_path: PathBuf::new(),
+            mutation_diff_path: PathBuf::new(),
+            changed_files_path: PathBuf::new(),
+            changed_files: vec![],
+            accepted_task_count: 0,
+            rejected_task_count: 0,
+            accepted_task_ids: vec![task_id.to_string()],
+            agent_proposed_tasks: vec![],
+            worker_results: vec![],
+            worker_summary: None,
+        }
+    }
+
+    #[test]
+    fn merge_updates_status_to_done() {
+        let mut main = graph(vec![
+            task("t1", GoalTaskStatus::Pending),
+            task("t2", GoalTaskStatus::Pending),
+        ]);
+        let mut delta1 = graph(vec![task("t1", GoalTaskStatus::Done)]);
+        delta1.tasks[0].completed_at = Some(Utc::now());
+        let mut delta2 = graph(vec![task("t2", GoalTaskStatus::Done)]);
+        delta2.tasks[0].completed_at = Some(Utc::now());
+
+        merge_concurrent_slice_task_graphs(&mut main, &[delta1, delta2]);
+
+        assert_eq!(main.tasks[0].status, GoalTaskStatus::Done);
+        assert_eq!(main.tasks[1].status, GoalTaskStatus::Done);
+    }
+
+    #[test]
+    fn merge_prefers_blocked_over_pending() {
+        let mut main = graph(vec![task("t1", GoalTaskStatus::Pending)]);
+        let delta = graph(vec![task("t1", GoalTaskStatus::Blocked)]);
+
+        merge_concurrent_slice_task_graphs(&mut main, &[delta]);
+
+        assert_eq!(main.tasks[0].status, GoalTaskStatus::Blocked);
+    }
+
+    #[test]
+    fn apply_agent_task_result_by_id_sets_done() {
+        let mut tg = graph(vec![task("t1", GoalTaskStatus::Pending)]);
+        let ev = evidence("t1", 1, 0);
+        let result = apply_agent_task_result_by_id(&mut tg, "t1", &ev, Utc::now());
+        assert!(result.is_some());
+        assert_eq!(tg.tasks[0].status, GoalTaskStatus::Done);
+    }
 }
