@@ -12,7 +12,7 @@ pub struct StdioMcpTransport {
 }
 
 impl StdioMcpTransport {
-    pub async fn spawn(
+    pub fn spawn(
         server_name: impl Into<String>,
         command: &str,
         args: &[String],

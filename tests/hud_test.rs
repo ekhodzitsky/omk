@@ -26,6 +26,7 @@ async fn setup_mock_team_state(name: &str) -> (tempfile::TempDir, PathBuf) {
             outbox: worker_dir.join("outbox.jsonl"),
             heartbeat: worker_dir.join("heartbeat.json"),
             project_dir: None,
+            external_tools: None,
         };
         spec.save().await.unwrap();
 
@@ -260,6 +261,7 @@ async fn test_hud_worker_display_stalled_and_dead() {
         outbox: worker_dir.join("outbox.jsonl"),
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: None,
+        external_tools: None,
     };
     spec.save().await.unwrap();
 
@@ -297,6 +299,7 @@ async fn test_hud_worker_display_heartbeat_from_event() {
         outbox: worker_dir.join("outbox.jsonl"),
         heartbeat: worker_dir.join("heartbeat.json"),
         project_dir: None,
+        external_tools: None,
     };
     spec.save().await.unwrap();
 

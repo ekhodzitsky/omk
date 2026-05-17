@@ -47,6 +47,7 @@ pub async fn make_spec(tmp: &TempDir, name: &str) -> WorkerSpec {
         outbox: dir.join("outbox.jsonl"),
         heartbeat: dir.join("heartbeat.json"),
         project_dir: None,
+        external_tools: None,
     }
 }
 

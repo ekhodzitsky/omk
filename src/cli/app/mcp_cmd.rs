@@ -107,8 +107,7 @@ async fn try_start_server(
 ) -> Result<Vec<String>> {
     use crate::mcp::client::transport::StdioMcpTransport;
     use crate::mcp::client::McpClient;
-    let transport =
-        StdioMcpTransport::spawn(name, &config.command, &config.args, &config.env).await?;
+    let transport = StdioMcpTransport::spawn(name, &config.command, &config.args, &config.env)?;
     let mut client = McpClient::new(transport, name);
     client.initialize().await?;
     let tools = client.list_tools().await?;

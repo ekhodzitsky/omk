@@ -93,18 +93,38 @@ impl McpClient {
                 self.server_name
             )
         })?;
+        if resp.jsonrpc != "2.0" {
+            bail!(
+                "MCP server {} returned unsupported JSON-RPC version {} for {}",
+                self.server_name,
+                resp.jsonrpc,
+                method
+            );
+        }
         if resp.id != id {
             warn!(server = %self.server_name, expected = id, got = resp.id, "MCP JSON-RPC id mismatch");
         }
         match resp.payload {
             JsonRpcPayload::Result(result) => Ok(result),
-            JsonRpcPayload::Error(err) => bail!(
-                "MCP server {} returned error for {}: {} (code: {})",
-                self.server_name,
-                method,
-                err.message,
-                err.code
-            ),
+            JsonRpcPayload::Error(err) => {
+                if let Some(data) = err.data {
+                    bail!(
+                        "MCP server {} returned error for {}: {} (code: {}, data: {})",
+                        self.server_name,
+                        method,
+                        err.message,
+                        err.code,
+                        data
+                    );
+                }
+                bail!(
+                    "MCP server {} returned error for {}: {} (code: {})",
+                    self.server_name,
+                    method,
+                    err.message,
+                    err.code
+                );
+            }
         }
     }
 

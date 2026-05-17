@@ -47,7 +47,7 @@ pub(super) enum Commands {
     /// Update OMK
     Update(UpdateArgs),
     /// MCP integration (client, registry, server)
-    #[command(name = "mcp", visible_alias = "m")]
+    #[command(name = "mcp")]
     Mcp(mcp_cmd::Args),
     /// Run MCP server (backward compat)
     McpServer,

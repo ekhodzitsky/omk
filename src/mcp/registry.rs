@@ -40,7 +40,6 @@ impl McpRegistry {
 
     async fn start_server(&mut self, name: String, config: &McpServerConfig) -> Result<()> {
         let transport = StdioMcpTransport::spawn(&name, &config.command, &config.args, &config.env)
-            .await
             .with_context(|| format!("failed to spawn MCP server '{name}'"))?;
         let mut client = McpClient::new(transport, name.clone());
         client
