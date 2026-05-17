@@ -154,6 +154,16 @@ impl Default for McpRegistry {
     }
 }
 
+impl Drop for McpRegistry {
+    fn drop(&mut self) {
+        // Best-effort kill: draining servers drops McpClient -> StdioMcpTransport -> Child::start_kill.
+        // Graceful async shutdown should be done via shutdown_all().await before drop.
+        for (_, handle) in self.servers.drain() {
+            drop(handle.client);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

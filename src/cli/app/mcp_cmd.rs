@@ -66,6 +66,7 @@ async fn cmd_list() -> Result<()> {
             println!("  {}::{} — {}", server, tool.name, desc);
         }
     }
+    registry.shutdown_all().await?;
     Ok(())
 }
 
@@ -94,14 +95,17 @@ async fn cmd_doctor() -> Result<()> {
     Ok(())
 }
 
-async fn cmd_call(_server_name: &str, tool_name: &str, json_args: &str) -> Result<()> {
+async fn cmd_call(server_name: &str, tool_name: &str, json_args: &str) -> Result<()> {
     let args: Value =
         serde_json::from_str(json_args).map_err(|e| anyhow::anyhow!("invalid JSON args: {e}"))?;
     let config_path = McpConfig::default_path();
     let config = McpConfig::load(&config_path).await?;
     let mut registry = McpRegistry::from_config(&config).await?;
-    let result: serde_json::Value = registry.call_tool(tool_name, args).await?;
+    let result: serde_json::Value = registry
+        .call_tool_on_server(server_name, tool_name, args)
+        .await?;
     println!("{}", serde_json::to_string_pretty(&result)?);
+    registry.shutdown_all().await?;
     Ok(())
 }
 
