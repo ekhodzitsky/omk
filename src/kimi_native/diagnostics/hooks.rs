@@ -8,7 +8,11 @@ struct HookConfigWrapper {
     hooks: Vec<crate::kimi_native::hook_spec::HookConfig>,
 }
 
-pub(super) async fn check_hooks(hooks_dir: &Path, results: &mut Vec<DiagResult>) {
+pub(super) async fn check_hooks(
+    hooks_dir: &Path,
+    project_dir: &Path,
+    results: &mut Vec<DiagResult>,
+) {
     // Check hooks (L1-033)
     let expected_hooks = ["safety-check.sh", "completion-check.sh", "notify.sh"];
     let mut missing_hooks = vec![];
@@ -54,6 +58,89 @@ pub(super) async fn check_hooks(hooks_dir: &Path, results: &mut Vec<DiagResult>)
             message: format!("Missing hooks: {}", missing_hooks.join(", ")),
             fix_hint: Some("Run `omk kimi install` or `omk kimi sync`".to_string()),
         });
+    }
+
+    // Validate hooks declared in .kimi/config.toml
+    let config_path = project_dir.join(".kimi").join("config.toml");
+    if config_path.exists() {
+        match tokio::fs::read_to_string(&config_path).await {
+            Ok(content) => match toml::from_str::<HookConfigWrapper>(&content) {
+                Ok(wrapper) => {
+                    for hook in &wrapper.hooks {
+                        let cmd_path = project_dir.join(&hook.command);
+                        if cmd_path.exists() {
+                            #[cfg(unix)]
+                            {
+                                use std::os::unix::fs::PermissionsExt;
+                                if let Ok(meta) = tokio::fs::metadata(&cmd_path).await {
+                                    let mode = meta.permissions().mode();
+                                    if mode & 0o111 != 0 {
+                                        results.push(DiagResult {
+                                            severity: Severity::Ok,
+                                            message: format!(
+                                                "Hook '{}' is executable",
+                                                hook.command
+                                            ),
+                                            fix_hint: None,
+                                        });
+                                    } else {
+                                        results.push(DiagResult {
+                                            severity: Severity::Warning,
+                                            message: format!(
+                                                "Hook '{}' is not executable",
+                                                hook.command
+                                            ),
+                                            fix_hint: Some(format!(
+                                                "chmod +x {}",
+                                                cmd_path.display()
+                                            )),
+                                        });
+                                    }
+                                }
+                            }
+                            #[cfg(not(unix))]
+                            {
+                                results.push(DiagResult {
+                                    severity: Severity::Ok,
+                                    message: format!("Hook '{}' exists", hook.command),
+                                    fix_hint: None,
+                                });
+                            }
+                        } else {
+                            results.push(DiagResult {
+                                severity: Severity::Warning,
+                                message: format!(
+                                    "Hook '{}' references missing script",
+                                    hook.command
+                                ),
+                                fix_hint: Some(format!(
+                                    "Create {} or run `omk kimi sync`",
+                                    cmd_path.display()
+                                )),
+                            });
+                        }
+                    }
+                }
+                Err(e) => {
+                    results.push(DiagResult {
+                        severity: Severity::Warning,
+                        message: format!(
+                            "Hook config '{}' is invalid TOML: {}",
+                            config_path.display(),
+                            e
+                        ),
+                        fix_hint: Some(format!("Review and fix {}", config_path.display())),
+                    });
+                }
+            },
+            Err(e) => {
+                results.push(DiagResult {
+                    severity: Severity::Warning,
+                    message: format!("Cannot read hook config '{}': {}", config_path.display(), e),
+                    fix_hint: None,
+                });
+            }
+        }
     }
 }
 

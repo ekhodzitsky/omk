@@ -33,7 +33,7 @@ pub async fn diagnose_project(dir: &Path) -> Result<Vec<DiagResult>> {
     }
 
     agents::check_agents(&agents_dir, &mut results).await;
-    hooks::check_hooks(&hooks_dir, &mut results).await;
+    hooks::check_hooks(&hooks_dir, dir, &mut results).await;
     hooks::check_hook_configs(dir, &kimi_dir, &mut results).await;
     skills::check_skills(&kimi_dir, &mut results).await?;
     assets::check_agents_md(dir, &mut results);

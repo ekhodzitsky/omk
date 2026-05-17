@@ -5,6 +5,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::runtime::events::{Event, EventBuilder, EventKind, JsonlWriter, TaskId, WorkerId};
+use crate::runtime::wire_worker::hook_executor::{discover_hook_subscriptions, HookExecutor};
 use crate::runtime::wire_worker::WireWorkerAdapter;
 use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
 use crate::wire::client::{ProcessWireClient, WireClient, WireMessage};
@@ -63,6 +64,12 @@ impl WireWorkerAdapter {
             self.spec.external_tools.clone()
         };
 
+        let hooks = if let Some(dir) = project_dir {
+            discover_hook_subscriptions(Some(dir)).await
+        } else {
+            Vec::new()
+        };
+
         let init_params = crate::wire::protocol::InitializeParams {
             protocol_version: crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string(),
             client: Some(crate::wire::protocol::ClientInfo {
@@ -71,7 +78,7 @@ impl WireWorkerAdapter {
             }),
             external_tools,
             capabilities: None,
-            hooks: None,
+            hooks: Some(hooks),
         };
         let init_result = client.initialize(init_params).await?;
         let init_event = Event::new(self.run_id.clone(), EventKind::TaskOutput)
@@ -166,6 +173,32 @@ impl WireWorkerAdapter {
                                             Some("wire step interrupted before turn_end".to_string());
                                         break;
                                     }
+                                    crate::wire::protocol::Event::HookTriggered { event, target, hook_count } => {
+                                        let hook_event = Event::new(self.run_id.clone(), EventKind::HookTriggered)
+                                            .with_actor(&self.spec.name)
+                                            .with_payload(serde_json::json!({
+                                                "task_id": task.id,
+                                                "worker_id": self.spec.name,
+                                                "event": event,
+                                                "target": target,
+                                                "hook_count": hook_count,
+                                            }))?;
+                                        self.event_writer.append(&hook_event).await?;
+                                    }
+                                    crate::wire::protocol::Event::HookResolved { event, target, action, reason, duration_ms } => {
+                                        let hook_event = Event::new(self.run_id.clone(), EventKind::HookResolved)
+                                            .with_actor(&self.spec.name)
+                                            .with_payload(serde_json::json!({
+                                                "task_id": task.id,
+                                                "worker_id": self.spec.name,
+                                                "event": event,
+                                                "target": target,
+                                                "action": action,
+                                                "reason": reason,
+                                                "duration_ms": duration_ms,
+                                            }))?;
+                                        self.event_writer.append(&hook_event).await?;
+                                    }
                                     _ => {}
                                 },
                                 Err(_) => {
@@ -189,7 +222,8 @@ impl WireWorkerAdapter {
                                             }
                                         }
                                         "turn_begin" | "step_begin" | "tool_call" | "tool_call_part"
-                                        | "tool_result" | "status_update" | "approval_response" => {}
+                                        | "tool_result" | "status_update" | "approval_response"
+                                        | "hook_triggered" | "hook_resolved" => {}
                                         other => warn!(event_type = %other, "Unknown wire event kind"),
                                     }
                                 }
@@ -200,6 +234,27 @@ impl WireWorkerAdapter {
                         }
                         Ok(WireMessage::Request(req)) => match req.params.to_request() {
                             Ok(request) => {
+                                if let crate::wire::protocol::Request::HookRequest(ref hook_req) = request {
+                                    let hook_executor = if let Some(dir) = project_dir {
+                                        HookExecutor::new(dir)
+                                    } else {
+                                        HookExecutor::new(".")
+                                    };
+                                    let hook_result = hook_executor.run(hook_req).await?;
+                                    let response = hook_result.to_response_value(&hook_req.id);
+                                    self.record_wire_request(task, &req.id, &req.params, &request, &response).await?;
+                                    client.send_response(&req.id, &response).await?;
+                                    info!(
+                                        worker = %self.spec.name,
+                                        request_id = %req.id,
+                                        request_type = request.kind(),
+                                        hook_event = %hook_req.event,
+                                        hook_action = ?hook_result.action,
+                                        "Handled wire hook request"
+                                    );
+                                    continue;
+                                }
+
                                 if let crate::wire::protocol::Request::ToolCallRequest(ref tool_call) = request {
                                     if let Some(bridge) = &self.mcp_bridge {
                                         if bridge.is_mcp_tool(&tool_call.name).await {

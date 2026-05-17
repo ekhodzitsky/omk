@@ -88,6 +88,8 @@ pub enum EventKind {
     GoalBudgetExhausted,
     GoalBudgetExtended,
     BudgetCheckpoint,
+    HookTriggered,
+    HookResolved,
 }
 
 // ---------------------------------------------------------------------------

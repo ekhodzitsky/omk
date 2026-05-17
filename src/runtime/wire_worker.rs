@@ -2,6 +2,7 @@ use crate::runtime::events::{EventWriter, RunId};
 use crate::runtime::worker::WorkerSpec;
 use tokio_util::sync::CancellationToken;
 
+pub mod hook_executor;
 mod loop_impl;
 mod task;
 
