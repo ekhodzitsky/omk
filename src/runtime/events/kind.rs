@@ -90,6 +90,8 @@ pub enum EventKind {
     BudgetCheckpoint,
     HookTriggered,
     HookResolved,
+    ApprovalRequested,
+    ApprovalDecided,
 }
 
 // ---------------------------------------------------------------------------

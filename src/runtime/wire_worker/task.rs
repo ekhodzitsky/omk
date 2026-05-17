@@ -11,7 +11,7 @@ use crate::runtime::wire_worker::hook_executor::{
 use crate::runtime::wire_worker::WireWorkerAdapter;
 use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
 use crate::wire::client::{ProcessWireClient, WireClient, WireMessage};
-use crate::wire::protocol::{redact_wire_secrets, Request, RequestParams};
+use crate::wire::protocol::{redact_wire_secrets, ApprovalRequest, Request, RequestParams};
 
 /// Outcome of [`WireWorkerAdapter::process_task`].
 ///
@@ -316,16 +316,23 @@ impl WireWorkerAdapter {
                                         }
                                     }
                                 }
-                                let response = request.default_response();
-                                self.record_wire_request(task, &req.id, &req.params, &request, &response)
-                                    .await?;
-                                client.send_response(&req.id, response).await?;
-                                info!(
-                                    worker = %self.spec.name,
-                                    request_id = %req.id,
-                                    request_type = request.kind(),
-                                    "Handled wire request"
-                                );
+                                match &request {
+                                    Request::ApprovalRequest(approval_req) => {
+                                        self.handle_approval_request(task, &req.id, approval_req, &mut client).await?;
+                                    }
+                                    _ => {
+                                        let resp = request.default_response();
+                                        self.record_wire_request(task, &req.id, &req.params, &request, &resp)
+                                            .await?;
+                                        client.send_response(&req.id, resp).await?;
+                                        info!(
+                                            worker = %self.spec.name,
+                                            request_id = %req.id,
+                                            request_type = request.kind(),
+                                            "Handled wire request"
+                                        );
+                                    }
+                                }
                             }
                             Err(_) => {
                                 client
@@ -499,5 +506,91 @@ impl WireWorkerAdapter {
                 "response": redacted_response,
             }))?;
         self.event_writer.append(&event).await
+    }
+
+    async fn handle_approval_request(
+        &self,
+        task: &WorkerTask,
+        request_id: &str,
+        approval_req: &ApprovalRequest,
+        client: &mut ProcessWireClient,
+    ) -> Result<()> {
+        let requested = Event::new(self.run_id.clone(), EventKind::ApprovalRequested)
+            .with_actor(&self.spec.name)
+            .with_payload(serde_json::json!({
+                "task_id": task.id,
+                "worker_id": self.spec.name,
+                "request_id": request_id,
+                "approval_request_id": approval_req.id,
+                "tool_call_id": approval_req.tool_call_id,
+                "sender": approval_req.sender,
+                "action": approval_req.action,
+                "description": approval_req.description,
+                "source_kind": approval_req.source_kind,
+                "agent_id": approval_req.agent_id,
+                "subagent_type": approval_req.subagent_type,
+            }))?;
+        self.event_writer.append(&requested).await?;
+
+        let decision = self.approval_proxy.decide(approval_req).await;
+        let response_type = decision.to_response_type();
+        let feedback = match &decision {
+            super::ApprovalDecision::Approve => "OMK approved this request.".to_string(),
+            super::ApprovalDecision::ApproveForSession => {
+                "OMK approved this request for the session.".to_string()
+            }
+            super::ApprovalDecision::Reject => "OMK rejected this request.".to_string(),
+        };
+
+        let response = serde_json::json!({
+            "request_id": approval_req.id,
+            "response": response_type,
+            "feedback": feedback,
+        });
+
+        let decided = Event::new(self.run_id.clone(), EventKind::ApprovalDecided)
+            .with_actor(&self.spec.name)
+            .with_payload(serde_json::json!({
+                "task_id": task.id,
+                "worker_id": self.spec.name,
+                "request_id": request_id,
+                "approval_request_id": approval_req.id,
+                "decision": match response_type {
+                    crate::wire::protocol::ApprovalResponseType::Approve => "approve",
+                    crate::wire::protocol::ApprovalResponseType::ApproveForSession => "approve_for_session",
+                    crate::wire::protocol::ApprovalResponseType::Reject => "reject",
+                },
+                "feedback": feedback,
+            }))?;
+        self.event_writer.append(&decided).await?;
+
+        self.record_wire_request(
+            task,
+            request_id,
+            &RequestParams {
+                request_type: "ApprovalRequest".to_string(),
+                payload: serde_json::to_value(approval_req)?,
+            },
+            &Request::ApprovalRequest(approval_req.clone()),
+            &response,
+        )
+        .await?;
+
+        client.send_response(request_id, response).await?;
+
+        info!(
+            worker = %self.spec.name,
+            request_id = %request_id,
+            approval_request_id = %approval_req.id,
+            action = %approval_req.action,
+            decision = %match decision {
+                super::ApprovalDecision::Approve => "approve",
+                super::ApprovalDecision::ApproveForSession => "approve_for_session",
+                super::ApprovalDecision::Reject => "reject",
+            },
+            "Handled approval request"
+        );
+
+        Ok(())
     }
 }

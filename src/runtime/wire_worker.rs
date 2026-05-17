@@ -2,6 +2,9 @@ use crate::runtime::events::{EventWriter, RunId};
 use crate::runtime::worker::WorkerSpec;
 use tokio_util::sync::CancellationToken;
 
+mod approval_proxy;
+pub use approval_proxy::{ApprovalChannel, ApprovalDecision, ApprovalPolicy, ApprovalProxy};
+
 pub mod hook_executor;
 mod loop_impl;
 mod task;
@@ -26,6 +29,7 @@ pub struct WireWorkerAdapter {
     active_turn_timeout: std::time::Duration,
     cancel_token: CancellationToken,
     mcp_bridge: Option<std::sync::Arc<crate::mcp::bridge::WireWorkerMcpBridge>>,
+    approval_proxy: ApprovalProxy,
 }
 
 impl WireWorkerAdapter {
@@ -39,6 +43,8 @@ impl WireWorkerAdapter {
         event_writer: EventWriter,
         cancel_token: CancellationToken,
     ) -> Self {
+        let approval_proxy =
+            ApprovalProxy::new(spec.approval_policy.clone(), spec.approval_timeout_secs);
         Self {
             spec,
             run_id,
@@ -46,6 +52,7 @@ impl WireWorkerAdapter {
             active_turn_timeout: resolve_active_turn_timeout(),
             cancel_token,
             mcp_bridge: None,
+            approval_proxy,
         }
     }
 
@@ -55,6 +62,15 @@ impl WireWorkerAdapter {
     ) -> Self {
         self.mcp_bridge = mcp_bridge;
         self
+    }
+
+    pub fn with_approval_channel(mut self, channel: ApprovalChannel) -> Self {
+        self.approval_proxy = self.approval_proxy.with_channel(channel);
+        self
+    }
+
+    pub fn approval_policy(&self) -> &ApprovalPolicy {
+        self.approval_proxy.policy()
     }
 
     /// Spawn the adapter as a background Tokio task.
