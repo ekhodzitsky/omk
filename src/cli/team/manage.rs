@@ -47,7 +47,7 @@ pub(crate) async fn shutdown(args: ShutdownArgs) -> Result<()> {
     // Estimate and record cost
     let duration = chrono::Utc::now().signed_duration_since(state.created_at);
     let cost_estimate = crate::cost::estimator::estimate_team_cost(
-        duration.num_seconds().max(0) as u64,
+        u64::try_from(duration.num_seconds()).unwrap_or(0),
         state.worker_count,
         &state.worker_role,
     );

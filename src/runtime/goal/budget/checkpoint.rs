@@ -59,10 +59,12 @@ pub async fn build_budget_checkpoint(
         .budget_time
         .as_deref()
         .and_then(parse_goal_duration_secs);
-    let elapsed_since_created_secs = recorded_at
-        .signed_duration_since(state.created_at)
-        .num_seconds()
-        .max(0) as u64;
+    let elapsed_since_created_secs = u64::try_from(
+        recorded_at
+            .signed_duration_since(state.created_at)
+            .num_seconds(),
+    )
+    .unwrap_or(0);
     let remaining_budget_secs =
         total_budget_secs.map(|total| total.saturating_sub(elapsed_since_created_secs));
     let usage = collect_goal_budget_usage(state).await;

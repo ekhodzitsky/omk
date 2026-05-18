@@ -116,7 +116,7 @@ impl TeamRunner {
                 .tasks()
                 .get(&task_id)
                 .and_then(|t| t.lease_expires)
-                .map(|dt| dt.timestamp() as u64)
+                .and_then(|dt| u64::try_from(dt.timestamp()).ok())
                 .unwrap_or(300);
             let claimed_event = EventBuilder::new(self.run_id.clone()).task_claimed(
                 TaskId(task_id.clone()),

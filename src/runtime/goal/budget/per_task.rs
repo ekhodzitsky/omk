@@ -29,10 +29,10 @@ pub async fn evaluate_task_budget(
         .budget_time
         .as_deref()
         .and_then(parse_goal_duration_secs);
-    let elapsed_since_created_secs = now
-        .signed_duration_since(state.created_at)
-        .num_seconds()
-        .max(0) as u64;
+    let elapsed_since_created_secs = u64::try_from(
+        now.signed_duration_since(state.created_at).num_seconds(),
+    )
+    .unwrap_or(0);
     let usage = collect_goal_budget_usage(state).await;
 
     if let Some(total_budget_secs) = total_budget_secs {

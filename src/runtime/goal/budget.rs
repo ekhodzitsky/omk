@@ -171,10 +171,10 @@ pub async fn add_goal_budget_limits(goal_id: &str, add: GoalBudgetAdd) -> Result
         );
     }
     let now = Utc::now();
-    let elapsed_since_created_secs = now
-        .signed_duration_since(state.created_at)
-        .num_seconds()
-        .max(0) as u64;
+    let elapsed_since_created_secs = u64::try_from(
+        now.signed_duration_since(state.created_at).num_seconds(),
+    )
+    .unwrap_or(0);
     let usage = collect_goal_budget_usage(&state).await;
     let previous_budget_time = state.budget_time.clone();
     let previous_budget_tokens = state.budget_tokens;
@@ -276,10 +276,10 @@ pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str)
         .budget_time
         .as_deref()
         .and_then(parse_goal_duration_secs);
-    let elapsed_since_created_secs = now
-        .signed_duration_since(state.created_at)
-        .num_seconds()
-        .max(0) as u64;
+    let elapsed_since_created_secs = u64::try_from(
+        now.signed_duration_since(state.created_at).num_seconds(),
+    )
+    .unwrap_or(0);
 
     let usage = collect_goal_budget_usage(state).await;
 
