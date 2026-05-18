@@ -83,6 +83,7 @@ mod tests {
     use crate::mcp::client::types::Tool;
     use crate::mcp::client::McpClient;
     use crate::mcp::registry::McpServerHandle;
+    use moka::future::Cache;
     use std::collections::VecDeque;
     use std::future::Future;
     use std::pin::Pin;
@@ -125,11 +126,16 @@ mod tests {
         let mut registry = McpRegistry::new();
         let transport: Box<dyn McpTransport> = Box::new(MockTransport::new(vec![]));
         let client = McpClient::new(transport, "server-a");
+        let tool_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(300))
+            .build();
         registry.servers.insert(
             "server-a".to_string(),
             McpServerHandle {
                 name: "server-a".to_string(),
                 client,
+                tool_cache,
                 tools,
             },
         );
@@ -180,11 +186,16 @@ mod tests {
         .to_string();
         let transport: Box<dyn McpTransport> = Box::new(MockTransport::new(vec![call_resp]));
         let client = McpClient::new(transport, "server-a");
+        let tool_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(300))
+            .build();
         registry.servers.insert(
             "server-a".to_string(),
             McpServerHandle {
                 name: "server-a".to_string(),
                 client,
+                tool_cache,
                 tools: vec![Tool {
                     name: "greet".to_string(),
                     description: None,

@@ -25,6 +25,28 @@ impl<S: CostSink> CostTracker<S> {
         Ok(())
     }
 
+    /// Record a cost session with exact token counting from a Wire message.
+    ///
+    /// Overwrites the heuristic `input_tokens` with the exact BPE count and
+    /// recalculates `estimated_usd` while preserving other fields.
+    pub async fn record_with_message(
+        &self,
+        mut cost: SessionCost,
+        message: &crate::wire::protocol::Request,
+        model: &str,
+    ) -> Result<()> {
+        if let Ok(exact) = crate::cost::tokens::count_message_tokens(message, model) {
+            cost.estimate.input_tokens = exact as u64;
+            let tier = cost.estimate.tier;
+            cost.estimate.estimated_usd = crate::cost::tokens::estimated_usd_from_exact_tokens(
+                exact,
+                cost.estimate.output_tokens as usize,
+                &tier,
+            );
+        }
+        self.record(cost).await
+    }
+
     pub async fn load(&self) -> Result<Vec<SessionCost>> {
         self.sink.load().await
     }

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::runtime::goal::state::{
     GoalState, GOAL_PRD_FILE, GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
@@ -30,8 +30,24 @@ pub(super) async fn write_goal_brief(state: &GoalState, generated_at: DateTime<U
 
 pub(super) async fn write_technical_plan(
     state: &GoalState,
+    relevant_files: &[PathBuf],
     generated_at: DateTime<Utc>,
 ) -> Result<()> {
+    let relevant_section = if relevant_files.is_empty() {
+        String::new()
+    } else {
+        let lines = relevant_files
+            .iter()
+            .map(|p| format!("- `{}`", p.display()))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!(
+            "## Semantically Relevant Files\n\n\
+             Discovered via AST analysis of function definitions against the goal description:\n\n\
+             {lines}\n\n"
+        )
+    };
+
     let body = format!(
         "# Technical Plan\n\n\
          Generated: {generated_at}\n\n\
@@ -45,6 +61,7 @@ pub(super) async fn write_technical_plan(
          7. Proof writes an honest not-ready proof until required execution, review, and integration evidence exists.\n\n\
          ## Execution Boundary\n\n\
          The current controller records planning task evidence, local verification task evidence, a bounded Wire-backed `goal-agent-execute` wave, agent mutation diff/changed-file evidence, post-mutation gate reruns when files change, and controller review/security evidence. The initial wave can make minimal project changes under the worker boundary, but readiness still requires specialist review loops and integration acceptance.\n\n\
+         {relevant_section}\
          Goal ID: `{}`\n",
         state.goal_id
     );

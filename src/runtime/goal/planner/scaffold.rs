@@ -85,7 +85,8 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
     record_artifact(&mut state, "prd", GOAL_PRD_FILE, now);
 
     state.phase = GoalPhase::Planning;
-    super::artifacts::write_technical_plan(&state, now).await?;
+    let relevant_files = super::discover::discover_relevant_files(&state.normalized_goal, &cwd)?;
+    super::artifacts::write_technical_plan(&state, &relevant_files, now).await?;
     record_artifact(&mut state, "technical_plan", GOAL_TECHNICAL_PLAN_FILE, now);
 
     state.phase = GoalPhase::Decomposition;

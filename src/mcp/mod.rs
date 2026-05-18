@@ -5,6 +5,7 @@ pub mod registry;
 pub mod server;
 pub mod tools;
 pub use bridge::{maybe_create_bridge, WireWorkerMcpBridge};
+pub use client::cache::CachedMcpClient;
 pub use client::transport::StdioMcpTransport;
 pub use client::types::{CallToolResult, InitializeResult, Resource, ResourceContent, Tool};
 pub use client::McpClient;
