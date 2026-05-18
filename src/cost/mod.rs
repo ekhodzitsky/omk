@@ -1,12 +1,14 @@
 pub mod estimator;
 pub mod file_sink;
 pub mod sink;
+pub mod tokens;
 pub mod tracker;
 pub mod types;
 
 pub use estimator::CostEstimate;
 pub use file_sink::JsonFileCostSink;
 pub use sink::CostSink;
+pub use tokens::{count_message_tokens, count_tokens, estimated_usd_from_exact_tokens};
 pub use tracker::CostTracker;
 pub use types::SessionCost;
 

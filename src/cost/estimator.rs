@@ -130,6 +130,28 @@ pub fn estimate_ralph_cost(
     )
 }
 
+/// Build a [`CostEstimate`] from exact token counts.
+///
+/// Bypasses the heuristic duration-based estimator and uses real token
+/// counts when they are already known (e.g. after calling
+/// [`crate::cost::tokens::count_tokens`]).
+pub fn estimate_from_exact_tokens(
+    input_tokens: u64,
+    output_tokens: u64,
+    tier: PricingTier,
+) -> CostEstimate {
+    let input_cost = (input_tokens as f64 / 1_000_000.0) * (tier.dollars_per_1m_tokens() / 4.0);
+    let output_cost = (output_tokens as f64 / 1_000_000.0) * tier.dollars_per_1m_tokens();
+    CostEstimate {
+        input_tokens,
+        output_tokens,
+        duration_secs: 0,
+        worker_count: 1,
+        estimated_usd: input_cost + output_cost,
+        tier,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,5 +224,26 @@ mod tests {
     fn test_estimate_team_cost_standard_role() {
         let est = estimate_team_cost(60, 1, "developer");
         assert_eq!(est.tier, PricingTier::Standard);
+    }
+
+    #[test]
+    fn test_estimate_from_exact_tokens() {
+        let est = estimate_from_exact_tokens(1_000_000, 0, PricingTier::Standard);
+        assert_eq!(est.input_tokens, 1_000_000);
+        assert_eq!(est.output_tokens, 0);
+        assert_eq!(est.worker_count, 1);
+        assert_eq!(est.duration_secs, 0);
+        // input is 1/4 the output rate: 8.0 / 4 = 2.0
+        assert!((est.estimated_usd - 2.0).abs() < f64::EPSILON);
+
+        let est2 = estimate_from_exact_tokens(0, 1_000_000, PricingTier::Standard);
+        assert!((est2.estimated_usd - 8.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_estimate_from_exact_tokens_premium() {
+        let est = estimate_from_exact_tokens(500_000, 500_000, PricingTier::Premium);
+        // input: 500k @ $6/m = $3.0, output: 500k @ $24/m = $12.0
+        assert!((est.estimated_usd - 15.0).abs() < 0.0001);
     }
 }
