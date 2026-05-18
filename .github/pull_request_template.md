@@ -28,6 +28,7 @@
 - [ ] `cargo test --all-features`
 - [ ] `cargo doc --no-deps`
 - [ ] `cargo deny check advisories licenses sources --all-features`
+- [ ] `cargo run --bin validate-contracts`
 
 ## Risk
 

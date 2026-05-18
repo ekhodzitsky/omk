@@ -117,17 +117,22 @@ filesystem. The trust model is intentionally narrow.
   scopes `contents: write` to the publish job only.
 - Every `actions/checkout` invocation sets `persist-credentials: false`
   so the `GITHUB_TOKEN` is not left on disk for downstream steps to read.
-- `cargo install cargo-tarpaulin` is pinned with `--locked --version ^0.31`
-  so a tarpaulin compromise cannot trivially target our coverage step.
-- Third-party actions are pinned to a major-version tag (`@v6`, `@v3`,
-  …). Pinning to a commit SHA is a tracked follow-up; see "Known Gaps"
-  below.
+- `cargo install cargo-tarpaulin` is pinned with `--locked --version
+  0.35.4` so a tarpaulin compromise cannot trivially target our coverage
+  step.
+- Non-GitHub third-party actions are pinned to a commit SHA
+  (`dtolnay/rust-toolchain`, `EmbarkStudios/cargo-deny-action`,
+  `codecov/codecov-action`). GitHub-owned actions (`actions/checkout`,
+  `actions/cache`) and `taiki-e/install-action` are pinned to a
+  major-version tag or reference.
 
 ## Known Gaps and Follow-ups
 
-- Third-party GitHub Actions are pinned by version tag, not commit SHA. A
-  malicious force-push or compromised maintainer at the action repository
-  would still be picked up. Track this as a future tightening pass.
+- `taiki-e/install-action` and GitHub-owned actions (`actions/checkout`,
+  `actions/cache`) are pinned by version tag or reference, not commit SHA.
+  A malicious force-push or compromised maintainer at the action
+  repository would still be picked up. Track full SHA pinning as a future
+  tightening pass.
 - The wire value-pattern redactor is best-effort — a high-entropy random
   string that does not match the curated patterns will still be persisted.
   Operators who handle exotic token formats should add a redaction pattern

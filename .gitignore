@@ -28,3 +28,7 @@ Cargo.lock
 
 # Local module contract draft
 /MODULE_CONTRACT_PATTERN.ru.md
+
+# Environment variables
+.env
+.env.*

@@ -32,13 +32,14 @@ named group of dependent tasks.
 
 ### CI Policy
 
-PRs use a fast Ubuntu gate for `cargo fmt --check`,
+PRs use a macOS gate for `cargo fmt --check`,
 `cargo clippy --all-targets --all-features -- -D warnings`, feature checks, and
-`cargo test`, plus a macOS compatibility smoke check. Heavy validation stays on
-protected branches, scheduled runs, and releases: full macOS build/test runs
-after merge, docs build outside the PR fast path, coverage uploads from
-push/scheduled/manual runs, and release artifacts are produced only by the
-release workflow.
+`cargo test`. The Ubuntu build job is temporarily disabled (no-op) while the
+macOS runtime stabilises; cross-platform CI will be re-enabled in a future
+milestone. Heavy validation stays on protected branches, scheduled runs, and
+releases: full macOS build/test runs after merge, docs build outside the PR
+fast path, coverage uploads from push/scheduled/manual runs, and release
+artifacts are produced only by the release workflow.
 
 External trackers (GitHub Issues, Linear, …) are optional and never a
 prerequisite for building, testing, or reviewing the project. The canonical

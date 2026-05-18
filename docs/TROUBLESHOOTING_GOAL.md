@@ -48,7 +48,7 @@ omk goal proof latest --format md
 
 ```bash
 # Switch from DraftPr to Pr or Local
-omk goal resume latest --delivery-policy pr
+omk goal resume latest --policy pr
 ```
 
 **If GitHub auth or push access is missing**, fix authentication and resume:
@@ -299,11 +299,8 @@ omk goal budget-add latest --tokens 500000 --usd 5.00
 omk goal resume latest
 ```
 
-If the goal is genuinely too large, consider splitting it into smaller goals:
-
-```bash
-omk goal split latest --max-slices 3
-```
+If the goal is genuinely too large, consider splitting it into smaller goals
+manually and starting new goal sessions for each part.
 
 ---
 
