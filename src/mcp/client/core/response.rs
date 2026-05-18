@@ -3,9 +3,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::debug;
 
+use super::types::McpClient;
 use crate::mcp::client::transport_trait::McpTransport;
 use crate::mcp::client::types::{CallToolResult, Resource, ResourceContent, Tool};
-use super::types::McpClient;
 
 impl<T: McpTransport> McpClient<T> {
     pub async fn list_tools(&mut self) -> Result<Vec<Tool>> {

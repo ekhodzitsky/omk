@@ -1,7 +1,9 @@
 use anyhow::Result;
 
-use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId};
-use crate::runtime::goal::state::{GOAL_CONTROLLER_ACTOR};
+use crate::runtime::events::{
+    Event, EventBuilder, EventKind, EventWriter, RunId, TaskId, WorkerId,
+};
+use crate::runtime::goal::state::GOAL_CONTROLLER_ACTOR;
 use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
 
 pub(crate) async fn append_controller_task_events(

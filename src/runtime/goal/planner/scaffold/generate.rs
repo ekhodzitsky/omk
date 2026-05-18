@@ -6,11 +6,10 @@ use crate::runtime::events::{EventBuilder, EventWriter, RunId};
 use crate::runtime::goal::evidence::{detect_git_evidence, record_artifact};
 use crate::runtime::goal::proof::{build_scaffold_proof, write_json_artifact};
 use crate::runtime::goal::state::{
-    FileSystemGoalStateStore, GoalState, GoalStateStore, GoalFailure, GoalPhase, GoalStatus,
-    GOAL_AGENT_EXECUTE_TASK_ID, GOAL_AGENT_VERIFY_TASK_ID, GOAL_ARTIFACTS_DIR,
-    GOAL_DECISIONS_FILE, GOAL_FAILURE_FILE, GOAL_LOCAL_VERIFY_TASK_ID,
-    GOAL_PRD_FILE, GOAL_PROOF_FILE, GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE,
-    GOAL_TEST_SPEC_FILE,
+    FileSystemGoalStateStore, GoalFailure, GoalPhase, GoalState, GoalStateStore, GoalStatus,
+    GOAL_AGENT_EXECUTE_TASK_ID, GOAL_AGENT_VERIFY_TASK_ID, GOAL_ARTIFACTS_DIR, GOAL_DECISIONS_FILE,
+    GOAL_FAILURE_FILE, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PRD_FILE, GOAL_PROOF_FILE,
+    GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
 };
 use crate::runtime::goal::task_graph::{GoalTaskGraph, GoalTaskStatus};
 
@@ -82,7 +81,8 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
     record_artifact(&mut state, "prd", GOAL_PRD_FILE, now);
 
     state.phase = GoalPhase::Planning;
-    let relevant_files = super::super::discover::discover_relevant_files(&state.normalized_goal, &cwd)?;
+    let relevant_files =
+        super::super::discover::discover_relevant_files(&state.normalized_goal, &cwd)?;
     super::super::artifacts::write_technical_plan(&state, &relevant_files, now).await?;
     record_artifact(&mut state, "technical_plan", GOAL_TECHNICAL_PLAN_FILE, now);
 
@@ -203,7 +203,10 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
             GOAL_TEST_SPEC_FILE.to_string(),
             GOAL_TASK_GRAPH_FILE.to_string(),
         ];
-        for slug in features.iter().map(|f| super::super::sanitize_feature_slug(f)) {
+        for slug in features
+            .iter()
+            .map(|f| super::super::sanitize_feature_slug(f))
+        {
             verify_read_set.push(format!("src/{slug}/"));
         }
 
@@ -235,7 +238,9 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
     };
 
     tasks.push(super::scaffold_review_task(&agent_verify_dependency));
-    tasks.push(super::scaffold_security_review_task(&agent_verify_dependency));
+    tasks.push(super::scaffold_security_review_task(
+        &agent_verify_dependency,
+    ));
 
     let graph = GoalTaskGraph {
         version: 1,

@@ -2,8 +2,7 @@ use crate::runtime::goal::agent::types::{
     GoalAgentDispatchPlan, GoalAgentTaskProposal, GoalAgentWaveKind,
 };
 use crate::runtime::goal::state::{
-    GoalState, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_AGENT_FOLLOWUPS_RUN_ID,
-    GOAL_AGENT_VERIFY_TASK_ID,
+    GoalState, GOAL_AGENT_EXECUTE_TASK_ID, GOAL_AGENT_FOLLOWUPS_RUN_ID, GOAL_AGENT_VERIFY_TASK_ID,
 };
 use crate::runtime::goal::task_graph::{
     goal_task_done, pending_goal_agent_followup_proposals, GoalTaskGraph, GoalTaskStatus,

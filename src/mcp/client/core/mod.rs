@@ -40,7 +40,9 @@ mod tests {
             Box::pin(async move { Ok(()) })
         }
 
-        fn recv(&mut self) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<String>>> + Send + '_>> {
+        fn recv(
+            &mut self,
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<Option<String>>> + Send + '_>> {
             let responses = self.responses.clone();
             Box::pin(async move { Ok(responses.lock().unwrap().pop_front()) })
         }

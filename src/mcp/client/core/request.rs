@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::{debug, info, warn};
 
-use crate::mcp::client::transport_trait::McpTransport;
-use crate::mcp::client::types::{InitializeResult};
 use super::types::{JsonRpcPayload, JsonRpcRequest, JsonRpcResponse, McpClient};
+use crate::mcp::client::transport_trait::McpTransport;
+use crate::mcp::client::types::InitializeResult;
 
 impl<T: McpTransport> McpClient<T> {
     pub fn new(transport: T, server_name: impl Into<String>) -> Self {

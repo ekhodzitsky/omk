@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::runtime::goal::agent::types::{
-    AcceptedGoalAgentAccessSet, GoalAgentAccessConflict, GoalAgentRejectedTask, GoalAgentTaskPolicy,
-    GoalAgentTaskProposal,
+    AcceptedGoalAgentAccessSet, GoalAgentAccessConflict, GoalAgentRejectedTask,
+    GoalAgentTaskPolicy, GoalAgentTaskProposal,
 };
 use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::{GoalTaskGraph, GoalTaskStatus};
@@ -161,7 +161,10 @@ fn first_unordered_access_conflict(
         if dependency_closure.contains(&accepted.task_id) {
             continue;
         }
-        if let Some(path) = crate::runtime::goal::agent::path_policy::first_conflicting_path(&proposal.write_set, &accepted.write_set) {
+        if let Some(path) = crate::runtime::goal::agent::path_policy::first_conflicting_path(
+            &proposal.write_set,
+            &accepted.write_set,
+        ) {
             return Some((
                 accepted.task_id.clone(),
                 GoalAgentAccessConflict {
@@ -170,7 +173,10 @@ fn first_unordered_access_conflict(
                 },
             ));
         }
-        if let Some(path) = crate::runtime::goal::agent::path_policy::first_conflicting_path(&proposal.read_set, &accepted.write_set) {
+        if let Some(path) = crate::runtime::goal::agent::path_policy::first_conflicting_path(
+            &proposal.read_set,
+            &accepted.write_set,
+        ) {
             return Some((
                 accepted.task_id.clone(),
                 GoalAgentAccessConflict {
@@ -179,7 +185,10 @@ fn first_unordered_access_conflict(
                 },
             ));
         }
-        if let Some(path) = crate::runtime::goal::agent::path_policy::first_conflicting_path(&proposal.write_set, &accepted.read_set) {
+        if let Some(path) = crate::runtime::goal::agent::path_policy::first_conflicting_path(
+            &proposal.write_set,
+            &accepted.read_set,
+        ) {
             return Some((
                 accepted.task_id.clone(),
                 GoalAgentAccessConflict {

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::runtime::goal::state::{goal_agent_task_budget_secs, GoalState};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoalAgentTaskProposal {
