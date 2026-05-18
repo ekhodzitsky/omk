@@ -59,11 +59,23 @@ async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
         .with_writer(non_blocking)
         .with_ansi(false);
 
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(stderr_layer)
-        .with(file_layer)
-        .init();
+    #[cfg(feature = "tokio-console")]
+    {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(stderr_layer)
+            .with(file_layer)
+            .with(console_subscriber::spawn())
+            .init();
+    }
+    #[cfg(not(feature = "tokio-console"))]
+    {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(stderr_layer)
+            .with(file_layer)
+            .init();
+    }
 
     info!("omk starting");
 
