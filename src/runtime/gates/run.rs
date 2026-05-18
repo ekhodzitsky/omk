@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 use tokio::process::Command;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::runtime::gates::types::{GateDef, GateResult, VerificationConfig, SKIPPED_GATE_COMMAND};
 use crate::wire::protocol::scrub_secret_patterns;
@@ -21,7 +21,8 @@ pub async fn run_gates_with_evidence(
 
     for (index, gate) in config.gates.iter().enumerate() {
         let start = std::time::Instant::now();
-        info!(gate = %gate.name, command = %gate.command, args = ?gate.args, "Running gate");
+        info!(gate = %gate.name, command = %gate.command, "Running gate");
+        debug!(gate = %gate.name, args = %scrub_secret_patterns(&gate.args.join(" ")), "Running gate args");
         if gate.command == SKIPPED_GATE_COMMAND {
             let skipped_message = "Skipped by gate config".to_string();
             results.push(GateResult {
