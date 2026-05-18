@@ -130,3 +130,231 @@ impl serde::Serialize for OmkError {
         state.end()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn status_code_mapping() {
+        assert_eq!(
+            OmkError::TeamNotFound {
+                name: "x".to_string()
+            }
+            .status_code(),
+            404
+        );
+        assert_eq!(
+            OmkError::TeamAlreadyExists {
+                name: "x".to_string()
+            }
+            .status_code(),
+            409
+        );
+        assert_eq!(
+            OmkError::InvalidConfig {
+                field: "f".to_string(),
+                value: "v".to_string()
+            }
+            .status_code(),
+            400
+        );
+        assert_eq!(
+            OmkError::RegistryUnreachable {
+                url: "u".to_string(),
+                reason: "r".to_string()
+            }
+            .status_code(),
+            503
+        );
+        assert_eq!(
+            OmkError::RegistryInvalid {
+                url: "u".to_string(),
+                reason: "r".to_string()
+            }
+            .status_code(),
+            502
+        );
+        assert_eq!(
+            OmkError::SkillNotFound {
+                name: "x".to_string()
+            }
+            .status_code(),
+            404
+        );
+        assert_eq!(
+            OmkError::SkillAlreadyExists {
+                name: "x".to_string(),
+                path: PathBuf::from("p")
+            }
+            .status_code(),
+            409
+        );
+        assert_eq!(
+            OmkError::ShellFailed {
+                command: "c".to_string()
+            }
+            .status_code(),
+            500
+        );
+        assert_eq!(
+            OmkError::InvalidInput {
+                reason: "r".to_string()
+            }
+            .status_code(),
+            400
+        );
+        assert_eq!(
+            OmkError::Io {
+                path: PathBuf::from("p"),
+                reason: "r".to_string()
+            }
+            .status_code(),
+            500
+        );
+        assert_eq!(
+            OmkError::StateSerialization {
+                reason: "r".to_string()
+            }
+            .status_code(),
+            500
+        );
+        assert_eq!(
+            OmkError::ProviderNotInstalled {
+                name: "p".to_string()
+            }
+            .status_code(),
+            503
+        );
+        assert_eq!(
+            OmkError::SynthesisFailed {
+                reason: "r".to_string()
+            }
+            .status_code(),
+            500
+        );
+        assert_eq!(OmkError::Timeout { secs: 1 }.status_code(), 504);
+        assert_eq!(
+            OmkError::McpTransport {
+                server: "s".to_string(),
+                reason: "r".to_string()
+            }
+            .status_code(),
+            502
+        );
+        assert_eq!(
+            OmkError::McpToolCall {
+                server: "s".to_string(),
+                tool: "t".to_string(),
+                reason: "r".to_string()
+            }
+            .status_code(),
+            500
+        );
+        assert_eq!(
+            OmkError::McpConfig {
+                path: PathBuf::from("p"),
+                reason: "r".to_string()
+            }
+            .status_code(),
+            400
+        );
+    }
+
+    #[test]
+    fn category_mapping() {
+        assert_eq!(
+            OmkError::TeamNotFound {
+                name: "x".to_string()
+            }
+            .category(),
+            "team"
+        );
+        assert_eq!(
+            OmkError::InvalidConfig {
+                field: "f".to_string(),
+                value: "v".to_string()
+            }
+            .category(),
+            "validation"
+        );
+        assert_eq!(
+            OmkError::RegistryUnreachable {
+                url: "u".to_string(),
+                reason: "r".to_string()
+            }
+            .category(),
+            "registry"
+        );
+        assert_eq!(
+            OmkError::SkillNotFound {
+                name: "x".to_string()
+            }
+            .category(),
+            "skill"
+        );
+        assert_eq!(
+            OmkError::ShellFailed {
+                command: "c".to_string()
+            }
+            .category(),
+            "shell"
+        );
+        assert_eq!(
+            OmkError::Io {
+                path: PathBuf::from("p"),
+                reason: "r".to_string()
+            }
+            .category(),
+            "io"
+        );
+        assert_eq!(
+            OmkError::ProviderNotInstalled {
+                name: "p".to_string()
+            }
+            .category(),
+            "runtime"
+        );
+        assert_eq!(
+            OmkError::McpTransport {
+                server: "s".to_string(),
+                reason: "r".to_string()
+            }
+            .category(),
+            "mcp"
+        );
+        assert_eq!(
+            OmkError::McpConfig {
+                path: PathBuf::from("p"),
+                reason: "r".to_string()
+            }
+            .category(),
+            "validation"
+        );
+    }
+
+    #[test]
+    fn from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "missing");
+        let err: OmkError = io_err.into();
+        match err {
+            OmkError::Io { path, reason } => {
+                assert_eq!(path, PathBuf::from("<unknown>"));
+                assert_eq!(reason, "missing");
+            }
+            other => panic!("expected Io error, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn serialize_json_shape() {
+        let err = OmkError::TeamNotFound {
+            name: "alpha".to_string(),
+        };
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["error"], "team 'alpha' not found");
+        assert_eq!(json["code"], 404);
+        assert_eq!(json["category"], "team");
+    }
+}
