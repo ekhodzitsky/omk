@@ -75,6 +75,13 @@ async fn run_wire_prompt(prompt: &str, kimi_bin: &str, client_name: &str) -> Res
                     Ok(Event::StepInterrupted) => {
                         anyhow::bail!("Wire prompt was interrupted");
                     }
+                    Ok(Event::ContentPart { text, chunk }) => {
+                        if let Some(t) = text {
+                            text_parts.push(t);
+                        } else if let Some(c) = chunk {
+                            text_parts.push(c);
+                        }
+                    }
                     _ => {}
                 }
 
@@ -83,7 +90,7 @@ async fn run_wire_prompt(prompt: &str, kimi_bin: &str, client_name: &str) -> Res
                     "step_interrupted" => {
                         anyhow::bail!("Wire prompt was interrupted");
                     }
-                    "thinking" | "text" | "content" | "content_part" => {
+                    "thinking" | "text" | "content" => {
                         if let Some(text) = ev.params.payload.get("text").and_then(|v| v.as_str()) {
                             text_parts.push(text.to_string());
                         } else if let Some(chunk) =
