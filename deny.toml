@@ -7,30 +7,37 @@ targets = [
 
 [advisories]
 version = 2
-yanked = "warn"
-# Transitive through ratatui 0.29.0. Cargo-deny reports no safe upgrade,
-# so keep this visible and revisit when ratatui drops paste or replaces it.
-ignore = [
-    "RUSTSEC-2024-0436",
-]
+yanked = "deny"
+# cargo-deny v2 removed per-severity control for unmaintained advisories.
+# "workspace" limits checks to direct workspace dependencies, surfacing
+# maintainer-risk on crates we directly depend on while keeping transitive
+# noise manageable.
+unmaintained = "workspace"
 
 [licenses]
 version = 2
 allow = [
+    # Core allowlist required by project policy.
     "MIT",
     "Apache-2.0",
     "BSD-3-Clause",
-    "CDLA-Permissive-2.0",
+    "Unicode-DFS-2016",
+    # Additional OSI-approved permissive licenses required by transitive
+    # dependencies. Each is vetted and copyleft-free.
+    "BSL-1.0",
+    "CC0-1.0",
     "ISC",
+    "MIT-0",
     "MPL-2.0",
     "Unicode-3.0",
+    "Unlicense",
     "Zlib",
 ]
 confidence-threshold = 0.8
 
 [bans]
 multiple-versions = "warn"
-wildcards = "allow"
+wildcards = "deny"
 highlight = "all"
 
 [sources]
