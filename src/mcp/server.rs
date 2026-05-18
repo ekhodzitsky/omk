@@ -8,8 +8,8 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::{debug, error, info, warn};
 
-use crate::wire::protocol::scrub_secret_patterns;
 use super::tools::{handle_tool_call, list_tools};
+use crate::wire::protocol::scrub_secret_patterns;
 
 /// Maximum length of a single inbound MCP JSON-RPC request, in bytes.
 ///
