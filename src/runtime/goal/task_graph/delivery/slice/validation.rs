@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
-use crate::runtime::goal::task_graph::delivery::persist::load_goal_task_delivery_records;
 use super::types::GoalDeliverySlice;
+use crate::runtime::goal::task_graph::delivery::persist::load_goal_task_delivery_records;
+use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
 
 /// Returns slices whose task is not Done and whose dependencies (including
 /// overlap serializations recorded in delivery metadata) are satisfied.

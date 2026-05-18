@@ -1,9 +1,7 @@
-use anyhow::Result;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use super::model::{GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
+use chrono::{DateTime, Utc};
+
 use crate::runtime::goal::agent::{GoalAgentTaskPolicy, GoalAgentTaskProposal};
 use crate::runtime::goal::evidence::GoalAgentRunEvidence;
 use crate::runtime::goal::proof::write_json_artifact;
@@ -11,14 +9,9 @@ use crate::runtime::goal::state::{
     default_goal_agent_task_budget_secs, GoalState, GOAL_AGENT_EXECUTE_TASK_ID,
     GOAL_AGENT_WORKER_ID, GOAL_AGENT_WORKER_ROLE, GOAL_CONTROLLER_ACTOR, GOAL_TASK_GRAPH_FILE,
 };
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct GoalTaskGraphSummary {
-    pub total_tasks: usize,
-    pub pending_tasks: usize,
-    pub blocked_tasks: usize,
-    pub done_tasks: usize,
-}
+use crate::runtime::goal::task_graph::model::{
+    GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus,
+};
 
 pub(crate) fn goal_task_done(task_graph: &GoalTaskGraph, task_id: &str) -> bool {
     task_graph
@@ -88,8 +81,10 @@ fn goal_agent_proposal_from_task(task: &GoalTask) -> GoalAgentTaskProposal {
     }
 }
 
-pub(crate) fn summarize_task_graph(task_graph: &GoalTaskGraph) -> GoalTaskGraphSummary {
-    GoalTaskGraphSummary {
+pub(crate) fn summarize_task_graph(
+    task_graph: &GoalTaskGraph,
+) -> super::types::GoalTaskGraphSummary {
+    super::types::GoalTaskGraphSummary {
         total_tasks: task_graph.tasks.len(),
         pending_tasks: task_graph
             .tasks
@@ -197,7 +192,7 @@ pub(crate) async fn apply_agent_proposed_task_mutations(
     task_graph: &mut GoalTaskGraph,
     evidence: &GoalAgentRunEvidence,
     recorded_at: DateTime<Utc>,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     if evidence.agent_proposed_tasks.is_empty() {
         return Ok(());
     }
@@ -231,7 +226,7 @@ pub(crate) async fn apply_agent_proposed_task_mutations(
 
 fn goal_task_from_agent_proposal(
     proposal: &GoalAgentTaskProposal,
-    proposal_path: &Path,
+    proposal_path: &std::path::Path,
     recorded_at: DateTime<Utc>,
 ) -> GoalTask {
     GoalTask {
@@ -264,7 +259,7 @@ async fn append_agent_proposed_task_events(
     state: &GoalState,
     evidence: &GoalAgentRunEvidence,
     policy: &GoalAgentTaskPolicy,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let writer = crate::runtime::events::EventWriter::new(
         state.state_dir.join(crate::runtime::config::EVENTS_FILE),
     );
@@ -316,7 +311,7 @@ async fn append_task_graph_mutation_events(
     evidence: &GoalAgentRunEvidence,
     policy: &GoalAgentTaskPolicy,
     previous_task_count: usize,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let writer = crate::runtime::events::EventWriter::new(
         state.state_dir.join(crate::runtime::config::EVENTS_FILE),
     );
@@ -340,236 +335,4 @@ async fn append_task_graph_mutation_events(
     }
 
     Ok(())
-}
-
-/// Append a cleanup task to the task graph and wire the original slice task
-/// to depend on it. Returns the cleanup task id when a new task was created
-/// or updated, or `None` if the task graph already contains an identical
-/// cleanup task for this slice.
-pub(crate) fn spawn_cleanup_task(
-    task_graph: &mut GoalTaskGraph,
-    slice_task_id: &str,
-    feedback: &str,
-    changed_files: &[String],
-    generated_at: DateTime<Utc>,
-) -> Option<String> {
-    let cleanup_task_id = format!("goal-agent-cleanup-{slice_task_id}");
-    if let Some(existing) = task_graph
-        .tasks
-        .iter_mut()
-        .find(|task| task.id == cleanup_task_id)
-    {
-        // Update existing cleanup task with new feedback if it differs.
-        let new_description =
-            format!("Auto-cleanup task generated from review feedback:\n\n{feedback}");
-        if existing.description == new_description {
-            return None;
-        }
-        existing.description = new_description;
-        existing.status = GoalTaskStatus::Pending;
-        existing.completed_at = None;
-        existing.read_set = changed_files.to_vec();
-        existing.write_set = changed_files.to_vec();
-        existing.evidence.push(GoalTaskEvidence {
-            kind: "cleanup_update".to_string(),
-            path: PathBuf::new(),
-            summary: format!("Cleanup task updated at {generated_at} for slice {slice_task_id}"),
-        });
-        return Some(cleanup_task_id);
-    }
-    let cleanup_task = GoalTask {
-        id: cleanup_task_id.clone(),
-        title: format!("Cleanup slice {slice_task_id}"),
-        description: format!("Auto-cleanup task generated from review feedback:\n\n{feedback}"),
-        status: GoalTaskStatus::Pending,
-        owner_role: Some(GOAL_AGENT_WORKER_ROLE.to_string()),
-        completed_at: None,
-        evidence: vec![GoalTaskEvidence {
-            kind: "cleanup_proposal".to_string(),
-            path: PathBuf::new(),
-            summary: format!("Cleanup task spawned at {generated_at} for slice {slice_task_id}"),
-        }],
-        retry_count: 0,
-        max_retries: 0,
-        lease_expires_at: None,
-        dependencies: Vec::new(),
-        read_set: changed_files.to_vec(),
-        write_set: changed_files.to_vec(),
-        risk: "low".to_string(),
-        acceptance: vec![
-            "Address all review feedback items".to_string(),
-            "Re-run verification gates after cleanup".to_string(),
-        ],
-    };
-    task_graph.tasks.push(cleanup_task);
-    if let Some(task) = task_graph
-        .tasks
-        .iter_mut()
-        .find(|task| task.id == slice_task_id)
-    {
-        if !task.dependencies.contains(&cleanup_task_id) {
-            task.dependencies.push(cleanup_task_id.clone());
-        }
-        task.status = GoalTaskStatus::Pending;
-        task.completed_at = None;
-    }
-    Some(cleanup_task_id)
-}
-
-/// Merge task graph deltas produced by concurrent slice post-processing
-/// back into the main task graph. Assumes slices are non-conflicting
-/// (i.e. they do not write to overlapping tasks), but defensively
-/// deduplicates new tasks and merges evidence.
-pub(crate) fn merge_concurrent_slice_task_graphs(
-    main: &mut GoalTaskGraph,
-    deltas: &[GoalTaskGraph],
-) {
-    use std::collections::HashMap;
-
-    // Collect new tasks (by id) from all deltas
-    let mut new_tasks_by_id: HashMap<String, GoalTask> = HashMap::new();
-    for delta in deltas {
-        for task in &delta.tasks {
-            if !main.tasks.iter().any(|t| t.id == task.id) {
-                new_tasks_by_id
-                    .entry(task.id.clone())
-                    .or_insert_with(|| task.clone());
-            }
-        }
-    }
-    for task in new_tasks_by_id.into_values() {
-        main.tasks.push(task);
-    }
-
-    // Update existing tasks with the most advanced status and merged evidence
-    for task in main.tasks.iter_mut() {
-        for delta in deltas {
-            if let Some(dt) = delta.tasks.iter().find(|t| t.id == task.id) {
-                let precedence = |s: GoalTaskStatus| match s {
-                    GoalTaskStatus::Done => 2,
-                    GoalTaskStatus::Blocked => 1,
-                    GoalTaskStatus::Pending => 0,
-                };
-                if precedence(dt.status) > precedence(task.status) {
-                    task.status = dt.status;
-                    task.completed_at = dt.completed_at;
-                    task.owner_role = dt.owner_role.clone();
-                }
-                for ev in &dt.evidence {
-                    if !task
-                        .evidence
-                        .iter()
-                        .any(|e| e.kind == ev.kind && e.path == ev.path && e.summary == ev.summary)
-                    {
-                        task.evidence.push(ev.clone());
-                    }
-                }
-                task.retry_count = dt.retry_count;
-                task.lease_expires_at = dt.lease_expires_at;
-                for dep in &dt.dependencies {
-                    if !task.dependencies.contains(dep) {
-                        task.dependencies.push(dep.clone());
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod merge_tests {
-    use super::*;
-    use crate::runtime::goal::evidence::GoalAgentRunEvidence;
-    use crate::runtime::scheduler::runner::RunSummary;
-
-    fn task(id: &str, status: GoalTaskStatus) -> GoalTask {
-        GoalTask {
-            id: id.to_string(),
-            title: format!("Task {id}"),
-            description: format!("Task {id} description"),
-            status,
-            owner_role: None,
-            completed_at: None,
-            evidence: vec![],
-            retry_count: 0,
-            max_retries: 0,
-            lease_expires_at: None,
-            dependencies: vec![],
-            read_set: vec![],
-            write_set: vec!["src".to_string()],
-            risk: "low".to_string(),
-            acceptance: vec![format!("Task {id} acceptance")],
-        }
-    }
-
-    fn graph(tasks: Vec<GoalTask>) -> GoalTaskGraph {
-        GoalTaskGraph {
-            version: 1,
-            goal_id: "goal-test".to_string(),
-            generated_at: Utc::now(),
-            tasks,
-        }
-    }
-
-    fn evidence(task_id: &str, completed: usize, failed: usize) -> GoalAgentRunEvidence {
-        GoalAgentRunEvidence {
-            summary: RunSummary {
-                run_id: format!("run-{task_id}"),
-                completed,
-                failed,
-                cancelled: 0,
-                total: completed + failed,
-            },
-            run_path: PathBuf::new(),
-            task_policy_path: PathBuf::new(),
-            agent_task_proposals_path: PathBuf::new(),
-            worker_outbox_path: PathBuf::new(),
-            wire_events_path: PathBuf::new(),
-            mutation_diff_path: PathBuf::new(),
-            changed_files_path: PathBuf::new(),
-            changed_files: vec![],
-            accepted_task_count: 0,
-            rejected_task_count: 0,
-            accepted_task_ids: vec![task_id.to_string()],
-            agent_proposed_tasks: vec![],
-            worker_results: vec![],
-            worker_summary: None,
-        }
-    }
-
-    #[test]
-    fn merge_updates_status_to_done() {
-        let mut main = graph(vec![
-            task("t1", GoalTaskStatus::Pending),
-            task("t2", GoalTaskStatus::Pending),
-        ]);
-        let mut delta1 = graph(vec![task("t1", GoalTaskStatus::Done)]);
-        delta1.tasks[0].completed_at = Some(Utc::now());
-        let mut delta2 = graph(vec![task("t2", GoalTaskStatus::Done)]);
-        delta2.tasks[0].completed_at = Some(Utc::now());
-
-        merge_concurrent_slice_task_graphs(&mut main, &[delta1, delta2]);
-
-        assert_eq!(main.tasks[0].status, GoalTaskStatus::Done);
-        assert_eq!(main.tasks[1].status, GoalTaskStatus::Done);
-    }
-
-    #[test]
-    fn merge_prefers_blocked_over_pending() {
-        let mut main = graph(vec![task("t1", GoalTaskStatus::Pending)]);
-        let delta = graph(vec![task("t1", GoalTaskStatus::Blocked)]);
-
-        merge_concurrent_slice_task_graphs(&mut main, &[delta]);
-
-        assert_eq!(main.tasks[0].status, GoalTaskStatus::Blocked);
-    }
-
-    #[test]
-    fn apply_agent_task_result_by_id_sets_done() {
-        let mut tg = graph(vec![task("t1", GoalTaskStatus::Pending)]);
-        let ev = evidence("t1", 1, 0);
-        let result = apply_agent_task_result_by_id(&mut tg, "t1", &ev, Utc::now());
-        assert!(result.is_some());
-        assert_eq!(tg.tasks[0].status, GoalTaskStatus::Done);
-    }
 }

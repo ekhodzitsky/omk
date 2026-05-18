@@ -2,8 +2,12 @@ use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
 use crate::runtime::goal::proof::GoalProof;
-use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore, GoalPhase, GoalStatus};
-use crate::runtime::goal::task_graph::{ready_delivery_slices, GoalDeliverySlice, GoalTaskGraph, GoalTaskStatus};
+use crate::runtime::goal::state::{
+    FileSystemGoalStateStore, GoalPhase, GoalStateStore, GoalStatus,
+};
+use crate::runtime::goal::task_graph::{
+    ready_delivery_slices, GoalDeliverySlice, GoalTaskGraph, GoalTaskStatus,
+};
 use crate::runtime::goal::{agent, budget, dispatch, evidence, proof, state, task_graph};
 
 pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> anyhow::Result<GoalProof> {

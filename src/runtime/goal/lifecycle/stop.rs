@@ -1,6 +1,8 @@
 use crate::runtime::goal::evidence::GoalAgentRunEvidence;
 use crate::runtime::goal::proof::{build_verified_proof, write_json_artifact, GoalProof};
-use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalState, GoalStateStore, GoalPhase, GoalStatus};
+use crate::runtime::goal::state::{
+    FileSystemGoalStateStore, GoalPhase, GoalState, GoalStateStore, GoalStatus,
+};
 use crate::runtime::goal::task_graph::GoalTaskGraph;
 use crate::runtime::goal::{budget, state};
 

@@ -3,12 +3,16 @@ use std::path::{Component, Path};
 
 use anyhow::Context;
 
+use super::types::{
+    AccessOverlap, GoalDeliveryOverlapSerialization, GoalDeliverySlice, GoalDeliverySlicePlan,
+};
 use crate::runtime::goal::state::GOAL_AGENT_EXECUTE_TASK_ID;
-use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
-use crate::runtime::goal::task_graph::delivery::metadata::{GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryStatus};
+use crate::runtime::goal::task_graph::delivery::metadata::{
+    GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryStatus,
+};
 use crate::runtime::goal::task_graph::delivery::persist::update_goal_task_delivery_metadata;
+use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
 use crate::runtime::goal::worktree::plan_goal_worktree;
-use super::types::{AccessOverlap, GoalDeliveryOverlapSerialization, GoalDeliverySlice, GoalDeliverySlicePlan};
 
 pub fn plan_goal_delivery_slices(
     worktrees_root: impl AsRef<Path>,

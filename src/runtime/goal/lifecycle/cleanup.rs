@@ -14,7 +14,8 @@ pub(crate) async fn process_slice_delivery_and_review(
     if agent_execution_succeeded
         && state.delivery_policy != crate::runtime::goal::GoalDeliveryPolicy::Local
     {
-        let base_branch = crate::runtime::goal::control::resolve_base_branch(exec_project_dir).await;
+        let base_branch =
+            crate::runtime::goal::control::resolve_base_branch(exec_project_dir).await;
         let delivery_options = crate::runtime::goal::delivery::SlicePrDeliveryOptions {
             policy: state.delivery_policy,
             dry_run: false,
@@ -272,7 +273,9 @@ pub(crate) fn aggregate_agent_evidence(
     combined
 }
 
-pub(crate) fn ensure_goal_can_continue(state: &crate::runtime::goal::state::GoalState) -> anyhow::Result<()> {
+pub(crate) fn ensure_goal_can_continue(
+    state: &crate::runtime::goal::state::GoalState,
+) -> anyhow::Result<()> {
     if state.status == GoalStatus::Paused {
         anyhow::bail!(
             "Goal '{}' is paused; run `omk goal resume {}` before continuing",
