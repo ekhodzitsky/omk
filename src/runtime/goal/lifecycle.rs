@@ -556,7 +556,8 @@ async fn process_slice_delivery_and_review(
             Ok(ref d) => {
                 // Blocked by review wall or merge check inside deliver_slice_pr.
                 if let Some(ref artifacts) = d.review_artifacts {
-                    let anti_slop_confidence = review::anti_slop_confidence(artifacts);
+                    let anti_slop_confidence =
+                        review::anti_slop_confidence_with_findings(artifacts, &d.slop_findings);
                     if anti_slop_confidence > review::ANTI_SLOP_ACTIONABLE_THRESHOLD {
                         let changed_files =
                             crate::runtime::gates::detect_changed_files(exec_project_dir).await;

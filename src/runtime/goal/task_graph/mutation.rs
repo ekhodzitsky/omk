@@ -343,8 +343,9 @@ async fn append_task_graph_mutation_events(
 }
 
 /// Append a cleanup task to the task graph and wire the original slice task
-/// to depend on it. Returns the cleanup task id when a new task was created,
-/// or `None` if a cleanup task for this slice already exists.
+/// to depend on it. Returns the cleanup task id when a new task was created
+/// or updated, or `None` if the task graph already contains an identical
+/// cleanup task for this slice.
 pub(crate) fn spawn_cleanup_task(
     task_graph: &mut GoalTaskGraph,
     slice_task_id: &str,
@@ -353,12 +354,28 @@ pub(crate) fn spawn_cleanup_task(
     generated_at: DateTime<Utc>,
 ) -> Option<String> {
     let cleanup_task_id = format!("goal-agent-cleanup-{slice_task_id}");
-    if task_graph
+    if let Some(existing) = task_graph
         .tasks
-        .iter()
-        .any(|task| task.id == cleanup_task_id)
+        .iter_mut()
+        .find(|task| task.id == cleanup_task_id)
     {
-        return None;
+        // Update existing cleanup task with new feedback if it differs.
+        let new_description =
+            format!("Auto-cleanup task generated from review feedback:\n\n{feedback}");
+        if existing.description == new_description {
+            return None;
+        }
+        existing.description = new_description;
+        existing.status = GoalTaskStatus::Pending;
+        existing.completed_at = None;
+        existing.read_set = changed_files.to_vec();
+        existing.write_set = changed_files.to_vec();
+        existing.evidence.push(GoalTaskEvidence {
+            kind: "cleanup_update".to_string(),
+            path: PathBuf::new(),
+            summary: format!("Cleanup task updated at {generated_at} for slice {slice_task_id}"),
+        });
+        return Some(cleanup_task_id);
     }
     let cleanup_task = GoalTask {
         id: cleanup_task_id.clone(),
