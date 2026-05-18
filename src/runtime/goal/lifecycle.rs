@@ -541,101 +541,98 @@ async fn process_slice_delivery_and_review(
             dry_run: false,
             base_branch,
         };
-        let delivery =
-            super::delivery::deliver_slice_pr(exec_project_dir, slice, state, delivery_options)
-                .await;
+        let delivery = super::delivery::deliver_slice_pr(
+            exec_project_dir,
+            slice,
+            state,
+            task_graph,
+            delivery_options,
+        )
+        .await;
 
-        let review = review::review_slice(slice, state, task_graph, exec_project_dir).await;
+        let mut extra = serde_json::Map::new();
+        let slice_status = match delivery {
+            Ok(ref d) if d.pr_url.is_some() => task_graph::GoalTaskDeliveryStatus::Delivered,
+            Ok(ref d) => {
+                // Blocked by review wall or merge check inside deliver_slice_pr.
+                if let Some(ref artifacts) = d.review_artifacts {
+                    let anti_slop_confidence = review::anti_slop_confidence(artifacts);
+                    if anti_slop_confidence > review::ANTI_SLOP_ACTIONABLE_THRESHOLD {
+                        let changed_files =
+                            crate::runtime::gates::detect_changed_files(exec_project_dir).await;
+                        let feedback_summary = artifacts
+                            .iter()
+                            .filter(|a| !a.passed)
+                            .map(|a| format!("{}: {}", a.kind, a.feedback))
+                            .collect::<Vec<_>>()
+                            .join("; ");
 
-        let (slice_status, _feedback) = match (delivery, review) {
-            (Ok(d), Ok(r)) => {
-                let anti_slop_confidence = review::anti_slop_confidence(&r.artifacts);
-                let anti_slop_actionable =
-                    anti_slop_confidence > review::ANTI_SLOP_ACTIONABLE_THRESHOLD;
+                        if let Some(cleanup_task_id) = task_graph::spawn_cleanup_task(
+                            task_graph,
+                            &slice.task_id,
+                            &feedback_summary,
+                            &changed_files,
+                            Utc::now(),
+                        ) {
+                            let writer = crate::runtime::events::EventWriter::new(
+                                state.state_dir.join(crate::runtime::config::EVENTS_FILE),
+                            );
+                            let event = crate::runtime::events::Event::new(
+                                crate::runtime::events::RunId(state.goal_id.clone()),
+                                crate::runtime::events::EventKind::TaskGraphMutated,
+                            )
+                            .with_actor(state::GOAL_CONTROLLER_ACTOR)
+                            .with_payload(
+                                crate::runtime::events::TaskGraphMutationPayload {
+                                    action: "task_added".to_string(),
+                                    source: "anti_slop_cleanup".to_string(),
+                                    task_id: crate::runtime::events::TaskId(cleanup_task_id),
+                                    task_graph_path: PathBuf::from(state::GOAL_TASK_GRAPH_FILE),
+                                    proposal_path: PathBuf::new(),
+                                    total_tasks_after: task_graph.tasks.len(),
+                                },
+                            )?;
+                            writer.append(&event).await?;
+                        }
 
-                let mut extra = serde_json::Map::new();
-
-                let status = if anti_slop_actionable {
-                    let changed_files =
-                        crate::runtime::gates::detect_changed_files(exec_project_dir).await;
-                    let feedback_summary = r
-                        .artifacts
-                        .iter()
-                        .filter(|a| !a.passed)
-                        .map(|a| format!("{}: {}", a.kind, a.feedback))
-                        .collect::<Vec<_>>()
-                        .join("; ");
-
-                    if let Some(cleanup_task_id) = task_graph::spawn_cleanup_task(
-                        task_graph,
-                        &slice.task_id,
-                        &feedback_summary,
-                        &changed_files,
-                        Utc::now(),
-                    ) {
-                        let writer = crate::runtime::events::EventWriter::new(
-                            state.state_dir.join(crate::runtime::config::EVENTS_FILE),
-                        );
-                        let event = crate::runtime::events::Event::new(
-                            crate::runtime::events::RunId(state.goal_id.clone()),
-                            crate::runtime::events::EventKind::TaskGraphMutated,
-                        )
-                        .with_actor(state::GOAL_CONTROLLER_ACTOR)
-                        .with_payload(
-                            crate::runtime::events::TaskGraphMutationPayload {
-                                action: "task_added".to_string(),
-                                source: "anti_slop_cleanup".to_string(),
-                                task_id: crate::runtime::events::TaskId(cleanup_task_id),
-                                task_graph_path: PathBuf::from(state::GOAL_TASK_GRAPH_FILE),
-                                proposal_path: PathBuf::new(),
-                                total_tasks_after: task_graph.tasks.len(),
-                            },
-                        )?;
-                        writer.append(&event).await?;
-                    }
-
-                    extra.insert(
-                        "review_feedback".to_string(),
-                        serde_json::Value::String(format!(
-                            "Anti-slop confidence {anti_slop_confidence:.2} exceeds threshold. Cleanup task spawned for slice {}.",
-                            slice.task_id
-                        )),
-                    );
-                    task_graph::GoalTaskDeliveryStatus::Blocked
-                } else if !r.passed {
-                    if let Some(ref fb) = r.feedback {
                         extra.insert(
                             "review_feedback".to_string(),
-                            serde_json::Value::String(fb.clone()),
+                            serde_json::Value::String(format!(
+                                "Anti-slop confidence {anti_slop_confidence:.2} exceeds threshold. Cleanup task spawned for slice {}.",
+                                slice.task_id
+                            )),
                         );
+                    } else {
+                        extra.insert(
+                            "review_feedback".to_string(),
+                            serde_json::Value::String(d.reason.clone()),
+                        );
+                        if let Some(task) =
+                            task_graph.tasks.iter_mut().find(|t| t.id == slice.task_id)
+                        {
+                            task.status = GoalTaskStatus::Pending;
+                            task.completed_at = None;
+                            task.description =
+                                format!("{}\n\n[review-feedback] {}", task.description, d.reason);
+                        }
                     }
+                } else {
+                    extra.insert(
+                        "review_feedback".to_string(),
+                        serde_json::Value::String(d.reason.clone()),
+                    );
                     if let Some(task) = task_graph.tasks.iter_mut().find(|t| t.id == slice.task_id)
                     {
                         task.status = GoalTaskStatus::Pending;
                         task.completed_at = None;
-                        if let Some(ref fb) = r.feedback {
-                            task.description =
-                                format!("{}\n\n[review-feedback] {}", task.description, fb);
-                        }
+                        task.description =
+                            format!("{}\n\n[review-feedback] {}", task.description, d.reason);
                     }
-                    task_graph::GoalTaskDeliveryStatus::Blocked
-                } else {
-                    task_graph::GoalTaskDeliveryStatus::Delivered
-                };
-                (
-                    task_graph::GoalTaskDeliveryMetadataUpdate {
-                        status: Some(status),
-                        pr_url: d.pr_url,
-                        commit_sha: d.commit_sha,
-                        extra,
-                        ..Default::default()
-                    },
-                    None::<String>,
-                )
+                }
+                task_graph::GoalTaskDeliveryStatus::Blocked
             }
-            (Err(e), _) | (_, Err(e)) => {
-                let mut extra = serde_json::Map::new();
-                let error_msg = format!("Slice delivery/review error: {e}");
+            Err(ref e) => {
+                let error_msg = format!("Slice delivery error: {e}");
                 extra.insert(
                     "review_feedback".to_string(),
                     serde_json::Value::String(error_msg.clone()),
@@ -646,21 +643,20 @@ async fn process_slice_delivery_and_review(
                     task.description =
                         format!("{}\n\n[review-feedback] {}", task.description, error_msg);
                 }
-                (
-                    task_graph::GoalTaskDeliveryMetadataUpdate {
-                        status: Some(task_graph::GoalTaskDeliveryStatus::Blocked),
-                        extra,
-                        ..Default::default()
-                    },
-                    None,
-                )
+                task_graph::GoalTaskDeliveryStatus::Blocked
             }
         };
 
         task_graph::update_goal_task_delivery_metadata(
             &state.state_dir,
             &slice.task_id,
-            slice_status,
+            task_graph::GoalTaskDeliveryMetadataUpdate {
+                status: Some(slice_status),
+                pr_url: delivery.as_ref().ok().and_then(|d| d.pr_url.clone()),
+                commit_sha: delivery.as_ref().ok().and_then(|d| d.commit_sha.clone()),
+                extra,
+                ..Default::default()
+            },
         )
         .await?;
     } else {
