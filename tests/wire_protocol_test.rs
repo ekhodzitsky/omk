@@ -396,6 +396,21 @@ fn test_initialize_result_tolerates_extra_fields_in_capabilities_and_hooks() {
     assert!(result.hooks.is_some());
 }
 
+#[test]
+fn test_tool_call_redacts_api_key_in_extras() {
+    let event = Event::ToolCall {
+        id: "tc-1".to_string(),
+        function: ToolCallFunction {
+            name: "test_tool".to_string(),
+            arguments: None,
+        },
+        extras: Some(json!({"api_key": "secret123"})),
+    };
+    let value = serde_json::to_value(&event).unwrap();
+    let redacted = redact_wire_secrets(&value);
+    assert_eq!(redacted["extras"]["api_key"], "[REDACTED]");
+}
+
 #[tokio::test]
 async fn test_replay_roundtrip() {
     let tmp = TempDir::new().unwrap();
