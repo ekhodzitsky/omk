@@ -271,7 +271,8 @@ impl super::ProofGenerator {
 
         // Compute elapsed time
         if let (Some(start), Some(end)) = (run_start, run_end) {
-            proof.elapsed_secs = end.signed_duration_since(start).num_seconds().max(0) as u64;
+            proof.elapsed_secs =
+                u64::try_from(end.signed_duration_since(start).num_seconds()).unwrap_or(0);
         }
 
         // Determine status

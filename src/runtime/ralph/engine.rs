@@ -129,10 +129,12 @@ pub async fn run_ralph(
                 state.save().await?;
 
                 // Record cost
-                let duration = chrono::Utc::now()
-                    .signed_duration_since(started_at)
-                    .num_seconds()
-                    .max(0) as u64;
+                let duration = u64::try_from(
+                    chrono::Utc::now()
+                        .signed_duration_since(started_at)
+                        .num_seconds(),
+                )
+                .unwrap_or(0);
                 let verified = state
                     .prd
                     .user_stories
@@ -341,10 +343,12 @@ pub async fn run_ralph(
     info!("Ralph reached max iterations");
     state.save().await?;
 
-    let duration = chrono::Utc::now()
-        .signed_duration_since(started_at)
-        .num_seconds()
-        .max(0) as u64;
+    let duration = u64::try_from(
+        chrono::Utc::now()
+            .signed_duration_since(started_at)
+            .num_seconds(),
+    )
+    .unwrap_or(0);
     let verified = state
         .prd
         .user_stories
