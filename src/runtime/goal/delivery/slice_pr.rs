@@ -11,8 +11,11 @@ use super::{
     GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrOperation,
     GoalGithubPrRequest,
 };
+use crate::runtime::goal::review::{
+    anti_slop_confidence, review_slice, ANTI_SLOP_ACTIONABLE_THRESHOLD,
+};
 use crate::runtime::goal::state::GoalState;
-use crate::runtime::goal::task_graph::GoalDeliverySlice;
+use crate::runtime::goal::task_graph::{GoalDeliverySlice, GoalTaskGraph};
 
 const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -31,6 +34,7 @@ pub struct SlicePrDeliveryOutcome {
     pub pr_url: Option<String>,
     pub mutated: bool,
     pub reason: String,
+    pub review_artifacts: Option<Vec<crate::runtime::goal::review::SliceReviewArtifact>>,
 }
 
 /// Full pipeline: detect changes → commit → push → open/update PR for one slice.
@@ -38,6 +42,7 @@ pub async fn deliver_slice_pr(
     worktree_path: &Path,
     slice: &GoalDeliverySlice,
     goal_state: &GoalState,
+    task_graph: &GoalTaskGraph,
     options: SlicePrDeliveryOptions,
 ) -> Result<SlicePrDeliveryOutcome> {
     if options.dry_run {
@@ -46,6 +51,7 @@ pub async fn deliver_slice_pr(
             pr_url: None,
             mutated: false,
             reason: "dry-run: skipped slice PR delivery".to_string(),
+            review_artifacts: None,
         });
     }
     if !options.policy.permits_github_mutation() {
@@ -54,6 +60,7 @@ pub async fn deliver_slice_pr(
             pr_url: None,
             mutated: false,
             reason: "local delivery policy does not permit GitHub mutation".to_string(),
+            review_artifacts: None,
         });
     }
 
@@ -65,10 +72,39 @@ pub async fn deliver_slice_pr(
             pr_url: None,
             mutated: false,
             reason: "no changes to commit in slice worktree".to_string(),
+            review_artifacts: None,
         });
     }
 
     let commit_sha = commit_slice_changes(worktree_path, slice, &goal_state.goal_id).await?;
+
+    // Run the 6-review wall before opening the PR.
+    let review = review_slice(slice, goal_state, task_graph, worktree_path).await?;
+    if !review.passed {
+        return Ok(SlicePrDeliveryOutcome {
+            commit_sha: Some(commit_sha),
+            pr_url: None,
+            mutated: false,
+            reason: format!(
+                "slice review wall blocked: {}",
+                review.feedback.unwrap_or_default()
+            ),
+            review_artifacts: Some(review.artifacts),
+        });
+    }
+    let anti_slop_conf = anti_slop_confidence(&review.artifacts);
+    if anti_slop_conf > ANTI_SLOP_ACTIONABLE_THRESHOLD {
+        return Ok(SlicePrDeliveryOutcome {
+            commit_sha: Some(commit_sha),
+            pr_url: None,
+            mutated: false,
+            reason: format!(
+                "slice blocked by anti-slop confidence {:.2} exceeding threshold",
+                anti_slop_conf
+            ),
+            review_artifacts: Some(review.artifacts),
+        });
+    }
 
     let base_branch = options.base_branch.as_deref().unwrap_or("main");
     if let Err(e) =
@@ -79,6 +115,7 @@ pub async fn deliver_slice_pr(
             pr_url: None,
             mutated: false,
             reason: format!("slice branch merge check failed: {e}"),
+            review_artifacts: Some(review.artifacts),
         });
     }
 
@@ -91,6 +128,7 @@ pub async fn deliver_slice_pr(
         pr_url: outcome.pr_url.clone(),
         mutated: outcome.mutated,
         reason: outcome.reason,
+        review_artifacts: Some(review.artifacts),
     })
 }
 
@@ -222,6 +260,7 @@ pub async fn open_slice_pr(
         pr_url: mutation.url.clone(),
         mutated: true,
         reason: format!("GitHub PR {} completed", mutation.operation.as_str()),
+        review_artifacts: None,
     })
 }
 
@@ -609,6 +648,7 @@ mod tests {
             pr_url: None,
             mutated: false,
             reason: "local delivery policy does not permit GitHub mutation".to_string(),
+            review_artifacts: None,
         };
         assert!(!outcome.mutated);
         assert!(outcome.commit_sha.is_none());
