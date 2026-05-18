@@ -6,6 +6,26 @@ use anyhow::{Context, Result};
 const GIT_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 pub(crate) async fn resolve_base_branch(repo_dir: &Path) -> Option<String> {
+    // First try to detect from origin/HEAD (works when remote is configured).
+    if let Ok(output) = git_command(
+        repo_dir,
+        vec![
+            OsString::from("symbolic-ref"),
+            OsString::from("refs/remotes/origin/HEAD"),
+        ],
+    )
+    .await
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        // Output format: refs/remotes/origin/main
+        if output.status.success() {
+            if let Some(branch) = stdout.strip_prefix("refs/remotes/origin/") {
+                return Some(branch.to_string());
+            }
+        }
+    }
+
+    // Fall back to checking for local main/master branches.
     for branch in ["main", "master"] {
         let output = git_command(
             repo_dir,
