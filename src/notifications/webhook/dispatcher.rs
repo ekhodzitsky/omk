@@ -3,6 +3,7 @@ use tracing::{debug, warn};
 
 use super::config::WebhookConfig;
 use super::payload::{format_discord, format_slack, format_telegram, NotificationEvent};
+use crate::wire::protocol::scrub_secret_patterns;
 
 /// Send a notification to all configured webhooks.
 pub async fn send_notification(config: &WebhookConfig, event: &NotificationEvent) {
@@ -26,7 +27,7 @@ pub async fn send_notification(config: &WebhookConfig, event: &NotificationEvent
         }
     }
 
-    debug!(event = %payload, "Notification sent");
+    debug!(event = %scrub_secret_patterns(&payload), "Notification sent");
 }
 
 async fn send_discord(url: &str, event: &NotificationEvent) -> Result<()> {

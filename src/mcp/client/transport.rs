@@ -1,4 +1,5 @@
 use super::transport_trait::McpTransport;
+use crate::wire::protocol::scrub_secret_patterns;
 use anyhow::{Context, Result};
 use std::future::Future;
 use std::pin::Pin;
@@ -57,7 +58,7 @@ impl StdioMcpTransport {
                         _ = cancel.cancelled() => break,
                         result = lines.next_line() => {
                             match result {
-                                Ok(Some(line)) => debug!(server = %name, stderr = %line, "MCP server stderr"),
+                                Ok(Some(line)) => debug!(server = %name, stderr = %scrub_secret_patterns(&line), "MCP server stderr"),
                                 _ => break,
                             }
                         }
