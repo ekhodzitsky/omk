@@ -2,6 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{mpsc, oneshot};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 use crate::runtime::events::Event;
@@ -36,9 +37,16 @@ struct WriterMsg {
 
 impl JsonlWriter {
     pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self::new_with_cancel(path, CancellationToken::new())
+    }
+
+    pub fn new_with_cancel(
+        path: impl Into<PathBuf>,
+        cancel_token: CancellationToken,
+    ) -> Self {
         let path = path.into();
         let (tx, rx) = mpsc::channel::<WriterMsg>(WRITER_CHANNEL_CAPACITY);
-        tokio::spawn(writer_task(path, rx));
+        tokio::spawn(writer_task(path, rx, cancel_token));
         Self { tx }
     }
 
@@ -61,7 +69,11 @@ impl JsonlWriter {
     }
 }
 
-async fn writer_task(path: PathBuf, mut rx: mpsc::Receiver<WriterMsg>) {
+async fn writer_task(
+    path: PathBuf,
+    mut rx: mpsc::Receiver<WriterMsg>,
+    cancel_token: CancellationToken,
+) {
     // Open once; reuse the handle across the actor's lifetime. The previous
     // open-write-close-per-call pattern not only re-opened the inode on each
     // event (high syscall overhead) but also widened the race window on
@@ -88,24 +100,34 @@ async fn writer_task(path: PathBuf, mut rx: mpsc::Receiver<WriterMsg>) {
         }
     };
 
-    while let Some(msg) = rx.recv().await {
-        let result = async {
-            file.write_all(&msg.payload).await?;
-            file.flush().await?;
-            Ok::<_, std::io::Error>(())
+    loop {
+        tokio::select! {
+            biased;
+            _ = cancel_token.cancelled() => {
+                debug!(path = %path.display(), "JsonlWriter actor received cancellation");
+                break;
+            }
+            msg = rx.recv() => {
+                let Some(msg) = msg else { break; };
+                let result = async {
+                    file.write_all(&msg.payload).await?;
+                    file.flush().await?;
+                    Ok::<_, std::io::Error>(())
+                }
+                .await
+                .map_err(|e| {
+                    anyhow!(
+                        "JsonlWriter file write failed for '{}': {}",
+                        path.display(),
+                        e
+                    )
+                });
+                let _ = msg.ack.send(result);
+            }
         }
-        .await
-        .map_err(|e| {
-            anyhow!(
-                "JsonlWriter file write failed for '{}': {}",
-                path.display(),
-                e
-            )
-        });
-        let _ = msg.ack.send(result);
     }
 
-    debug!(path = %path.display(), "JsonlWriter actor shutting down (all senders dropped)");
+    debug!(path = %path.display(), "JsonlWriter actor shutting down");
 }
 
 fn redact_event(event: &Event) -> Event {
@@ -129,6 +151,15 @@ impl EventWriter {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self {
             inner: JsonlWriter::new(path),
+        }
+    }
+
+    pub fn new_with_cancel(
+        path: impl Into<PathBuf>,
+        cancel_token: CancellationToken,
+    ) -> Self {
+        Self {
+            inner: JsonlWriter::new_with_cancel(path, cancel_token),
         }
     }
 

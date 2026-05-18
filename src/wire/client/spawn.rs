@@ -3,6 +3,7 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::Duration;
 use tokio_util::codec::{FramedRead, LinesCodec};
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::wire::client::{ProcessWireClient, MAX_WIRE_LINE_LENGTH};
@@ -59,11 +60,27 @@ impl ProcessWireClient {
         // Drain stderr in a background task so a verbose kimi cannot fill the
         // pipe buffer (typically 64 KiB) and block its own writes — which would
         // otherwise deadlock the wire session.
+        let cancel_token = CancellationToken::new();
+        let stderr_cancel = cancel_token.clone();
         let stderr_handle = child.stderr.take().map(|stderr| {
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stderr).lines();
+<<<<<<< HEAD
                 while let Ok(Some(line)) = reader.next_line().await {
                     warn!(target: "kimi.stderr", "{}", scrub_secret_patterns(&line));
+=======
+                loop {
+                    tokio::select! {
+                        biased;
+                        _ = stderr_cancel.cancelled() => break,
+                        line = reader.next_line() => {
+                            match line {
+                                Ok(Some(line)) => warn!(target: "kimi.stderr", "{}", line),
+                                _ => break,
+                            }
+                        }
+                    }
+>>>>>>> d175790 (fix(code-quality): add CancellationToken to background tasks)
                 }
             })
         });
@@ -78,6 +95,7 @@ impl ProcessWireClient {
             request_id_counter: 0,
             handshake_done: false,
             stderr_handle,
+            cancel_token,
         })
     }
 }

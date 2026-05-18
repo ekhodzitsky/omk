@@ -74,6 +74,8 @@ impl WireWorkerAdapter {
     }
 
     /// Spawn the adapter as a background Tokio task.
+    ///
+    /// Caller must await or abort the returned handle on shutdown.
     pub fn spawn(self) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             if let Err(e) = self.run_loop().await {
