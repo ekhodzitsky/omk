@@ -1,3 +1,4 @@
+pub mod cache;
 mod core;
 pub mod http_transport;
 pub mod transport;
