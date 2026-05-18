@@ -397,6 +397,21 @@ fn test_initialize_result_tolerates_extra_fields_in_capabilities_and_hooks() {
 }
 
 #[test]
+fn test_initialize_result_tolerates_extra_fields_at_root() {
+    let raw = json!({
+        "protocol_version": "1.9",
+        "server": {"name": "Kimi Code CLI", "version": "1.41.0"},
+        "capabilities": {"supports_question": true},
+        "future_capability": true,
+        "extra_nested": {"foo": "bar"}
+    });
+    let result: InitializeResult = serde_json::from_value(raw).unwrap();
+    assert_eq!(result.protocol_version, "1.9");
+    assert!(result.server.is_some());
+    assert!(result.capabilities.is_some());
+}
+
+#[test]
 fn test_tool_call_redacts_api_key_in_extras() {
     let event = Event::ToolCall {
         id: "tc-1".to_string(),
@@ -409,6 +424,24 @@ fn test_tool_call_redacts_api_key_in_extras() {
     let value = serde_json::to_value(&event).unwrap();
     let redacted = redact_wire_secrets(&value);
     assert_eq!(redacted["extras"]["api_key"], "[REDACTED]");
+}
+
+#[test]
+fn test_tool_call_arguments_object_redaction() {
+    // When arguments arrives as an object on the wire, redaction must
+    // scrub nested secret keys. This shape is not producible via
+    // Event::ToolCall because ToolCallFunction.arguments is Option<String>,
+    // so we test the Value path directly.
+    let raw = json!({
+        "type": "function",
+        "id": "tc-1",
+        "function": {
+            "name": "test_tool",
+            "arguments": {"api_key": "secret123"}
+        }
+    });
+    let redacted = redact_wire_secrets(&raw);
+    assert_eq!(redacted["function"]["arguments"]["api_key"], "[REDACTED]");
 }
 
 #[tokio::test]
