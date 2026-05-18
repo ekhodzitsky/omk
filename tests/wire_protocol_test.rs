@@ -149,6 +149,10 @@ fn test_event_params_normalizes_pascal_case_events() {
         payload: json!({"type": "text", "text": "Hello"}),
     };
     assert_eq!(event.normalized_event_type(), "content_part");
+    assert!(matches!(
+        event.to_event().unwrap(),
+        Event::ContentPart { .. }
+    ));
 
     let turn_end = EventParams {
         event_type: "TurnEnd".to_string(),
@@ -352,6 +356,95 @@ cat > /dev/null
     assert_eq!(prompt_result.status, "finished");
 
     client.shutdown().await.unwrap();
+}
+
+#[test]
+fn test_event_tolerates_unknown_fields() {
+    let raw = json!({
+        "type": "turn_begin",
+        "user_input": "hello",
+        "unknown_future_field": 42,
+        "extra_nested": {"foo": "bar"}
+    });
+    let event: Event = serde_json::from_value(raw).unwrap();
+    assert!(matches!(event, Event::TurnBegin { .. }));
+}
+
+#[test]
+fn test_request_tolerates_unknown_fields() {
+    let raw = json!({
+        "type": "ApprovalRequest",
+        "id": "app-1",
+        "tool_call_id": "tc-1",
+        "sender": "Shell",
+        "action": "run",
+        "description": "ls",
+        "unknown_future_field": true
+    });
+    let request: Request = serde_json::from_value(raw).unwrap();
+    assert!(matches!(request, Request::ApprovalRequest(_)));
+}
+
+#[test]
+fn test_initialize_result_tolerates_extra_fields_in_capabilities_and_hooks() {
+    let raw = json!({
+        "protocol_version": "1.9",
+        "server": {"name": "Kimi Code CLI", "version": "1.41.0"},
+        "capabilities": {"supports_question": true, "future_capability": [1, 2, 3]},
+        "hooks": {"supported_events": ["PreToolUse"], "configured": {}, "future_hook_field": "ok"}
+    });
+    let result: InitializeResult = serde_json::from_value(raw).unwrap();
+    assert_eq!(result.protocol_version, "1.9");
+    assert!(result.capabilities.is_some());
+    assert!(result.hooks.is_some());
+}
+
+#[test]
+fn test_initialize_result_tolerates_extra_fields_at_root() {
+    let raw = json!({
+        "protocol_version": "1.9",
+        "server": {"name": "Kimi Code CLI", "version": "1.41.0"},
+        "capabilities": {"supports_question": true},
+        "future_capability": true,
+        "extra_nested": {"foo": "bar"}
+    });
+    let result: InitializeResult = serde_json::from_value(raw).unwrap();
+    assert_eq!(result.protocol_version, "1.9");
+    assert!(result.server.is_some());
+    assert!(result.capabilities.is_some());
+}
+
+#[test]
+fn test_tool_call_redacts_api_key_in_extras() {
+    let event = Event::ToolCall {
+        id: "tc-1".to_string(),
+        function: ToolCallFunction {
+            name: "test_tool".to_string(),
+            arguments: None,
+        },
+        extras: Some(json!({"api_key": "secret123"})),
+    };
+    let value = serde_json::to_value(&event).unwrap();
+    let redacted = redact_wire_secrets(&value);
+    assert_eq!(redacted["extras"]["api_key"], "[REDACTED]");
+}
+
+#[test]
+fn test_tool_call_arguments_object_redaction() {
+    // When arguments arrives as an object on the wire, redaction must
+    // scrub nested secret keys. This shape is not producible via
+    // Event::ToolCall because ToolCallFunction.arguments is Option<String>,
+    // so we test the Value path directly.
+    let raw = json!({
+        "type": "function",
+        "id": "tc-1",
+        "function": {
+            "name": "test_tool",
+            "arguments": {"api_key": "secret123"}
+        }
+    });
+    let redacted = redact_wire_secrets(&raw);
+    assert_eq!(redacted["function"]["arguments"]["api_key"], "[REDACTED]");
 }
 
 #[tokio::test]

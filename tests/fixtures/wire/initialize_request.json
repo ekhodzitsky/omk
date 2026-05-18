@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","method":"initialize","id":"1","params":{"protocol_version":"1.9","client":{"name":"omk","version":"0.4.0"},"capabilities":{"supports_question":true,"supports_plan_mode":true},"hooks":[{"id":"pre-tool","event":"PreToolUse","matcher":"Shell","timeout":30}]}}

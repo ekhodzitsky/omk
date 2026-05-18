@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"1","result":{"protocol_version":"1.9","server":{"name":"Kimi Code CLI","version":"1.41.0"},"slash_commands":[{"name":"init","description":"Analyze codebase","aliases":[]}],"capabilities":{"supports_question":true},"hooks":{"supported_events":["PreToolUse","Stop"],"configured":{"PreToolUse":1}}}}
