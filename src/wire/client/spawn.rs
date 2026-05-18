@@ -6,6 +6,7 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::{info, warn};
 
 use crate::wire::client::{ProcessWireClient, MAX_WIRE_LINE_LENGTH};
+use crate::wire::protocol::scrub_secret_patterns;
 
 impl ProcessWireClient {
     /// Spawn a new kimi process in wire mode.
@@ -62,7 +63,7 @@ impl ProcessWireClient {
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
-                    warn!(target: "kimi.stderr", "{}", line);
+                    warn!(target: "kimi.stderr", "{}", scrub_secret_patterns(&line));
                 }
             })
         });
