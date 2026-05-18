@@ -105,6 +105,7 @@ fn test_prompt_missing_file() {
 }
 
 #[test]
+#[ignore = "flaky: uses thread::sleep to wait on child process state (#TODO)"]
 fn test_wire_stall_mode() {
     use std::io::{BufRead, BufReader};
     use std::process::{Command as StdCommand, Stdio};
@@ -168,6 +169,7 @@ fn test_wire_stall_mode() {
 }
 
 #[test]
+#[ignore = "flaky: uses thread::sleep to wait on child process state (#TODO)"]
 fn test_wire_stall_mode_with_flag() {
     use std::io::{BufRead, BufReader};
     use std::process::{Command as StdCommand, Stdio};

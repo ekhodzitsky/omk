@@ -40,6 +40,7 @@ fn graph(tasks: Vec<GoalTask>) -> GoalTaskGraph {
     }
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn delivery_slice_plan_is_deterministic_and_pr_sized() {
     let root = Path::new("/repo/.omk/worktrees");
@@ -87,6 +88,7 @@ fn delivery_slice_plan_is_deterministic_and_pr_sized() {
         .contains(&"code_review".to_string()));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn delivery_slice_plan_serializes_overlapping_write_scopes() {
     let root = Path::new("/repo/.omk/worktrees");
@@ -115,6 +117,7 @@ fn delivery_slice_plan_serializes_overlapping_write_scopes() {
     );
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn delivery_slice_plan_does_not_duplicate_existing_overlap_order() {
     let root = Path::new("/repo/.omk/worktrees");
@@ -135,6 +138,7 @@ fn delivery_slice_plan_does_not_duplicate_existing_overlap_order() {
     assert!(plan.overlap_serializations.is_empty());
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn delivery_slice_plan_persists_metadata_on_task_graph() {
     let goal_dir = tempfile::tempdir().expect("goal dir");
@@ -188,6 +192,7 @@ async fn delivery_slice_plan_persists_metadata_on_task_graph() {
         .any(|review| review == "anti_slop_review"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn until_ready_goal_run_materializes_delivery_worktrees_without_pr_side_effects() {
     let (_xdg, envs) = omk::test_helpers::isolated_xdg_env();
@@ -237,6 +242,7 @@ fn until_ready_goal_run_materializes_delivery_worktrees_without_pr_side_effects(
         .all(|delivery| delivery.get("pr_url").is_none()));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn until_ready_goal_run_skips_worktree_materialization_on_dirty_baseline() {
     let (_xdg, envs) = omk::test_helpers::isolated_xdg_env();

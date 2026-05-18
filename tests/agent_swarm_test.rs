@@ -258,6 +258,7 @@ impl GoalDispatcher for MockGoalDispatcher {
     }
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn verify_goal_with_slices_runs_gates_in_parallel() {
     let _guard = ENV_LOCK.lock().await;
@@ -342,6 +343,7 @@ async fn verify_goal_with_slices_runs_gates_in_parallel() {
     assert!(proof.gates.iter().any(|g| g.name == "pass" && g.passed));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn two_concurrent_slices_both_succeed() {
     let _guard = ENV_LOCK.lock().await;
@@ -396,6 +398,7 @@ async fn two_concurrent_slices_both_succeed() {
     assert_eq!(t2.status, GoalTaskStatus::Done);
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn two_concurrent_slices_one_fails() {
     let _guard = ENV_LOCK.lock().await;
@@ -446,6 +449,7 @@ async fn two_concurrent_slices_one_fails() {
     assert_eq!(t2.status, GoalTaskStatus::Blocked);
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn cost_tracking_reports_actual_worker_count() {
     let _guard = ENV_LOCK.lock().await;

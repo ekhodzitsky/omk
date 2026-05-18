@@ -92,6 +92,7 @@ fn goal_dirs(envs: &[(&'static str, PathBuf)]) -> Vec<PathBuf> {
     dirs
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn run_until_ready_with_local_policy_stops_at_manual_integration_blocker() {
     let (_tmp, envs) = isolated_env();

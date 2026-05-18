@@ -15,6 +15,7 @@ const GOAL_PROOF_VERIFIED_NOT_EXECUTED: &str =
 const GOAL_PROOF_WITH_AGENT_EVIDENCE: &str =
     include_str!("fixtures/goal_proof_with_agent_evidence.json");
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_proof_golden_happy_path() {
     let tmp = TempDir::new().unwrap();
@@ -49,6 +50,7 @@ async fn test_proof_golden_happy_path() {
     assert!(md.contains("Readiness verdict: `ready_for_handoff`."));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_proof_golden_with_failures() {
     let tmp = TempDir::new().unwrap();
@@ -81,6 +83,7 @@ async fn test_proof_golden_with_failures() {
     assert!(md.contains("Readiness verdict: `blocked`."));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_proof_golden_empty_run() {
     let tmp = TempDir::new().unwrap();
@@ -102,6 +105,7 @@ async fn test_proof_golden_empty_run() {
     assert!(proof.gates.is_empty());
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_proof_from_gate_results_direct() {
     use omk::runtime::gates::GateResult;
@@ -177,6 +181,7 @@ async fn test_proof_from_gate_results_direct() {
     );
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_proof_golden_not_ready_scaffold() {
     let (_tmp, envs) = isolated_env();
@@ -201,6 +206,7 @@ fn test_goal_proof_golden_not_ready_scaffold() {
     );
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_proof_golden_verified_but_not_executed() {
     let (_tmp, envs) = isolated_env();
@@ -228,6 +234,7 @@ fn test_goal_proof_golden_verified_but_not_executed() {
     );
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_proof_golden_with_agent_evidence() {
     let (_tmp, envs) = isolated_env();

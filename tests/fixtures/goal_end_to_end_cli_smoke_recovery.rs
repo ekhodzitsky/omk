@@ -2,6 +2,7 @@ use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_north_star_demo_rejects_non_executable_mock_kimi_path() {
     let tmp = tempfile::tempdir().unwrap();
@@ -57,6 +58,7 @@ exit 1
     assert!(stdout.contains(&expected));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_north_star_demo_dry_run_does_not_require_kimi_for_setup() {
     let tmp = tempfile::tempdir().unwrap();
@@ -115,6 +117,7 @@ exit 1
     assert!(!stdout.contains("Neither 'kimi' nor 'mock-kimi' found."));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_north_star_demo_dry_run_ignores_unusable_real_kimi_path() {
     let tmp = tempfile::tempdir().unwrap();

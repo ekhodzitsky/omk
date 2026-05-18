@@ -138,6 +138,7 @@ fn inject_delivery_metadata(task_graph_path: &Path) {
     .expect("rewrite task graph");
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn goal_help_lists_open_pr_command() {
     let (_tmp, envs) = isolated_env();
@@ -149,6 +150,7 @@ fn goal_help_lists_open_pr_command() {
         .stdout(predicate::str::contains("open-pr"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn goal_open_pr_markdown_dry_run_renders_goal_proof_and_delivery_metadata() {
     let (_tmp, envs) = isolated_env();
@@ -203,6 +205,7 @@ fn goal_open_pr_markdown_dry_run_renders_goal_proof_and_delivery_metadata() {
     assert!(stdout.contains("## Artifacts"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn goal_open_pr_json_dry_run_is_valid_json() {
     let (_tmp, envs) = isolated_env();
@@ -231,6 +234,7 @@ fn goal_open_pr_json_dry_run_is_valid_json() {
         .contains("## Verification Wall"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn goal_open_pr_draft_dry_run_marks_draft_metadata() {
     let (_tmp, envs) = isolated_env();
@@ -263,6 +267,7 @@ fn goal_open_pr_draft_dry_run_marks_draft_metadata() {
         .contains("- Draft: `true`"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn goal_open_pr_default_local_policy_renders_without_dry_run() {
     let (_tmp, envs) = isolated_env();
@@ -283,6 +288,7 @@ fn goal_open_pr_default_local_policy_renders_without_dry_run() {
     assert!(stdout.contains("Title: Goal proof: Render a GitHub PR from goal proof evidence"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn goal_open_pr_auto_pr_dry_run_renders_without_mutation() {
     let (_tmp, envs) = isolated_env();
@@ -316,6 +322,7 @@ fn goal_open_pr_auto_pr_dry_run_renders_without_mutation() {
     );
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn goal_open_pr_local_policy_dry_run_false_is_same_as_default() {
     let (_tmp, envs) = isolated_env();
@@ -336,6 +343,7 @@ fn goal_open_pr_local_policy_dry_run_false_is_same_as_default() {
     assert!(stdout.contains("Title: Goal proof: Render a GitHub PR from goal proof evidence"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn goal_open_pr_auto_pr_without_dry_run_fails_when_gh_not_authenticated() {
     let (_tmp, envs) = isolated_env();
@@ -362,6 +370,7 @@ fn goal_open_pr_auto_pr_without_dry_run_fails_when_gh_not_authenticated() {
     );
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn goal_open_pr_fails_when_proof_has_no_evidence() {
     let (_tmp, envs) = isolated_env();

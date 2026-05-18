@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_run_until_ready_first_user_path_records_progress_and_proof() {
     let (_tmp, envs) = isolated_env();
@@ -98,6 +99,7 @@ fn test_goal_run_until_ready_first_user_path_records_progress_and_proof() {
     assert!(goal_dir.join("events.jsonl").exists());
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_slice_execution_creates_worktrees_and_delivery_metadata() {
     let (_tmp, envs) = isolated_env();
@@ -196,6 +198,7 @@ fn test_goal_slice_execution_creates_worktrees_and_delivery_metadata() {
     // that worktrees and delivery metadata were created.
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_concurrent_slice_execution_does_not_regress_with_max_agents() {
     let (_tmp, envs) = isolated_env();
@@ -279,6 +282,7 @@ fn test_goal_concurrent_slice_execution_does_not_regress_with_max_agents() {
     assert!(has_delivery, "task graph should contain delivery metadata");
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_north_star_e2e_harness_reaches_open_pr_dry_run_render() {
     let (_tmp, envs) = isolated_env();

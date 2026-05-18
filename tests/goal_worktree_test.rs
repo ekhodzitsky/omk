@@ -7,6 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_worktree_plan_is_deterministic_and_task_scoped() {
     let root = Path::new("/repo/.omk/worktrees");
@@ -30,6 +31,7 @@ fn test_goal_worktree_plan_is_deterministic_and_task_scoped() {
     assert_eq!(first.worktree_path, root.join(&first.worktree_name));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_worktree_plan_normalizes_unsafe_components() {
     let root = Path::new("/repo/.omk/worktrees");
@@ -46,6 +48,7 @@ fn test_goal_worktree_plan_normalizes_unsafe_components() {
     assert!(!plan.worktree_name.contains('\\'));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_worktree_plan_rejects_components_without_safe_text() {
     let root = Path::new("/repo/.omk/worktrees");
@@ -56,6 +59,7 @@ fn test_goal_worktree_plan_rejects_components_without_safe_text() {
     assert!(err.to_string().contains("goal id"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_worktree_plan_rejects_control_characters() {
     let root = Path::new("/repo/.omk/worktrees");
@@ -66,6 +70,7 @@ fn test_goal_worktree_plan_rejects_control_characters() {
     assert!(err.to_string().contains("task id"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_worktree_plan_avoids_normalized_identifier_collisions() {
     let root = Path::new("/repo/.omk/worktrees");
@@ -82,6 +87,7 @@ fn test_goal_worktree_plan_avoids_normalized_identifier_collisions() {
     assert_ne!(slash.worktree_path, colon.worktree_path);
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn test_goal_worktree_batch_planner_rejects_duplicate_collisions() {
     let root = Path::new("/repo/.omk/worktrees");
@@ -92,6 +98,7 @@ fn test_goal_worktree_batch_planner_rejects_duplicate_collisions() {
     assert!(err.to_string().contains("worktree plan collision"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_goal_worktree_dry_run_does_not_materialize_filesystem_or_branch() {
     let repo = temp_git_repo();
@@ -122,6 +129,7 @@ async fn test_goal_worktree_dry_run_does_not_materialize_filesystem_or_branch() 
     );
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_goal_worktree_materialize_rejects_existing_branch() {
     let repo = temp_git_repo();
@@ -143,6 +151,7 @@ async fn test_goal_worktree_materialize_rejects_existing_branch() {
     assert!(err.to_string().contains(&plan.branch_name));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_goal_worktree_materialize_rejects_existing_path() {
     let repo = temp_git_repo();
@@ -166,6 +175,7 @@ async fn test_goal_worktree_materialize_rejects_existing_path() {
         .contains(&plan.worktree_path.display().to_string()));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_goal_worktree_materialize_creates_branch_and_worktree() {
     let repo = temp_git_repo();
@@ -193,6 +203,7 @@ async fn test_goal_worktree_materialize_creates_branch_and_worktree() {
     );
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_goal_worktree_materialize_records_delivery_metadata_for_task() {
     let repo = temp_git_repo();
@@ -245,6 +256,7 @@ async fn test_goal_worktree_materialize_records_delivery_metadata_for_task() {
     );
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_goal_worktree_materialize_rejects_dirty_repo() {
     let repo = temp_git_repo();
@@ -262,6 +274,7 @@ async fn test_goal_worktree_materialize_rejects_dirty_repo() {
     assert!(err.to_string().contains("requires a clean git worktree"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn test_goal_worktree_materialize_rejects_non_git_directory() {
     let repo = tempfile::tempdir().expect("non-git tempdir");

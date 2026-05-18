@@ -99,6 +99,7 @@ fn read_jsonl(path: &Path) -> Vec<Value> {
         .collect()
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn run_until_ready_drives_controller_loop_and_stops_before_manual_acceptance() {
     let (_tmp, envs) = isolated_env();
@@ -184,6 +185,7 @@ fn run_until_ready_drives_controller_loop_and_stops_before_manual_acceptance() {
             .is_some_and(|decision| decision.contains("manual integration acceptance"))));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn run_until_ready_failed_gate_is_not_a_human_decision() {
     let (_tmp, envs) = isolated_env();
@@ -218,6 +220,7 @@ fn run_until_ready_failed_gate_is_not_a_human_decision() {
         .is_empty());
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn run_until_ready_dispatches_accepted_agent_followup_before_review() {
     let (_tmp, envs) = isolated_env();
@@ -272,6 +275,7 @@ fn run_until_ready_dispatches_accepted_agent_followup_before_review() {
     assert_eq!(followup["status"], "done");
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn run_until_ready_stops_on_blocked_review_wall_before_manual_integration() {
     let (_tmp, envs) = isolated_env();

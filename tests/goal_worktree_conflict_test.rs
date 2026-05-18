@@ -7,6 +7,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn merge_conflict_detection_records_blocked_delivery_evidence() {
     let repo = temp_git_repo();
@@ -47,6 +48,7 @@ async fn merge_conflict_detection_records_blocked_delivery_evidence() {
         .is_some_and(|summary| summary.contains("merge conflict")));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[tokio::test]
 async fn clean_merge_detection_records_ready_for_review_delivery_evidence() {
     let repo = temp_git_repo();

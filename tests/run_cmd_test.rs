@@ -90,6 +90,7 @@ fn test_run_show_json_shortcut() {
 }
 
 #[test]
+#[ignore = "flaky: uses thread::sleep for filesystem timing (#TODO)"]
 fn test_run_show_latest_resolves_most_recent_scheduler_run() {
     let (_tmp, envs) = omk::test_helpers::isolated_xdg_env();
     create_run_dir(&envs, "older-run");

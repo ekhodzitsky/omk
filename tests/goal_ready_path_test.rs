@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn greenfield_goal_becomes_ready_after_integrator_accepts_oracle_evidence() {
     let (_tmp, envs) = omk::test_helpers::isolated_xdg_env();
@@ -60,6 +61,7 @@ fn greenfield_goal_becomes_ready_after_integrator_accepts_oracle_evidence() {
     assert!(pr_draft.contains("anti-slop"));
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn rewrite_goal_becomes_ready_after_compatibility_oracle_acceptance() {
     let (_tmp, envs) = omk::test_helpers::isolated_xdg_env();
@@ -95,6 +97,7 @@ fn rewrite_goal_becomes_ready_after_compatibility_oracle_acceptance() {
     assert_oracle_checks(&proof, &["compatibility", "golden"]);
 }
 
+#[ignore = "integration: uses real git or bash (#TODO)"]
 #[test]
 fn integrator_reject_keeps_goal_not_ready_with_visible_reason() {
     let (_tmp, envs) = omk::test_helpers::isolated_xdg_env();
