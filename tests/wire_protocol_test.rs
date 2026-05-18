@@ -355,6 +355,47 @@ cat > /dev/null
     client.shutdown().await.unwrap();
 }
 
+#[test]
+fn test_event_tolerates_unknown_fields() {
+    let raw = json!({
+        "type": "turn_begin",
+        "user_input": "hello",
+        "unknown_future_field": 42,
+        "extra_nested": {"foo": "bar"}
+    });
+    let event: Event = serde_json::from_value(raw).unwrap();
+    assert!(matches!(event, Event::TurnBegin { .. }));
+}
+
+#[test]
+fn test_request_tolerates_unknown_fields() {
+    let raw = json!({
+        "type": "ApprovalRequest",
+        "id": "app-1",
+        "tool_call_id": "tc-1",
+        "sender": "Shell",
+        "action": "run",
+        "description": "ls",
+        "unknown_future_field": true
+    });
+    let request: Request = serde_json::from_value(raw).unwrap();
+    assert!(matches!(request, Request::ApprovalRequest(_)));
+}
+
+#[test]
+fn test_initialize_result_tolerates_extra_fields_in_capabilities_and_hooks() {
+    let raw = json!({
+        "protocol_version": "1.9",
+        "server": {"name": "Kimi Code CLI", "version": "1.41.0"},
+        "capabilities": {"supports_question": true, "future_capability": [1, 2, 3]},
+        "hooks": {"supported_events": ["PreToolUse"], "configured": {}, "future_hook_field": "ok"}
+    });
+    let result: InitializeResult = serde_json::from_value(raw).unwrap();
+    assert_eq!(result.protocol_version, "1.9");
+    assert!(result.capabilities.is_some());
+    assert!(result.hooks.is_some());
+}
+
 #[tokio::test]
 async fn test_replay_roundtrip() {
     let tmp = TempDir::new().unwrap();
