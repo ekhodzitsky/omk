@@ -149,7 +149,10 @@ fn test_event_params_normalizes_pascal_case_events() {
         payload: json!({"type": "text", "text": "Hello"}),
     };
     assert_eq!(event.normalized_event_type(), "content_part");
-    assert!(matches!(event.to_event().unwrap(), Event::ContentPart { .. }));
+    assert!(matches!(
+        event.to_event().unwrap(),
+        Event::ContentPart { .. }
+    ));
 
     let turn_end = EventParams {
         event_type: "TurnEnd".to_string(),

@@ -3,9 +3,8 @@ use serde_json::Value;
 use std::fs;
 
 fn golden_roundtrip(fixture_path: &str) {
-    let raw = fs::read_to_string(fixture_path).unwrap_or_else(|e| {
-        panic!("failed to read fixture {}: {}", fixture_path, e)
-    });
+    let raw = fs::read_to_string(fixture_path)
+        .unwrap_or_else(|e| panic!("failed to read fixture {}: {}", fixture_path, e));
     let msg: WireMessage = serde_json::from_str(&raw)
         .unwrap_or_else(|e| panic!("failed to deserialize {}: {}", fixture_path, e));
     let serialized =
