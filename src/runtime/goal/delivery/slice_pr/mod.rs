@@ -1,0 +1,189 @@
+use anyhow::Result;
+use std::path::Path;
+use std::time::Duration;
+
+use super::{
+    GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrOperation,
+    GoalGithubPrRequest,
+};
+use crate::runtime::goal::control::resolve_base_branch;
+use crate::runtime::goal::state::GoalState;
+use crate::runtime::goal::task_graph::GoalDeliverySlice;
+
+mod commit;
+mod git;
+mod merge_check;
+mod rebase;
+
+const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+const DEFAULT_BASE_BRANCH: &str = "main";
+const STASH_MESSAGE: &str = "omk-merge-check";
+const DEFAULT_REMOTE: &str = "origin";
+
+/// Options for delivering a slice PR.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlicePrDeliveryOptions {
+    pub policy: GoalDeliveryPolicy,
+    pub dry_run: bool,
+    pub base_branch: Option<String>,
+}
+
+/// Outcome of delivering a slice PR.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlicePrDeliveryOutcome {
+    pub commit_sha: Option<String>,
+    pub pr_url: Option<String>,
+    pub mutated: bool,
+    pub reason: String,
+}
+
+/// Full pipeline: detect changes → commit → push → open/update PR for one slice.
+pub async fn deliver_slice_pr(
+    worktree_path: &Path,
+    slice: &GoalDeliverySlice,
+    goal_state: &GoalState,
+    options: SlicePrDeliveryOptions,
+) -> Result<SlicePrDeliveryOutcome> {
+    if options.dry_run {
+        return Ok(SlicePrDeliveryOutcome {
+            commit_sha: None,
+            pr_url: None,
+            mutated: false,
+            reason: "dry-run: skipped slice PR delivery".to_string(),
+        });
+    }
+    if !options.policy.permits_github_mutation() {
+        return Ok(SlicePrDeliveryOutcome {
+            commit_sha: None,
+            pr_url: None,
+            mutated: false,
+            reason: "local delivery policy does not permit GitHub mutation".to_string(),
+        });
+    }
+
+    // Check if there are any changes to commit
+    let has_changes = git::git_worktree_has_changes(worktree_path).await?;
+    if !has_changes {
+        return Ok(SlicePrDeliveryOutcome {
+            commit_sha: None,
+            pr_url: None,
+            mutated: false,
+            reason: "no changes to commit in slice worktree".to_string(),
+        });
+    }
+
+    let commit_sha =
+        commit::commit_slice_changes(worktree_path, slice, &goal_state.goal_id).await?;
+
+    let base_branch = if let Some(ref bb) = options.base_branch {
+        bb.clone()
+    } else {
+        resolve_base_branch(worktree_path)
+            .await
+            .unwrap_or_else(|| DEFAULT_BASE_BRANCH.to_string())
+    };
+    if let Err(e) =
+        rebase::ensure_slice_branch_merge_clean(worktree_path, &slice.branch_name, &base_branch)
+            .await
+    {
+        return Ok(SlicePrDeliveryOutcome {
+            commit_sha: Some(commit_sha),
+            pr_url: None,
+            mutated: false,
+            reason: format!("slice branch merge check failed: {e}"),
+        });
+    }
+
+    commit::push_slice_branch(worktree_path, &slice.branch_name).await?;
+
+    let outcome = open_slice_pr(slice, goal_state, &commit_sha, &options).await?;
+
+    Ok(SlicePrDeliveryOutcome {
+        commit_sha: Some(commit_sha),
+        pr_url: outcome.pr_url.clone(),
+        mutated: outcome.mutated,
+        reason: outcome.reason,
+    })
+}
+
+/// Open or update a PR for a single slice.
+async fn open_slice_pr(
+    slice: &GoalDeliverySlice,
+    goal_state: &GoalState,
+    commit_sha: &str,
+    options: &SlicePrDeliveryOptions,
+) -> Result<SlicePrDeliveryOutcome> {
+    let head_branch = slice.branch_name.clone();
+    let title = format!(
+        "[slice] {} — {}",
+        slice.slice_id, goal_state.normalized_goal
+    );
+    let body = format!(
+        "Slice `{}` for goal `{}`.\n\n- Owner: `{}`\n- Write scope: `{}`\n- Commit: `{}`\n- Slice dependencies: `{}`\n",
+        slice.slice_id,
+        goal_state.goal_id,
+        slice.owner_role,
+        slice.write_scope.join(", "),
+        commit_sha,
+        slice.dependencies.join(", "),
+    );
+
+    let request = GoalGithubPrRequest {
+        title,
+        body,
+        head_branch,
+        base_branch: options.base_branch.clone(),
+        draft: options.policy == GoalDeliveryPolicy::DraftPr,
+        existing_pr_url: slice.pr_url.clone(),
+    };
+
+    let mut client = GoalGithubPrCommandClient::default();
+    let operation = if request.existing_pr_url.is_some() {
+        GoalGithubPrOperation::Update
+    } else {
+        GoalGithubPrOperation::Create
+    };
+    let mutation = match operation {
+        GoalGithubPrOperation::Create => client.create_pr(request).await?,
+        GoalGithubPrOperation::Update => client.update_pr(request).await?,
+    };
+
+    Ok(SlicePrDeliveryOutcome {
+        commit_sha: Some(commit_sha.to_string()),
+        pr_url: mutation.url.clone(),
+        mutated: true,
+        reason: format!("GitHub PR {} completed", mutation.operation.as_str()),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slice_pr_delivery_options_equality() {
+        let a = SlicePrDeliveryOptions {
+            policy: GoalDeliveryPolicy::DraftPr,
+            dry_run: false,
+            base_branch: Some("main".to_string()),
+        };
+        let b = SlicePrDeliveryOptions {
+            policy: GoalDeliveryPolicy::DraftPr,
+            dry_run: false,
+            base_branch: Some("main".to_string()),
+        };
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn slice_pr_delivery_outcome_local_policy_skips() {
+        let outcome = SlicePrDeliveryOutcome {
+            commit_sha: None,
+            pr_url: None,
+            mutated: false,
+            reason: "local delivery policy does not permit GitHub mutation".to_string(),
+        };
+        assert!(!outcome.mutated);
+        assert!(outcome.commit_sha.is_none());
+    }
+}

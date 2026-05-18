@@ -1,0 +1,137 @@
+use anyhow::Result;
+use std::ffi::OsString;
+use std::path::Path;
+
+use super::git::{git_output, output_stderr, output_stdout};
+use crate::runtime::goal::task_graph::GoalDeliverySlice;
+
+/// Auto-commit all changes in the slice worktree with a structured message.
+pub(super) async fn commit_slice_changes(
+    worktree_path: &Path,
+    slice: &GoalDeliverySlice,
+    goal_id: &str,
+) -> Result<String> {
+    // Stage all changes
+    let add_output = git_output(
+        worktree_path,
+        vec![OsString::from("add"), OsString::from("-A")],
+        "stage slice changes",
+    )
+    .await?;
+    if !add_output.status.success() {
+        anyhow::bail!("git add failed: {}", output_stderr(&add_output));
+    }
+
+    // Build commit message
+    let write_scope_text = if slice.write_scope.is_empty() {
+        "project files".to_string()
+    } else {
+        slice.write_scope.join(", ")
+    };
+    let message = format!(
+        "[omk-slice] {goal_id} / {}\n\nWrite scope: {write_scope_text}",
+        slice.slice_id
+    );
+
+    // Commit
+    let commit_output = git_output(
+        worktree_path,
+        vec![
+            OsString::from("commit"),
+            OsString::from("-m"),
+            OsString::from(message),
+        ],
+        "commit slice changes",
+    )
+    .await?;
+    if !commit_output.status.success() {
+        anyhow::bail!("git commit failed: {}", output_stderr(&commit_output));
+    }
+
+    // Get the commit SHA
+    let sha_output = git_output(
+        worktree_path,
+        vec![
+            OsString::from("rev-parse"),
+            OsString::from("--verify"),
+            OsString::from("HEAD"),
+        ],
+        "get slice commit sha",
+    )
+    .await?;
+    if !sha_output.status.success() {
+        anyhow::bail!("git rev-parse failed: {}", output_stderr(&sha_output));
+    }
+
+    Ok(output_stdout(&sha_output))
+}
+
+/// Push the slice branch to origin.
+pub(super) async fn push_slice_branch(worktree_path: &Path, branch: &str) -> Result<()> {
+    let output = git_output(
+        worktree_path,
+        vec![
+            OsString::from("push"),
+            OsString::from("-u"),
+            OsString::from(super::DEFAULT_REMOTE),
+            OsString::from(branch),
+        ],
+        "push slice branch",
+    )
+    .await?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!("git push failed: {}", output_stderr(&output))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::git::tests::init_git_repo;
+    use super::*;
+    use crate::runtime::goal::task_graph::GoalDeliverySlice;
+    use std::process::Command as StdCommand;
+
+    #[tokio::test]
+    async fn commit_slice_changes_creates_commit_with_structured_message() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let repo = tmp.path().join("repo");
+        std::fs::create_dir(&repo).expect("mkdir");
+        init_git_repo(&repo);
+
+        // Create a file to commit
+        std::fs::write(repo.join("hello.txt"), "world").expect("write");
+
+        let slice = GoalDeliverySlice {
+            slice_id: "slice-1".to_string(),
+            task_id: "t1".to_string(),
+            owner_role: "executor".to_string(),
+            read_scope: vec![],
+            write_scope: vec!["src".to_string()],
+            dependencies: vec![],
+            branch_name: "test-branch".to_string(),
+            worktree_name: "wt".to_string(),
+            worktree_path: repo.clone(),
+            gates: vec![],
+            review_needs: vec![],
+            pr_url: None,
+        };
+
+        let sha = commit_slice_changes(&repo, &slice, "goal-123")
+            .await
+            .expect("commit_slice_changes");
+        assert!(!sha.is_empty(), "commit sha should not be empty");
+
+        // Verify the commit message
+        let output = StdCommand::new("git")
+            .arg("-C")
+            .arg(&repo)
+            .args(["log", "-1", "--pretty=%B"])
+            .output()
+            .expect("git log");
+        let message = String::from_utf8_lossy(&output.stdout);
+        assert!(message.contains("[omk-slice] goal-123 / slice-1"));
+        assert!(message.contains("Write scope: src"));
+    }
+}
