@@ -6,7 +6,7 @@ class Omk < Formula
   # Until the first release after that automation lands, the sha256
   # placeholders below are intentionally NOT real digests — `brew install`
   # will fail by design so nobody installs an unverified binary.
-  version "0.3.30"
+  version "0.4.0"
   license "MIT"
 
   on_macos do
