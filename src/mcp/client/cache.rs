@@ -68,11 +68,7 @@ impl<C: McpToolCaller> CachedMcpClient<C> {
     }
 
     /// Calls a tool, returning a cached result if available.
-    pub async fn call_tool(
-        &mut self,
-        name: &str,
-        arguments: Value,
-    ) -> Result<CallToolResult> {
+    pub async fn call_tool(&mut self, name: &str, arguments: Value) -> Result<CallToolResult> {
         let key = cache_key(self.inner.server_name(), name, &arguments)
             .context("failed to build cache key")?;
 
@@ -88,8 +84,8 @@ impl<C: McpToolCaller> CachedMcpClient<C> {
 
 /// Generates a cache key from server name, tool name, and arguments.
 fn cache_key(server_name: &str, tool_name: &str, arguments: &Value) -> Result<String> {
-    let args_str = serde_json::to_string(arguments)
-        .context("failed to serialize arguments for cache key")?;
+    let args_str =
+        serde_json::to_string(arguments).context("failed to serialize arguments for cache key")?;
     let mut hasher = DefaultHasher::new();
     (server_name, tool_name, args_str).hash(&mut hasher);
     Ok(format!("{:x}", hasher.finish()))
@@ -123,13 +119,17 @@ mod tests {
             &self.server_name
         }
 
-        async fn call_tool(
+        fn call_tool(
             &mut self,
             _name: &str,
             _arguments: Value,
-        ) -> Result<CallToolResult> {
-            self.call_count.fetch_add(1, Ordering::SeqCst);
-            Ok(self.result.clone())
+        ) -> impl std::future::Future<Output = Result<CallToolResult>> + Send {
+            let count = self.call_count.clone();
+            let result = self.result.clone();
+            async move {
+                count.fetch_add(1, Ordering::SeqCst);
+                Ok(result)
+            }
         }
     }
 
@@ -193,8 +193,14 @@ mod tests {
         let count = mock.call_count.clone();
         let mut cached = CachedMcpClient::new(mock);
 
-        let _ = cached.call_tool("tool-a", serde_json::json!({})).await.unwrap();
-        let _ = cached.call_tool("tool-b", serde_json::json!({})).await.unwrap();
+        let _ = cached
+            .call_tool("tool-a", serde_json::json!({}))
+            .await
+            .unwrap();
+        let _ = cached
+            .call_tool("tool-b", serde_json::json!({}))
+            .await
+            .unwrap();
 
         assert_eq!(count.load(Ordering::SeqCst), 2);
     }
