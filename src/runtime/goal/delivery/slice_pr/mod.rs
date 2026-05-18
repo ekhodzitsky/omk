@@ -8,7 +8,7 @@ use super::{
 };
 use crate::runtime::goal::control::resolve_base_branch;
 use crate::runtime::goal::review::{
-    anti_slop_confidence, review_slice, ANTI_SLOP_ACTIONABLE_THRESHOLD,
+    anti_slop_confidence_with_findings, review_slice, ANTI_SLOP_ACTIONABLE_THRESHOLD,
 };
 use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::{GoalDeliverySlice, GoalTaskGraph};
@@ -39,6 +39,7 @@ pub struct SlicePrDeliveryOutcome {
     pub mutated: bool,
     pub reason: String,
     pub review_artifacts: Option<Vec<crate::runtime::goal::review::SliceReviewArtifact>>,
+    pub slop_findings: Vec<crate::runtime::goal::review::slop::SlopFinding>,
 }
 
 /// Full pipeline: detect changes → commit → push → open/update PR for one slice.
@@ -56,6 +57,7 @@ pub async fn deliver_slice_pr(
             mutated: false,
             reason: "dry-run: skipped slice PR delivery".to_string(),
             review_artifacts: None,
+            slop_findings: Vec::new(),
         });
     }
     if !options.policy.permits_github_mutation() {
@@ -65,6 +67,7 @@ pub async fn deliver_slice_pr(
             mutated: false,
             reason: "local delivery policy does not permit GitHub mutation".to_string(),
             review_artifacts: None,
+            slop_findings: Vec::new(),
         });
     }
 
@@ -77,6 +80,7 @@ pub async fn deliver_slice_pr(
             mutated: false,
             reason: "no changes to commit in slice worktree".to_string(),
             review_artifacts: None,
+            slop_findings: Vec::new(),
         });
     }
 
@@ -95,9 +99,11 @@ pub async fn deliver_slice_pr(
                 review.feedback.unwrap_or_default()
             ),
             review_artifacts: Some(review.artifacts),
+            slop_findings: review.slop_findings,
         });
     }
-    let anti_slop_conf = anti_slop_confidence(&review.artifacts);
+    let anti_slop_conf =
+        anti_slop_confidence_with_findings(&review.artifacts, &review.slop_findings);
     if anti_slop_conf > ANTI_SLOP_ACTIONABLE_THRESHOLD {
         return Ok(SlicePrDeliveryOutcome {
             commit_sha: Some(commit_sha),
@@ -108,6 +114,7 @@ pub async fn deliver_slice_pr(
                 anti_slop_conf
             ),
             review_artifacts: Some(review.artifacts),
+            slop_findings: review.slop_findings,
         });
     }
 
@@ -128,6 +135,7 @@ pub async fn deliver_slice_pr(
             mutated: false,
             reason: format!("slice branch merge check failed: {e}"),
             review_artifacts: Some(review.artifacts),
+            slop_findings: review.slop_findings,
         });
     }
 
@@ -140,7 +148,8 @@ pub async fn deliver_slice_pr(
         pr_url: outcome.pr_url.clone(),
         mutated: outcome.mutated,
         reason: outcome.reason,
-        review_artifacts: Some(review.artifacts),
+        review_artifacts: outcome.review_artifacts,
+        slop_findings: outcome.slop_findings,
     })
 }
 
@@ -192,6 +201,7 @@ async fn open_slice_pr(
         mutated: true,
         reason: format!("GitHub PR {} completed", mutation.operation.as_str()),
         review_artifacts: None,
+        slop_findings: Vec::new(),
     })
 }
 
@@ -222,6 +232,7 @@ mod tests {
             mutated: false,
             reason: "local delivery policy does not permit GitHub mutation".to_string(),
             review_artifacts: None,
+            slop_findings: Vec::new(),
         };
         assert!(!outcome.mutated);
         assert!(outcome.commit_sha.is_none());

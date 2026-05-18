@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 use crate::runtime::gates::{
     detect_changed_files, gates_passed, load_or_detect_gates, run_gates_with_evidence,
 };
+use crate::runtime::goal::review::slop::{
+    scan_for_slop, slop_confidence_from_findings, SlopFinding,
+};
 use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::{GoalDeliverySlice, GoalTaskGraph};
 use crate::runtime::goal::verifier::scan_goal_security_findings;
@@ -28,9 +31,10 @@ pub struct SliceReviewOutcome {
     pub security_review_path: Option<PathBuf>,
     pub feedback: Option<String>,
     pub artifacts: Vec<SliceReviewArtifact>,
+    pub slop_findings: Vec<SlopFinding>,
 }
 
-/// Compute anti-slop confidence from slice review artifacts.
+/// Compute anti-slop confidence from slice review artifacts and real slop findings.
 /// Returns a value in [0.0, 1.0] where higher means more likely slop.
 pub fn anti_slop_confidence(artifacts: &[SliceReviewArtifact]) -> f64 {
     let mut confidence: f64 = 0.0;
@@ -50,6 +54,16 @@ pub fn anti_slop_confidence(artifacts: &[SliceReviewArtifact]) -> f64 {
         }
     }
     confidence.min(1.0_f64)
+}
+
+/// Compute anti-slop confidence from both artifacts and real slop findings.
+pub fn anti_slop_confidence_with_findings(
+    artifacts: &[SliceReviewArtifact],
+    findings: &[SlopFinding],
+) -> f64 {
+    let artifact_confidence = anti_slop_confidence(artifacts);
+    let slop_confidence = slop_confidence_from_findings(findings);
+    (artifact_confidence + slop_confidence).min(1.0)
 }
 
 /// Run review gates and security scan in the slice worktree and produce
@@ -98,6 +112,29 @@ pub async fn review_slice(
         .filter(|gate| is_performance_gate(&gate.name))
         .any(|gate| gate.passed);
 
+    // Run real anti-slop heuristics on changed files.
+    let slop_findings = scan_for_slop(worktree_path, &changed_files);
+    let _slop_confidence = slop_confidence_from_findings(&slop_findings);
+    let anti_slop_passed = gates_ok && !changed_files.is_empty() && slop_findings.is_empty();
+    let anti_slop_feedback = if anti_slop_passed {
+        "Anti-slop review passed: changed-file evidence, passing gates, and no rough edges found"
+            .to_string()
+    } else {
+        let mut parts = Vec::new();
+        if !gates_ok {
+            parts.push("missing changed-file evidence or failing gates".to_string());
+        }
+        if !slop_findings.is_empty() {
+            let summary = slop_findings
+                .iter()
+                .map(|f| format!("{} at {:?}: {}", f.kind, f.line, f.message))
+                .collect::<Vec<_>>()
+                .join("; ");
+            parts.push(format!("rough edges detected: {summary}"));
+        }
+        format!("Anti-slop review blocked: {}", parts.join(", "))
+    };
+
     let artifacts = vec![
         SliceReviewArtifact {
             kind: "architect".to_string(),
@@ -118,16 +155,21 @@ pub async fn review_slice(
         },
         SliceReviewArtifact {
             kind: "code".to_string(),
-            passed: !changed_files.is_empty(),
+            passed: !changed_files.is_empty() && slop_findings.is_empty(),
             feedback: if changed_files.is_empty() {
                 "Code review blocked: no changed files to inspect".to_string()
+            } else if !slop_findings.is_empty() {
+                format!(
+                    "Code review blocked: {} rough edge(s) in changed files",
+                    slop_findings.len()
+                )
             } else {
                 format!(
                     "Code review passed: {} changed file(s)",
                     changed_files.len()
                 )
             },
-            severity: if changed_files.is_empty() {
+            severity: if changed_files.is_empty() || !slop_findings.is_empty() {
                 "high".to_string()
             } else {
                 "low".to_string()
@@ -180,14 +222,9 @@ pub async fn review_slice(
         },
         SliceReviewArtifact {
             kind: "anti-slop".to_string(),
-            passed: gates_ok && !changed_files.is_empty(),
-            feedback: if gates_ok && !changed_files.is_empty() {
-                "Anti-slop review passed: changed-file evidence and passing gates exist".to_string()
-            } else {
-                "Anti-slop review blocked: missing changed-file evidence or failing gates"
-                    .to_string()
-            },
-            severity: if gates_ok && !changed_files.is_empty() {
+            passed: anti_slop_passed,
+            feedback: anti_slop_feedback,
+            severity: if anti_slop_passed {
                 "low".to_string()
             } else {
                 "medium".to_string()
@@ -201,6 +238,7 @@ pub async fn review_slice(
         security_review_path: None,
         feedback,
         artifacts,
+        slop_findings,
     })
 }
 
@@ -221,6 +259,7 @@ mod tests {
             security_review_path: None,
             feedback: None,
             artifacts: Vec::new(),
+            slop_findings: Vec::new(),
         };
         assert!(outcome.passed);
         assert!(outcome.feedback.is_none());
@@ -234,6 +273,7 @@ mod tests {
             security_review_path: None,
             feedback: Some("Gates failed: test".to_string()),
             artifacts: Vec::new(),
+            slop_findings: Vec::new(),
         };
         assert!(!outcome.passed);
         assert_eq!(outcome.feedback, Some("Gates failed: test".to_string()));
