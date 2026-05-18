@@ -107,9 +107,25 @@ jobs:
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         run: cargo check --no-default-features --features server
 
+      - name: Install cargo-deny
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: Check supply chain
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo deny check
+
+      - name: Install cargo-nextest
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        uses: taiki-e/install-action@nextest
+
       - name: Run tests
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        run: cargo test
+        run: cargo nextest run
+
+      - name: Run doctests
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo test --doc
 
       - name: Validate module contracts
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
@@ -161,9 +177,17 @@ jobs:
         if: github.event_name != 'pull_request'
         run: cargo build --all-features
 
+      - name: Install cargo-nextest
+        if: github.event_name != 'pull_request'
+        uses: taiki-e/install-action@nextest
+
       - name: Full macOS tests
         if: github.event_name != 'pull_request'
-        run: cargo test --all-features
+        run: cargo nextest run --all-features
+
+      - name: Run macOS doctests
+        if: github.event_name != 'pull_request'
+        run: cargo test --doc --all-features
 
   cargo-deny:
     name: Audit Dependencies
