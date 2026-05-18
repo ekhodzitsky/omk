@@ -107,6 +107,14 @@ jobs:
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         run: cargo check --no-default-features --features server
 
+      - name: Install cargo-deny
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: Check supply chain
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo deny check
+
       - name: Run tests
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         run: cargo test
