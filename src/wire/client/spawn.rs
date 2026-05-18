@@ -65,22 +65,17 @@ impl ProcessWireClient {
         let stderr_handle = child.stderr.take().map(|stderr| {
             tokio::spawn(async move {
                 let mut reader = BufReader::new(stderr).lines();
-<<<<<<< HEAD
-                while let Ok(Some(line)) = reader.next_line().await {
-                    warn!(target: "kimi.stderr", "{}", scrub_secret_patterns(&line));
-=======
                 loop {
                     tokio::select! {
                         biased;
                         _ = stderr_cancel.cancelled() => break,
                         line = reader.next_line() => {
                             match line {
-                                Ok(Some(line)) => warn!(target: "kimi.stderr", "{}", line),
+                                Ok(Some(line)) => warn!(target: "kimi.stderr", "{}", scrub_secret_patterns(&line)),
                                 _ => break,
                             }
                         }
                     }
->>>>>>> d175790 (fix(code-quality): add CancellationToken to background tasks)
                 }
             })
         });

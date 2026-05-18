@@ -40,10 +40,7 @@ impl JsonlWriter {
         Self::new_with_cancel(path, CancellationToken::new())
     }
 
-    pub fn new_with_cancel(
-        path: impl Into<PathBuf>,
-        cancel_token: CancellationToken,
-    ) -> Self {
+    pub fn new_with_cancel(path: impl Into<PathBuf>, cancel_token: CancellationToken) -> Self {
         let path = path.into();
         let (tx, rx) = mpsc::channel::<WriterMsg>(WRITER_CHANNEL_CAPACITY);
         tokio::spawn(writer_task(path, rx, cancel_token));
@@ -154,10 +151,7 @@ impl EventWriter {
         }
     }
 
-    pub fn new_with_cancel(
-        path: impl Into<PathBuf>,
-        cancel_token: CancellationToken,
-    ) -> Self {
+    pub fn new_with_cancel(path: impl Into<PathBuf>, cancel_token: CancellationToken) -> Self {
         Self {
             inner: JsonlWriter::new_with_cancel(path, cancel_token),
         }

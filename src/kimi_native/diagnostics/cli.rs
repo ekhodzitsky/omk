@@ -6,7 +6,9 @@ pub(super) async fn check_kimi_cli(results: &mut Vec<DiagResult>) {
         Ok(path) => {
             match tokio::time::timeout(
                 std::time::Duration::from_secs(30),
-                tokio::process::Command::new("kimi").arg("--version").output(),
+                tokio::process::Command::new("kimi")
+                    .arg("--version")
+                    .output(),
             )
             .await
             {

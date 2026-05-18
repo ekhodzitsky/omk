@@ -220,10 +220,9 @@ impl Watchdog {
 
                         // Check heartbeat freshness
                         if let Some(ts) = last_heartbeat {
-                            let age_secs = u64::try_from(
-                                now.signed_duration_since(ts).num_seconds(),
-                            )
-                            .unwrap_or(0);
+                            let age_secs =
+                                u64::try_from(now.signed_duration_since(ts).num_seconds())
+                                    .unwrap_or(0);
                             if age_secs > self.config.heartbeat_missing_secs {
                                 status = HealthStatus::Dead;
                                 message = format!(

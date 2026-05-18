@@ -75,7 +75,9 @@ pub(super) async fn health_handler() -> Json<Value> {
     // Check kimi
     let kimi_ok = match tokio::time::timeout(
         std::time::Duration::from_secs(30),
-        tokio::process::Command::new("kimi").arg("--version").output(),
+        tokio::process::Command::new("kimi")
+            .arg("--version")
+            .output(),
     )
     .await
     {
