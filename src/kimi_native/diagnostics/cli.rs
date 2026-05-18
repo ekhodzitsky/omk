@@ -4,12 +4,13 @@ pub(super) async fn check_kimi_cli(results: &mut Vec<DiagResult>) {
     // Check for Kimi CLI (L1-031)
     match which::which("kimi") {
         Ok(path) => {
-            match tokio::process::Command::new("kimi")
-                .arg("--version")
-                .output()
-                .await
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                tokio::process::Command::new("kimi").arg("--version").output(),
+            )
+            .await
             {
-                Ok(output) if output.status.success() => {
+                Ok(Ok(output)) if output.status.success() => {
                     let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
                     results.push(DiagResult {
                         severity: Severity::Ok,
@@ -17,7 +18,7 @@ pub(super) async fn check_kimi_cli(results: &mut Vec<DiagResult>) {
                         fix_hint: None,
                     });
                 }
-                Ok(output) => {
+                Ok(Ok(output)) => {
                     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
                     let details = if stderr.is_empty() {
                         format!("exit status {}", output.status)
@@ -38,7 +39,7 @@ pub(super) async fn check_kimi_cli(results: &mut Vec<DiagResult>) {
                         fix_hint: Some(repair),
                     });
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     let repair = format!(
                         "Run `{0} --version`; if it still fails, reinstall Kimi CLI from https://www.kimi.com/code/docs and re-check with `command -v kimi && kimi --version`",
                         path.display()
@@ -49,6 +50,20 @@ pub(super) async fn check_kimi_cli(results: &mut Vec<DiagResult>) {
                             "Kimi CLI found at {} but version check could not run: {}",
                             path.display(),
                             e
+                        ),
+                        fix_hint: Some(repair),
+                    });
+                }
+                Err(_) => {
+                    let repair = format!(
+                        "Run `{0} --version`; if it still fails, reinstall Kimi CLI from https://www.kimi.com/code/docs and re-check with `command -v kimi && kimi --version`",
+                        path.display()
+                    );
+                    results.push(DiagResult {
+                        severity: Severity::Warning,
+                        message: format!(
+                            "Kimi CLI found at {} but version check timed out after 30s",
+                            path.display()
                         ),
                         fix_hint: Some(repair),
                     });
