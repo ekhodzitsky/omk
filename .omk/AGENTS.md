@@ -159,7 +159,7 @@ The code anchor is `src/wire/protocol.rs::KIMI_WIRE_PROTOCOL_VERSION`; update th
 | `CompactionBegin/End` | Context compaction | — |
 | `StatusUpdate` | Stats update | `context_usage`, `context_tokens`, `plan_mode` |
 | `ContentPart` | AI output | `type`: text/think/image_url/audio_url/video_url |
-| `ToolCall` | Tool invoked | `id`, `function.name`, `function.arguments` |
+| `ToolCall` | Tool invoked | `id`, `function.name`, `function.arguments` (wire name: `function`) |
 | `ToolCallPart` | Streaming args | `arguments_part` |
 | `ToolResult` | Tool done | `tool_call_id`, `return_value` |
 | `ApprovalResponse` | Approval done | `request_id`, `response` |
