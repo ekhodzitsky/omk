@@ -78,6 +78,13 @@ clap_mangen = "0.3"
 tempfile = "3.19"
 glob = "0.3.3"
 
+# Tree-sitter parsing
+tree-sitter = "0.25"
+tree-sitter-rust = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-go = "0.23"
+
 [features]
 default = ["tui"]
 tui = ["dep:ratatui", "dep:crossterm"]

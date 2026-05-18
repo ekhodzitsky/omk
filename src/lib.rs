@@ -6,6 +6,7 @@
 #![warn(missing_debug_implementations)]
 
 pub mod agents;
+pub mod analysis;
 pub mod cli;
 pub mod cost;
 pub mod error;
