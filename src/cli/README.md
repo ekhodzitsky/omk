@@ -119,6 +119,7 @@ run_cmd proof   ultrawork  kimi_native
 - Do not add business logic to `app/run.rs` beyond command routing, tracing setup, and signal handling.
 - Respect the 400-line file limit; split command handlers into subdirectories when they grow.
 - Feature-gate heavy dependencies (`vis` TUI/web) behind `tui` / `server` flags.
+- `tokio-console` feature enables tokio-console runtime instrumentation via `console-subscriber`; opt-in only.
 - Validate CLI input eagerly before performing side effects (see `goal/validate.rs`).
 
 ## Tests
