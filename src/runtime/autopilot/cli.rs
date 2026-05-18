@@ -21,10 +21,12 @@ pub async fn run_autopilot(
     let result = autopilot.run().await;
 
     // Record actual cost
-    let duration = chrono::Utc::now()
-        .signed_duration_since(autopilot.state.created_at)
-        .num_seconds()
-        .max(0) as u64;
+    let duration = u64::try_from(
+        chrono::Utc::now()
+            .signed_duration_since(autopilot.state.created_at)
+            .num_seconds(),
+    )
+    .unwrap_or(0);
     let phases = autopilot
         .state
         .execution_log
@@ -81,10 +83,12 @@ pub async fn resume_autopilot(
     let result = autopilot.run().await;
 
     // Record actual cost
-    let duration = chrono::Utc::now()
-        .signed_duration_since(autopilot.state.created_at)
-        .num_seconds()
-        .max(0) as u64;
+    let duration = u64::try_from(
+        chrono::Utc::now()
+            .signed_duration_since(autopilot.state.created_at)
+            .num_seconds(),
+    )
+    .unwrap_or(0);
     let phases = autopilot
         .state
         .execution_log

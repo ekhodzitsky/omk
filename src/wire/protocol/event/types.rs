@@ -39,6 +39,13 @@ pub enum Event {
         #[serde(skip_serializing_if = "Option::is_none")]
         plan_mode: Option<bool>,
     },
+    ContentPart {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        chunk: Option<String>,
+    },
+    /// Wire name is `"function"` because Kimi serializes tool calls as `function` type.
     #[serde(rename = "function")]
     ToolCall {
         id: String,

@@ -165,6 +165,13 @@ impl WireWorkerAdapter {
                                             warn!(error = %e, "Failed to emit hook_resolved event");
                                         }
                                     }
+                                    crate::wire::protocol::Event::ContentPart { text, chunk } => {
+                                        if let Some(t) = text {
+                                            summary_parts.push(t);
+                                        } else if let Some(c) = chunk {
+                                            summary_parts.push(c);
+                                        }
+                                    }
                                     _ => {}
                                 },
                                 Err(_) => {
@@ -176,7 +183,7 @@ impl WireWorkerAdapter {
                                                 Some("wire step interrupted before turn_end".to_string());
                                             break;
                                         }
-                                        "thinking" | "text" | "content" | "content_part" => {
+                                        "thinking" | "text" | "content" => {
                                             if let Some(text) =
                                                 ev.params.payload.get("text").and_then(|v| v.as_str())
                                             {

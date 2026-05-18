@@ -2,6 +2,7 @@ use anyhow::Context;
 use std::collections::VecDeque;
 use tokio::process::{Child, ChildStdin, ChildStdout};
 use tokio_util::codec::{FramedRead, LinesCodec};
+use tokio_util::sync::CancellationToken;
 
 mod client_trait;
 mod dispatch;
@@ -34,10 +35,12 @@ pub struct ProcessWireClient {
     pub(crate) request_id_counter: u64,
     pub(crate) handshake_done: bool,
     pub(crate) stderr_handle: Option<tokio::task::JoinHandle<()>>,
+    pub(crate) cancel_token: CancellationToken,
 }
 
 impl Drop for ProcessWireClient {
     fn drop(&mut self) {
+        self.cancel_token.cancel();
         if let Some(handle) = self.stderr_handle.take() {
             handle.abort();
         }

@@ -73,12 +73,17 @@ pub(super) async fn health_handler() -> Json<Value> {
     let mut healthy = true;
 
     // Check kimi
-    let kimi_ok = tokio::process::Command::new("kimi")
-        .arg("--version")
-        .output()
-        .await
-        .map(|o| o.status.success())
-        .unwrap_or(false);
+    let kimi_ok = match tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        tokio::process::Command::new("kimi")
+            .arg("--version")
+            .output(),
+    )
+    .await
+    {
+        Ok(Ok(o)) => o.status.success(),
+        _ => false,
+    };
     checks["kimi"] = serde_json::json!({"status": if kimi_ok { "ok" } else { "error" } });
     if !kimi_ok {
         healthy = false;
