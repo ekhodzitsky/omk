@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Wire Protocol
+
+- Added `ContentPart` variant to the `Event` enum so it matches the documented
+  wire event types table.
+- Documented that `Event::ToolCall` serializes as `"function"` on the wire.
+- Added unknown/extra field tolerance tests for `Event`, `Request`, and
+  `InitializeResult`.
+- Added golden round-trip tests for protocol message fixtures.
+- Added end-to-end redaction test for `ToolCall` secrets.
+
+#### Wire Protocol Version History
+
+| Version | Introduced In | Notes |
+|---------|---------------|-------|
+| 1.9 | 0.4.0 | Current version; observed from Kimi Code CLI 1.41.0. |
+| 1.7 | 0.2.0 | Added `set_plan_mode` / `steer` control methods. |
+| 1.0 | 0.1.0 | Initial wire protocol support. |
+
 ## [0.4.0] - 2026-05-13
 
 ### Added
