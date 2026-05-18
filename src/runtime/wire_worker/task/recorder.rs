@@ -39,7 +39,11 @@ impl WireWorkerAdapter {
         Ok(())
     }
 
-    pub(super) async fn write_worker_result(&self, outbox: &PathBuf, result: &WorkerResult) -> Result<()> {
+    pub(super) async fn write_worker_result(
+        &self,
+        outbox: &PathBuf,
+        result: &WorkerResult,
+    ) -> Result<()> {
         let outbox_line = format!("{}\n", serde_json::to_string(&result)?);
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
@@ -151,9 +155,7 @@ impl WireWorkerAdapter {
         let response_type = decision.to_response_type();
         let feedback = match &decision {
             ApprovalDecision::Approve => "OMK approved this request.",
-            ApprovalDecision::ApproveForSession => {
-                "OMK approved this request for the session."
-            }
+            ApprovalDecision::ApproveForSession => "OMK approved this request for the session.",
             ApprovalDecision::Reject => "OMK rejected this request.",
         };
 
