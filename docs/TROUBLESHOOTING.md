@@ -1,5 +1,7 @@
 # Troubleshooting Guide
 
+> For goal-specific recovery procedures (PR creation failures, CI blockers, merge conflicts, review wall rejections, and budget issues), see [`TROUBLESHOOTING_GOAL.md`](TROUBLESHOOTING_GOAL.md).
+
 ## Installation Issues
 
 ### `cargo install --git https://github.com/ekhodzitsky/oh-my-kimi.git` fails
