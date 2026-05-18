@@ -13,6 +13,9 @@ use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
 use crate::wire::client::{ProcessWireClient, WireClient, WireMessage};
 use crate::wire::protocol::{redact_wire_secrets, ApprovalRequest, Request, RequestParams};
 
+/// Warn when a wire message exceeds ~90 % of a typical 128 k context window.
+const CONTEXT_WINDOW_WARNING_THRESHOLD: usize = 115_200;
+
 /// Outcome of [`WireWorkerAdapter::process_task`].
 ///
 /// `Completed` means the task ran to a natural conclusion (success, failure,
@@ -111,6 +114,15 @@ impl WireWorkerAdapter {
             prompt.push_str(context);
         }
         prompt.push_str("\n\nWhen complete, summarize what you did in 1-2 sentences.");
+        let tokens = crate::cost::tokens::count_tokens(&prompt, "gpt-4");
+        if tokens > CONTEXT_WINDOW_WARNING_THRESHOLD {
+            warn!(
+                worker = %self.spec.name,
+                task = %task.id,
+                tokens,
+                "Prompt exceeds 90% of typical context window"
+            );
+        }
         client.start_prompt(&prompt).await?;
 
         let mut summary_parts: Vec<String> = Vec::new();
@@ -238,6 +250,15 @@ impl WireWorkerAdapter {
                         }
                         Ok(WireMessage::Request(req)) => match req.params.to_request() {
                             Ok(request) => {
+                                let tokens = crate::cost::tokens::count_message_tokens(&request, "gpt-4").unwrap_or(0);
+                                if tokens > CONTEXT_WINDOW_WARNING_THRESHOLD {
+                                    warn!(
+                                        worker = %self.spec.name,
+                                        task = %task.id,
+                                        tokens,
+                                        "Wire request exceeds 90% of typical context window"
+                                    );
+                                }
                                 if let crate::wire::protocol::Request::HookRequest(ref hook_req) = request {
                                     let hook_result = if let Some(dir) = project_dir {
                                         match HookExecutor::new(dir).run(hook_req).await {

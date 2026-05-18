@@ -1,18 +1,22 @@
 use super::client::transport::StdioMcpTransport;
 use super::client::transport_trait::McpTransport;
-use super::client::types::Tool;
+use super::client::types::{CallToolResult, Tool};
 use super::client::McpClient;
 use super::config::{McpConfig, McpServerConfig, TransportType};
 use crate::error::OmkError;
 use anyhow::{Context, Result};
+use moka::future::Cache;
 use serde_json::Value;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use tracing::{debug, info, warn};
 
 #[derive(Debug)]
 pub(crate) struct McpServerHandle {
     pub(crate) name: String,
     pub(crate) client: McpClient<Box<dyn McpTransport>>,
+    pub(crate) tool_cache: Cache<String, CallToolResult>,
     pub(crate) tools: Vec<Tool>,
 }
 
@@ -59,11 +63,16 @@ impl McpRegistry {
             .list_tools()
             .await
             .with_context(|| format!("MCP list_tools failed for server '{name}'"))?;
+        let tool_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(300))
+            .build();
         self.servers.insert(
             name.clone(),
             McpServerHandle {
                 name,
                 client,
+                tool_cache,
                 tools,
             },
         );
@@ -107,6 +116,16 @@ impl McpRegistry {
                 server: server_name.clone(),
                 reason: "server handle missing".to_string(),
             })?;
+        let key =
+            cache_key(&server_name, tool_name, &arguments).map_err(|e| OmkError::McpToolCall {
+                server: server_name.clone(),
+                tool: tool_name.to_string(),
+                reason: e.to_string(),
+            })?;
+        if let Some(cached) = handle.tool_cache.get(&key).await {
+            debug!(server = %server_name, tool = %tool_name, "MCP tool call cache hit");
+            return Ok(tool_result_to_json(cached));
+        }
         let result = handle
             .client
             .call_tool(tool_name, arguments)
@@ -116,20 +135,9 @@ impl McpRegistry {
                 tool: tool_name.to_string(),
                 reason: e.to_string(),
             })?;
-        let mut texts = Vec::new();
-        let mut is_error = false;
-        for content in &result.content {
-            match content {
-                super::client::types::ToolContent::Text { text } => texts.push(text.clone()),
-                super::client::types::ToolContent::Unknown => {}
-            }
-        }
-        if result.is_error == Some(true) {
-            is_error = true;
-        }
-        let output = serde_json::json!({"texts": texts, "is_error": is_error});
-        debug!(server = %server_name, tool = %tool_name, "MCP tool call completed");
-        Ok(output)
+        handle.tool_cache.insert(key, result.clone()).await;
+        debug!(server = %server_name, tool = %tool_name, "MCP tool call cache miss");
+        Ok(tool_result_to_json(result))
     }
 
     pub async fn call_tool_on_server(
@@ -149,6 +157,16 @@ impl McpRegistry {
                 reason: format!("MCP tool '{tool_name}' not found on server '{server_name}'"),
             });
         }
+        let key =
+            cache_key(server_name, tool_name, &arguments).map_err(|e| OmkError::McpToolCall {
+                server: server_name.to_string(),
+                tool: tool_name.to_string(),
+                reason: e.to_string(),
+            })?;
+        if let Some(cached) = handle.tool_cache.get(&key).await {
+            debug!(server = %server_name, tool = %tool_name, "MCP tool call cache hit");
+            return Ok(tool_result_to_json(cached));
+        }
         let result = handle
             .client
             .call_tool(tool_name, arguments)
@@ -158,20 +176,9 @@ impl McpRegistry {
                 tool: tool_name.to_string(),
                 reason: e.to_string(),
             })?;
-        let mut texts = Vec::new();
-        let mut is_error = false;
-        for content in &result.content {
-            match content {
-                super::client::types::ToolContent::Text { text } => texts.push(text.clone()),
-                super::client::types::ToolContent::Unknown => {}
-            }
-        }
-        if result.is_error == Some(true) {
-            is_error = true;
-        }
-        let output = serde_json::json!({"texts": texts, "is_error": is_error});
-        debug!(server = %server_name, tool = %tool_name, "MCP tool call completed");
-        Ok(output)
+        handle.tool_cache.insert(key, result.clone()).await;
+        debug!(server = %server_name, tool = %tool_name, "MCP tool call cache miss");
+        Ok(tool_result_to_json(result))
     }
 
     pub fn server_count(&self) -> usize {
@@ -190,6 +197,31 @@ impl McpRegistry {
     }
 }
 
+/// Generates a cache key from server name, tool name, and arguments.
+fn cache_key(server_name: &str, tool_name: &str, arguments: &Value) -> Result<String> {
+    let args_str =
+        serde_json::to_string(arguments).context("failed to serialize arguments for cache key")?;
+    let mut hasher = DefaultHasher::new();
+    (server_name, tool_name, args_str).hash(&mut hasher);
+    Ok(format!("{:x}", hasher.finish()))
+}
+
+/// Converts a [`CallToolResult`] into the JSON shape returned by the registry.
+fn tool_result_to_json(result: CallToolResult) -> Value {
+    let mut texts = Vec::new();
+    let mut is_error = false;
+    for content in &result.content {
+        match content {
+            super::client::types::ToolContent::Text { text } => texts.push(text.clone()),
+            super::client::types::ToolContent::Unknown => {}
+        }
+    }
+    if result.is_error == Some(true) {
+        is_error = true;
+    }
+    serde_json::json!({"texts": texts, "is_error": is_error})
+}
+
 impl Default for McpRegistry {
     fn default() -> Self {
         Self::new()
@@ -198,10 +230,9 @@ impl Default for McpRegistry {
 
 impl Drop for McpRegistry {
     fn drop(&mut self) {
-        // Best-effort kill: draining servers drops McpClient -> StdioMcpTransport -> Child::start_kill.
-        // Graceful async shutdown should be done via shutdown_all().await before drop.
         for (_, handle) in self.servers.drain() {
             drop(handle.client);
+            drop(handle.tool_cache);
         }
     }
 }
@@ -283,11 +314,16 @@ mod tests {
         );
         let transport: Box<dyn McpTransport> = Box::new(MockTransport::new(vec![init, tools]));
         let client = McpClient::new(transport, "server-a");
+        let tool_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(300))
+            .build();
         registry.servers.insert(
             "server-a".to_string(),
             McpServerHandle {
                 name: "server-a".to_string(),
                 client,
+                tool_cache,
                 tools: vec![Tool {
                     name: "tool-a".to_string(),
                     description: None,
@@ -321,11 +357,16 @@ mod tests {
         .to_string();
         let transport: Box<dyn McpTransport> = Box::new(MockTransport::new(vec![call_resp]));
         let client = McpClient::new(transport, "server-a");
+        let tool_cache = Cache::builder()
+            .max_capacity(1000)
+            .time_to_live(std::time::Duration::from_secs(300))
+            .build();
         registry.servers.insert(
             "server-a".to_string(),
             McpServerHandle {
                 name: "server-a".to_string(),
                 client,
+                tool_cache,
                 tools: vec![Tool {
                     name: "tool-a".to_string(),
                     description: None,

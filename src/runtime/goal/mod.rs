@@ -38,6 +38,7 @@ pub use evidence::GoalGitEvidence;
 pub use lifecycle::{execute_goal, review_goal, verify_goal, verify_goal_with_slices};
 pub use open_pr::GoalOpenPrDraft;
 pub use oracle::GoalKind;
+pub use planner::discover_relevant_files;
 pub use progress::{GoalProgressLine, GoalProgressLineKind, GoalProgressSnapshot};
 pub use proof::GoalProof;
 pub use queries::{list_goals, resolve_goal, resolve_goal_proof};
