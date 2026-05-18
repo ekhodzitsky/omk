@@ -134,6 +134,26 @@ impl GoalProof {
         );
         Ok(proof)
     }
+
+    /// Validate that the proof is ready for a merge into the base branch.
+    /// Checks:
+    /// - proof status is `Ready`
+    /// - all verification gates passed
+    /// - review wall artifacts exist and all passed
+    pub(crate) fn validate_for_merge(&self) -> Result<()> {
+        if self.status != GoalStatus::Ready {
+            anyhow::bail!("proof status is not Ready (current: {:?})", self.status);
+        }
+        if !gates_passed(&self.gates) {
+            anyhow::bail!("verification gates have not all passed");
+        }
+        let review_artifacts =
+            sidecar::remembered_goal_proof_review_artifacts(self).unwrap_or_default();
+        if !review_artifacts.is_empty() && !review::review_artifacts_passed(&review_artifacts) {
+            anyhow::bail!("review wall has failures or blockers");
+        }
+        Ok(())
+    }
 }
 
 pub(crate) fn build_scaffold_proof(

@@ -106,6 +106,7 @@ pub(crate) async fn finalize_until_ready_delivery(
             } else {
                 "no PR was created; inspect the goal state for delivery evidence".to_string()
             };
+            cleanup_goal_worktrees(&state, project_dir).await;
             state.status = GoalStatus::BlockedOnHuman;
             state.phase = GoalPhase::Proof;
             state.completed_at = Some(now);
@@ -165,6 +166,26 @@ pub(crate) async fn finalize_until_ready_delivery(
             })
         }
         GoalMergePolicy::Gated => {
+            if let Err(e) = proof.validate_for_merge() {
+                return finalize_until_ready_blocker(
+                    goal_id,
+                    steps,
+                    UntilReadyBlocker::policy(format!(
+                        "gated merge blocked: proof validation failed: {e}"
+                    )),
+                )
+                .await;
+            }
+            if pr_url.is_none() {
+                return finalize_until_ready_blocker(
+                    goal_id,
+                    steps,
+                    UntilReadyBlocker::policy(
+                        "gated merge blocked: no PR URL available for merge".to_string(),
+                    ),
+                )
+                .await;
+            }
             if let Some(ref url) = pr_url {
                 let check_timeout = std::time::Duration::from_secs(120);
                 let poll_interval = std::time::Duration::from_secs(10);
@@ -213,8 +234,6 @@ pub(crate) async fn finalize_until_ready_delivery(
                     .await;
                 }
             }
-
-            cleanup_goal_worktrees(&state, project_dir).await;
 
             state.status = GoalStatus::Ready;
             state.phase = GoalPhase::Proof;
