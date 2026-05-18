@@ -1,5 +1,6 @@
 use super::transport_trait::McpTransport;
 use super::types::{CallToolResult, InitializeResult, Resource, ResourceContent, Tool};
+use crate::wire::protocol::{redact_wire_secrets, scrub_secret_patterns};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -107,18 +108,20 @@ impl<T: McpTransport> McpClient<T> {
             // Demux: skip notifications and responses that don't match our id.
             let value: Value = serde_json::from_str(&line).with_context(|| {
                 format!(
-                    "failed to parse MCP JSON from {} for method {method}: {line}",
-                    self.server_name
+                    "failed to parse MCP JSON from {} for method {method}: {}",
+                    self.server_name,
+                    scrub_secret_patterns(&line)
                 )
             })?;
             if value.get("id").is_none() {
-                debug!(server = %self.server_name, line = %line, "MCP notification or unsolicited message, skipping");
+                debug!(server = %self.server_name, line = %scrub_secret_patterns(&line), "MCP notification or unsolicited message, skipping");
                 continue;
             }
             let resp: JsonRpcResponse<R> = serde_json::from_value(value).with_context(|| {
                 format!(
-                    "failed to parse MCP response from {} for method {method}: {line}",
-                    self.server_name
+                    "failed to parse MCP response from {} for method {method}: {}",
+                    self.server_name,
+                    scrub_secret_patterns(&line)
                 )
             })?;
             if resp.jsonrpc != "2.0" {
@@ -143,7 +146,7 @@ impl<T: McpTransport> McpClient<T> {
                             method,
                             err.message,
                             err.code,
-                            data
+                            redact_wire_secrets(&data)
                         );
                     }
                     bail!(

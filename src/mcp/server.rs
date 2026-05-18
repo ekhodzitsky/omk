@@ -8,6 +8,7 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::{debug, error, info, warn};
 
+use crate::wire::protocol::scrub_secret_patterns;
 use super::tools::{handle_tool_call, list_tools};
 
 /// Maximum length of a single inbound MCP JSON-RPC request, in bytes.
@@ -70,7 +71,7 @@ pub async fn run_mcp_server() -> Result<()> {
             continue;
         }
 
-        debug!(line = %line, "Received JSON-RPC request");
+        debug!(line = %scrub_secret_patterns(line), "Received JSON-RPC request");
 
         let request: JsonRpcRequest = match serde_json::from_str(line) {
             Ok(req) => req,
