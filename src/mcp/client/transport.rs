@@ -4,6 +4,7 @@ use std::future::Future;
 use std::pin::Pin;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 #[derive(Debug)]
@@ -12,6 +13,7 @@ pub struct StdioMcpTransport {
     lines_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
     child: Child,
     server_name: String,
+    cancel_token: CancellationToken,
 }
 
 impl StdioMcpTransport {
@@ -30,7 +32,9 @@ impl StdioMcpTransport {
         cmd.stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+        let cancel_token = CancellationToken::new();
         let mut child = cmd
+            .kill_on_drop(true)
             .spawn()
             .with_context(|| format!("failed to spawn MCP server '{}' ({command})", server_name))?;
         let stdin = child
@@ -43,21 +47,35 @@ impl StdioMcpTransport {
             .context("MCP server stdout not available")?;
         if let Some(stderr) = child.stderr.take() {
             let name = server_name.clone();
+            let cancel = cancel_token.child_token();
             tokio::spawn(async move {
                 let reader = BufReader::new(stderr);
                 let mut lines = reader.lines();
-                while let Ok(Some(line)) = lines.next_line().await {
-                    debug!(server = %name, stderr = %line, "MCP server stderr");
+                loop {
+                    tokio::select! {
+                        biased;
+                        _ = cancel.cancelled() => break,
+                        result = lines.next_line() => {
+                            match result {
+                                Ok(Some(line)) => debug!(server = %name, stderr = %line, "MCP server stderr"),
+                                _ => break,
+                            }
+                        }
+                    }
                 }
             });
         }
 
         let (lines_tx, lines_rx) = tokio::sync::mpsc::unbounded_channel();
         let name = server_name.clone();
+        let cancel = cancel_token.child_token();
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout);
             let mut buf = String::new();
             loop {
+                if cancel.is_cancelled() {
+                    break;
+                }
                 buf.clear();
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(60),
@@ -94,6 +112,7 @@ impl StdioMcpTransport {
             lines_rx,
             child,
             server_name,
+            cancel_token,
         })
     }
 
@@ -128,6 +147,7 @@ impl StdioMcpTransport {
     }
 
     pub async fn close(&mut self) -> Result<()> {
+        self.cancel_token.cancel();
         match self.child.start_kill() {
             Ok(()) => {
                 let _ = tokio::time::timeout(std::time::Duration::from_secs(5), self.child.wait())

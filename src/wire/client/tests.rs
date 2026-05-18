@@ -73,7 +73,7 @@ exit 0
         tokio::fs::set_permissions(&script, perms).await.unwrap();
     }
 
-    let client = ProcessWireClient::spawn(script.to_str().unwrap(), None, None, None);
+    let client = ProcessWireClient::spawn(script.to_str().unwrap(), None, None, None).await;
     assert!(client.is_ok());
     let client = client.unwrap();
     client.shutdown().await.unwrap();

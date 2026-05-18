@@ -372,7 +372,7 @@ async fn test_wire_control_methods() {
     use omk::wire::protocol::InitializeParams;
 
     let bin = mock_kimi_path_string();
-    let mut client = ProcessWireClient::spawn(&bin, None, None, None).unwrap();
+    let mut client = ProcessWireClient::spawn(&bin, None, None, None).await.unwrap();
 
     let init = client
         .initialize(InitializeParams {

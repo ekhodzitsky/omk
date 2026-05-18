@@ -9,7 +9,7 @@ use crate::wire::client::{ProcessWireClient, MAX_WIRE_LINE_LENGTH};
 
 impl ProcessWireClient {
     /// Spawn a new kimi process in wire mode.
-    pub fn spawn(
+    pub async fn spawn(
         kimi_binary: &str,
         work_dir: Option<&std::path::Path>,
         session: Option<&str>,
@@ -38,7 +38,7 @@ impl ProcessWireClient {
                     break;
                 }
                 Err(err) if err.raw_os_error() == Some(26) && attempt < 2 => {
-                    std::thread::sleep(Duration::from_millis(25));
+                    tokio::time::sleep(Duration::from_millis(25)).await;
                 }
                 Err(err) => return Err(err).context("Failed to spawn kimi --wire"),
             }
