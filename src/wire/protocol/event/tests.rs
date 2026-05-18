@@ -15,6 +15,29 @@ fn test_event_turn_begin_roundtrip() {
 }
 
 #[test]
+fn test_event_content_part_roundtrip() {
+    let event = Event::ContentPart {
+        text: Some("Hello world".to_string()),
+        chunk: None,
+    };
+    let params = event.to_params().unwrap();
+    assert_eq!(params.event_type, "content_part");
+    assert_eq!(params.payload["text"], "Hello world");
+    let back = params.to_event().unwrap();
+    assert_eq!(back, event);
+
+    let event_chunk = Event::ContentPart {
+        text: None,
+        chunk: Some("chunk-data".to_string()),
+    };
+    let params_chunk = event_chunk.to_params().unwrap();
+    assert_eq!(params_chunk.event_type, "content_part");
+    assert_eq!(params_chunk.payload["chunk"], "chunk-data");
+    let back_chunk = params_chunk.to_event().unwrap();
+    assert_eq!(back_chunk, event_chunk);
+}
+
+#[test]
 fn test_event_tool_call_roundtrip() {
     let event = Event::ToolCall {
         id: "call_1".to_string(),
