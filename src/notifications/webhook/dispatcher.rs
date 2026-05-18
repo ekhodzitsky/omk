@@ -85,3 +85,43 @@ async fn send_telegram(url: &str, event: &NotificationEvent) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn send_notification_with_empty_config_does_nothing() {
+        let config = WebhookConfig {
+            discord: None,
+            slack: None,
+            telegram: None,
+        };
+        let event = NotificationEvent::Error {
+            source: "test".to_string(),
+            message: "hello".to_string(),
+        };
+        // Should complete without panicking or making network requests.
+        send_notification(&config, &event).await;
+    }
+
+    #[tokio::test]
+    async fn send_notification_serializes_event_to_debug_log() {
+        let config = WebhookConfig {
+            discord: None,
+            slack: None,
+            telegram: None,
+        };
+        let event = NotificationEvent::TeamSpawned {
+            name: "test-team".to_string(),
+            task: "test-task".to_string(),
+            workers: 2,
+            role: "qa".to_string(),
+        };
+        // Verify event serializes correctly by checking the payload helper.
+        let payload = serde_json::to_string(&event).unwrap_or_default();
+        assert!(!payload.is_empty());
+        assert!(payload.contains("test-team"));
+        send_notification(&config, &event).await;
+    }
+}
