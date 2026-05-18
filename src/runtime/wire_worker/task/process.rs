@@ -1,47 +1,22 @@
 use anyhow::{Context, Result};
 use std::path::PathBuf;
-use tokio::io::AsyncWriteExt;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use crate::runtime::events::{Event, EventBuilder, EventKind, JsonlWriter, TaskId, WorkerId};
+use crate::runtime::events::{Event, EventKind, JsonlWriter};
 use crate::runtime::wire_worker::hook_executor::{
     discover_hook_subscriptions, HookExecutor, HookResult,
 };
 use crate::runtime::wire_worker::WireWorkerAdapter;
 use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
 use crate::wire::client::{ProcessWireClient, WireClient, WireMessage};
-use crate::wire::protocol::{redact_wire_secrets, ApprovalRequest, Request, RequestParams};
+use crate::wire::protocol::{redact_wire_secrets, Request};
 
-/// Warn when a wire message exceeds ~90 % of a typical 128 k context window.
-const CONTEXT_WINDOW_WARNING_THRESHOLD: usize = 115_200;
-
-/// Outcome of [`WireWorkerAdapter::process_task`].
-///
-/// `Completed` means the task ran to a natural conclusion (success, failure,
-/// or wire error) and the result has already been written to the outbox.
-///
-/// The `Cancelled*` variants both mean cancellation fired before completion —
-/// kimi has been killed and no result has been written. They differ in which
-/// token fired:
-///
-/// - [`TaskOutcome::CancelledTimeout`]: the per-task budget elapsed; caller
-///   should record a timeout in the outbox so the scheduler sees a failure.
-/// - [`TaskOutcome::CancelledExternal`]: the outer worker shutdown token
-///   fired; caller should not record anything because the worker itself is
-///   tearing down.
-///
-/// The variant is determined inside the `select!` arm that fires, which
-/// eliminates the TOCTOU race that an after-the-fact `is_cancelled()` check
-/// has when both tokens fire in quick succession.
-pub(super) enum TaskOutcome {
-    Completed,
-    CancelledTimeout,
-    CancelledExternal,
-}
+use super::context_guard;
+use super::TaskOutcome;
 
 impl WireWorkerAdapter {
-    pub(super) async fn process_task(
+    pub(in crate::runtime::wire_worker) async fn process_task(
         &self,
         task: &WorkerTask,
         kimi_bin: &str,
@@ -51,7 +26,6 @@ impl WireWorkerAdapter {
         timeout_cancel: &CancellationToken,
     ) -> Result<TaskOutcome> {
         info!(worker = %self.spec.name, task = %task.id, "Processing task via wire");
-
         let started = Event::new(self.run_id.clone(), EventKind::TaskStarted)
             .with_actor(&self.spec.name)
             .with_payload(serde_json::json!({
@@ -59,18 +33,14 @@ impl WireWorkerAdapter {
                 "worker_id": self.spec.name,
             }))?;
         self.event_writer.append(&started).await?;
-
         let project_dir = self.spec.project_dir.as_deref();
-        let mut client = ProcessWireClient::spawn(kimi_bin, project_dir, None, None)?;
-
+        let mut client = ProcessWireClient::spawn(kimi_bin, project_dir, None, None).await?;
         let external_tools = if let Some(bridge) = &self.mcp_bridge {
             Some(bridge.external_tools().await)
         } else {
             self.spec.external_tools.clone()
         };
-
         let hooks = discover_hook_subscriptions(project_dir).await;
-
         let init_params = crate::wire::protocol::InitializeParams {
             protocol_version: crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string(),
             client: Some(crate::wire::protocol::ClientInfo {
@@ -93,7 +63,6 @@ impl WireWorkerAdapter {
                 "wire_protocol_version": init_result.protocol_version,
             }))?;
         self.event_writer.append(&init_event).await?;
-
         let mut prompt = format!(
             "You are a {} agent named {}.\n\nTask: {}",
             self.spec.role, self.spec.name, task.task
@@ -114,22 +83,12 @@ impl WireWorkerAdapter {
             prompt.push_str(context);
         }
         prompt.push_str("\n\nWhen complete, summarize what you did in 1-2 sentences.");
-        let tokens = crate::cost::tokens::count_tokens(&prompt, "gpt-4");
-        if tokens > CONTEXT_WINDOW_WARNING_THRESHOLD {
-            warn!(
-                worker = %self.spec.name,
-                task = %task.id,
-                tokens,
-                "Prompt exceeds 90% of typical context window"
-            );
-        }
+        context_guard::warn_if_prompt_exceeds_threshold(&prompt, &self.spec.name, &task.id);
         client.start_prompt(&prompt).await?;
-
         let mut summary_parts: Vec<String> = Vec::new();
         let mut success = true;
         let mut failure_reason: Option<String> = None;
         let start_time = std::time::Instant::now();
-
         loop {
             tokio::select! {
                 biased;
@@ -139,8 +98,6 @@ impl WireWorkerAdapter {
                         task = %task.id,
                         "Task processing cancelled (worker shutdown)"
                     );
-                    // Reap the kimi child immediately so it does not linger as
-                    // a zombie / continue mutating the worktree behind our back.
                     let _ = client.shutdown().await;
                     return Ok(TaskOutcome::CancelledExternal);
                 }
@@ -158,10 +115,6 @@ impl WireWorkerAdapter {
                         Ok(WireMessage::Event(ev)) => {
                             let raw_json =
                                 serde_json::to_string(&redact_wire_secrets(&serde_json::to_value(&ev)?))?;
-                            // Route through the single-writer actor so
-                            // concurrent producers across the wire-worker
-                            // adapter (and any future helpers cloning the
-                            // writer) cannot interleave partial lines.
                             let mut line = raw_json.into_bytes();
                             line.push(b'\n');
                             wire_events_writer
@@ -173,7 +126,6 @@ impl WireWorkerAdapter {
                                         task.id, self.spec.name
                                     )
                                 })?;
-
                             match ev.params.to_event() {
                                 Ok(typed) => match typed {
                                     crate::wire::protocol::Event::TurnEnd => break,
@@ -250,15 +202,7 @@ impl WireWorkerAdapter {
                         }
                         Ok(WireMessage::Request(req)) => match req.params.to_request() {
                             Ok(request) => {
-                                let tokens = crate::cost::tokens::count_message_tokens(&request, "gpt-4").unwrap_or(0);
-                                if tokens > CONTEXT_WINDOW_WARNING_THRESHOLD {
-                                    warn!(
-                                        worker = %self.spec.name,
-                                        task = %task.id,
-                                        tokens,
-                                        "Wire request exceeds 90% of typical context window"
-                                    );
-                                }
+                                context_guard::warn_if_request_exceeds_threshold(&request, &self.spec.name, &task.id);
                                 if let crate::wire::protocol::Request::HookRequest(ref hook_req) = request {
                                     let hook_result = if let Some(dir) = project_dir {
                                         match HookExecutor::new(dir).run(hook_req).await {
@@ -289,7 +233,6 @@ impl WireWorkerAdapter {
                                     );
                                     continue;
                                 }
-
                                 if let crate::wire::protocol::Request::ToolCallRequest(ref tool_call) = request {
                                     if let Some(bridge) = &self.mcp_bridge {
                                         if bridge.is_mcp_tool(&tool_call.name).await {
@@ -387,7 +330,6 @@ impl WireWorkerAdapter {
                                             "error": reason,
                                         }))?;
                                 self.event_writer.append(&timeout_event).await?;
-
                                 let stalled = Event::new(
                                     self.run_id.clone(),
                                     EventKind::WorkerStalled,
@@ -406,12 +348,9 @@ impl WireWorkerAdapter {
                 }
             }
         }
-
         client.shutdown().await?;
-
         let summary = summary_parts.join(" ").trim().to_string();
         let elapsed = start_time.elapsed().as_secs();
-
         let result = WorkerResult {
             task_id: task.id.clone(),
             status: if success {
@@ -431,9 +370,7 @@ impl WireWorkerAdapter {
             artifacts: vec![],
             elapsed_secs: elapsed,
         };
-
         self.write_worker_result(outbox, &result).await?;
-
         info!(
             worker = %self.spec.name,
             task = %task.id,
@@ -441,224 +378,6 @@ impl WireWorkerAdapter {
             elapsed = elapsed,
             "Task finished"
         );
-
         Ok(TaskOutcome::Completed)
-    }
-
-    pub(super) async fn record_task_timeout(
-        &self,
-        task: &WorkerTask,
-        outbox: &PathBuf,
-        timeout_secs: u64,
-    ) -> Result<()> {
-        let result = WorkerResult {
-            task_id: task.id.clone(),
-            status: ResultStatus::Failed,
-            summary: format!("task budget timed out after {timeout_secs}s"),
-            artifacts: vec![],
-            elapsed_secs: timeout_secs,
-        };
-
-        self.write_worker_result(outbox, &result).await?;
-        let timeout_event = Event::new(self.run_id.clone(), EventKind::TaskOutput)
-            .with_actor(&self.spec.name)
-            .with_payload(serde_json::json!({
-                "type": "task_budget_timeout",
-                "task_id": task.id,
-                "worker_id": self.spec.name,
-                "timeout_secs": timeout_secs,
-            }))?;
-        self.event_writer.append(&timeout_event).await?;
-
-        Ok(())
-    }
-
-    async fn write_worker_result(&self, outbox: &PathBuf, result: &WorkerResult) -> Result<()> {
-        let outbox_line = format!("{}\n", serde_json::to_string(&result)?);
-        let mut file = tokio::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(outbox)
-            .await?;
-        file.write_all(outbox_line.as_bytes()).await?;
-        file.flush().await?;
-
-        if matches!(result.status, ResultStatus::Success) {
-            let completed = EventBuilder::new(self.run_id.clone()).task_completed(
-                TaskId(result.task_id.clone()),
-                WorkerId(self.spec.name.clone()),
-                Some(&result.summary),
-            )?;
-            self.event_writer.append(&completed).await?;
-        } else {
-            let failed = Event::new(self.run_id.clone(), EventKind::TaskFailed)
-                .with_actor(&self.spec.name)
-                .with_payload(serde_json::json!({
-                    "task_id": result.task_id.clone(),
-                    "worker_id": self.spec.name.clone(),
-                    "error": result.summary.clone(),
-                }))?;
-            self.event_writer.append(&failed).await?;
-        }
-
-        Ok(())
-    }
-
-    pub(super) async fn record_wire_request(
-        &self,
-        task: &WorkerTask,
-        request_id: &str,
-        params: &RequestParams,
-        request: &Request,
-        response: &serde_json::Value,
-    ) -> Result<()> {
-        let redacted_request_payload = redact_wire_secrets(&params.payload);
-        let redacted_response = redact_wire_secrets(response);
-        let event = Event::new(self.run_id.clone(), EventKind::TaskOutput)
-            .with_actor(&self.spec.name)
-            .with_payload(serde_json::json!({
-                "type": "wire_request",
-                "task_id": task.id,
-                "worker_id": self.spec.name,
-                "request_id": request_id,
-                "request_type": request.kind(),
-                "raw_request_type": params.request_type,
-                "request_payload": redacted_request_payload,
-                "response": redacted_response,
-            }))?;
-        self.event_writer.append(&event).await
-    }
-
-    async fn handle_approval_request(
-        &self,
-        task: &WorkerTask,
-        request_id: &str,
-        approval_req: &ApprovalRequest,
-        client: &mut ProcessWireClient,
-        outer_cancel: &CancellationToken,
-        timeout_cancel: &CancellationToken,
-    ) -> Result<()> {
-        let requested = match Event::new(self.run_id.clone(), EventKind::ApprovalRequested)
-            .with_actor(&self.spec.name)
-            .with_payload(serde_json::json!({
-                "task_id": task.id,
-                "worker_id": self.spec.name,
-                "request_id": request_id,
-                "approval_request_id": approval_req.id,
-                "tool_call_id": approval_req.tool_call_id,
-                "sender": approval_req.sender,
-                "action": approval_req.action,
-                "description": approval_req.description,
-                "source_kind": approval_req.source_kind,
-                "agent_id": approval_req.agent_id,
-                "subagent_type": approval_req.subagent_type,
-            })) {
-            Ok(ev) => ev,
-            Err(e) => {
-                warn!(error = %e, "Failed to build approval_requested event; sending rejection");
-                let fallback = serde_json::json!({
-                    "request_id": approval_req.id,
-                    "response": crate::wire::protocol::ApprovalResponseType::Reject,
-                    "feedback": "OMK internal error building approval event.",
-                });
-                client.send_response(request_id, fallback).await?;
-                return Ok(());
-            }
-        };
-        if let Err(e) = self.event_writer.append(&requested).await {
-            warn!(error = %e, "Failed to emit approval_requested event; continuing");
-        }
-
-        let decision = tokio::select! {
-            biased;
-            _ = outer_cancel.cancelled() => {
-                info!(worker = %self.spec.name, "Approval cancelled by worker shutdown");
-                super::ApprovalDecision::Reject
-            }
-            _ = timeout_cancel.cancelled() => {
-                info!(worker = %self.spec.name, "Approval cancelled by task budget timeout");
-                super::ApprovalDecision::Reject
-            }
-            d = self.approval_proxy.decide(approval_req) => d,
-        };
-
-        let response_type = decision.to_response_type();
-        let feedback = match &decision {
-            super::ApprovalDecision::Approve => "OMK approved this request.",
-            super::ApprovalDecision::ApproveForSession => {
-                "OMK approved this request for the session."
-            }
-            super::ApprovalDecision::Reject => "OMK rejected this request.",
-        };
-
-        let response = serde_json::json!({
-            "request_id": approval_req.id,
-            "response": response_type,
-            "feedback": feedback,
-        });
-
-        if let Ok(decided) = Event::new(self.run_id.clone(), EventKind::ApprovalDecided)
-            .with_actor(&self.spec.name)
-            .with_payload(serde_json::json!({
-                "task_id": task.id,
-                "worker_id": self.spec.name,
-                "request_id": request_id,
-                "approval_request_id": approval_req.id,
-                "decision": match response_type {
-                    crate::wire::protocol::ApprovalResponseType::Approve => "approve",
-                    crate::wire::protocol::ApprovalResponseType::ApproveForSession => "approve_for_session",
-                    crate::wire::protocol::ApprovalResponseType::Reject => "reject",
-                },
-                "feedback": feedback,
-            }))
-        {
-            if let Err(e) = self.event_writer.append(&decided).await {
-                warn!(error = %e, "Failed to emit approval_decided event; continuing");
-            }
-        }
-
-        let request_params = match serde_json::to_value(approval_req) {
-            Ok(payload) => RequestParams {
-                request_type: "ApprovalRequest".to_string(),
-                payload,
-            },
-            Err(e) => {
-                warn!(error = %e, "Failed to serialize approval request for logging; skipping record_wire_request");
-                RequestParams {
-                    request_type: "ApprovalRequest".to_string(),
-                    payload: serde_json::json!({"error": "serialization failed"}),
-                }
-            }
-        };
-
-        if let Err(e) = self
-            .record_wire_request(
-                task,
-                request_id,
-                &request_params,
-                &Request::ApprovalRequest(approval_req.clone()),
-                &response,
-            )
-            .await
-        {
-            warn!(error = %e, "Failed to record wire request; continuing");
-        }
-
-        client.send_response(request_id, response).await?;
-
-        info!(
-            worker = %self.spec.name,
-            request_id = %request_id,
-            approval_request_id = %approval_req.id,
-            action = %approval_req.action,
-            decision = %match decision {
-                super::ApprovalDecision::Approve => "approve",
-                super::ApprovalDecision::ApproveForSession => "approve_for_session",
-                super::ApprovalDecision::Reject => "reject",
-            },
-            "Handled approval request"
-        );
-
-        Ok(())
     }
 }

@@ -44,7 +44,7 @@ impl SynthesisAgent {
 }
 
 async fn run_wire_prompt(prompt: &str, kimi_bin: &str, client_name: &str) -> Result<String> {
-    let mut client = ProcessWireClient::spawn(kimi_bin, None, None, None)?;
+    let mut client = ProcessWireClient::spawn(kimi_bin, None, None, None).await?;
 
     let init_params = InitializeParams {
         protocol_version: crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string(),
