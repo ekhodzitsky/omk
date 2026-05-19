@@ -10,6 +10,7 @@ pub mod analysis;
 pub mod cli;
 pub mod cost;
 pub mod error;
+pub mod git;
 pub mod kimi_native;
 pub mod marketplace;
 pub mod mcp;
