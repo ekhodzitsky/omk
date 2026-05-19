@@ -219,3 +219,117 @@ async fn handle_tools_call(id: Option<Value>, params: Option<Value>) -> Result<J
         }),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn handle_initialize_returns_protocol_version() {
+        let resp = handle_initialize(Some(serde_json::json!("init-1")), None);
+        assert_eq!(resp.jsonrpc, "2.0");
+        assert_eq!(resp.id, Some(serde_json::json!("init-1")));
+        assert!(resp.error.is_none());
+
+        let result = resp.result.unwrap();
+        assert_eq!(result["protocolVersion"], "2024-11-05");
+        assert_eq!(result["serverInfo"]["name"], "omk");
+        assert!(result["capabilities"]["tools"].is_object());
+    }
+
+    #[test]
+    fn handle_tools_list_returns_tools_array() {
+        let resp = handle_tools_list(Some(serde_json::json!("list-1")));
+        assert_eq!(resp.jsonrpc, "2.0");
+        assert_eq!(resp.id, Some(serde_json::json!("list-1")));
+        assert!(resp.error.is_none());
+
+        let result = resp.result.unwrap();
+        let tools = result["tools"].as_array().expect("tools array");
+        assert!(!tools.is_empty());
+        assert!(tools.iter().all(|t| t["name"].is_string()));
+    }
+
+    #[tokio::test]
+    async fn handle_request_initialize() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(serde_json::json!("r1")),
+            method: "initialize".to_string(),
+            params: None,
+        };
+        let resp = handle_request(req).await.unwrap();
+        assert!(resp.result.is_some());
+        assert!(resp.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn handle_request_notifications_initialized_is_silent() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: None,
+            method: "notifications/initialized".to_string(),
+            params: None,
+        };
+        let resp = handle_request(req).await;
+        assert!(resp.is_none());
+    }
+
+    #[tokio::test]
+    async fn handle_request_tools_list() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(serde_json::json!("r2")),
+            method: "tools/list".to_string(),
+            params: None,
+        };
+        let resp = handle_request(req).await.unwrap();
+        assert!(resp.result.is_some());
+        assert!(resp.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn handle_request_unknown_method() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(serde_json::json!("r3")),
+            method: "unknown/method".to_string(),
+            params: None,
+        };
+        let resp = handle_request(req).await.unwrap();
+        assert!(resp.result.is_none());
+        assert!(resp.error.is_some());
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, -32601);
+        assert!(err.message.contains("Method not found"));
+    }
+
+    #[tokio::test]
+    async fn handle_tools_call_unknown_tool_returns_error_response() {
+        let resp = handle_tools_call(
+            Some(serde_json::json!("tc1")),
+            Some(serde_json::json!({"name": "unknown_tool", "arguments": {}})),
+        )
+        .await
+        .unwrap();
+
+        assert!(resp.result.is_some());
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        assert_eq!(result["isError"], true);
+    }
+
+    #[tokio::test]
+    async fn handle_tools_call_missing_name_defaults_to_empty() {
+        let resp = handle_tools_call(
+            Some(serde_json::json!("tc2")),
+            Some(serde_json::json!({"arguments": {}})),
+        )
+        .await
+        .unwrap();
+
+        assert!(resp.result.is_some());
+        let result = resp.result.unwrap();
+        assert_eq!(result["isError"], true);
+    }
+}
