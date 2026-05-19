@@ -17,7 +17,7 @@ pub use constants::{
     GOAL_TEST_SPEC_FILE,
 };
 pub use error::GoalStateError;
-pub use persistence::goals_dir;
+pub(super) use persistence::goals_dir;
 pub use store::{FileSystemGoalStateStore, GoalStateStore};
 
 #[cfg(test)]

@@ -11,7 +11,7 @@ impl GoalState {
     }
 }
 
-pub fn goals_dir() -> PathBuf {
+pub(crate) fn goals_dir() -> PathBuf {
     crate::runtime::config::omk_state_dir().join(super::constants::GOALS_DIR)
 }
 

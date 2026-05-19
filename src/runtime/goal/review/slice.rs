@@ -12,11 +12,11 @@ use crate::runtime::goal::task_graph::{GoalDeliverySlice, GoalTaskGraph};
 use crate::runtime::goal::verifier::scan_goal_security_findings;
 
 /// Confidence threshold above which anti-slop issues are considered actionable.
-pub const ANTI_SLOP_ACTIONABLE_THRESHOLD: f64 = 0.5;
+pub(crate) const ANTI_SLOP_ACTIONABLE_THRESHOLD: f64 = 0.5;
 
 /// A single review pass artifact for a slice.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SliceReviewArtifact {
+pub(crate) struct SliceReviewArtifact {
     pub kind: String,
     pub passed: bool,
     pub feedback: String,
@@ -25,7 +25,7 @@ pub struct SliceReviewArtifact {
 
 /// Outcome of a per-slice review.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SliceReviewOutcome {
+pub(crate) struct SliceReviewOutcome {
     pub passed: bool,
     pub review_path: Option<PathBuf>,
     pub security_review_path: Option<PathBuf>,
@@ -36,7 +36,7 @@ pub struct SliceReviewOutcome {
 
 /// Compute anti-slop confidence from slice review artifacts and real slop findings.
 /// Returns a value in [0.0, 1.0] where higher means more likely slop.
-pub fn anti_slop_confidence(artifacts: &[SliceReviewArtifact]) -> f64 {
+pub(super) fn anti_slop_confidence(artifacts: &[SliceReviewArtifact]) -> f64 {
     let mut confidence: f64 = 0.0;
     for artifact in artifacts {
         if artifact.kind == "anti-slop" {
@@ -57,7 +57,7 @@ pub fn anti_slop_confidence(artifacts: &[SliceReviewArtifact]) -> f64 {
 }
 
 /// Compute anti-slop confidence from both artifacts and real slop findings.
-pub fn anti_slop_confidence_with_findings(
+pub(crate) fn anti_slop_confidence_with_findings(
     artifacts: &[SliceReviewArtifact],
     findings: &[SlopFinding],
 ) -> f64 {
@@ -68,7 +68,7 @@ pub fn anti_slop_confidence_with_findings(
 
 /// Run review gates and security scan in the slice worktree and produce
 /// pass/fail + human-readable feedback.
-pub async fn review_slice(
+pub(crate) async fn review_slice(
     _slice: &GoalDeliverySlice,
     _goal_state: &GoalState,
     _task_graph: &GoalTaskGraph,

@@ -1,7 +1,7 @@
 use crate::analysis::parser::Language;
 use crate::analysis::query::{call_target_name, node_range, CallSite};
 
-pub fn collect_calls(
+pub(super) fn collect_calls(
     source: &str,
     root: tree_sitter::Node,
     language: Language,

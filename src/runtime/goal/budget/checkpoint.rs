@@ -9,7 +9,7 @@ use crate::runtime::goal::state::{
 use super::events::append_budget_checkpoint_event;
 use super::{collect_goal_budget_usage, remaining_tokens, remaining_usd, GoalBudgetCheckpoint};
 
-pub async fn append_budget_checkpoint(
+pub(crate) async fn append_budget_checkpoint(
     state: &GoalState,
     label: &str,
 ) -> Result<GoalBudgetCheckpoint> {
@@ -22,7 +22,7 @@ pub async fn append_budget_checkpoint(
     Ok(checkpoint)
 }
 
-pub async fn read_budget_checkpoints(state: &GoalState) -> Result<Vec<GoalBudgetCheckpoint>> {
+pub(super) async fn read_budget_checkpoints(state: &GoalState) -> Result<Vec<GoalBudgetCheckpoint>> {
     let path = budget_checkpoints_path(state);
     let content = match tokio::fs::read_to_string(&path).await {
         Ok(content) => content,
@@ -50,7 +50,7 @@ pub async fn read_budget_checkpoints(state: &GoalState) -> Result<Vec<GoalBudget
     Ok(checkpoints)
 }
 
-pub async fn build_budget_checkpoint(
+pub(super) async fn build_budget_checkpoint(
     state: &GoalState,
     label: &str,
     recorded_at: DateTime<Utc>,
