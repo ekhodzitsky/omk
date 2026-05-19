@@ -298,11 +298,20 @@ async fn test_proof_upsert() {
 
     let proof = ProofRecord {
         goal_id: "goal-1".to_string(),
+        version: 1,
         status: "pending".to_string(),
+        readiness: "not_ready".to_string(),
+        summary: "Proof pending".to_string(),
+        task_graph_summary: None,
+        changed_files: Some("[\"src/lib.rs\"]".to_string()),
+        commits: None,
+        git: None,
+        gates: None,
         gates_passed: 0,
         gates_total: 3,
-        changed_files: Some("[\"src/lib.rs\"]".to_string()),
+        post_mutation_gates_ran: false,
         known_gaps: None,
+        human_decisions_required: None,
         recovery_status: None,
         generated_at: 1_700_000_000,
     };
@@ -314,11 +323,20 @@ async fn test_proof_upsert() {
 
     let updated = ProofRecord {
         goal_id: "goal-1".to_string(),
+        version: 1,
         status: "passed".to_string(),
+        readiness: "ready".to_string(),
+        summary: "All gates passed".to_string(),
+        task_graph_summary: None,
+        changed_files: Some("[\"src/lib.rs\", \"src/main.rs\"]".to_string()),
+        commits: None,
+        git: None,
+        gates: None,
         gates_passed: 3,
         gates_total: 3,
-        changed_files: Some("[\"src/lib.rs\", \"src/main.rs\"]".to_string()),
+        post_mutation_gates_ran: false,
         known_gaps: None,
+        human_decisions_required: None,
         recovery_status: Some("none".to_string()),
         generated_at: 1_700_000_001,
     };
@@ -355,7 +373,21 @@ async fn test_budget_checkpoints() {
         let cp = BudgetCheckpoint {
             checkpoint_id: None,
             goal_id: "goal-1".to_string(),
-            kind: "tokens".to_string(),
+            version: 1,
+            label: "tokens".to_string(),
+            status: "active".to_string(),
+            phase: "planning".to_string(),
+            recorded_at: 1_700_000_000 + i as i64,
+            budget_time: None,
+            total_budget_secs: Some(3600),
+            elapsed_since_created_secs: 0,
+            remaining_budget_secs: Some(3600),
+            budget_tokens: Some(1_000_000),
+            used_tokens: (i * 100) as i64,
+            remaining_budget_tokens: Some(1_000_000 - (i * 100) as i64),
+            budget_usd: Some(500),
+            estimated_cost_usd: 0,
+            remaining_budget_usd: Some(500),
             limit_value: Some(1_000_000),
             used_value: Some((i * 100) as i64),
             created_at: 1_700_000_000 + i as i64,
@@ -366,7 +398,7 @@ async fn test_budget_checkpoints() {
     let fetched = db.budget_repo().get_by_goal("goal-1").await.unwrap();
     assert_eq!(fetched.len(), 5);
     for (i, cp) in fetched.iter().enumerate() {
-        assert_eq!(cp.used_value, Some((i * 100) as i64));
+        assert_eq!(cp.used_tokens, (i * 100) as i64);
     }
 
     db.close().await.unwrap();

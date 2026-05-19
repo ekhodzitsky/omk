@@ -23,24 +23,44 @@ impl ProofRepo for ProofRepoImpl {
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO proofs (
-                        goal_id, status, gates_passed, gates_total,
-                        changed_files, known_gaps, recovery_status, generated_at
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                        goal_id, version, status, readiness, summary, task_graph_summary,
+                        changed_files, commits, git, gates, gates_passed, gates_total,
+                        post_mutation_gates_ran, known_gaps, human_decisions_required,
+                        recovery_status, generated_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
                     ON CONFLICT(goal_id) DO UPDATE SET
+                        version = excluded.version,
                         status = excluded.status,
+                        readiness = excluded.readiness,
+                        summary = excluded.summary,
+                        task_graph_summary = excluded.task_graph_summary,
+                        changed_files = excluded.changed_files,
+                        commits = excluded.commits,
+                        git = excluded.git,
+                        gates = excluded.gates,
                         gates_passed = excluded.gates_passed,
                         gates_total = excluded.gates_total,
-                        changed_files = excluded.changed_files,
+                        post_mutation_gates_ran = excluded.post_mutation_gates_ran,
                         known_gaps = excluded.known_gaps,
+                        human_decisions_required = excluded.human_decisions_required,
                         recovery_status = excluded.recovery_status,
                         generated_at = excluded.generated_at",
                     params![
                         proof.goal_id,
+                        proof.version,
                         proof.status,
+                        proof.readiness,
+                        proof.summary,
+                        proof.task_graph_summary,
+                        proof.changed_files,
+                        proof.commits,
+                        proof.git,
+                        proof.gates,
                         proof.gates_passed,
                         proof.gates_total,
-                        proof.changed_files,
+                        if proof.post_mutation_gates_ran { 1 } else { 0 },
                         proof.known_gaps,
+                        proof.human_decisions_required,
                         proof.recovery_status,
                         proof.generated_at,
                     ],
@@ -57,21 +77,32 @@ impl ProofRepo for ProofRepoImpl {
             .call(move |conn| {
                 let mut stmt = conn.prepare(
                     "SELECT
-                        goal_id, status, gates_passed, gates_total,
-                        changed_files, known_gaps, recovery_status, generated_at
+                        goal_id, version, status, readiness, summary, task_graph_summary,
+                        changed_files, commits, git, gates, gates_passed, gates_total,
+                        post_mutation_gates_ran, known_gaps, human_decisions_required,
+                        recovery_status, generated_at
                     FROM proofs WHERE goal_id = ?1",
                 )?;
                 let mut rows = stmt.query(params![goal_id])?;
                 if let Some(row) = rows.next()? {
                     Ok(Some(ProofRecord {
                         goal_id: row.get(0)?,
-                        status: row.get(1)?,
-                        gates_passed: row.get(2)?,
-                        gates_total: row.get(3)?,
-                        changed_files: row.get(4)?,
-                        known_gaps: row.get(5)?,
-                        recovery_status: row.get(6)?,
-                        generated_at: row.get(7)?,
+                        version: row.get(1)?,
+                        status: row.get(2)?,
+                        readiness: row.get(3)?,
+                        summary: row.get(4)?,
+                        task_graph_summary: row.get(5)?,
+                        changed_files: row.get(6)?,
+                        commits: row.get(7)?,
+                        git: row.get(8)?,
+                        gates: row.get(9)?,
+                        gates_passed: row.get(10)?,
+                        gates_total: row.get(11)?,
+                        post_mutation_gates_ran: row.get::<_, i32>(12)? != 0,
+                        known_gaps: row.get(13)?,
+                        human_decisions_required: row.get(14)?,
+                        recovery_status: row.get(15)?,
+                        generated_at: row.get(16)?,
                     }))
                 } else {
                     Ok(None)

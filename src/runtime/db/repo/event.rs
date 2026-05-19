@@ -50,7 +50,7 @@ impl EventRepo for EventRepoImpl {
         self.conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT event_id, goal_id, kind, payload, created_at
+                    "SELECT event_id, event_uuid, run_id, goal_id, schema_version, kind, actor, payload, created_at
                      FROM events
                      WHERE goal_id = ?1
                        AND (?2 IS NULL OR created_at >= ?2)
@@ -60,10 +60,14 @@ impl EventRepo for EventRepoImpl {
                 let rows = stmt.query_map(params![goal_id, since, limit_i64], |row| {
                     Ok(EventRecord {
                         event_id: row.get(0)?,
-                        goal_id: row.get(1)?,
-                        kind: row.get(2)?,
-                        payload: row.get(3)?,
-                        created_at: row.get(4)?,
+                        event_uuid: row.get(1)?,
+                        run_id: row.get(2)?,
+                        goal_id: row.get(3)?,
+                        schema_version: row.get(4)?,
+                        kind: row.get(5)?,
+                        actor: row.get(6)?,
+                        payload: row.get(7)?,
+                        created_at: row.get(8)?,
                     })
                 })?;
 

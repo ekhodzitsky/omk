@@ -26,11 +26,11 @@ impl DbHandle {
             let current: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
             if current < TARGET_USER_VERSION {
                 conn.execute_batch(INITIAL_SCHEMA)?;
-                conn.execute(
-                    &format!("PRAGMA user_version = {}", TARGET_USER_VERSION),
-                    [],
-                )?;
             }
+            conn.execute(
+                &format!("PRAGMA user_version = {}", TARGET_USER_VERSION),
+                [],
+            )?;
             Ok(())
         })
         .await
@@ -71,3 +71,5 @@ impl DbHandle {
             .map_err(DbError::Connection)
     }
 }
+
+

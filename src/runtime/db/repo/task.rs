@@ -33,24 +33,31 @@ impl TaskRepo for TaskRepoImpl {
             .call(move |conn| {
                 let mut stmt = conn.prepare(
                     "INSERT INTO tasks (
-                        task_id, goal_id, kind, status, owner, write_set,
-                        depends_on, retry_count, max_retries, lease_expires_at,
-                        evidence_paths, created_at, updated_at
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                        task_id, goal_id, title, description, kind, status, owner,
+                        read_set, write_set, depends_on, risk, acceptance, evidence,
+                        retry_count, max_retries, lease_expires_at, completed_at,
+                        created_at, updated_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
                 )?;
                 for task in &tasks {
                     stmt.execute(params![
                         task.task_id,
                         goal_id,
+                        task.title,
+                        task.description,
                         task.kind,
                         task.status,
                         task.owner,
+                        task.read_set,
                         task.write_set,
                         task.depends_on,
+                        task.risk,
+                        task.acceptance,
+                        task.evidence,
                         task.retry_count,
                         task.max_retries,
                         task.lease_expires_at,
-                        task.evidence_paths,
+                        task.completed_at,
                         task.created_at,
                         task.updated_at,
                     ])?;
@@ -67,9 +74,10 @@ impl TaskRepo for TaskRepoImpl {
             .call(move |conn| {
                 let mut stmt = conn.prepare(
                     "SELECT
-                        task_id, goal_id, kind, status, owner, write_set,
-                        depends_on, retry_count, max_retries, lease_expires_at,
-                        evidence_paths, created_at, updated_at
+                        task_id, goal_id, title, description, kind, status, owner,
+                        read_set, write_set, depends_on, risk, acceptance, evidence,
+                        retry_count, max_retries, lease_expires_at, completed_at,
+                        created_at, updated_at
                     FROM tasks WHERE task_id = ?1",
                 )?;
                 let mut rows = stmt.query(params![task_id])?;
@@ -77,17 +85,23 @@ impl TaskRepo for TaskRepoImpl {
                     Ok(Some(TaskRecord {
                         task_id: row.get(0)?,
                         goal_id: row.get(1)?,
-                        kind: row.get(2)?,
-                        status: row.get(3)?,
-                        owner: row.get(4)?,
-                        write_set: row.get(5)?,
-                        depends_on: row.get(6)?,
-                        retry_count: row.get(7)?,
-                        max_retries: row.get(8)?,
-                        lease_expires_at: row.get(9)?,
-                        evidence_paths: row.get(10)?,
-                        created_at: row.get(11)?,
-                        updated_at: row.get(12)?,
+                        title: row.get(2)?,
+                        description: row.get(3)?,
+                        kind: row.get(4)?,
+                        status: row.get(5)?,
+                        owner: row.get(6)?,
+                        read_set: row.get(7)?,
+                        write_set: row.get(8)?,
+                        depends_on: row.get(9)?,
+                        risk: row.get(10)?,
+                        acceptance: row.get(11)?,
+                        evidence: row.get(12)?,
+                        retry_count: row.get(13)?,
+                        max_retries: row.get(14)?,
+                        lease_expires_at: row.get(15)?,
+                        completed_at: row.get(16)?,
+                        created_at: row.get(17)?,
+                        updated_at: row.get(18)?,
                     }))
                 } else {
                     Ok(None)
@@ -103,26 +117,33 @@ impl TaskRepo for TaskRepoImpl {
             .call(move |conn| {
                 let mut stmt = conn.prepare(
                     "SELECT
-                        task_id, goal_id, kind, status, owner, write_set,
-                        depends_on, retry_count, max_retries, lease_expires_at,
-                        evidence_paths, created_at, updated_at
+                        task_id, goal_id, title, description, kind, status, owner,
+                        read_set, write_set, depends_on, risk, acceptance, evidence,
+                        retry_count, max_retries, lease_expires_at, completed_at,
+                        created_at, updated_at
                     FROM tasks WHERE goal_id = ?1 ORDER BY created_at",
                 )?;
                 let rows = stmt.query_map(params![goal_id], |row| {
                     Ok(TaskRecord {
                         task_id: row.get(0)?,
                         goal_id: row.get(1)?,
-                        kind: row.get(2)?,
-                        status: row.get(3)?,
-                        owner: row.get(4)?,
-                        write_set: row.get(5)?,
-                        depends_on: row.get(6)?,
-                        retry_count: row.get(7)?,
-                        max_retries: row.get(8)?,
-                        lease_expires_at: row.get(9)?,
-                        evidence_paths: row.get(10)?,
-                        created_at: row.get(11)?,
-                        updated_at: row.get(12)?,
+                        title: row.get(2)?,
+                        description: row.get(3)?,
+                        kind: row.get(4)?,
+                        status: row.get(5)?,
+                        owner: row.get(6)?,
+                        read_set: row.get(7)?,
+                        write_set: row.get(8)?,
+                        depends_on: row.get(9)?,
+                        risk: row.get(10)?,
+                        acceptance: row.get(11)?,
+                        evidence: row.get(12)?,
+                        retry_count: row.get(13)?,
+                        max_retries: row.get(14)?,
+                        lease_expires_at: row.get(15)?,
+                        completed_at: row.get(16)?,
+                        created_at: row.get(17)?,
+                        updated_at: row.get(18)?,
                     })
                 })?;
                 let mut results = Vec::new();
@@ -165,24 +186,31 @@ impl TaskRepo for TaskRepoImpl {
                 conn.execute("DELETE FROM tasks WHERE goal_id = ?1", params![goal_id])?;
                 let mut stmt = conn.prepare(
                     "INSERT INTO tasks (
-                        task_id, goal_id, kind, status, owner, write_set,
-                        depends_on, retry_count, max_retries, lease_expires_at,
-                        evidence_paths, created_at, updated_at
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                        task_id, goal_id, title, description, kind, status, owner,
+                        read_set, write_set, depends_on, risk, acceptance, evidence,
+                        retry_count, max_retries, lease_expires_at, completed_at,
+                        created_at, updated_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
                 )?;
                 for task in &tasks {
                     stmt.execute(params![
                         task.task_id,
                         goal_id,
+                        task.title,
+                        task.description,
                         task.kind,
                         task.status,
                         task.owner,
+                        task.read_set,
                         task.write_set,
                         task.depends_on,
+                        task.risk,
+                        task.acceptance,
+                        task.evidence,
                         task.retry_count,
                         task.max_retries,
                         task.lease_expires_at,
-                        task.evidence_paths,
+                        task.completed_at,
                         task.created_at,
                         task.updated_at,
                     ])?;

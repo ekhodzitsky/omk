@@ -25,27 +25,38 @@ impl GoalRepo for GoalRepoImpl {
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO goals (
-                        goal_id, status, phase, kind, goal_text, project_dir,
-                        policy, merge_policy, slice_execution, max_agents,
-                        budget_time_secs, budget_tokens, budget_usd,
-                        created_at, updated_at, controller_pid, version
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                        goal_id, status, phase, kind, original_goal, normalized_goal,
+                        goal_text, project_dir, state_dir, policy, delivery_policy,
+                        merge_policy, until_ready, slice_execution, max_agents,
+                        budget_time_secs, budget_tokens, budget_usd, cost_tracker_path,
+                        terminal_criteria, failure, created_at, updated_at,
+                        completed_at, controller_pid, version
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
                     params![
                         goal.goal_id,
                         goal.status,
                         goal.phase,
                         goal.kind,
+                        goal.original_goal,
+                        goal.normalized_goal,
                         goal.goal_text,
                         goal.project_dir,
+                        goal.state_dir,
                         goal.policy,
+                        goal.delivery_policy,
                         goal.merge_policy,
+                        if goal.until_ready { 1 } else { 0 },
                         if goal.slice_execution { 1 } else { 0 },
                         goal.max_agents,
                         goal.budget_time_secs,
                         goal.budget_tokens,
                         goal.budget_usd,
+                        goal.cost_tracker_path,
+                        goal.terminal_criteria,
+                        goal.failure,
                         goal.created_at,
                         goal.updated_at,
+                        goal.completed_at,
                         goal.controller_pid,
                         goal.version,
                     ],
@@ -62,10 +73,12 @@ impl GoalRepo for GoalRepoImpl {
             .call(move |conn| {
                 let mut stmt = conn.prepare(
                     "SELECT
-                        goal_id, status, phase, kind, goal_text, project_dir,
-                        policy, merge_policy, slice_execution, max_agents,
-                        budget_time_secs, budget_tokens, budget_usd,
-                        created_at, updated_at, controller_pid, version
+                        goal_id, status, phase, kind, original_goal, normalized_goal,
+                        goal_text, project_dir, state_dir, policy, delivery_policy,
+                        merge_policy, until_ready, slice_execution, max_agents,
+                        budget_time_secs, budget_tokens, budget_usd, cost_tracker_path,
+                        terminal_criteria, failure, created_at, updated_at,
+                        completed_at, controller_pid, version
                     FROM goals WHERE goal_id = ?1",
                 )?;
                 let mut rows = stmt.query(params![goal_id])?;
@@ -75,19 +88,28 @@ impl GoalRepo for GoalRepoImpl {
                         status: row.get(1)?,
                         phase: row.get(2)?,
                         kind: row.get(3)?,
-                        goal_text: row.get(4)?,
-                        project_dir: row.get(5)?,
-                        policy: row.get(6)?,
-                        merge_policy: row.get(7)?,
-                        slice_execution: row.get::<_, i32>(8)? != 0,
-                        max_agents: row.get(9)?,
-                        budget_time_secs: row.get(10)?,
-                        budget_tokens: row.get(11)?,
-                        budget_usd: row.get(12)?,
-                        created_at: row.get(13)?,
-                        updated_at: row.get(14)?,
-                        controller_pid: row.get(15)?,
-                        version: row.get(16)?,
+                        original_goal: row.get(4)?,
+                        normalized_goal: row.get(5)?,
+                        goal_text: row.get(6)?,
+                        project_dir: row.get(7)?,
+                        state_dir: row.get(8)?,
+                        policy: row.get(9)?,
+                        delivery_policy: row.get(10)?,
+                        merge_policy: row.get(11)?,
+                        until_ready: row.get::<_, i32>(12)? != 0,
+                        slice_execution: row.get::<_, i32>(13)? != 0,
+                        max_agents: row.get(14)?,
+                        budget_time_secs: row.get(15)?,
+                        budget_tokens: row.get(16)?,
+                        budget_usd: row.get(17)?,
+                        cost_tracker_path: row.get(18)?,
+                        terminal_criteria: row.get(19)?,
+                        failure: row.get(20)?,
+                        created_at: row.get(21)?,
+                        updated_at: row.get(22)?,
+                        completed_at: row.get(23)?,
+                        controller_pid: row.get(24)?,
+                        version: row.get(25)?,
                     }))
                 } else {
                     Ok(None)
@@ -97,7 +119,12 @@ impl GoalRepo for GoalRepoImpl {
             .map_err(DbError::Connection)
     }
 
-    async fn update_status(&self, goal_id: &str, status: &str, phase: &str) -> Result<(), DbError> {
+    async fn update_status(
+        &self,
+        goal_id: &str,
+        status: &str,
+        phase: &str,
+    ) -> Result<(), DbError> {
         let goal_id = goal_id.to_string();
         let status = status.to_string();
         let phase = phase.to_string();
