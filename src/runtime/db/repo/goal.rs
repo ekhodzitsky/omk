@@ -119,12 +119,7 @@ impl GoalRepo for GoalRepoImpl {
             .map_err(DbError::Connection)
     }
 
-    async fn update_status(
-        &self,
-        goal_id: &str,
-        status: &str,
-        phase: &str,
-    ) -> Result<(), DbError> {
+    async fn update_status(&self, goal_id: &str, status: &str, phase: &str) -> Result<(), DbError> {
         let goal_id = goal_id.to_string();
         let status = status.to_string();
         let phase = phase.to_string();

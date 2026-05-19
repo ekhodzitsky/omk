@@ -110,7 +110,10 @@ impl BudgetRepo for BudgetRepoImpl {
         let goal_id = goal_id.to_string();
         self.conn
             .call(move |conn| {
-                conn.execute("DELETE FROM budget_checkpoints WHERE goal_id = ?1", params![goal_id])?;
+                conn.execute(
+                    "DELETE FROM budget_checkpoints WHERE goal_id = ?1",
+                    params![goal_id],
+                )?;
                 Ok(())
             })
             .await

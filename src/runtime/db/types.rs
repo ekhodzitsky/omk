@@ -21,7 +21,7 @@ pub struct GoalRecord {
     pub budget_usd: Option<i64>, // cents
     pub cost_tracker_path: Option<String>,
     pub terminal_criteria: Option<String>, // JSON
-    pub failure: Option<String>,          // JSON
+    pub failure: Option<String>,           // JSON
     pub created_at: i64,
     pub updated_at: i64,
     pub completed_at: Option<i64>,
@@ -39,12 +39,12 @@ pub struct TaskRecord {
     pub kind: String,
     pub status: String,
     pub owner: Option<String>,
-    pub read_set: Option<String>,      // JSON array
-    pub write_set: Option<String>,     // JSON array
-    pub depends_on: Option<String>,    // JSON array
+    pub read_set: Option<String>,   // JSON array
+    pub write_set: Option<String>,  // JSON array
+    pub depends_on: Option<String>, // JSON array
     pub risk: String,
-    pub acceptance: Option<String>,    // JSON array
-    pub evidence: Option<String>,      // JSON array
+    pub acceptance: Option<String>, // JSON array
+    pub evidence: Option<String>,   // JSON array
     pub retry_count: i32,
     pub max_retries: i32,
     pub lease_expires_at: Option<i64>,
@@ -83,7 +83,7 @@ pub struct ProofRecord {
     pub gates_passed: i32,
     pub gates_total: i32,
     pub post_mutation_gates_ran: bool,
-    pub known_gaps: Option<String>,         // JSON array
+    pub known_gaps: Option<String>,               // JSON array
     pub human_decisions_required: Option<String>, // JSON array
     pub recovery_status: Option<String>,
     pub generated_at: i64,
@@ -106,8 +106,8 @@ pub struct BudgetCheckpoint {
     pub budget_tokens: Option<i64>,
     pub used_tokens: i64,
     pub remaining_budget_tokens: Option<i64>,
-    pub budget_usd: Option<i64>, // cents
-    pub estimated_cost_usd: i64, // cents
+    pub budget_usd: Option<i64>,           // cents
+    pub estimated_cost_usd: i64,           // cents
     pub remaining_budget_usd: Option<i64>, // cents
     pub limit_value: Option<i64>,
     pub used_value: Option<i64>,

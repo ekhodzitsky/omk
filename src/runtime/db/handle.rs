@@ -71,5 +71,3 @@ impl DbHandle {
             .map_err(DbError::Connection)
     }
 }
-
-
