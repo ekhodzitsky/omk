@@ -1,12 +1,8 @@
 use anyhow::{Context, Result};
+use crate::git::GitRepo;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::Output;
-use std::time::Duration;
-use tokio::process::Command;
-use tokio::time::timeout;
 
 mod conflict;
 
@@ -17,7 +13,7 @@ pub use conflict::{
 const BRANCH_PREFIX: &str = "omk/goal";
 const WORKTREE_PREFIX: &str = "goal";
 const COMPONENT_MAX_CHARS: usize = 48;
-const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoalWorktreePlan {
@@ -151,13 +147,7 @@ pub async fn materialize_goal_worktrees(
 }
 
 pub(crate) async fn is_git_worktree(repo_dir: &Path) -> Result<bool> {
-    let output = git_output(
-        repo_dir,
-        git_args(&["rev-parse", "--is-inside-work-tree"]),
-        "verify git repository",
-    )
-    .await?;
-    Ok(output.status.success() && output_stdout(&output).trim() == "true")
+    Ok(GitRepo::open(repo_dir).is_ok())
 }
 
 async fn ensure_git_worktree(repo_dir: &Path) -> Result<()> {
@@ -171,21 +161,16 @@ async fn ensure_git_worktree(repo_dir: &Path) -> Result<()> {
 }
 
 async fn ensure_clean_git_worktree(repo_dir: &Path) -> Result<()> {
-    let status = git_stdout(
-        repo_dir,
-        git_args(&["status", "--porcelain"]),
-        "check git worktree status",
-    )
-    .await?;
-    if status.trim().is_empty() {
-        return Ok(());
+    let repo = GitRepo::open(repo_dir)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    if let Err(e) = repo.ensure_clean().await {
+        let sample = format!("{e}");
+        anyhow::bail!(
+            "goal worktree materialization requires a clean git worktree: {} has changes ({sample})",
+            repo_dir.display()
+        );
     }
-
-    let sample = status.lines().take(5).collect::<Vec<_>>().join("; ");
-    anyhow::bail!(
-        "goal worktree materialization requires a clean git worktree: {} has changes ({sample})",
-        repo_dir.display()
-    );
+    Ok(())
 }
 
 async fn ensure_materialization_targets_are_available(
@@ -217,80 +202,23 @@ fn path_is_occupied(path: &Path) -> Result<bool> {
 }
 
 async fn git_branch_exists(repo_dir: &Path, branch_name: &str) -> Result<bool> {
-    let ref_name = format!("refs/heads/{branch_name}");
-    let output = git_output(
-        repo_dir,
-        vec![
-            OsString::from("show-ref"),
-            OsString::from("--verify"),
-            OsString::from("--quiet"),
-            OsString::from(ref_name),
-        ],
-        "check branch availability",
-    )
-    .await?;
-
-    match output.status.code() {
-        Some(0) => Ok(true),
-        Some(1) => Ok(false),
-        _ => Err(git_failure("check branch availability", &output)),
-    }
+    let repo = GitRepo::open(repo_dir)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    repo.branch_exists(branch_name)
+        .await
+        .map_err(|e| anyhow::anyhow!("git branch check failed: {e}"))
 }
 
 async fn create_git_worktree(repo_dir: &Path, plan: &GoalWorktreePlan) -> Result<()> {
-    let output = git_output(
-        repo_dir,
-        vec![
-            OsString::from("worktree"),
-            OsString::from("add"),
-            OsString::from("-b"),
-            OsString::from(&plan.branch_name),
-            plan.worktree_path.as_os_str().to_os_string(),
-            OsString::from("HEAD"),
-        ],
-        "create goal worktree",
-    )
-    .await?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(git_failure("create goal worktree", &output))
-    }
-}
-
-async fn git_stdout(repo_dir: &Path, args: Vec<OsString>, description: &str) -> Result<String> {
-    let output = git_output(repo_dir, args, description).await?;
-    if output.status.success() {
-        Ok(output_stdout(&output))
-    } else {
-        Err(git_failure(description, &output))
-    }
-}
-
-async fn git_output(repo_dir: &Path, args: Vec<OsString>, description: &str) -> Result<Output> {
-    let mut command = Command::new("git");
-    command.arg("-C").arg(repo_dir).args(args);
-    timeout(GIT_COMMAND_TIMEOUT, command.output())
+    let repo = GitRepo::open(repo_dir)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    repo.branch_create(&plan.branch_name, Some("HEAD"))
         .await
-        .with_context(|| format!("Timed out while running git to {description}"))?
-        .with_context(|| format!("Failed to run git to {description}"))
-}
-
-fn git_args(args: &[&str]) -> Vec<OsString> {
-    args.iter().map(OsString::from).collect()
-}
-
-fn output_stdout(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
-}
-
-fn git_failure(description: &str, output: &Output) -> anyhow::Error {
-    anyhow::anyhow!(
-        "git failed to {description}: status={} stdout={} stderr={}",
-        output.status,
-        String::from_utf8_lossy(&output.stdout).trim(),
-        String::from_utf8_lossy(&output.stderr).trim()
-    )
+        .map_err(|e| anyhow::anyhow!("git branch create failed: {e}"))?;
+    repo.worktree_add(&plan.worktree_path, &plan.branch_name)
+        .await
+        .map_err(|e| anyhow::anyhow!("git worktree add failed: {e}"))?;
+    Ok(())
 }
 
 /// Remove a single git worktree. Silently succeeds if the worktree does not exist.
@@ -298,22 +226,12 @@ pub(super) async fn remove_goal_worktree(repo_dir: &Path, worktree_path: &Path) 
     if !worktree_path.exists() {
         return Ok(());
     }
-    let output = git_output(
-        repo_dir,
-        vec![
-            OsString::from("worktree"),
-            OsString::from("remove"),
-            OsString::from("--force"),
-            worktree_path.as_os_str().to_os_string(),
-        ],
-        "remove goal worktree",
-    )
-    .await?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(git_failure("remove goal worktree", &output))
-    }
+    let repo = GitRepo::open(repo_dir)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    repo.worktree_remove(worktree_path, true)
+        .await
+        .map_err(|e| anyhow::anyhow!("git worktree remove failed: {e}"))?;
+    Ok(())
 }
 
 /// Remove all worktrees for a list of worktree paths. Errors are logged but not

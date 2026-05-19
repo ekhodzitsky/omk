@@ -1,10 +1,9 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use std::collections::BTreeSet;
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use crate::git::GitRepo;
 use crate::runtime::goal::state::GOAL_ARTIFACTS_DIR;
 use crate::runtime::goal::task_graph::{
     update_goal_task_delivery_metadata, GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryStatus,
@@ -37,28 +36,18 @@ pub struct GoalMergeConflictEvidence {
 pub async fn detect_goal_merge_conflicts(
     request: GoalMergeConflictCheckRequest,
 ) -> Result<GoalMergeConflictEvidence> {
-    let output = super::git_output(
-        &request.repo_dir,
-        vec![
-            OsString::from("merge-tree"),
-            OsString::from("--write-tree"),
-            OsString::from("--name-only"),
-            OsString::from(&request.target_ref),
-            OsString::from(&request.source_ref),
-        ],
-        "detect goal merge conflicts",
-    )
-    .await?;
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let clean_merge = output.status.success();
-    let conflicting_files = if clean_merge {
-        Vec::new()
-    } else {
-        parse_conflicting_files(&stdout)
-    };
+    let repo = GitRepo::open(&request.repo_dir)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let result = repo
+        .merge_tree(&request.target_ref, &request.source_ref)
+        .await
+        .map_err(|e| anyhow::anyhow!("git merge-tree failed: {e}"))?;
+
+    let clean_merge = !result.has_conflicts;
+    let conflicting_files = result.conflict_files.clone();
+
     if !clean_merge && conflicting_files.is_empty() {
-        return Err(super::git_failure("detect goal merge conflicts", &output));
+        anyhow::bail!("merge-tree detected conflicts but no conflicting files were parsed");
     }
 
     let artifact_path = conflict_artifact_path(&request.task_id)?;
@@ -69,28 +58,21 @@ pub async fn detect_goal_merge_conflicts(
         clean_merge,
         conflicting_files,
         command_line: format!(
-            "git merge-tree --write-tree --name-only {} {}",
+            "git merge-tree {} {}",
             request.target_ref, request.source_ref
         ),
-        stdout_summary: summarize_output(&stdout),
-        stderr_summary: summarize_output(&stderr),
+        stdout_summary: if clean_merge {
+            "clean merge".to_string()
+        } else {
+            result.conflict_files.join("\n")
+        },
+        stderr_summary: String::new(),
         artifact_path,
     };
 
     write_conflict_artifact(&request.goal_dir, &evidence).await?;
     record_conflict_delivery_metadata(&request.goal_dir, &evidence).await?;
     Ok(evidence)
-}
-
-fn parse_conflicting_files(stdout: &str) -> Vec<String> {
-    stdout
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(ToString::to_string)
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect()
 }
 
 fn conflict_artifact_path(task_id: &str) -> Result<PathBuf> {
@@ -171,12 +153,4 @@ async fn record_conflict_delivery_metadata(
     Ok(())
 }
 
-fn summarize_output(output: &str) -> String {
-    output
-        .lines()
-        .take(20)
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string()
-}
+
