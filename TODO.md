@@ -2,12 +2,41 @@
 
 This is the implementation backlog for `omk goal`.
 
-Canonical spec: `SPEC.md`
-Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
-End-to-end delivery contract:
-`docs/superpowers/specs/2026-05-14-omk-goal-end-to-end-delivery.md`
+Canonical spec: `SPEC.md`  
+End-to-end delivery contract: `ROADMAP.md` Stage 7.
 
-## Phase 1 - Durable Goal State
+---
+
+## Active Backlog
+
+These are implemented at the scaffold/code level but need hardening or
+real-world validation before they are considered fully closed:
+
+- [ ] Treat routine polish as part of the goal: anti-slop review should
+      automatically spawn cleanup/refactor follow-up tasks when evidence shows
+      rough edges, not just record the finding in `proof.json`.
+- [ ] Run the full 6-review wall (architect, code, test, security, performance,
+      anti-slop) against each slice PR. Current per-slice review runs gates +
+      security scan only.
+- [ ] Detect integration conflicts with `git merge-tree`, rebase/update task PRs
+      when safe, and record conflict evidence when automatic recovery is unsafe.
+      Current merge-tree check exists but auto-rebase is not implemented.
+- [ ] Gate final merge into `main` / `master` on proof, CI, review wall, and
+      delivery policy. `merge_policy` (`gated`/`manual`/`disabled`) is wired but
+      the actual merge action relies on `gh pr merge` polling and needs
+      end-to-end validation with real GitHub PRs.
+- [ ] Document manual recovery for failed PR creation, failed CI, review
+      blockers, merge conflicts, and partial acceptance.
+
+---
+
+## Archive
+
+All items below are completed. They are preserved for historical context; do
+not treat them as active work.
+
+<details>
+<summary>Phase 1 – Durable Goal State (completed)</summary>
 
 - [x] Add `src/runtime/goal/` module.
 - [x] Define `GoalStatus` and `GoalState`.
@@ -22,7 +51,10 @@ End-to-end delivery contract:
 - [x] Add unit tests for serialization.
 - [x] Add backward-compatible read/migration tests.
 
-## Phase 2 - CLI Surface
+</details>
+
+<details>
+<summary>Phase 2 – CLI Surface (completed)</summary>
 
 - [x] Add `omk goal run <goal>`.
 - [x] Add `omk goal status [goal-id|latest]`.
@@ -39,7 +71,10 @@ End-to-end delivery contract:
 - [x] Add command help smoke tests.
 - [x] Add JSON output smoke tests.
 
-## Phase 3 - Planning Artifacts
+</details>
+
+<details>
+<summary>Phase 3 – Planning Artifacts (completed)</summary>
 
 - [x] Generate `prd.md` or `goal-brief.md`.
 - [x] Generate `technical-plan.md`.
@@ -50,7 +85,10 @@ End-to-end delivery contract:
 - [x] Add `blocked_on_human` when success criteria cannot be made testable.
 - [x] Add tests for greenfield and rewrite planning fixtures.
 
-## Phase 4 - Task Graph
+</details>
+
+<details>
+<summary>Phase 4 – Task Graph (completed)</summary>
 
 - [x] Define task node schema.
 - [x] Track dependencies.
@@ -63,7 +101,10 @@ End-to-end delivery contract:
 - [x] Add graph mutation events.
 - [x] Add tests for dependency ordering and exact/normalized/parent-child/read-write access conflicts.
 
-## Phase 5 - Agent Orchestration
+</details>
+
+<details>
+<summary>Phase 5 – Agent Orchestration (completed)</summary>
 
 - [x] Implement first policy-validating goal controller loop.
 - [x] Add local controller execution step for verification task evidence.
@@ -79,7 +120,10 @@ End-to-end delivery contract:
 - [x] Emit task proposed/accepted/rejected events.
 - [x] Add tests with a mock Wire agent for the first execution wave.
 
-## Phase 6 - Verification and Proof
+</details>
+
+<details>
+<summary>Phase 6 – Verification and Proof (completed)</summary>
 
 - [x] Add goal proof model.
 - [x] Capture gate command evidence.
@@ -96,7 +140,10 @@ End-to-end delivery contract:
 - [x] Add ready-path greenfield and rewrite fixture tests with oracle,
       review, integration, and PR draft evidence.
 
-## Phase 7 - Rewrite Oracle
+</details>
+
+<details>
+<summary>Phase 7 – Rewrite Oracle (completed)</summary>
 
 - [x] Detect source project command/API surfaces.
 - [x] Generate compatibility test plan.
@@ -106,7 +153,10 @@ End-to-end delivery contract:
 - [x] Track intentional incompatibilities.
 - [x] Add small Python-to-Rust fixture demo.
 
-## Phase 8 - Greenfield Oracle
+</details>
+
+<details>
+<summary>Phase 8 – Greenfield Oracle (completed)</summary>
 
 - [x] Generate acceptance tests from PRD.
 - [x] Generate smoke/demo script.
@@ -114,7 +164,10 @@ End-to-end delivery contract:
 - [x] Add "engineering-ready" vs "product-ready" distinction.
 - [x] Add greenfield CLI/app fixture demo.
 
-## Phase 9 - Worktree Integration
+</details>
+
+<details>
+<summary>Phase 9 – Worktree Integration (completed)</summary>
 
 - [x] Treat `master` / `main` as read-only baselines in docs, PR templates,
       and future automation. (Docs and PR template done; CI/branch-protection
@@ -128,7 +181,10 @@ End-to-end delivery contract:
 - [x] Preserve changelog and docs updates.
 - [x] Add rollback for rejected slices.
 
-## Phase 10 - Review Loops
+</details>
+
+<details>
+<summary>Phase 10 – Review Loops (completed)</summary>
 
 - [x] Add initial controller review pass.
 - [x] Add initial controller security evidence pass.
@@ -140,7 +196,10 @@ End-to-end delivery contract:
 - [x] Add performance review pass.
 - [x] Add anti-slop cleanup pass.
 
-## Phase 11 - GitHub Delivery
+</details>
+
+<details>
+<summary>Phase 11 – GitHub Delivery (completed)</summary>
 
 - [x] Add `omk goal open-pr`.
 - [x] Generate PR body from proof.
@@ -150,7 +209,10 @@ End-to-end delivery contract:
 - [x] Support draft PR dry-run metadata.
 - [x] Support release-candidate notes in PR dry-run output.
 
-## Phase 12 - End-to-End Delivery Controller
+</details>
+
+<details>
+<summary>Phase 12 – End-to-End Delivery Controller (completed)</summary>
 
 - [x] Keep the primary UX one-command: `omk goal run ... --until-ready`;
       additional commands are for inspection, recovery, and explicit policy
@@ -179,30 +241,10 @@ End-to-end delivery contract:
 - [x] Add an end-to-end fixture proving: plan -> worktree -> agent -> delivery
       metadata -> narrative TUI.
 
-## Phase 12 Leftovers / Next Release
+</details>
 
-These are implemented at the scaffold/code level but need hardening or
-real-world validation before they are considered fully closed:
-
-- [ ] Treat routine polish as part of the goal: anti-slop review should
-      automatically spawn cleanup/refactor follow-up tasks when evidence shows
-      rough edges, not just record the finding in `proof.json`.
-- [ ] Run the full 6-review wall (architect, code, test, security, performance,
-      anti-slop) against each slice PR. Current per-slice review runs gates +
-      security scan only.
-- [ ] Detect integration conflicts with `git merge-tree`, rebase/update task PRs
-      when safe, and record conflict evidence when automatic recovery is unsafe.
-      Current merge-tree check exists but auto-rebase is not implemented.
-- [ ] Gate final merge into `main` / `master` on proof, CI, review wall, and
-      delivery policy. `merge_policy` (`gated`/`manual`/`disabled`) is wired but
-      the actual merge action relies on `gh pr merge` polling and needs
-      end-to-end validation with real GitHub PRs.
-- [ ] Document manual recovery for failed PR creation, failed CI, review
-      blockers, merge conflicts, and partial acceptance.
-- [x] Concurrent slice execution with non-overlapping write scopes in isolated
-      git worktrees. Overlapping scopes are still serialized.
-
-## Phase 13 - Long-Horizon Reliability
+<details>
+<summary>Phase 13 – Long-Horizon Reliability (completed)</summary>
 
 - [x] Add pause/resume across process restart.
 - [x] Harden pause/resume against active worker interruption.
@@ -217,7 +259,10 @@ real-world validation before they are considered fully closed:
 - [x] Add goal replay.
 - [x] Harden goal replay into deterministic crash-recovery replay.
 
-## Documentation Tasks
+</details>
+
+<details>
+<summary>Documentation Tasks (completed)</summary>
 
 - [x] Add `omk goal` tutorial after CLI MVP exists.
 - [x] Add troubleshooting entries for blocked goals.
@@ -226,7 +271,10 @@ real-world validation before they are considered fully closed:
 - [x] Refresh `docs/COMPETITIVE_POSITIONING.md` before each major `omk goal` release.
 - [x] Update README feature table when the first goal MVP lands.
 
-## Release Gates for First Goal MVP
+</details>
+
+<details>
+<summary>Release Gates for First Goal MVP (completed)</summary>
 
 - [x] `cargo fmt -- --check`
 - [x] `cargo check --all-targets`
@@ -235,3 +283,5 @@ real-world validation before they are considered fully closed:
 - [x] `cargo doc --no-deps`
 - [x] `cargo deny --all-features check advisories licenses`
 - [x] North Star goal fixture demo passes.
+
+</details>

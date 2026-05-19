@@ -118,9 +118,11 @@ Exit criteria:
 Target: make parallel work safe.
 
 - Treat `master` / `main` as read-only baselines; all slices land through PRs.
-- Use the goal task graph plus GitHub PRs as the durable coordination layer for
-  human, Codex, Kimi, Claude, and future `omk goal` workers.
-- Create isolated worktrees or branches for independent task slices.
+- Use task-scoped worktrees and branches as the canonical coordination path.
+  GitHub PRs carry proof evidence, write scopes, and verification wall output
+  for human, Codex, Kimi, Claude, and future `omk goal` workers.
+- Create isolated worktrees for independent task slices; fall back to branches
+  when worktree creation is not possible.
 - Record one task per slice with owner, write scope, dependencies, gates,
   branch, and PR link.
 - Merge accepted slices through an integrator task. Current local integrator
