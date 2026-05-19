@@ -7,12 +7,12 @@ const STANDARD_INPUT_USD_PER_1M_TOKENS: f64 = 2.0;
 const STANDARD_OUTPUT_USD_PER_1M_TOKENS: f64 = 8.0;
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct GoalBudgetUsage {
+pub(super) struct GoalBudgetUsage {
     pub used_tokens: u64,
     pub estimated_cost_usd: f64,
 }
 
-pub async fn collect_goal_budget_usage(state: &GoalState) -> GoalBudgetUsage {
+pub(super) async fn collect_goal_budget_usage(state: &GoalState) -> GoalBudgetUsage {
     let root = state
         .state_dir
         .join(GOAL_ARTIFACTS_DIR)
@@ -122,12 +122,12 @@ fn estimate_split_token_cost(input_tokens: u64, output_tokens: u64) -> f64 {
 }
 
 impl GoalBudgetUsage {
-    pub fn add(&mut self, other: GoalBudgetUsage) {
+    pub(super) fn add(&mut self, other: GoalBudgetUsage) {
         self.used_tokens = self.used_tokens.saturating_add(other.used_tokens);
         self.estimated_cost_usd += other.estimated_cost_usd;
     }
 
-    pub fn keep_max(&mut self, other: GoalBudgetUsage) {
+    pub(super) fn keep_max(&mut self, other: GoalBudgetUsage) {
         if other.used_tokens > self.used_tokens {
             *self = other;
         }

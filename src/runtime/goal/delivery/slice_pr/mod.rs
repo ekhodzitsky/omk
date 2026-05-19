@@ -25,7 +25,7 @@ const DEFAULT_REMOTE: &str = "origin";
 
 /// Options for delivering a slice PR.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SlicePrDeliveryOptions {
+pub(crate) struct SlicePrDeliveryOptions {
     pub policy: GoalDeliveryPolicy,
     pub dry_run: bool,
     pub base_branch: Option<String>,
@@ -33,7 +33,7 @@ pub struct SlicePrDeliveryOptions {
 
 /// Outcome of delivering a slice PR.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SlicePrDeliveryOutcome {
+pub(crate) struct SlicePrDeliveryOutcome {
     pub commit_sha: Option<String>,
     pub pr_url: Option<String>,
     pub mutated: bool,
@@ -43,7 +43,7 @@ pub struct SlicePrDeliveryOutcome {
 }
 
 /// Full pipeline: detect changes → commit → push → open/update PR for one slice.
-pub async fn deliver_slice_pr(
+pub(crate) async fn deliver_slice_pr(
     worktree_path: &Path,
     slice: &GoalDeliverySlice,
     goal_state: &GoalState,

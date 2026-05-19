@@ -8,9 +8,9 @@ mod slice_pr;
 
 pub use pr_client::{poll_github_pr_checks, GoalGithubPrCommandClient};
 pub use pr_draft::{deliver_goal_open_pr_with_client, open_goal_pr_with_client};
-pub use slice_pr::{deliver_slice_pr, SlicePrDeliveryOptions};
+pub(super) use slice_pr::{deliver_slice_pr, SlicePrDeliveryOptions};
 
-pub type GoalGithubPrFuture<'a> =
+pub(super) type GoalGithubPrFuture<'a> =
     Pin<Box<dyn Future<Output = anyhow::Result<GoalGithubPrMutation>> + Send + 'a>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

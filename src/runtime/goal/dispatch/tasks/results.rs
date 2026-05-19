@@ -10,7 +10,7 @@ use crate::runtime::goal::state::{GoalState, GOAL_AGENT_WORKER_ID};
 use crate::runtime::goal::task_graph::GoalTaskStatus;
 use crate::runtime::worker::WorkerSpec;
 
-pub async fn read_goal_agent_worker_results(
+pub(super) async fn read_goal_agent_worker_results(
     specs: &[WorkerSpec],
     task_ids: &[String],
 ) -> Result<Vec<crate::runtime::worker::WorkerResult>> {
@@ -26,7 +26,7 @@ pub async fn read_goal_agent_worker_results(
     Ok(filtered)
 }
 
-pub fn summarize_goal_agent_worker_results(
+pub(super) fn summarize_goal_agent_worker_results(
     results: &[crate::runtime::worker::WorkerResult],
 ) -> Option<String> {
     let summaries: Vec<String> = results

@@ -1946,7 +1946,6 @@ fn test_goal_replay_json_is_deterministic_after_restart() {
         String::from_utf8_lossy(&first.stdout),
         String::from_utf8_lossy(&first.stderr)
     );
-    thread::sleep(Duration::from_millis(25));
     let second = omk_cmd(&envs)
         .args(["goal", "replay", "latest", "--json"])
         .output()

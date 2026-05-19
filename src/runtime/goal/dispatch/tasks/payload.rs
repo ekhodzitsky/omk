@@ -1,7 +1,7 @@
 use crate::runtime::goal::agent::{goal_agent_task_policy_payload, GoalAgentTaskProposal};
 use crate::runtime::goal::budget::PerTaskBudgetSnapshot;
 
-pub fn task_dispatch_accepted_payload(
+pub(super) fn task_dispatch_accepted_payload(
     proposal: &GoalAgentTaskProposal,
     snapshot: &PerTaskBudgetSnapshot,
 ) -> anyhow::Result<serde_json::Value> {
@@ -15,7 +15,7 @@ pub fn task_dispatch_accepted_payload(
     Ok(value)
 }
 
-pub fn task_dispatch_rejected_payload(
+pub(super) fn task_dispatch_rejected_payload(
     proposal: &GoalAgentTaskProposal,
     reason: &str,
     snapshot: Option<&PerTaskBudgetSnapshot>,

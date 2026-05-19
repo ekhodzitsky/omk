@@ -1,7 +1,7 @@
 use crate::analysis::parser::Language;
 use crate::analysis::query::{extract_params, node_range, node_text, FunctionDef};
 
-pub fn collect_functions(
+pub(super) fn collect_functions(
     source: &str,
     root: tree_sitter::Node,
     language: Language,

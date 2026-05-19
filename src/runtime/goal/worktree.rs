@@ -294,7 +294,7 @@ fn git_failure(description: &str, output: &Output) -> anyhow::Error {
 }
 
 /// Remove a single git worktree. Silently succeeds if the worktree does not exist.
-pub async fn remove_goal_worktree(repo_dir: &Path, worktree_path: &Path) -> Result<()> {
+pub(super) async fn remove_goal_worktree(repo_dir: &Path, worktree_path: &Path) -> Result<()> {
     if !worktree_path.exists() {
         return Ok(());
     }
@@ -318,7 +318,7 @@ pub async fn remove_goal_worktree(repo_dir: &Path, worktree_path: &Path) -> Resu
 
 /// Remove all worktrees for a list of worktree paths. Errors are logged but not
 /// returned so that cleanup is best-effort.
-pub async fn remove_goal_worktrees(repo_dir: &Path, worktree_paths: &[PathBuf]) {
+pub(super) async fn remove_goal_worktrees(repo_dir: &Path, worktree_paths: &[PathBuf]) {
     for path in worktree_paths {
         if let Err(e) = remove_goal_worktree(repo_dir, path).await {
             tracing::warn!(

@@ -14,7 +14,7 @@ pub async fn list_goals() -> Result<Vec<GoalState>> {
 }
 
 /// Generic variant of [`list_goals`] for tests and alternative backends.
-pub async fn list_goals_with_store<S: GoalStateStore>(store: &S) -> Result<Vec<GoalState>> {
+pub(super) async fn list_goals_with_store<S: GoalStateStore>(store: &S) -> Result<Vec<GoalState>> {
     store.list().await
 }
 
@@ -24,7 +24,7 @@ pub async fn resolve_goal(goal_id: &str) -> Result<GoalState> {
 }
 
 /// Generic variant of [`resolve_goal`] for tests and alternative backends.
-pub async fn resolve_goal_with_store<S: GoalStateStore>(
+pub(super) async fn resolve_goal_with_store<S: GoalStateStore>(
     store: &S,
     goal_id: &str,
 ) -> Result<GoalState> {
@@ -61,7 +61,7 @@ pub async fn resolve_goal_proof(goal_id: &str) -> Result<GoalProof> {
 }
 
 /// Resolve proof for a goal that has already been loaded.
-pub async fn resolve_proof_for_goal(goal: &GoalState) -> Result<GoalProof> {
+pub(super) async fn resolve_proof_for_goal(goal: &GoalState) -> Result<GoalProof> {
     match GoalProof::load(&goal.state_dir).await {
         Ok(mut proof) => {
             proof::reconcile_goal_proof_with_state(&mut proof, goal);

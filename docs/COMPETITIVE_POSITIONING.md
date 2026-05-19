@@ -1,6 +1,6 @@
 # Competitive Positioning
 
-Last reviewed: 2026-05-14
+Last reviewed: 2026-05-18
 
 This document is the canonical market map for `omk goal`.
 
@@ -55,14 +55,42 @@ coding landscape, including Devin, OpenHands, Claude Code, Aider, Dify, and Cody
 No competitor code, prompts, assets, branding, or proprietary workflows should be
 copied into OMK.
 
+## Namesake Conflict
+
+As of 2026-05-18, at least three other public projects ship under the
+`oh-my-kimi` name and overlap with OMK's category:
+
+| Project | Origin | Overlap |
+| --- | --- | --- |
+| `oh-my-kimi` (PyPI) | Python package | "Python port of the oh-my-kimi orchestration framework"; uses Kimi native multi-agent (`spawn_agent`) by default. |
+| `wang-h/oh-my-kimi` | GitHub | "Kimi-first multi-agent orchestration layer." |
+| `Goblin1024/oh-my-kimi` | GitHub | "Workflow orchestration layer for Kimi Code CLI — inspired by oh-my-codex." |
+
+This collision is materially closer to OMK's positioning than Devin, OpenHands,
+or Claude Code, and is unresolved. The repository's wedge against these
+namesakes is: Rust runtime, durable goal state, explicit verification gates,
+`proof.json` semantics, and end-to-end repo delivery with worktrees and
+integrator PRs. A naming/priority decision (defend the name vs. rebrand vs.
+suffix) is required before the next public release.
+
 ## Competitor Map
 
 | Product | Relationship to OMK | Main strength | OMK wedge |
 | --- | --- | --- | --- |
-| Devin | Direct competitor | Hosted AI software engineer for scoped coding tasks, PRs, and team workflows. | Local proof-first controller with durable state, explicit gates, and GitHub as output rather than control plane. |
-| OpenHands | Direct open-source competitor | AI-driven development platform with CLI, GUI, cloud, and SDK surfaces. | Smaller Rust CLI wedge: repo-native task graph, Wire execution, verification wall, and proof bundle. |
+| Bernstein | Direct competitor (most similar wedge) | Python orchestrator that drives 40+ CLI coding agents in parallel git worktrees with deterministic scheduling, quality gates, and HMAC-chained audit log. | Rust runtime, durable goal state across crashes, oracle-aware planning, slice-execution with integrator PRs, and proof/failure artifacts as first-class terminal status. |
+| CLI Agent Orchestrator (CAO, awslabs) | Direct multi-CLI competitor | Supervisor–worker orchestration over MCP across Claude Code, Kimi CLI, Codex, Gemini CLI, Copilot CLI, OpenCode, Q Developer; isolated tmux sessions; Web UI dashboard. | Goal controller with verification wall and proof semantics rather than a generic supervisor pattern; OMK is opinionated about *what done means*, not just *who runs what*. |
+| Kimi Agent SDK (MoonshotAI) | Upstream programmatic competitor | Official SDK for interacting with Kimi CLI programmatically. | Repo-native orchestration layer above the SDK: task graphs, gates, worktrees, PRs, and durable state that the raw SDK does not provide. |
+| Devin | Direct hosted competitor | Hosted AI software engineer for scoped coding tasks, PRs, and team workflows. | Local proof-first controller with durable state, explicit gates, and GitHub as output rather than control plane. |
+| OpenHands | Direct open-source competitor | AI-driven development platform with CLI, GUI, cloud, and SDK surfaces; ~65k GitHub stars. | Smaller Rust CLI wedge: repo-native task graph, Wire execution, verification wall, and proof bundle. |
 | Claude Code | Direct platform competitor | Strong agentic coding surface across terminal, IDE, web, MCP, hooks, skills, and background work. | Engine-adaptable orchestrator with durable goal state and proof semantics that can outlive one assistant session. |
+| Cursor background agents | Direct hosted-agent competitor | Async background coding agents inside an IDE-native distribution. | Terminal-native, local-first, engine-adaptable; not tied to a proprietary editor. |
 | Aider | Adjacent/direct CLI competitor | Excellent terminal pair-programming, repo map, git-aware edits, and test/lint loop. | Long-running multi-agent goal controller rather than interactive pair-programming loop. |
+| Cline | Adjacent local-agent competitor | Local terminal/IDE agent with human-in-the-loop approvals. | Autonomous goal runtime with explicit gates, not a per-step approval loop. |
+| SWE-Agent | Adjacent research competitor | Princeton agent framework; standard SWE-bench baseline. | Engineering runtime with delivery semantics, not a benchmark harness. |
+| ROMA (Recursive Open Meta-Agent) | Adjacent task-graph competitor | Recursive subtask trees for long-horizon parallel work. | Durable, replayable task graph with gates, worktrees, and PR delivery — not just decomposition. |
+| Agyn | Adjacent multi-agent SE competitor | Role-based multi-agent system (coord/research/impl/review). | Equivalent role packs plus durable state, gates, and proof artifacts. |
+| GNAP (Git-Native Agent Protocol) | Adjacent protocol competitor | Coordinates AI agents through a handful of JSON files in a git repo, no server. | Same git-native instinct, but OMK ships a full runtime, not only a wire format; should monitor whether to interop. |
+| Agenttrace | Adjacent observability competitor | Local-first observability for agent sessions: tokens, cost, latency, tool failures, CI health gates. | Observability is a side-effect of proof artifacts in OMK; should evaluate whether to interop or absorb. |
 | Dify | Adjacent workflow competitor | Mature LLM app/workflow builder with agents, RAG, observability, and deployment surfaces. | Software engineering runtime for changing and proving a repository, not building LLM apps. |
 | Cody | Adjacent code-context competitor | Enterprise codebase context, search, IDE chat, and code assistant UX. | Execution and verification runtime, not only context and editing help. |
 
@@ -70,9 +98,16 @@ copied into OMK.
 
 | Threat | Level | What it means for OMK |
 | --- | --- | --- |
+| Namesake `oh-my-kimi` projects already exist on PyPI and GitHub. | High | Brand collision blocks adoption; resolve naming/priority before next release. |
+| Bernstein ships parallel-worktree orchestration with gates and audit log. | High | Most overlapping wedge. OMK must differentiate on durable goal state, slice-execution with integrator PRs, and proof terminal semantics — not just "many CLIs in worktrees." |
+| CAO (awslabs) becomes the default multi-CLI supervisor. | High | OMK must own *trustable completion semantics*, not just process orchestration. AWS-backed distribution is a real moat risk. |
+| Kimi Agent SDK gives upstream programmatic access. | High | The "Kimi-wrapper" layer is now first-party. OMK has to justify itself above the SDK with task graph, gates, and delivery. |
 | Devin normalizes "AI software engineer" expectations. | High | OMK must not overpromise; it must answer with proof or precise blockers. |
 | Claude Code owns developer distribution. | High | OMK must become a controller layer, not a weaker assistant UI. |
 | OpenHands captures open-source agentic development mindshare. | High | OMK must be simpler to run locally and more explicit about proof. |
+| Cursor background agents normalize async hosted coding. | Medium | OMK competes by being local-first and editor-agnostic. |
+| GNAP becomes a de facto git-native agent protocol. | Medium | Track and decide whether to interop; OMK's git-native instinct aligns. |
+| Agenttrace becomes the default agent observability layer. | Medium | Evaluate interop vs. absorption; do not reinvent observability from scratch. |
 | Aider sets the bar for terminal editing ergonomics. | Medium | OMK should learn from its fast feedback loop and git-native UX. |
 | Dify owns visual workflow/app-builder language. | Medium | OMK should avoid the visual app-builder category. |
 | Cody owns enterprise context/search expectations. | Medium | OMK needs strong repo navigation, indexing, and context discipline. |
@@ -139,10 +174,22 @@ Avoid:
 
 Re-check these before major `omk goal` releases:
 
+- Namesake `oh-my-kimi` on PyPI: https://pypi.org/project/oh-my-kimi/
+- Namesake `wang-h/oh-my-kimi`: https://github.com/wang-h/oh-my-kimi
+- Namesake `Goblin1024/oh-my-kimi`: https://github.com/Goblin1024/oh-my-kimi
+- Kimi CLI (upstream): https://github.com/MoonshotAI/kimi-cli
+- Kimi Agent SDK (upstream): https://github.com/MoonshotAI/kimi-agent-sdk
+- CLI Agent Orchestrator (awslabs): https://github.com/awslabs/cli-agent-orchestrator
+- Bernstein (parallel-worktree CLI orchestrator): track via "Bernstein Python orchestrator git worktrees quality gates"
+- GNAP (Git-Native Agent Protocol): track via "GNAP git-native agent protocol"
+- Agenttrace (local-first agent observability): track via "Agenttrace local agent observability"
 - Devin docs: https://docs.devin.ai/
 - OpenHands: https://github.com/OpenHands/OpenHands
 - Claude Code docs: https://code.claude.com/docs/en/overview
+- Cursor background agents: https://cursor.com/
 - Aider: https://github.com/Aider-AI/aider
+- Cline: https://github.com/cline/cline
+- SWE-Agent: https://github.com/SWE-agent/SWE-agent
 - Dify: https://github.com/langgenius/dify
 - Cody docs: https://sourcegraph.com/docs/cody
 
@@ -151,3 +198,16 @@ reinforce the same boundary. OMK should not chase broad hosted-agent or
 assistant-surface parity; the defensible MVP remains local durable state,
 task-scoped branches/worktrees, explicit verification/review/integration gates,
 and proof-backed terminal statuses.
+
+May 18, 2026 review note: a broader scan surfaced four new high-threat items
+not previously tracked. (1) Three public `oh-my-kimi` namesakes — name collision
+must be resolved before next release. (2) Bernstein occupies almost exactly the
+same wedge (parallel worktrees + quality gates + audit log); OMK's
+differentiation is durable goal state, oracle-aware planning, slice-execution
+with integrator PRs, and proof terminal status, not feature breadth. (3) AWS's
+CAO is the most credible cross-CLI supervisor; OMK competes on completion
+semantics, not on running more agents. (4) Moonshot's Kimi Agent SDK collapses
+the "thin Kimi wrapper" category; OMK justifies itself above the SDK with task
+graph, gates, worktrees, and delivery — not by re-exposing the SDK surface.
+GNAP and Agenttrace are medium-threat protocol/observability vectors worth
+interop evaluation rather than reimplementation.

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 /// A single rough-edge finding that contributes to anti-slop confidence.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SlopFinding {
+pub(crate) struct SlopFinding {
     pub kind: SlopKind,
     pub file: PathBuf,
     pub line: Option<usize>,
@@ -11,7 +11,7 @@ pub struct SlopFinding {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SlopKind {
+pub(crate) enum SlopKind {
     FileTooLong,
     BannedPattern,
     TodoFixmeHack,
@@ -33,7 +33,7 @@ impl std::fmt::Display for SlopKind {
 /// - File size > 400 lines (AGENTS.md violation)
 /// - `unwrap()`, `expect()`, `panic!()` in production code (AGENTS.md banned)
 /// - `TODO`, `FIXME`, `HACK` comments in production code (AGENTS.md Tier 3)
-pub fn scan_for_slop(worktree_path: &Path, changed_files: &[String]) -> Vec<SlopFinding> {
+pub(crate) fn scan_for_slop(worktree_path: &Path, changed_files: &[String]) -> Vec<SlopFinding> {
     let mut findings = Vec::new();
     let banned_patterns: &[(&str, &str)] = &[
         ("unwrap()", "unwrap() is banned in production code"),
@@ -109,7 +109,7 @@ pub fn scan_for_slop(worktree_path: &Path, changed_files: &[String]) -> Vec<Slop
 }
 
 /// Compute a normalized anti-slop confidence in [0.0, 1.0] from real findings.
-pub fn slop_confidence_from_findings(findings: &[SlopFinding]) -> f64 {
+pub(crate) fn slop_confidence_from_findings(findings: &[SlopFinding]) -> f64 {
     if findings.is_empty() {
         return 0.0;
     }

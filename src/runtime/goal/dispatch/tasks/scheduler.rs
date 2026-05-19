@@ -5,7 +5,7 @@ use crate::runtime::goal::state::{GoalState, GOAL_LOCAL_VERIFY_TASK_ID};
 use crate::runtime::goal::task_graph::GoalTaskGraph;
 use crate::runtime::scheduler::task::Task;
 
-pub fn goal_agent_scheduler_tasks(
+pub(super) fn goal_agent_scheduler_tasks(
     state: &GoalState,
     task_graph: &GoalTaskGraph,
     generated_at: DateTime<Utc>,

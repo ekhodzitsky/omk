@@ -5,13 +5,13 @@ use clap::{Parser, Subcommand};
 use serde_json::Value;
 
 #[derive(Parser, Debug)]
-pub struct Args {
+pub(crate) struct Args {
     #[command(subcommand)]
     pub command: McpCommands,
 }
 
 #[derive(Subcommand, Debug)]
-pub enum McpCommands {
+pub(crate) enum McpCommands {
     List,
     Doctor,
     Call {
@@ -22,7 +22,7 @@ pub enum McpCommands {
     },
 }
 
-pub async fn run(args: Args) -> Result<()> {
+pub(super) async fn run(args: Args) -> Result<()> {
     match args.command {
         McpCommands::List => cmd_list().await,
         McpCommands::Doctor => cmd_doctor().await,

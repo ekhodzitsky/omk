@@ -317,3 +317,110 @@ pub(super) fn format_telegram(event: &NotificationEvent) -> String {
         _ => format!("{:?}", event),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_discord_team_spawned() {
+        let event = NotificationEvent::TeamSpawned {
+            name: "alpha".to_string(),
+            task: "fix bugs".to_string(),
+            workers: 3,
+            role: "coder".to_string(),
+        };
+        let (content, embeds) = format_discord(&event);
+        assert!(content.contains("Team spawned"));
+        assert_eq!(embeds.len(), 1);
+        let embed = &embeds[0];
+        assert_eq!(embed["title"], "Team Spawned");
+        assert_eq!(embed["color"], 0x22c55e);
+    }
+
+    #[test]
+    fn format_discord_team_shutdown_success() {
+        let event = NotificationEvent::TeamShutdown {
+            name: "alpha".to_string(),
+            duration_secs: 42,
+            status: "success".to_string(),
+        };
+        let (content, embeds) = format_discord(&event);
+        assert!(content.contains("Team shutdown"));
+        assert_eq!(embeds[0]["color"], 0x22c55e);
+    }
+
+    #[test]
+    fn format_discord_team_shutdown_failure() {
+        let event = NotificationEvent::TeamShutdown {
+            name: "alpha".to_string(),
+            duration_secs: 42,
+            status: "failed".to_string(),
+        };
+        let (_content, embeds) = format_discord(&event);
+        assert_eq!(embeds[0]["color"], 0xef4444);
+    }
+
+    #[test]
+    fn format_slack_team_spawned() {
+        let event = NotificationEvent::TeamSpawned {
+            name: "beta".to_string(),
+            task: "refactor".to_string(),
+            workers: 2,
+            role: "architect".to_string(),
+        };
+        let text = format_slack(&event);
+        assert!(text.contains("Team Spawned"));
+        assert!(text.contains("beta"));
+        assert!(text.contains("architect"));
+        assert!(text.contains("2"));
+    }
+
+    #[test]
+    fn format_slack_autopilot_failed_truncates_error() {
+        let long_error = "x".repeat(600);
+        let event = NotificationEvent::AutopilotFailed {
+            name: "gamma".to_string(),
+            phase: "test".to_string(),
+            error: long_error.clone(),
+        };
+        let text = format_slack(&event);
+        assert!(text.contains("Autopilot Failed"));
+        assert!(!text.contains(&"x".repeat(600))); // should be truncated
+    }
+
+    #[test]
+    fn format_telegram_contains_markdown() {
+        let event = NotificationEvent::UltraworkComplete {
+            jobs_total: 10,
+            jobs_success: 8,
+            duration_secs: 120,
+        };
+        let text = format_telegram(&event);
+        assert!(text.contains("Ultrawork Complete"));
+        assert!(text.contains("8/10"));
+    }
+
+    #[test]
+    fn format_discord_fallback_for_unmatched_variant() {
+        let event = NotificationEvent::AutopilotStarted {
+            name: "delta".to_string(),
+            task: "ship".to_string(),
+        };
+        let (content, embeds) = format_discord(&event);
+        assert!(content.contains("AutopilotStarted"));
+        assert!(embeds.is_empty());
+    }
+
+    #[test]
+    fn notification_event_serializes_with_tag() {
+        let event = NotificationEvent::Error {
+            source: "test".to_string(),
+            message: "boom".to_string(),
+        };
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["event"], "Error");
+        assert_eq!(json["source"], "test");
+        assert_eq!(json["message"], "boom");
+    }
+}

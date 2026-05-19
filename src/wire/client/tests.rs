@@ -58,25 +58,26 @@ fn test_wire_message_parsing_error_response() {
 }
 
 #[tokio::test]
-async fn test_wire_client_spawn() {
-    let tmp = tempfile::tempdir().unwrap();
-    let script = tmp.path().join("mock-true");
-    let script_content = r#"#!/bin/bash
-exit 0
-"#;
-    tokio::fs::write(&script, script_content).await.unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = tokio::fs::metadata(&script).await.unwrap().permissions();
-        perms.set_mode(0o755);
-        tokio::fs::set_permissions(&script, perms).await.unwrap();
-    }
+async fn test_mock_wire_client_roundtrip() {
+    use crate::test_helpers::MockWireClient;
 
-    let client = ProcessWireClient::spawn(script.to_str().unwrap(), None, None, None).await;
-    assert!(client.is_ok());
-    let client = client.unwrap();
-    client.shutdown().await.unwrap();
+    let mut client = MockWireClient::new();
+    client
+        .inject(WireMessage::SuccessResponse(
+            crate::wire::protocol::JsonRpcSuccessResponse {
+                jsonrpc: "2.0".to_string(),
+                id: "req-1".to_string(),
+                result: serde_json::json!({"status":"ok","steps":[{"n":1}]}),
+            },
+        ))
+        .await;
+
+    let result = client.prompt("hello").await.unwrap();
+    assert_eq!(result.status, "ok");
+
+    let outgoing = client.drain().await;
+    assert_eq!(outgoing.len(), 1);
+    assert_eq!(outgoing[0]["method"], "prompt");
 }
 
 #[tokio::test]
