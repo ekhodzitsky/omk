@@ -2,7 +2,7 @@
 
 This page tracks the official Kimi docs OMK depends on before changing Kimi integration surfaces.
 
-Last checked: 2026-05-09
+Last checked: 2026-05-19
 
 ## Tracked URLs
 
@@ -22,7 +22,7 @@ Last checked: 2026-05-09
 
 ## Release Checklist
 
-- [ ] Re-open the official docs root and Wire Protocol page before release.
-- [ ] Re-check the local `kimi info` observation and record any protocol version change.
-- [ ] Update `README.md`, `SPEC.md`, `ROADMAP.md`, or `TODO.md` if upstream behavior changed.
-- [ ] Confirm `initialize`, `prompt`, `request`, `replay`, and fallback behavior still match the upstream docs.
+- [x] Re-open the official docs root and Wire Protocol page before release.
+- [x] Re-check the local `kimi info` observation and record any protocol version change.
+- [x] Update `README.md`, `SPEC.md`, `ROADMAP.md`, or `TODO.md` if upstream behavior changed.
+- [x] Confirm `initialize`, `prompt`, `request`, `replay`, and fallback behavior still match the upstream docs.
