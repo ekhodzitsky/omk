@@ -9,7 +9,9 @@ pub(crate) use apply::{
     apply_agent_proposed_task_mutations, apply_agent_task_result_by_id, goal_agent_execution_done,
     goal_task_done, pending_goal_agent_followup_proposals, summarize_task_graph,
 };
-pub(crate) use rollback::{merge_concurrent_slice_task_graphs, spawn_cleanup_task};
+pub(crate) use rollback::{
+    merge_concurrent_slice_task_graphs, spawn_cleanup_task, spawn_refactor_task_from_slop_findings,
+};
 
 #[cfg(test)]
 mod tests {
@@ -19,6 +21,7 @@ mod tests {
 
     use super::*;
     use crate::runtime::goal::evidence::GoalAgentRunEvidence;
+    use crate::runtime::goal::review::slop::{SlopFinding, SlopKind};
     use crate::runtime::goal::task_graph::model::{GoalTask, GoalTaskGraph, GoalTaskStatus};
     use crate::runtime::scheduler::runner::RunSummary;
 
@@ -111,5 +114,103 @@ mod tests {
         let result = apply_agent_task_result_by_id(&mut tg, "t1", &ev, Utc::now());
         assert!(result.is_some());
         assert_eq!(tg.tasks[0].status, GoalTaskStatus::Done);
+    }
+
+    #[test]
+    fn spawn_refactor_task_from_empty_findings_returns_none() {
+        let mut tg = graph(vec![task("slice-a", GoalTaskStatus::Done)]);
+        let result = spawn_refactor_task_from_slop_findings(
+            &mut tg,
+            "slice-a",
+            &[],
+            &["src/main.rs".to_string()],
+            Utc::now(),
+        );
+        assert!(result.is_none());
+        assert_eq!(tg.tasks.len(), 1);
+    }
+
+    #[test]
+    fn spawn_refactor_task_creates_task_and_wires_dependency() {
+        let mut tg = graph(vec![task("slice-a", GoalTaskStatus::Done)]);
+        let findings = vec![SlopFinding {
+            kind: SlopKind::BannedPattern,
+            file: PathBuf::from("src/main.rs"),
+            line: Some(42),
+            message: "unwrap() is banned".to_string(),
+        }];
+        let result = spawn_refactor_task_from_slop_findings(
+            &mut tg,
+            "slice-a",
+            &findings,
+            &["src/main.rs".to_string()],
+            Utc::now(),
+        );
+        assert_eq!(result, Some("goal-agent-refactor-slice-a".to_string()));
+        assert_eq!(tg.tasks.len(), 2);
+
+        let refactor = tg
+            .tasks
+            .iter()
+            .find(|t| t.id == "goal-agent-refactor-slice-a")
+            .expect("refactor task exists");
+        assert!(refactor.description.contains("unwrap() is banned"));
+        assert!(refactor.description.contains("line 42"));
+        assert_eq!(refactor.status, GoalTaskStatus::Pending);
+        assert_eq!(refactor.read_set, vec!["src/main.rs"]);
+
+        let slice = tg
+            .tasks
+            .iter()
+            .find(|t| t.id == "slice-a")
+            .expect("slice task exists");
+        assert!(slice
+            .dependencies
+            .contains(&"goal-agent-refactor-slice-a".to_string()));
+        assert_eq!(slice.status, GoalTaskStatus::Pending);
+    }
+
+    #[test]
+    fn spawn_refactor_task_updates_existing_task_when_findings_change() {
+        let mut tg = graph(vec![task("slice-a", GoalTaskStatus::Done)]);
+        let first = vec![SlopFinding {
+            kind: SlopKind::TodoFixmeHack,
+            file: PathBuf::from("src/lib.rs"),
+            line: Some(10),
+            message: "TODO fix this".to_string(),
+        }];
+        let id1 = spawn_refactor_task_from_slop_findings(
+            &mut tg,
+            "slice-a",
+            &first,
+            &["src/lib.rs".to_string()],
+            Utc::now(),
+        );
+        assert!(id1.is_some());
+
+        let second = vec![SlopFinding {
+            kind: SlopKind::BannedPattern,
+            file: PathBuf::from("src/lib.rs"),
+            line: Some(20),
+            message: "expect() is banned".to_string(),
+        }];
+        let id2 = spawn_refactor_task_from_slop_findings(
+            &mut tg,
+            "slice-a",
+            &second,
+            &["src/lib.rs".to_string()],
+            Utc::now(),
+        );
+        assert_eq!(id1, id2);
+        assert_eq!(tg.tasks.len(), 2);
+
+        let refactor = tg
+            .tasks
+            .iter()
+            .find(|t| t.id == "goal-agent-refactor-slice-a")
+            .expect("refactor task exists");
+        assert!(refactor.description.contains("expect() is banned"));
+        assert!(!refactor.description.contains("TODO fix this"));
+        assert_eq!(refactor.evidence.len(), 2);
     }
 }
