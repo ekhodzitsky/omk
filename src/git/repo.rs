@@ -320,4 +320,52 @@ impl GitRepo {
         self.cmd.run(&["stash", "pop"]).await?;
         Ok(())
     }
+
+    /// Merge branch into current HEAD (mutating).
+    /// If no_edit is true, passes --no-edit.
+    pub async fn merge(&self, branch: &str, no_edit: bool) -> Result<(), GitError> {
+        let mut args = vec!["merge", branch];
+        if no_edit {
+            args.push("--no-edit");
+        }
+        self.cmd.run(&args).await?;
+        Ok(())
+    }
+
+    /// Rebase current HEAD onto branch.
+    /// Returns error if conflicts; caller must handle abort externally.
+    pub async fn rebase(&self, branch: &str) -> Result<(), GitError> {
+        self.cmd.run(&["rebase", branch]).await?;
+        Ok(())
+    }
+
+    /// Abort an in-progress rebase.
+    pub async fn rebase_abort(&self) -> Result<(), GitError> {
+        self.cmd.run(&["rebase", "--abort"]).await?;
+        Ok(())
+    }
+
+    /// Get the default branch name from remote (e.g. "main" from origin).
+    /// Uses `git symbolic-ref refs/remotes/origin/HEAD`.
+    pub async fn default_branch(&self) -> Result<String, GitError> {
+        let out = self
+            .cmd
+            .run(&["symbolic-ref", "refs/remotes/origin/HEAD"])
+            .await?;
+        let stdout = out.stdout.trim();
+        if let Some(branch) = stdout.strip_prefix("refs/remotes/origin/") {
+            if !branch.is_empty() {
+                return Ok(branch.to_string());
+            }
+        }
+        Err(GitError::Parse(format!(
+            "unexpected origin/HEAD format: {stdout}"
+        )))
+    }
+
+    /// Push with --force (not --force-with-lease), preserving semantics of existing code.
+    pub async fn push_force(&self, remote: &str, branch: &str) -> Result<(), GitError> {
+        self.cmd.run(&["push", "--force", remote, branch]).await?;
+        Ok(())
+    }
 }
