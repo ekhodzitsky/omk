@@ -48,6 +48,31 @@ async fn test_goal_crud() {
 }
 
 #[tokio::test]
+async fn test_goal_update_and_delete_not_found() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("test.db");
+    let db = DbHandle::open(&path).await.unwrap();
+
+    let err = db
+        .goal_repo()
+        .update_status("missing", "x", "y")
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("goal not found"));
+
+    let err = db
+        .goal_repo()
+        .delete("missing")
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("goal not found"));
+
+    db.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn test_task_batch_create() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test.db");
@@ -62,6 +87,26 @@ async fn test_task_batch_create() {
 
     let fetched = db.task_repo().get_by_goal("goal-1").await.unwrap();
     assert_eq!(fetched.len(), 10);
+
+    db.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_task_batch_create_mismatched_goal_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("test.db");
+    let db = DbHandle::open(&path).await.unwrap();
+
+    db.goal_repo().create(&test_goal()).await.unwrap();
+
+    let tasks = vec![test_task("t1", "wrong-goal")];
+    let err = db
+        .task_repo()
+        .create_batch("goal-1", &tasks)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("not all tasks belong to goal"));
 
     db.close().await.unwrap();
 }
@@ -110,6 +155,36 @@ async fn test_task_update_status() {
     db.task_repo().update_status("t1", "running").await.unwrap();
     let tasks = db.task_repo().get_by_goal("goal-1").await.unwrap();
     assert_eq!(tasks[0].status, "running");
+
+    db.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_task_get_by_id_and_not_found() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("test.db");
+    let db = DbHandle::open(&path).await.unwrap();
+
+    db.goal_repo().create(&test_goal()).await.unwrap();
+    db.task_repo()
+        .create_batch("goal-1", &[test_task("t1", "goal-1")])
+        .await
+        .unwrap();
+
+    let found = db.task_repo().get_by_id("t1").await.unwrap();
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().task_id, "t1");
+
+    let missing = db.task_repo().get_by_id("no-such-task").await.unwrap();
+    assert!(missing.is_none());
+
+    let err = db
+        .task_repo()
+        .update_status("no-such-task", "done")
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("task not found"));
 
     db.close().await.unwrap();
 }
@@ -198,6 +273,22 @@ async fn test_event_delete_by_goal() {
 }
 
 #[tokio::test]
+async fn test_event_get_by_missing_goal() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("test.db");
+    let db = DbHandle::open(&path).await.unwrap();
+
+    let events = db
+        .event_repo()
+        .get_by_goal("no-such-goal", None, None)
+        .await
+        .unwrap();
+    assert!(events.is_empty());
+
+    db.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn test_proof_upsert() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test.db");
@@ -241,6 +332,18 @@ async fn test_proof_upsert() {
 }
 
 #[tokio::test]
+async fn test_proof_get_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("test.db");
+    let db = DbHandle::open(&path).await.unwrap();
+
+    let missing = db.proof_repo().get("no-such-goal").await.unwrap();
+    assert!(missing.is_none());
+
+    db.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn test_budget_checkpoints() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test.db");
@@ -265,6 +368,18 @@ async fn test_budget_checkpoints() {
     for (i, cp) in fetched.iter().enumerate() {
         assert_eq!(cp.used_value, Some((i * 100) as i64));
     }
+
+    db.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_budget_get_by_missing_goal() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("test.db");
+    let db = DbHandle::open(&path).await.unwrap();
+
+    let checkpoints = db.budget_repo().get_by_goal("no-such-goal").await.unwrap();
+    assert!(checkpoints.is_empty());
 
     db.close().await.unwrap();
 }
@@ -303,6 +418,22 @@ async fn test_artifact_register() {
         .await
         .unwrap();
     assert_eq!(logs.len(), 2);
+
+    db.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_artifact_get_by_missing_goal() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("test.db");
+    let db = DbHandle::open(&path).await.unwrap();
+
+    let artifacts = db
+        .artifact_repo()
+        .get_by_goal("no-such-goal", None)
+        .await
+        .unwrap();
+    assert!(artifacts.is_empty());
 
     db.close().await.unwrap();
 }
