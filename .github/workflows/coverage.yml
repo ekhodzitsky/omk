@@ -18,66 +18,39 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  TARPAULIN_VERSION: 0.35.4
 
 jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
-      - name: Skip PR coverage
-        if: github.event_name == 'pull_request'
-        run: echo "Coverage is deferred to push, schedule, or manual runs so PR feedback stays fast."
-
       - name: Install Rust
-        if: github.event_name != 'pull_request'
-        # SHA-pinned third-party action (v1 at time of pin).
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
           toolchain: stable
+          components: llvm-tools-preview
 
-      - name: Cache cargo
-        if: github.event_name != 'pull_request'
-        uses: actions/cache@v5
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@aa7c1c80a07a27a84c0aa76d0cef0aad3830e330 # v2.7.8
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@9903ab6feadaec33945de535fe9d181b91802a55 # v2.50.0
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-
-            ${{ runner.os }}-${{ github.job }}-
-
-      - name: Cache tarpaulin binary
-        id: tarpaulin-cache
-        if: github.event_name != 'pull_request'
-        uses: actions/cache@v5
-        with:
-          path: ~/.cargo/bin/cargo-tarpaulin
-          key: ${{ runner.os }}-cargo-tarpaulin-${{ env.TARPAULIN_VERSION }}
-
-      - name: Install tarpaulin
-        if: github.event_name != 'pull_request' && steps.tarpaulin-cache.outputs.cache-hit != 'true'
-        run: cargo install cargo-tarpaulin --locked --version "$TARPAULIN_VERSION"
-
-      - name: Show tarpaulin version
-        if: github.event_name != 'pull_request'
-        run: cargo tarpaulin --version
+          tool: cargo-llvm-cov
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run coverage
-        if: github.event_name != 'pull_request'
-        run: cargo tarpaulin --out Xml --all-features
+        run: cargo llvm-cov --codecov --output-path codecov.json
 
       - name: Upload to Codecov
-        if: github.event_name != 'pull_request'
-        # SHA-pinned third-party action (v6.0.0 at time of pin).
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
+        # SHA-pinned third-party action (v5.4.0 at time of pin).
+        uses: codecov/codecov-action@e96185f4044c2f0cedf0f022454acf9811cf8057
         with:
-          files: ./cobertura.xml
+          files: ./codecov.json
           disable_search: true
           fail_ci_if_error: false

@@ -27,7 +27,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       deps: ${{ steps.filter.outputs.deps }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
@@ -56,58 +56,29 @@ jobs:
             echo "deps=false" >> "$GITHUB_OUTPUT"
           fi
 
-  # Ubuntu full build temporarily disabled — Kimi-first macOS runtime.
-  # Cross-platform CI will be re-enabled once the macOS runtime stabilises.
-  # This no-op job satisfies the branch protection rule while skipping the build.
-  build-and-test:
-    name: Build & Test (ubuntu-latest)
+  lint:
+    name: Lint & Audit
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+
       - name: Skip docs-only PR
         if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
         run: echo "No Rust paths changed."
-      - name: Ubuntu build temporarily disabled
-        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        run: echo "Ubuntu build is temporarily disabled. See agent/macos-first-ci for details."
-
-  build-and-test-macos:
-    name: Build & Test (macos-latest)
-    needs: changes
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Skip docs-only PR
-        if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
-        run: echo "No Rust, Cargo, or workflow paths changed; keeping required CI check green with a cheap no-op."
 
       - name: Install Rust
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        # SHA-pinned third-party action (v1 at time of pin).
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
-        # rust-toolchain's "stable" alias is selected via `toolchain` input.
         with:
           toolchain: stable
           components: rustfmt, clippy
 
-      - name: Cache cargo
+      - name: Cache Rust dependencies
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-
-            ${{ runner.os }}-${{ github.job }}-
+        uses: Swatinem/rust-cache@aa7c1c80a07a27a84c0aa76d0cef0aad3830e330 # v2.7.8
 
       - name: Check formatting
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
@@ -125,40 +96,20 @@ jobs:
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         run: cargo check --no-default-features --features server
 
-      - name: Install cargo-deny
-        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        uses: taiki-e/install-action@cargo-deny
-
       - name: Check supply chain
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        run: cargo deny check
-
-      - name: Install cargo-nextest
-        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        uses: taiki-e/install-action@nextest
-
-      - name: Run tests
-        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        run: cargo nextest run
-
-      - name: Run doctests
-        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        run: cargo test --doc
-
-      - name: Validate module contracts
-        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        run: cargo run --bin validate-contracts
-
-      - name: Build docs
-        if: github.event_name != 'pull_request'
-        run: cargo doc --no-deps
+        # SHA-pinned third-party action (v2.0.18 at time of pin).
+        uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1
+        with:
+          command: check advisories licenses sources
+          arguments: --all-features
 
   cargo-deny:
     name: Audit Dependencies
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
@@ -166,9 +117,97 @@ jobs:
         if: github.event_name == 'pull_request' && needs.changes.outputs.deps != 'true'
         run: echo "Cargo dependency inputs did not change; dependency audit is a cheap no-op."
 
-      # SHA-pinned third-party action (v2.0.18 at time of pin).
-      - uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1
+      - name: Check supply chain
         if: github.event_name != 'pull_request' || needs.changes.outputs.deps == 'true'
+        # SHA-pinned third-party action (v2.0.18 at time of pin).
+        uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1
         with:
           command: check advisories licenses sources
           arguments: --all-features
+
+  msrv:
+    name: MSRV
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Skip docs-only PR
+        if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
+        run: echo "No Rust paths changed."
+
+      - name: Install Rust (MSRV)
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.78'
+
+      - name: Cache Rust dependencies
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        uses: Swatinem/rust-cache@aa7c1c80a07a27a84c0aa76d0cef0aad3830e330 # v2.7.8
+
+      - name: Check MSRV
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo check --all-targets --all-features
+
+  build-test:
+    name: Build & Test (${{ matrix.os }})
+    needs: changes
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            full: true
+          - os: ubuntu-latest
+            full: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Skip docs-only PR
+        if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
+        run: echo "No Rust paths changed; keeping required CI check green."
+
+      - name: Install Rust
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        uses: Swatinem/rust-cache@aa7c1c80a07a27a84c0aa76d0cef0aad3830e330 # v2.7.8
+
+      - name: Check all targets and features
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo check --all-targets --all-features
+
+      - name: Run tests
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo test
+
+      - name: Run doctests
+        if: (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') && matrix.full
+        run: cargo test --doc
+
+      - name: Validate module contracts
+        if: (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') && matrix.full
+        run: cargo run --bin validate-contracts
+
+      - name: Build release binary
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: cargo build --release
+
+      - name: Smoke test release binary
+        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
+        run: ./target/release/omk --version
+
+      - name: Build docs
+        if: (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') && matrix.full
+        run: cargo doc --no-deps
