@@ -25,6 +25,10 @@ database.
 Each repository is exposed both as a method on `DbHandle` (auto-commit) and
 via `DbTransaction` (participates in the active transaction).
 
+Repository traits are re-exported from the root of the `db` module so
+consumers can write `use omk::runtime::db::GoalRepo` instead of reaching
+into `repo::`.
+
 | Trait        | Key operations                              |
 |--------------|---------------------------------------------|
 | `GoalRepo`   | `create`, `get`, `update_status`, `list`, `delete` |
@@ -85,10 +89,13 @@ src/runtime/db/
 
 ## Invariants
 
-- `DbTransaction` does **not** auto-rollback on drop. Callers must explicitly
-  invoke `commit` or `rollback`.
+- `DbTransaction` dropped without `commit` or `rollback` logs a `tracing::warn`
+  and spawns a best-effort rollback on the current Tokio runtime.
 - All repo operations through `DbTransaction` participate in the same SQLite
   transaction because all clones share the same underlying connection.
 - Foreign keys are enforced; deleting a goal cascades to tasks, events, proofs,
   budget checkpoints, and artifacts.
 - `unwrap()`/`expect()` are banned in production code; used only in tests.
+- Dynamic SQL is avoided for optional filters; fixed queries use
+  `(? IS NULL OR column = ?)` so `params![]` always matches the placeholder
+  count.
