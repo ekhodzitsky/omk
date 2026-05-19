@@ -103,26 +103,21 @@ impl GoalRepo for GoalRepoImpl {
         let phase = phase.to_string();
         let updated_at = chrono::Utc::now().timestamp();
         let goal_id_for_err = goal_id.clone();
-        self.conn
+        let count = self
+            .conn
             .call(move |conn| {
-                let count = conn.execute(
+                conn.execute(
                     "UPDATE goals SET status = ?1, phase = ?2, updated_at = ?3 WHERE goal_id = ?4",
                     params![status, phase, updated_at, goal_id],
-                )?;
-                if count == 0 {
-                    return Err(tokio_rusqlite::Error::Rusqlite(
-                        rusqlite::Error::QueryReturnedNoRows,
-                    ));
-                }
-                Ok(())
+                )
+                .map_err(tokio_rusqlite::Error::Rusqlite)
             })
             .await
-            .map_err(|e| match e {
-                tokio_rusqlite::Error::Rusqlite(rusqlite::Error::QueryReturnedNoRows) => {
-                    DbError::GoalNotFound(goal_id_for_err)
-                }
-                other => DbError::Connection(other),
-            })
+            .map_err(DbError::Connection)?;
+        if count == 0 {
+            return Err(DbError::GoalNotFound(goal_id_for_err));
+        }
+        Ok(())
     }
 
     async fn list(&self, filter: GoalFilter) -> Result<Vec<GoalSummary>, DbError> {
@@ -172,23 +167,17 @@ impl GoalRepo for GoalRepoImpl {
     async fn delete(&self, goal_id: &str) -> Result<(), DbError> {
         let goal_id = goal_id.to_string();
         let goal_id_for_err = goal_id.clone();
-        self.conn
+        let count = self
+            .conn
             .call(move |conn| {
-                let count =
-                    conn.execute("DELETE FROM goals WHERE goal_id = ?1", params![goal_id])?;
-                if count == 0 {
-                    return Err(tokio_rusqlite::Error::Rusqlite(
-                        rusqlite::Error::QueryReturnedNoRows,
-                    ));
-                }
-                Ok(())
+                conn.execute("DELETE FROM goals WHERE goal_id = ?1", params![goal_id])
+                    .map_err(tokio_rusqlite::Error::Rusqlite)
             })
             .await
-            .map_err(|e| match e {
-                tokio_rusqlite::Error::Rusqlite(rusqlite::Error::QueryReturnedNoRows) => {
-                    DbError::GoalNotFound(goal_id_for_err)
-                }
-                other => DbError::Connection(other),
-            })
+            .map_err(DbError::Connection)?;
+        if count == 0 {
+            return Err(DbError::GoalNotFound(goal_id_for_err));
+        }
+        Ok(())
     }
 }

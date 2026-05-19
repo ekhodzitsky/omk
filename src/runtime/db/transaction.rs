@@ -9,6 +9,7 @@ use super::repo::{
 /// Callers must explicitly invoke `commit` or `rollback`. If dropped without
 /// either, a best-effort rollback is spawned on the current Tokio runtime and
 /// a warning is logged.
+#[must_use = "DbTransaction must be explicitly committed or rolled back"]
 pub struct DbTransaction {
     pub(super) conn: tokio_rusqlite::Connection,
     pub(super) active: bool,

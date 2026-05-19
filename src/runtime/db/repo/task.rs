@@ -7,6 +7,7 @@ use crate::runtime::db::types::TaskRecord;
 #[allow(async_fn_in_trait)]
 pub trait TaskRepo {
     async fn create_batch(&self, goal_id: &str, tasks: &[TaskRecord]) -> Result<(), DbError>;
+    async fn get_by_id(&self, task_id: &str) -> Result<Option<TaskRecord>, DbError>;
     async fn get_by_goal(&self, goal_id: &str) -> Result<Vec<TaskRecord>, DbError>;
     async fn update_status(&self, task_id: &str, status: &str) -> Result<(), DbError>;
     async fn update_task_graph(&self, goal_id: &str, tasks: &[TaskRecord]) -> Result<(), DbError>;
@@ -20,6 +21,12 @@ pub struct TaskRepoImpl {
 
 impl TaskRepo for TaskRepoImpl {
     async fn create_batch(&self, goal_id: &str, tasks: &[TaskRecord]) -> Result<(), DbError> {
+        if tasks.iter().any(|t| t.goal_id != goal_id) {
+            return Err(DbError::InvalidData(format!(
+                "create_batch: not all tasks belong to goal {}",
+                goal_id
+            )));
+        }
         let goal_id = goal_id.to_string();
         let tasks: Vec<TaskRecord> = tasks.to_vec();
         self.conn
@@ -49,6 +56,42 @@ impl TaskRepo for TaskRepoImpl {
                     ])?;
                 }
                 Ok(())
+            })
+            .await
+            .map_err(DbError::Connection)
+    }
+
+    async fn get_by_id(&self, task_id: &str) -> Result<Option<TaskRecord>, DbError> {
+        let task_id = task_id.to_string();
+        self.conn
+            .call(move |conn| {
+                let mut stmt = conn.prepare(
+                    "SELECT
+                        task_id, goal_id, kind, status, owner, write_set,
+                        depends_on, retry_count, max_retries, lease_expires_at,
+                        evidence_paths, created_at, updated_at
+                    FROM tasks WHERE task_id = ?1",
+                )?;
+                let mut rows = stmt.query(params![task_id])?;
+                if let Some(row) = rows.next()? {
+                    Ok(Some(TaskRecord {
+                        task_id: row.get(0)?,
+                        goal_id: row.get(1)?,
+                        kind: row.get(2)?,
+                        status: row.get(3)?,
+                        owner: row.get(4)?,
+                        write_set: row.get(5)?,
+                        depends_on: row.get(6)?,
+                        retry_count: row.get(7)?,
+                        max_retries: row.get(8)?,
+                        lease_expires_at: row.get(9)?,
+                        evidence_paths: row.get(10)?,
+                        created_at: row.get(11)?,
+                        updated_at: row.get(12)?,
+                    }))
+                } else {
+                    Ok(None)
+                }
             })
             .await
             .map_err(DbError::Connection)
@@ -97,26 +140,21 @@ impl TaskRepo for TaskRepoImpl {
         let status = status.to_string();
         let updated_at = chrono::Utc::now().timestamp();
         let task_id_for_err = task_id.clone();
-        self.conn
+        let count = self
+            .conn
             .call(move |conn| {
-                let count = conn.execute(
+                conn.execute(
                     "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE task_id = ?3",
                     params![status, updated_at, task_id],
-                )?;
-                if count == 0 {
-                    return Err(tokio_rusqlite::Error::Rusqlite(
-                        rusqlite::Error::QueryReturnedNoRows,
-                    ));
-                }
-                Ok(())
+                )
+                .map_err(tokio_rusqlite::Error::Rusqlite)
             })
             .await
-            .map_err(|e| match e {
-                tokio_rusqlite::Error::Rusqlite(rusqlite::Error::QueryReturnedNoRows) => {
-                    DbError::TaskNotFound(task_id_for_err)
-                }
-                other => DbError::Connection(other),
-            })
+            .map_err(DbError::Connection)?;
+        if count == 0 {
+            return Err(DbError::TaskNotFound(task_id_for_err));
+        }
+        Ok(())
     }
 
     async fn update_task_graph(&self, goal_id: &str, tasks: &[TaskRecord]) -> Result<(), DbError> {

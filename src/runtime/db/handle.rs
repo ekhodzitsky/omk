@@ -6,8 +6,12 @@ use super::error::DbError;
 use super::schema::INITIAL_SCHEMA;
 use super::transaction::DbTransaction;
 
+/// Target schema version. Bump this when adding new migrations.
+const TARGET_USER_VERSION: i32 = 1;
+
 /// A cloneable handle to a SQLite database.
 #[derive(Clone, Debug)]
+#[must_use = "DbHandle represents an open database connection"]
 pub struct DbHandle {
     pub(super) conn: Connection,
 }
@@ -19,7 +23,14 @@ impl DbHandle {
         let conn = Connection::open(path).await.map_err(DbError::Connection)?;
 
         conn.call(|conn| {
-            conn.execute_batch(INITIAL_SCHEMA)?;
+            let current: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+            if current < TARGET_USER_VERSION {
+                conn.execute_batch(INITIAL_SCHEMA)?;
+                conn.execute(
+                    &format!("PRAGMA user_version = {}", TARGET_USER_VERSION),
+                    [],
+                )?;
+            }
             Ok(())
         })
         .await

@@ -11,11 +11,11 @@ CREATE TABLE IF NOT EXISTS goals (
     project_dir TEXT NOT NULL,
     policy TEXT NOT NULL DEFAULT 'local',
     merge_policy TEXT NOT NULL DEFAULT 'disabled',
-    slice_execution INTEGER NOT NULL DEFAULT 0,
+    slice_execution INTEGER NOT NULL DEFAULT 0 CHECK(slice_execution IN (0, 1)),
     max_agents INTEGER,
     budget_time_secs INTEGER,
     budget_tokens INTEGER,
-    budget_usd REAL,
+    budget_usd INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     controller_pid INTEGER,
@@ -65,10 +65,12 @@ CREATE TABLE IF NOT EXISTS budget_checkpoints (
     checkpoint_id INTEGER PRIMARY KEY AUTOINCREMENT,
     goal_id TEXT NOT NULL REFERENCES goals(goal_id) ON DELETE CASCADE,
     kind TEXT NOT NULL,
-    limit_value REAL,
-    used_value REAL,
+    limit_value INTEGER,
+    used_value INTEGER,
     created_at INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_budget_checkpoints_goal_id ON budget_checkpoints(goal_id);
 
 CREATE TABLE IF NOT EXISTS artifacts (
     artifact_id INTEGER PRIMARY KEY AUTOINCREMENT,

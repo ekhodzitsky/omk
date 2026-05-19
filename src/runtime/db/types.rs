@@ -13,7 +13,7 @@ pub struct GoalRecord {
     pub max_agents: Option<i32>,
     pub budget_time_secs: Option<i64>,
     pub budget_tokens: Option<i64>,
-    pub budget_usd: Option<f64>,
+    pub budget_usd: Option<i64>, // cents
     pub created_at: i64,
     pub updated_at: i64,
     pub controller_pid: Option<i32>,
@@ -67,8 +67,8 @@ pub struct BudgetCheckpoint {
     pub checkpoint_id: Option<i64>,
     pub goal_id: String,
     pub kind: String,
-    pub limit_value: Option<f64>,
-    pub used_value: Option<f64>,
+    pub limit_value: Option<i64>,
+    pub used_value: Option<i64>,
     pub created_at: i64,
 }
 

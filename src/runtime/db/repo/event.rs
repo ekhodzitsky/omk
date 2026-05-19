@@ -54,7 +54,7 @@ impl EventRepo for EventRepoImpl {
                      FROM events
                      WHERE goal_id = ?1
                        AND (?2 IS NULL OR created_at >= ?2)
-                     ORDER BY created_at ASC
+                     ORDER BY created_at ASC, event_id ASC
                      LIMIT COALESCE(?3, -1)",
                 )?;
                 let rows = stmt.query_map(params![goal_id, since, limit_i64], |row| {
