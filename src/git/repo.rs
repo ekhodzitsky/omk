@@ -276,12 +276,10 @@ impl GitRepo {
         let out = self.cmd.run(&["remote", "get-url", remote]).await;
         match out {
             Ok(o) => Ok(Some(o.stdout.trim().to_string())),
-            Err(GitError::CommandFailed { ref stderr, .. }) => {
-                if stderr.contains("No such remote") {
-                    Ok(None)
-                } else {
-                    Err(out.expect_err("already matched Err"))
-                }
+            Err(GitError::CommandFailed { stderr, .. })
+                if stderr.contains("No such remote") =>
+            {
+                Ok(None)
             }
             Err(other) => Err(other),
         }
