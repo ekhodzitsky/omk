@@ -6,19 +6,12 @@ use super::repo::{
 
 /// An active database transaction.
 ///
-/// Note: `DbTransaction` does not automatically rollback on drop.
-/// Callers must explicitly invoke `commit` or `rollback`.
+/// Callers must explicitly invoke `commit` or `rollback`. If dropped without
+/// either, a best-effort rollback is spawned on the current Tokio runtime and
+/// a warning is logged.
 pub struct DbTransaction {
     pub(super) conn: tokio_rusqlite::Connection,
     pub(super) active: bool,
-}
-
-impl std::fmt::Debug for DbTransaction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DbTransaction")
-            .field("active", &self.active)
-            .finish_non_exhaustive()
-    }
 }
 
 impl DbTransaction {
@@ -94,5 +87,32 @@ impl DbTransaction {
         ArtifactRepoImpl {
             conn: self.conn.clone(),
         }
+    }
+}
+
+impl Drop for DbTransaction {
+    fn drop(&mut self) {
+        if self.active {
+            tracing::warn!("DbTransaction dropped without explicit commit or rollback");
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                let conn = self.conn.clone();
+                handle.spawn(async move {
+                    let _ = conn
+                        .call(|conn| {
+                            let _ = conn.execute("ROLLBACK", []);
+                            Ok(())
+                        })
+                        .await;
+                });
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for DbTransaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DbTransaction")
+            .field("active", &self.active)
+            .finish_non_exhaustive()
     }
 }

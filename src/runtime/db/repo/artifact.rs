@@ -60,19 +60,14 @@ impl ArtifactRepo for ArtifactRepoImpl {
         let kind = kind.map(String::from);
         self.conn
             .call(move |conn| {
-                let (sql, params_vec): (String, Vec<&dyn rusqlite::ToSql>) = if let Some(ref k) = kind {
-                    (
-                        "SELECT artifact_id, goal_id, kind, path, mime_type, created_at FROM artifacts WHERE goal_id = ?1 AND kind = ?2 ORDER BY created_at".to_string(),
-                        vec![&goal_id, k],
-                    )
-                } else {
-                    (
-                        "SELECT artifact_id, goal_id, kind, path, mime_type, created_at FROM artifacts WHERE goal_id = ?1 ORDER BY created_at".to_string(),
-                        vec![&goal_id],
-                    )
-                };
-                let mut stmt = conn.prepare(&sql)?;
-                let rows = stmt.query_map(&*params_vec, |row| {
+                let mut stmt = conn.prepare(
+                    "SELECT artifact_id, goal_id, kind, path, mime_type, created_at
+                     FROM artifacts
+                     WHERE goal_id = ?1
+                       AND (?2 IS NULL OR kind = ?2)
+                     ORDER BY created_at",
+                )?;
+                let rows = stmt.query_map(params![goal_id, kind.as_deref()], |row| {
                     Ok(ArtifactRecord {
                         artifact_id: row.get(0)?,
                         goal_id: row.get(1)?,

@@ -128,45 +128,36 @@ impl GoalRepo for GoalRepoImpl {
     async fn list(&self, filter: GoalFilter) -> Result<Vec<GoalSummary>, DbError> {
         self.conn
             .call(move |conn| {
-                let mut sql = String::from(
-                    "SELECT goal_id, status, phase, goal_text, created_at, updated_at FROM goals WHERE 1=1",
-                );
-                let mut params: Vec<&dyn rusqlite::ToSql> = Vec::new();
-
-                if filter.status.is_some() {
-                    sql.push_str(" AND status = ?");
-                    params.push(&filter.status);
-                }
-                if filter.phase.is_some() {
-                    sql.push_str(" AND phase = ?");
-                    params.push(&filter.phase);
-                }
-                if filter.kind.is_some() {
-                    sql.push_str(" AND kind = ?");
-                    params.push(&filter.kind);
-                }
-                if filter.older_than.is_some() {
-                    sql.push_str(" AND updated_at < ?");
-                    params.push(&filter.older_than);
-                }
-                sql.push_str(" ORDER BY updated_at DESC");
-                if filter.limit.is_some() {
-                    let idx = params.len() + 1;
-                    sql.push_str(&format!(" LIMIT ?{}", idx));
-                    params.push(&filter.limit);
-                }
-
-                let mut stmt = conn.prepare(&sql)?;
-                let rows = stmt.query_map(&*params, |row| {
-                    Ok(GoalSummary {
-                        goal_id: row.get(0)?,
-                        status: row.get(1)?,
-                        phase: row.get(2)?,
-                        goal_text: row.get(3)?,
-                        created_at: row.get(4)?,
-                        updated_at: row.get(5)?,
-                    })
-                })?;
+                let mut stmt = conn.prepare(
+                    "SELECT goal_id, status, phase, goal_text, created_at, updated_at
+                     FROM goals
+                     WHERE (?1 IS NULL OR status = ?1)
+                       AND (?2 IS NULL OR phase = ?2)
+                       AND (?3 IS NULL OR kind = ?3)
+                       AND (?4 IS NULL OR updated_at < ?4)
+                     ORDER BY updated_at DESC
+                     LIMIT COALESCE(?5, -1)",
+                )?;
+                let limit = filter.limit.map(|l| l as i64);
+                let rows = stmt.query_map(
+                    params![
+                        filter.status,
+                        filter.phase,
+                        filter.kind,
+                        filter.older_than,
+                        limit,
+                    ],
+                    |row| {
+                        Ok(GoalSummary {
+                            goal_id: row.get(0)?,
+                            status: row.get(1)?,
+                            phase: row.get(2)?,
+                            goal_text: row.get(3)?,
+                            created_at: row.get(4)?,
+                            updated_at: row.get(5)?,
+                        })
+                    },
+                )?;
 
                 let mut results = Vec::new();
                 for row in rows {

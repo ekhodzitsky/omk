@@ -484,18 +484,23 @@ async fn test_concurrent_writes() {
 async fn test_concurrent_reads_during_write() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("test.db");
-    let db = DbHandle::open(&path).await.unwrap();
-    db.goal_repo().create(&test_goal()).await.unwrap();
+
+    // Two independent connections to the same database file.
+    let db_writer = DbHandle::open(&path).await.unwrap();
+    let db_reader = DbHandle::open(&path).await.unwrap();
+
+    db_writer.goal_repo().create(&test_goal()).await.unwrap();
 
     for i in 0..50 {
-        db.event_repo()
+        db_writer
+            .event_repo()
             .append("goal-1", "test", &format!("event-{}", i))
             .await
             .unwrap();
     }
 
     let write_handle = {
-        let db = db.clone();
+        let db = db_writer.clone();
         tokio::spawn(async move {
             for i in 50..100 {
                 db.event_repo()
@@ -508,7 +513,7 @@ async fn test_concurrent_reads_during_write() {
     };
 
     let read_handle = {
-        let db = db.clone();
+        let db = db_reader.clone();
         tokio::spawn(async move {
             let mut reads = 0;
             for _ in 0..20 {
@@ -526,9 +531,11 @@ async fn test_concurrent_reads_during_write() {
 
     let (_, reads) = tokio::join!(write_handle, read_handle);
     let reads = reads.unwrap();
+    // WAL mode allows reads from a separate connection while writes are in progress.
     assert!(reads > 0);
 
-    db.close().await.unwrap();
+    db_writer.close().await.unwrap();
+    db_reader.close().await.unwrap();
 }
 
 #[tokio::test]

@@ -13,6 +13,12 @@ pub use types::{
     ProofRecord, TaskRecord,
 };
 
+// Re-export repository traits so consumers don't need to reach into repo::.
+pub use repo::{
+    artifact::ArtifactRepo, budget::BudgetRepo, event::EventRepo, goal::GoalRepo, proof::ProofRepo,
+    task::TaskRepo,
+};
+
 use repo::{
     artifact::ArtifactRepoImpl, budget::BudgetRepoImpl, event::EventRepoImpl, goal::GoalRepoImpl,
     proof::ProofRepoImpl, task::TaskRepoImpl,

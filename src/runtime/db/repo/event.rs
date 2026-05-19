@@ -49,22 +49,15 @@ impl EventRepo for EventRepoImpl {
         let limit_i64 = limit.map(|l| l as i64);
         self.conn
             .call(move |conn| {
-                let mut sql = String::from(
-                    "SELECT event_id, goal_id, kind, payload, created_at FROM events WHERE goal_id = ?1",
-                );
-                let mut params: Vec<&dyn rusqlite::ToSql> = vec![&goal_id];
-                if since.is_some() {
-                    sql.push_str(" AND created_at >= ?2");
-                    params.push(&since);
-                }
-                if limit_i64.is_some() {
-                    let idx = params.len() + 1;
-                    sql.push_str(&format!(" LIMIT ?{}", idx));
-                    params.push(&limit_i64);
-                }
-
-                let mut stmt = conn.prepare(&sql)?;
-                let rows = stmt.query_map(&*params, |row| {
+                let mut stmt = conn.prepare(
+                    "SELECT event_id, goal_id, kind, payload, created_at
+                     FROM events
+                     WHERE goal_id = ?1
+                       AND (?2 IS NULL OR created_at >= ?2)
+                     ORDER BY created_at ASC
+                     LIMIT COALESCE(?3, -1)",
+                )?;
+                let rows = stmt.query_map(params![goal_id, since, limit_i64], |row| {
                     Ok(EventRecord {
                         event_id: row.get(0)?,
                         goal_id: row.get(1)?,
