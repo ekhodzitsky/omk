@@ -41,6 +41,8 @@ jobs:
         uses: taiki-e/install-action@9903ab6feadaec33945de535fe9d181b91802a55 # v2.50.0
         with:
           tool: cargo-llvm-cov,cargo-nextest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run coverage
         run: cargo llvm-cov nextest --all-features --codecov --output-path codecov.json

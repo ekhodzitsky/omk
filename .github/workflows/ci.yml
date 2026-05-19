@@ -101,6 +101,8 @@ jobs:
         uses: taiki-e/install-action@9903ab6feadaec33945de535fe9d181b91802a55 # v2.50.0
         with:
           tool: cargo-deny
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check supply chain
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
@@ -174,6 +176,8 @@ jobs:
         uses: taiki-e/install-action@9903ab6feadaec33945de535fe9d181b91802a55 # v2.50.0
         with:
           tool: cargo-nextest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run tests
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
