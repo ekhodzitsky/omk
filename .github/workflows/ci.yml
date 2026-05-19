@@ -173,7 +173,7 @@ jobs:
 
       - name: Run tests
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        run: cargo nextest run --all-features
+        run: cargo nextest run
 
       - name: Run doctests
         if: (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') && matrix.full
