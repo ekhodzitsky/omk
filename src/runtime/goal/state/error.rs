@@ -24,3 +24,48 @@ impl std::fmt::Display for GoalStateError {
 }
 
 impl std::error::Error for GoalStateError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn goal_state_error_missing_file_display() {
+        let err = GoalStateError::MissingFile {
+            path: "/tmp/state.json".to_string(),
+        };
+        assert_eq!(err.to_string(), "Goal state file missing: /tmp/state.json");
+    }
+
+    #[test]
+    fn goal_state_error_io_error_display() {
+        let err = GoalStateError::IoError {
+            path: "/tmp/state.json".to_string(),
+            reason: "permission denied".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "Goal state file unreadable at /tmp/state.json: permission denied"
+        );
+    }
+
+    #[test]
+    fn goal_state_error_invalid_format_display() {
+        let err = GoalStateError::InvalidFormat {
+            path: "/tmp/state.json".to_string(),
+            reason: "bad json".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "Goal state file has invalid format at /tmp/state.json: bad json"
+        );
+    }
+
+    #[test]
+    fn goal_state_error_implements_error() {
+        let err: Box<dyn std::error::Error> = Box::new(GoalStateError::MissingFile {
+            path: "p".to_string(),
+        });
+        assert!(err.to_string().contains("Goal state file missing"));
+    }
+}
