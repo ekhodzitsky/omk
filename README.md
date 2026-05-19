@@ -1,113 +1,92 @@
 <div align="center">
 
-<img src="assets/omk-kimi-hero.png" alt="oh-my-kimi wide banner with a blue Kimi mascot reaching out of the screen" width="920">
+<img src="assets/omk-kimi-hero.png" alt="oh-my-kimi banner" width="920">
 
-# oh-my-kimi (omk)
+# oh-my-kimi (`omk`)
 
-**Local, repo-native, proof-driven orchestration for Kimi CLI.**
-
-Turn a single chat window into an observable team of local coding workers — with role assets, scheduler state, verification gates, run timelines, and proof you can inspect before merging.
+**A Rust runtime that makes Kimi CLI production-grade.**
 
 [![CI](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml)
 [![Coverage](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/coverage.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/coverage.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/ekhodzitsky/oh-my-kimi?label=release&sort=semver)](https://github.com/ekhodzitsky/oh-my-kimi/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust MSRV](https://img.shields.io/badge/MSRV-1.78%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/Rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
 
-[Install](#install) · [First Run](#first-run) · [Features](#features) · [Docs](#docs)
+[Install](#install) · [Quick Start](#quick-start) · [Docs](#docs)
 
 </div>
 
 ---
 
-## What & Why
+## Why?
 
-Kimi CLI is great for one-off answers. OMK is for when you want **repeatable, verifiable agent runs** across your repository — without losing control of what changed, why, and whether it actually works.
+Kimi CLI gives you answers. OMK gives you **runs** — tracked, verifiable, and reproducible.
 
-OMK wraps Kimi CLI with a local runtime that installs native agents, dispatches scheduler-backed teams, detects file conflicts before parallel workers collide, runs verification gates, and writes durable `proof.json` artifacts. It is independent of Moonshot AI and not a generic app builder. The category is simple:
+- **Stop guessing what changed.** Every run leaves a `proof.json` you can inspect before merging.
+- **Stop breaking your own code.** Parallel agents run in isolated git worktrees with automatic conflict detection.
+- **Stop when it is not ready.** Verification gates, review walls, and honest `not_ready` / `blocked` terminal states — no silent failures shipped to `master`.
+- **Stay local.** No cloud control plane, no hosted agents, no IDE lock-in. Your code never leaves your machine unless you push it.
 
-> *Local, repo-native, proof-driven autonomous software engineering runtime.*
-
-## Install
+## The One Command: `omk goal`
 
 ```bash
-# One-liner from GitHub
-curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
-
-# Or build from source
-git clone https://github.com/ekhodzitsky/oh-my-kimi.git && cd oh-my-kimi
-cargo build --release
+omk goal run "Add OAuth and rate-limiting to the API" --until-ready
 ```
 
-Binaries are available for macOS (arm64 / x86_64) and Linux x86_64. Windows is not supported yet. We do not publish to crates.io yet — GitHub releases and source builds are the canonical paths.
-
-## First Run
+OMK plans the work, builds a task graph, runs verification gates, dispatches bounded Kimi Wire agents in isolated worktrees, collects proof, and stops with an honest `ready` or `not_ready` verdict.
 
 ```bash
-omk setup                 # create config, state, and data directories
-omk doctor                # verify Kimi CLI and local environment
-
-# Run a goal with proof-backed readiness
-omk goal run "Build a tiny Rust CLI with tests and proof evidence" --until-ready
-
-# Or run with concurrent slices in isolated worktrees
-omk goal run "Add OAuth + rate-limiting to the API" \
-  --until-ready --slice-execution --policy draft-pr --merge-policy gated
-
-# Inspect what happened
+# See what happened
 omk goal proof latest --format md
 omk goal replay latest
 ```
 
-`--slice-execution` decomposes the goal into independent features and runs each in its own git worktree and branch. Combine it with `--policy draft-pr` or `--policy auto-pr` to open per-slice PRs, run review/fix loops, and finally create an integrator PR with reran gates. The CLI renders a live narrative with step icons so you can watch the orchestrator work.
+**Status:** `omk goal` is a **Beta MVP**. Core flow works — planning, execution, verification, proof, slice isolation, and PR delivery. Budget hard stops, pause/resume, and crash recovery are in place. See [`TODO.md`](TODO.md) for what is next.
 
 ## What You Get
 
-- **🧩 Kimi-native assets** — sync/install/doctor/rollback for `.kimi/agents`, hooks, and skills with manifests and backups.
-- **👥 Scheduler-backed teams** — task claims, leases, retries, write-set conflict detection, event logs, and proof/failure artifacts.
-- **🧪 Verification gates** — Rust/Node/Python/Go presets plus custom `.omk/gates.toml`, with full stdout/stderr capture.
-- **🎯 Goal runtime (`omk goal`)** — durable state, oracle-aware planning, bounded Wire-backed execution waves, optional concurrent slice isolation, post-mutation gate reruns, per-slice PR delivery, integrator merge, budget hard stops, pause/resume, and honest `proof.json`/`failure.json` artifacts.
-- **📊 Observability** — text/JSON/TUI HUD, run timelines, worker health, and deterministic replay.
-
-## Features
-
-| Surface | What it does | Status |
-|---|---|---|
-| Kimi asset management | Sync/install/doctor/rollback for agents, hooks, skills | Ready |
-| Role packs | Architect, executor, verifier, reviewer, integrator | Ready |
-| Scheduler-backed teams | Task dispatch, conflict detection, event logs, proof | Beta MVP |
-| Verification gates | Presets + custom config, stdout/stderr capture | Ready |
-| Proof reports | `proof.json`, `failure.json`, text/JSON/Markdown | Beta MVP |
-| Goal runtime | Plan → verify → execute → review → deliver → integrate | Beta MVP |
-| HUD / timelines | Text, JSON, TUI, web scaffold | Ready / Scaffold |
-
-## Where OMK Is Stronger
-
-| vs | The difference |
+| Feature | What it does |
 |---|---|
-| **Raw Kimi CLI** | OMK turns one-off prompts into tracked runs with tasks, gates, artifacts, and proof. |
-| **Ad hoc scripts** | Typed event logs, run manifests, role packs, drift checks, rollback, and honest failure artifacts. |
-| **Cloud orchestrators** | Local-first, Git-friendly, no hosted control plane, Kimi-native instead of generic. |
-| **Chat assistants** | Goal controller with `ready` / `not_ready` / `blocked` as evidence-backed terminal states. |
+| **`omk goal`** | Proof-driven goal runner — plan, verify, execute, review, deliver |
+| **Slice isolation** | Parallel feature work in git worktrees with conflict detection |
+| **Verification gates** | Rust / Node / Python / Go presets + custom config |
+| **Proof & replay** | Durable `proof.json`, `failure.json`, and event timelines |
+| **Asset management** | Install / sync / doctor for Kimi agents, hooks, and skills |
 
-## Development
+## Install
 
 ```bash
-cargo fmt --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-features
+curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for the multi-agent workflow and hard constraints.
+Or build from source (Rust 1.78+):
+
+```bash
+git clone https://github.com/ekhodzitsky/oh-my-kimi.git && cd oh-my-kimi
+cargo build --release
+```
+
+macOS (arm64 / x86_64) and Linux x86_64. Windows is not supported yet.
+
+## Quick Start
+
+```bash
+omk setup                 # create config, state, and data directories
+omk doctor                # verify Kimi CLI and environment
+
+omk goal run "Build a tiny Rust CLI with tests" --until-ready
+omk goal proof latest
+```
 
 ## Docs
 
-- [Tutorial](docs/TUTORIAL.md)
-- [North Star tutorial](docs/north_star_tutorial.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Competitive Positioning](docs/COMPETITIVE_POSITIONING.md)
-- [Roadmap](ROADMAP.md), [Spec](SPEC.md), [Backlog](TODO.md)
+- [`docs/TUTORIAL.md`](docs/TUTORIAL.md) — step-by-step first run
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system design
+- [`docs/API.md`](docs/API.md) — machine-readable CLI outputs
+- [`ROADMAP.md`](ROADMAP.md) — where we are headed
+- [`TODO.md`](TODO.md) — active backlog
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to contribute
+- [`AGENTS.md`](AGENTS.md) — multi-agent workflow rules
 
 ## License
 
