@@ -31,6 +31,55 @@ pub(crate) async fn process_slice_delivery_and_review(
         .await;
 
         let mut extra = serde_json::Map::new();
+
+        // Spawn a refactor follow-up task whenever anti-slop evidence shows
+        // concrete rough edges, regardless of whether delivery succeeded.
+        let slop_findings: Vec<_> = delivery
+            .as_ref()
+            .map(|d| d.slop_findings.clone())
+            .unwrap_or_default();
+        if !slop_findings.is_empty() {
+            let changed_files = crate::runtime::gates::detect_changed_files(exec_project_dir).await;
+            if let Some(refactor_task_id) = task_graph::spawn_refactor_task_from_slop_findings(
+                task_graph,
+                &slice.task_id,
+                &slop_findings,
+                &changed_files,
+                chrono::Utc::now(),
+            ) {
+                // Best-effort event emission: the task graph has already been
+                // mutated, so we must not fail the whole delivery if the event
+                // writer encounters a transient I/O error.
+                let writer = crate::runtime::events::EventWriter::new(
+                    state.state_dir.join(crate::runtime::config::EVENTS_FILE),
+                );
+                if let Ok(event) = crate::runtime::events::Event::new(
+                    crate::runtime::events::RunId(state.goal_id.clone()),
+                    crate::runtime::events::EventKind::TaskGraphMutated,
+                )
+                .with_actor(state::GOAL_CONTROLLER_ACTOR)
+                .with_payload(crate::runtime::events::TaskGraphMutationPayload {
+                    action: "task_added".to_string(),
+                    source: "anti_slop_refactor".to_string(),
+                    task_id: crate::runtime::events::TaskId(refactor_task_id),
+                    task_graph_path: PathBuf::from(state::GOAL_TASK_GRAPH_FILE),
+                    proposal_path: PathBuf::new(),
+                    total_tasks_after: task_graph.tasks.len(),
+                }) {
+                    let _ = writer.append(&event).await;
+                }
+            }
+
+            extra.insert(
+                "review_feedback".to_string(),
+                serde_json::Value::String(format!(
+                    "Anti-slop review found {} rough edge(s). Refactor task spawned for slice {}.",
+                    slop_findings.len(),
+                    slice.task_id
+                )),
+            );
+        }
+
         let slice_status = match delivery {
             Ok(ref d) if d.pr_url.is_some() => task_graph::GoalTaskDeliveryStatus::Delivered,
             Ok(ref d) => {
