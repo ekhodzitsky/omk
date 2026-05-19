@@ -21,7 +21,6 @@ impl GitWorktree {
     }
 
     /// Execute a closure with a [`GitRepo`] opened at this worktree's path.
-    #[allow(dead_code)]
     pub async fn repo<F, Fut, R>(&self, f: F) -> Result<R, GitError>
     where
         F: FnOnce(GitRepo) -> Fut,

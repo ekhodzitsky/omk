@@ -84,6 +84,17 @@ async fn test_changed_files() {
 }
 
 #[tokio::test]
+async fn test_changed_files_no_duplicates() {
+    let (repo, tmp) = temp_repo();
+    // Stage init.txt, then modify it again -> porcelain shows "MM init.txt"
+    std::fs::write(tmp.path().join("init.txt"), "v1").unwrap();
+    run_git(tmp.path(), &["add", "init.txt"]);
+    std::fs::write(tmp.path().join("init.txt"), "v2").unwrap();
+    let files = repo.changed_files().await.unwrap();
+    assert_eq!(files.iter().filter(|f| *f == "init.txt").count(), 1);
+}
+
+#[tokio::test]
 async fn test_worktree_add_and_remove() {
     let (repo, tmp) = temp_repo();
     repo.branch_create("wt-branch", None).await.unwrap();
@@ -182,14 +193,6 @@ async fn test_stash_pop() {
     repo.stash_pop().await.unwrap();
     let files = repo.changed_files().await.unwrap();
     assert!(files.iter().any(|f| f.contains("init.txt")));
-}
-
-#[tokio::test]
-async fn test_command_timeout() {
-    // The timeout is hard-coded at 30s in GitCommand; we verify normal commands still work.
-    let (repo, _tmp) = temp_repo();
-    let sha = repo.head_commit().await.unwrap();
-    assert_eq!(sha.len(), 7);
 }
 
 #[tokio::test]

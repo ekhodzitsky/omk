@@ -69,6 +69,8 @@ impl GitRepo {
         files.extend(status.staged);
         files.extend(status.unstaged);
         files.extend(status.untracked);
+        files.sort();
+        files.dedup();
         Ok(files)
     }
 
@@ -173,7 +175,10 @@ impl GitRepo {
         Ok(())
     }
 
-    /// Check whether a local branch exists.
+    /// Check whether a branch exists (local or remote-tracking).
+    ///
+    /// Note: this matches against `git branch --format=%(refname:short)`,
+    /// which includes remote-tracking branches such as `origin/main`.
     pub async fn branch_exists(&self, name: &str) -> Result<bool, GitError> {
         let out = self
             .cmd
@@ -276,9 +281,7 @@ impl GitRepo {
         let out = self.cmd.run(&["remote", "get-url", remote]).await;
         match out {
             Ok(o) => Ok(Some(o.stdout.trim().to_string())),
-            Err(GitError::CommandFailed { stderr, .. })
-                if stderr.contains("No such remote") =>
-            {
+            Err(GitError::CommandFailed { stderr, .. }) if stderr.contains("No such remote") => {
                 Ok(None)
             }
             Err(other) => Err(other),
