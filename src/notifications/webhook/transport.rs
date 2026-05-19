@@ -53,7 +53,10 @@ impl WebhookTransport for MockWebhookTransport {
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         let url = url.to_string();
         Box::pin(async move {
-            self.calls.lock().expect("mock transport lock").push((url, body));
+            self.calls
+                .lock()
+                .expect("mock transport lock")
+                .push((url, body));
             Ok(())
         })
     }

@@ -10,7 +10,10 @@ use super::registry::MarketplaceRegistry;
 /// The only place `reqwest` and `tokio::fs` are allowed under `src/marketplace/`.
 pub trait RegistryLoader: Send + Sync {
     /// Fetch a registry from a remote URL.
-    fn fetch<'a>(&'a self, url: &'a str) -> Pin<Box<dyn Future<Output = Result<MarketplaceRegistry>> + Send + 'a>>;
+    fn fetch<'a>(
+        &'a self,
+        url: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<MarketplaceRegistry>> + Send + 'a>>;
 
     /// Fetch a registry from a local file path.
     fn fetch_file<'a>(
@@ -24,7 +27,10 @@ pub trait RegistryLoader: Send + Sync {
 pub struct ReqwestRegistryLoader;
 
 impl RegistryLoader for ReqwestRegistryLoader {
-    fn fetch<'a>(&'a self, url: &'a str) -> Pin<Box<dyn Future<Output = Result<MarketplaceRegistry>> + Send + 'a>> {
+    fn fetch<'a>(
+        &'a self,
+        url: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<MarketplaceRegistry>> + Send + 'a>> {
         Box::pin(async move {
             let client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(30))
@@ -72,7 +78,10 @@ pub struct MockRegistryLoader {
 }
 
 impl RegistryLoader for MockRegistryLoader {
-    fn fetch<'a>(&'a self, url: &'a str) -> Pin<Box<dyn Future<Output = Result<MarketplaceRegistry>> + Send + 'a>> {
+    fn fetch<'a>(
+        &'a self,
+        url: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<MarketplaceRegistry>> + Send + 'a>> {
         let url = url.to_string();
         Box::pin(async move {
             self.registries

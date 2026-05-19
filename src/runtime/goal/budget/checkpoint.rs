@@ -22,7 +22,9 @@ pub(crate) async fn append_budget_checkpoint(
     Ok(checkpoint)
 }
 
-pub(super) async fn read_budget_checkpoints(state: &GoalState) -> Result<Vec<GoalBudgetCheckpoint>> {
+pub(super) async fn read_budget_checkpoints(
+    state: &GoalState,
+) -> Result<Vec<GoalBudgetCheckpoint>> {
     let path = budget_checkpoints_path(state);
     let content = match tokio::fs::read_to_string(&path).await {
         Ok(content) => content,
