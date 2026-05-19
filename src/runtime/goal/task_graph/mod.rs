@@ -19,5 +19,5 @@ pub(crate) use mutation::{
     apply_agent_execution_task_result, apply_agent_followup_task_results,
     apply_agent_proposed_task_mutations, apply_agent_task_result_by_id, goal_agent_execution_done,
     goal_task_done, merge_concurrent_slice_task_graphs, pending_goal_agent_followup_proposals,
-    spawn_cleanup_task, summarize_task_graph,
+    spawn_cleanup_task, spawn_refactor_task_from_slop_findings, summarize_task_graph,
 };

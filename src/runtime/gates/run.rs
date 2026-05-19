@@ -45,59 +45,106 @@ pub async fn run_gates_with_evidence(
         let command_line = render_command_line(&gate.command, &gate.args);
 
         let mut cmd = Command::new(&gate.command);
-        cmd.args(&gate.args).current_dir(dir);
+        cmd.args(&gate.args)
+            .current_dir(dir)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
 
-        let output = if gate.timeout_secs > 0 {
-            cmd.kill_on_drop(true);
-            match tokio::time::timeout(Duration::from_secs(gate.timeout_secs), cmd.output()).await {
-                Ok(Ok(output)) => output,
-                Ok(Err(e)) => {
-                    warn!(gate = %gate.name, error = %e, "Failed to run gate command");
-                    results.push(make_gate_error(
-                        gate,
-                        &command_line,
-                        start,
-                        &format!("Run error: {e}"),
-                    ));
-                    continue;
-                }
-                Err(_) => {
-                    let timeout_message = format!("Timed out after {}s", gate.timeout_secs);
-                    warn!(gate = %gate.name, timeout = gate.timeout_secs, "Gate timed out");
-                    results.push(make_gate_timeout(
-                        gate,
-                        &command_line,
-                        start,
-                        timeout_message,
-                    ));
-                    continue;
-                }
-            }
+        let timeout = if gate.timeout_secs > 0 {
+            Duration::from_secs(gate.timeout_secs)
         } else {
-            match tokio::time::timeout(Duration::from_secs(60), cmd.output()).await {
-                Ok(Ok(o)) => o,
-                Ok(Err(e)) => {
+            Duration::from_secs(60)
+        };
+
+        let mut child = match cmd.spawn() {
+            Ok(child) => child,
+            Err(e) => {
+                if gate.timeout_secs > 0 {
+                    warn!(gate = %gate.name, error = %e, "Failed to run gate command");
+                } else {
                     warn!(gate = %gate.name, error = %e, "Failed to spawn gate command");
-                    results.push(make_gate_error(
-                        gate,
-                        &command_line,
-                        start,
-                        &format!("Spawn error: {e}"),
-                    ));
-                    continue;
                 }
-                Err(_) => {
-                    let timeout_message = "Timed out after 60s (default)".to_string();
-                    warn!(gate = %gate.name, timeout = 60, "Gate timed out");
-                    results.push(make_gate_timeout(
-                        gate,
-                        &command_line,
-                        start,
-                        timeout_message,
-                    ));
-                    continue;
-                }
+                let prefix = if gate.timeout_secs > 0 {
+                    "Run error"
+                } else {
+                    "Spawn error"
+                };
+                results.push(make_gate_error(
+                    gate,
+                    &command_line,
+                    start,
+                    &format!("{prefix}: {e}"),
+                ));
+                continue;
             }
+        };
+
+        let mut stdout = child.stdout.take().expect("stdout piped by spawn");
+        let mut stderr = child.stderr.take().expect("stderr piped by spawn");
+
+        let read_stdout = tokio::spawn(async move {
+            let mut buf = Vec::new();
+            let _ = tokio::io::AsyncReadExt::read_to_end(&mut stdout, &mut buf).await;
+            buf
+        });
+        let read_stderr = tokio::spawn(async move {
+            let mut buf = Vec::new();
+            let _ = tokio::io::AsyncReadExt::read_to_end(&mut stderr, &mut buf).await;
+            buf
+        });
+
+        let (status, stdout, stderr) = match tokio::time::timeout(timeout, child.wait()).await {
+            Ok(Ok(status)) => {
+                let stdout = read_stdout.await.unwrap_or_default();
+                let stderr = read_stderr.await.unwrap_or_default();
+                (status, stdout, stderr)
+            }
+            Ok(Err(e)) => {
+                read_stdout.abort();
+                read_stderr.abort();
+                if gate.timeout_secs > 0 {
+                    warn!(gate = %gate.name, error = %e, "Failed to run gate command");
+                } else {
+                    warn!(gate = %gate.name, error = %e, "Failed to spawn gate command");
+                }
+                let prefix = if gate.timeout_secs > 0 {
+                    "Run error"
+                } else {
+                    "Spawn error"
+                };
+                results.push(make_gate_error(
+                    gate,
+                    &command_line,
+                    start,
+                    &format!("{prefix}: {e}"),
+                ));
+                continue;
+            }
+            Err(_) => {
+                read_stdout.abort();
+                read_stderr.abort();
+                let _ = child.start_kill();
+                let _ = child.wait().await;
+                let timeout_message = if gate.timeout_secs > 0 {
+                    format!("Timed out after {}s", gate.timeout_secs)
+                } else {
+                    "Timed out after 60s (default)".to_string()
+                };
+                warn!(gate = %gate.name, timeout = gate.timeout_secs, "Gate timed out");
+                results.push(make_gate_timeout(
+                    gate,
+                    &command_line,
+                    start,
+                    timeout_message,
+                ));
+                continue;
+            }
+        };
+
+        let output = std::process::Output {
+            status,
+            stdout,
+            stderr,
         };
 
         let stdout = scrub_secret_patterns(&String::from_utf8_lossy(&output.stdout)).into_owned();

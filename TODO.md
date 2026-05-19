@@ -12,7 +12,7 @@ End-to-end delivery contract: `ROADMAP.md` Stage 7.
 These are implemented at the scaffold/code level but need hardening or
 real-world validation before they are considered fully closed:
 
-- [ ] Treat routine polish as part of the goal: anti-slop review should
+- [x] Treat routine polish as part of the goal: anti-slop review should
       automatically spawn cleanup/refactor follow-up tasks when evidence shows
       rough edges, not just record the finding in `proof.json`.
 - [ ] Run the full 6-review wall (architect, code, test, security, performance,

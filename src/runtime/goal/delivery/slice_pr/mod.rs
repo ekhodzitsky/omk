@@ -117,6 +117,7 @@ pub(crate) async fn deliver_slice_pr(
             slop_findings: review.slop_findings,
         });
     }
+    let slop_findings = review.slop_findings.clone();
 
     let base_branch = if let Some(ref bb) = options.base_branch {
         bb.clone()
@@ -135,7 +136,7 @@ pub(crate) async fn deliver_slice_pr(
             mutated: false,
             reason: format!("slice branch merge check failed: {e}"),
             review_artifacts: Some(review.artifacts),
-            slop_findings: review.slop_findings,
+            slop_findings,
         });
     }
 
@@ -149,7 +150,7 @@ pub(crate) async fn deliver_slice_pr(
         mutated: outcome.mutated,
         reason: outcome.reason,
         review_artifacts: outcome.review_artifacts,
-        slop_findings: outcome.slop_findings,
+        slop_findings,
     })
 }
 

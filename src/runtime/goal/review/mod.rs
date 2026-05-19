@@ -1,5 +1,5 @@
 mod slice;
-pub(super) mod slop;
+pub(crate) mod slop;
 
 pub(super) use slice::SliceReviewArtifact;
 pub(crate) use slice::{

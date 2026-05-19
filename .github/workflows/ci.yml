@@ -104,6 +104,27 @@ jobs:
           command: check advisories licenses sources
           arguments: --all-features
 
+  cargo-deny:
+    name: Audit Dependencies
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Skip unchanged dependency graph
+        if: github.event_name == 'pull_request' && needs.changes.outputs.deps != 'true'
+        run: echo "Cargo dependency inputs did not change; dependency audit is a cheap no-op."
+
+      - name: Check supply chain
+        if: github.event_name != 'pull_request' || needs.changes.outputs.deps == 'true'
+        # SHA-pinned third-party action (v2.0.18 at time of pin).
+        uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1
+        with:
+          command: check advisories licenses sources
+          arguments: --all-features
+
   msrv:
     name: MSRV
     needs: changes

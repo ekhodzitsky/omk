@@ -89,3 +89,45 @@ pub(crate) fn push_unique(values: &mut Vec<String>, value: String) {
         values.push(value);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn policy_blocker_sets_expected_fields() {
+        let b = UntilReadyBlocker::policy("some reason");
+        assert_eq!(b.reason, "some reason");
+        assert_eq!(b.artifact_file, super::super::UNTIL_READY_BLOCKER_FILE);
+        assert!(!b.human_decision_required);
+    }
+
+    #[test]
+    fn human_blocker_sets_expected_fields() {
+        let b = UntilReadyBlocker::human("human reason", "custom.json");
+        assert_eq!(b.reason, "human reason");
+        assert_eq!(b.artifact_file, "custom.json");
+        assert!(b.human_decision_required);
+    }
+
+    #[test]
+    fn push_unique_appends_when_not_present() {
+        let mut values = vec!["a".to_string(), "b".to_string()];
+        push_unique(&mut values, "c".to_string());
+        assert_eq!(values, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn push_unique_skips_when_already_present() {
+        let mut values = vec!["a".to_string(), "b".to_string()];
+        push_unique(&mut values, "b".to_string());
+        assert_eq!(values, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn push_unique_appends_to_empty_vec() {
+        let mut values: Vec<String> = Vec::new();
+        push_unique(&mut values, "first".to_string());
+        assert_eq!(values, vec!["first"]);
+    }
+}
