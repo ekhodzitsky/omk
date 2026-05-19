@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use anyhow::Result;
 use crate::git::GitRepo;
+use anyhow::Result;
 
 pub(crate) async fn resolve_base_branch(repo_dir: &Path) -> Option<String> {
     let repo = GitRepo::open(repo_dir).ok()?;
@@ -25,8 +25,8 @@ pub(crate) async fn create_integrator_branch(
     integrator_branch: &str,
     base_branch: &str,
 ) -> Result<()> {
-    let repo = GitRepo::open(repo_dir)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let repo =
+        GitRepo::open(repo_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
     repo.branch_create(integrator_branch, Some(base_branch))
         .await
         .map_err(|e| anyhow::anyhow!("git checkout -b failed: {e}"))?;
@@ -41,8 +41,8 @@ pub(crate) async fn merge_tree_is_clean(
     branch: &str,
     integrator_branch: &str,
 ) -> Result<()> {
-    let repo = GitRepo::open(repo_dir)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let repo =
+        GitRepo::open(repo_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
     let result = repo
         .merge_tree(integrator_branch, branch)
         .await
@@ -58,8 +58,8 @@ pub(crate) async fn merge_branch_into_integrator(
     branch: &str,
     integrator_branch: &str,
 ) -> Result<()> {
-    let repo = GitRepo::open(repo_dir)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let repo =
+        GitRepo::open(repo_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
 
     repo.checkout(integrator_branch)
         .await
@@ -95,8 +95,8 @@ pub(crate) async fn merge_branch_into_integrator(
 }
 
 pub(crate) async fn push_branch(repo_dir: &Path, branch: &str) -> Result<()> {
-    let repo = GitRepo::open(repo_dir)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let repo =
+        GitRepo::open(repo_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
     repo.push_force("origin", branch)
         .await
         .map_err(|e| anyhow::anyhow!("git push failed: {e}"))?;

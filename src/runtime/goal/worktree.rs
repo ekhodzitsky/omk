@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
 use crate::git::GitRepo;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,6 @@ pub use conflict::{
 const BRANCH_PREFIX: &str = "omk/goal";
 const WORKTREE_PREFIX: &str = "goal";
 const COMPONENT_MAX_CHARS: usize = 48;
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoalWorktreePlan {
@@ -161,8 +160,8 @@ async fn ensure_git_worktree(repo_dir: &Path) -> Result<()> {
 }
 
 async fn ensure_clean_git_worktree(repo_dir: &Path) -> Result<()> {
-    let repo = GitRepo::open(repo_dir)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let repo =
+        GitRepo::open(repo_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
     if let Err(e) = repo.ensure_clean().await {
         let sample = format!("{e}");
         anyhow::bail!(
@@ -202,16 +201,16 @@ fn path_is_occupied(path: &Path) -> Result<bool> {
 }
 
 async fn git_branch_exists(repo_dir: &Path, branch_name: &str) -> Result<bool> {
-    let repo = GitRepo::open(repo_dir)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let repo =
+        GitRepo::open(repo_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
     repo.branch_exists(branch_name)
         .await
         .map_err(|e| anyhow::anyhow!("git branch check failed: {e}"))
 }
 
 async fn create_git_worktree(repo_dir: &Path, plan: &GoalWorktreePlan) -> Result<()> {
-    let repo = GitRepo::open(repo_dir)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let repo =
+        GitRepo::open(repo_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
     repo.branch_create(&plan.branch_name, Some("HEAD"))
         .await
         .map_err(|e| anyhow::anyhow!("git branch create failed: {e}"))?;
@@ -226,8 +225,8 @@ pub(super) async fn remove_goal_worktree(repo_dir: &Path, worktree_path: &Path) 
     if !worktree_path.exists() {
         return Ok(());
     }
-    let repo = GitRepo::open(repo_dir)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let repo =
+        GitRepo::open(repo_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
     repo.worktree_remove(worktree_path, true)
         .await
         .map_err(|e| anyhow::anyhow!("git worktree remove failed: {e}"))?;

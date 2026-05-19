@@ -3,12 +3,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::git::GitRepo;
 use super::proof::write_json_artifact;
 use super::state::{
     GoalArtifact, GoalState, GOAL_ARTIFACTS_DIR, GOAL_GATE_ARTIFACTS_DIR, GOAL_PROOF_FILE,
 };
 use super::task_graph::GoalTaskEvidence;
+use crate::git::GitRepo;
 use crate::runtime::gates::detect_changed_files;
 use crate::runtime::scheduler::runner::RunSummary;
 use crate::runtime::worker::WorkerResult;

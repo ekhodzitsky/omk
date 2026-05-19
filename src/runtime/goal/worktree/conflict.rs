@@ -152,5 +152,3 @@ async fn record_conflict_delivery_metadata(
     .await?;
     Ok(())
 }
-
-

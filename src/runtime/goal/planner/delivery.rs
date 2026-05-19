@@ -25,8 +25,8 @@ pub(super) async fn materialize_delivery_slices(
     // Skip worktree materialization if the repo has uncommitted changes.
     // This keeps `omk goal run --until-ready` usable on real projects
     // that naturally have untracked files.
-    let repo = GitRepo::open(project_dir)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let repo =
+        GitRepo::open(project_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
     let clean = repo.ensure_clean().await.is_ok();
     if !clean {
         return Ok(());
