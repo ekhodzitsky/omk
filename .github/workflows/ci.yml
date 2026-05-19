@@ -167,13 +167,9 @@ jobs:
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         run: cargo check --all-targets --all-features
 
-      - name: Install cargo-nextest
-        if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        run: cargo install cargo-nextest --locked
-
       - name: Run tests
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
-        run: cargo nextest run
+        run: cargo test
 
       - name: Run doctests
         if: (github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true') && matrix.full
