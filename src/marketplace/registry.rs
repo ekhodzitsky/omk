@@ -86,3 +86,94 @@ pub async fn load_all_skills(registries: &[String]) -> Result<Vec<(String, Regis
 
     Ok(all)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_deserialization_roundtrip() {
+        let registry = MarketplaceRegistry {
+            name: "test-registry".to_string(),
+            url: "https://example.com/registry.json".to_string(),
+            skills: vec![
+                RegistrySkill {
+                    name: "skill-a".to_string(),
+                    description: "Does A".to_string(),
+                    author: "alice".to_string(),
+                    url: "https://example.com/skill-a".to_string(),
+                    tags: vec!["rust".to_string(), "cli".to_string()],
+                },
+                RegistrySkill {
+                    name: "skill-b".to_string(),
+                    description: "Does B".to_string(),
+                    author: "bob".to_string(),
+                    url: "https://example.com/skill-b".to_string(),
+                    tags: vec![],
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&registry).unwrap();
+        let parsed: MarketplaceRegistry = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.name, "test-registry");
+        assert_eq!(parsed.skills.len(), 2);
+        assert_eq!(parsed.skills[0].name, "skill-a");
+        assert_eq!(parsed.skills[0].tags, vec!["rust", "cli"]);
+        assert_eq!(parsed.skills[1].tags, Vec::<String>::new());
+    }
+
+    #[test]
+    fn registry_skill_deserialization_with_missing_tags() {
+        let json = r#"{
+            "name": "skill-c",
+            "description": "Does C",
+            "author": "charlie",
+            "url": "https://example.com/skill-c"
+        }"#;
+        let skill: RegistrySkill = serde_json::from_str(json).unwrap();
+        assert_eq!(skill.name, "skill-c");
+        assert!(skill.tags.is_empty());
+    }
+
+    #[test]
+    fn registry_deserialization_with_empty_skills() {
+        let json = r#"{
+            "name": "empty-registry",
+            "url": "https://example.com/empty.json",
+            "skills": []
+        }"#;
+        let registry: MarketplaceRegistry = serde_json::from_str(json).unwrap();
+        assert!(registry.skills.is_empty());
+    }
+
+    #[tokio::test]
+    async fn load_all_skills_empty_registries() {
+        let result = load_all_skills(&[]).await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn load_all_skills_skips_unreachable_registries() {
+        // A non-existent local path should be skipped gracefully.
+        let result = load_all_skills(&["/nonexistent/path/registry.json".to_string()])
+            .await
+            .unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn registry_skill_equality_and_clone() {
+        let skill = RegistrySkill {
+            name: "skill".to_string(),
+            description: "desc".to_string(),
+            author: "auth".to_string(),
+            url: "https://example.com".to_string(),
+            tags: vec!["t".to_string()],
+        };
+        let cloned = skill.clone();
+        assert_eq!(skill.name, cloned.name);
+        assert_eq!(skill.description, cloned.description);
+    }
+}
