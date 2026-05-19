@@ -2,8 +2,7 @@
 
 This file contains agent-level conventions for the entire project tree.
 For OMK-specific context (wire protocol, agent roles, roadmap), see `.omk/AGENTS.md`.
-For the main product direction, read `SPEC.md`, `ROADMAP.md`, `TODO.md`, and
-`docs/superpowers/specs/2026-05-11-omk-goal-design.md`.
+For the main product direction, read `SPEC.md`, `ROADMAP.md`, and `TODO.md`.
 For market positioning and competitor boundaries, read
 `docs/COMPETITIVE_POSITIONING.md`.
 

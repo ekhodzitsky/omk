@@ -3,9 +3,7 @@
 This is the implementation backlog for `omk goal`.
 
 Canonical spec: `SPEC.md`
-Detailed design: `docs/superpowers/specs/2026-05-11-omk-goal-design.md`
-End-to-end delivery contract:
-`docs/superpowers/specs/2026-05-14-omk-goal-end-to-end-delivery.md`
+End-to-end delivery contract: `ROADMAP.md` Stage 7.
 
 ## Phase 1 - Durable Goal State
 

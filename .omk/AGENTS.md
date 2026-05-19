@@ -222,7 +222,7 @@ Canonical docs:
 - `ROADMAP.md` — staged delivery path
 - `TODO.md` — implementation backlog
 - `docs/COMPETITIVE_POSITIONING.md` — competitor map and positioning contract
-- `docs/superpowers/specs/2026-05-11-omk-goal-design.md` — detailed design
+- `SPEC.md` — detailed product contract and north-star design
 
 ## Project Conventions
 

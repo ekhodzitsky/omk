@@ -7,11 +7,8 @@ proof-driven engineering runtime. The command accepts a high-level outcome,
 builds an evidence-backed plan, launches agents and subagents under policy, and
 keeps working until the goal is ready, blocked, or out of budget.
 
-Canonical detailed design:
-`docs/superpowers/specs/2026-05-11-omk-goal-design.md`
-
-End-to-end delivery contract:
-`docs/superpowers/specs/2026-05-14-omk-goal-end-to-end-delivery.md`
+End-to-end delivery contract is defined in `ROADMAP.md` Stage 7 and enforced by the
+`omk goal` CLI surface (`run`, `status`, `verify`, `execute`, `review`, `open-pr`, `proof`).
 
 ## Product Thesis
 
