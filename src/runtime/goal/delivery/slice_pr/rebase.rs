@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
-use std::ffi::OsString;
 use std::path::Path;
 
-use super::git::{git_output, output_stderr, validate_git_ref};
+use crate::git::GitRepo;
+
+use super::git::validate_git_ref;
 use super::merge_check::check_slice_branch_merge_clean;
 
 /// Ensure the slice branch can merge cleanly into the base branch.
@@ -51,62 +52,29 @@ async fn rebase_slice_branch_onto_base(
     validate_git_ref(branch)?;
     validate_git_ref(base_branch)?;
 
+    let repo = GitRepo::open(worktree_path)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+
     // Checkout the slice branch
-    let checkout = git_output(
-        worktree_path,
-        vec![OsString::from("checkout"), OsString::from(branch)],
-        "checkout slice branch for rebase",
-    )
-    .await?;
-    if !checkout.status.success() {
-        anyhow::bail!("git checkout {branch} failed: {}", output_stderr(&checkout));
-    }
+    repo.checkout(branch)
+        .await
+        .map_err(|e| anyhow::anyhow!("git checkout {branch} failed: {e}"))?;
 
     // Try to fetch first; fall back to local ref
-    let fetched = git_output(
-        worktree_path,
-        vec![
-            OsString::from("fetch"),
-            OsString::from(super::DEFAULT_REMOTE),
-            OsString::from(base_branch),
-        ],
-        "fetch base branch for rebase",
-    )
-    .await;
-    let base_ref = if fetched.map(|o| o.status.success()).unwrap_or(false) {
+    let fetch_ok = repo.fetch(super::DEFAULT_REMOTE).await.is_ok();
+    let base_ref = if fetch_ok {
         format!("{}/{base_branch}", super::DEFAULT_REMOTE)
     } else {
         base_branch.to_string()
     };
 
     // Rebase onto the base branch
-    let rebase = git_output(
-        worktree_path,
-        vec![
-            OsString::from("rebase"),
-            OsString::from("--"),
-            OsString::from(&base_ref),
-        ],
-        "rebase slice branch onto base",
-    )
-    .await?;
-
-    if rebase.status.success() {
-        return Ok(());
+    if let Err(e) = repo.rebase(&base_ref).await {
+        let _ = repo.rebase_abort().await;
+        anyhow::bail!("git rebase {branch} onto {base_ref} failed: {e}");
     }
 
-    // Rebase failed — abort and report
-    let _ = git_output(
-        worktree_path,
-        vec![OsString::from("rebase"), OsString::from("--abort")],
-        "abort failed rebase",
-    )
-    .await;
-
-    anyhow::bail!(
-        "git rebase {branch} onto {base_ref} failed: {}",
-        output_stderr(&rebase)
-    );
+    Ok(())
 }
 
 #[cfg(test)]

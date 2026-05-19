@@ -304,6 +304,12 @@ impl GitRepo {
         Ok(out.stdout)
     }
 
+    /// Stage all changes (including untracked).
+    pub async fn add_all(&self) -> Result<(), GitError> {
+        self.cmd.run(&["add", "-A"]).await?;
+        Ok(())
+    }
+
     /// Stash changes with an optional message.
     pub async fn stash(&self, message: Option<&str>) -> Result<(), GitError> {
         let mut args = vec!["stash", "push"];
