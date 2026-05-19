@@ -230,6 +230,38 @@ async fn test_fetch_and_remote_url() {
 }
 
 #[tokio::test]
+async fn test_commit_with_paths() {
+    let (repo, tmp) = temp_repo();
+    // init.txt is tracked; modify it
+    std::fs::write(tmp.path().join("init.txt"), "modified").unwrap();
+    // create an untracked file
+    std::fs::write(tmp.path().join("b.txt"), "b").unwrap();
+    let sha = repo
+        .commit("commit init only", &[std::path::Path::new("init.txt")])
+        .await
+        .unwrap();
+    // b.txt should still be untracked
+    let files = repo.changed_files().await.unwrap();
+    assert!(!files.contains(&"init.txt".to_string()));
+    assert!(files.contains(&"b.txt".to_string()));
+    assert!(!sha.is_empty());
+}
+
+#[tokio::test]
+async fn test_git_worktree_repo() {
+    let (repo, tmp) = temp_repo();
+    repo.branch_create("wt-test", None).await.unwrap();
+    let wt_path = tmp.path().join("wt");
+    let wt = repo.worktree_add(&wt_path, "wt-test").await.unwrap();
+
+    let branch = wt
+        .repo(|r| async move { r.current_branch().await })
+        .await
+        .unwrap();
+    assert_eq!(branch, "wt-test");
+}
+
+#[tokio::test]
 async fn test_checkout_branch_not_found() {
     let (repo, _tmp) = temp_repo();
     let err = repo.checkout("nonexistent-branch-12345").await.unwrap_err();
