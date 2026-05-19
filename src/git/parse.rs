@@ -10,7 +10,13 @@ pub fn parse_status(stdout: &str) -> Result<GitStatus, GitError> {
         }
         let idx = line.as_bytes().first().copied().unwrap_or(b' ');
         let wt = line.as_bytes().get(1).copied().unwrap_or(b' ');
-        let path = line[3..].to_string();
+        let rest = &line[3..];
+        // Rename/copy lines: "XY old_path -> new_path"
+        let path = if let Some(arrow) = rest.find(" -> ") {
+            rest[arrow + 4..].to_string()
+        } else {
+            rest.to_string()
+        };
 
         if idx == b'?' && wt == b'?' {
             status.untracked.push(path);
@@ -161,6 +167,13 @@ mod tests {
         assert_eq!(s.staged, vec!["src/lib.rs"]);
         assert_eq!(s.unstaged, vec!["src/main.rs", "old.rs"]);
         assert_eq!(s.untracked, vec!["new.txt"]);
+    }
+
+    #[test]
+    fn test_parse_status_rename() {
+        let input = "R  old.txt -> new.txt\n";
+        let s = parse_status(input).unwrap();
+        assert_eq!(s.staged, vec!["new.txt"]);
     }
 
     #[test]
