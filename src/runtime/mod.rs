@@ -2,6 +2,7 @@ pub mod ask;
 pub mod atomic;
 pub mod autopilot;
 pub mod config;
+pub mod db;
 pub mod events;
 pub mod gates;
 pub mod goal;
