@@ -37,15 +37,15 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@aa7c1c80a07a27a84c0aa76d0cef0aad3830e330 # v2.7.8
 
-      - name: Install cargo-llvm-cov and cargo-nextest
+      - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@9903ab6feadaec33945de535fe9d181b91802a55 # v2.50.0
         with:
-          tool: cargo-llvm-cov,cargo-nextest
+          tool: cargo-llvm-cov
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run coverage
-        run: cargo llvm-cov nextest --all-features --codecov --output-path codecov.json
+        run: cargo llvm-cov --all-features --codecov --output-path codecov.json
 
       - name: Upload to Codecov
         # SHA-pinned third-party action (v5.4.0 at time of pin).
