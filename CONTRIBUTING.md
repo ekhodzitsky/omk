@@ -67,6 +67,8 @@ output, public API, or release behavior.
 
 ```
 src/
+  analysis/   # tree-sitter based code analysis module
+  bin/        # auxiliary binary crate directory (contains validate-contracts.rs)
   cli/        # Clap subcommands (setup, doctor, config, team, ask, autopilot, ralph, ultrawork, hud, kimi, goal, run, proof, backup, skill, logs, man, update)
   runtime/    # Core orchestration logic
     config.rs   # XDG path resolution + config.toml parsing

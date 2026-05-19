@@ -195,3 +195,220 @@ Aggregated runtime counters.
 ```
 
 `total_spawns` is a legacy compatibility alias for `total_team_runs`.
+
+## Goal API
+
+> **Current status:** Goal is CLI-only. There are no goal-specific MCP tools or REST endpoints yet. The web dashboard does not expose goal state over HTTP. Machine-readable access is available through the `omk goal` CLI with `--json` or `--format json|md`.
+
+### Goal CLI — Machine-Readable Output
+
+The following commands support structured output for scripting and integration:
+
+| Command | `--json` | `--format json` | `--format md` | Notes |
+| --- | --- | --- | --- | --- |
+| `omk goal show` | ✓ | ✓ | ✓ | Full `GoalState` |
+| `omk goal proof` | ✓ | ✓ | ✓ | `GoalProof` artifact |
+| `omk goal replay` | ✓ | ✓ | ✓ | `GoalReplay` timeline |
+| `omk goal budget` | ✓ | ✓ | ✓ | `GoalBudgetReport` |
+| `omk goal status` | — | — | — | Text only |
+| `omk goal list` | — | — | — | Text only |
+
+#### `omk goal show --json`
+
+Serializes the full `GoalState` (secrets redacted at the Wire boundary):
+
+```json
+{
+  "version": 1,
+  "goal_id": "goal-20260519-abc123",
+  "original_goal": "refactor authentication module",
+  "normalized_goal": "refactor authentication module",
+  "status": "running",
+  "phase": "execution",
+  "created_at": "2026-05-19T10:00:00Z",
+  "updated_at": "2026-05-19T10:30:00Z",
+  "completed_at": null,
+  "until_ready": true,
+  "budget_time": "8h",
+  "budget_tokens": 500000,
+  "budget_usd": 10.0,
+  "max_agents": 5,
+  "terminal_criteria": {
+    "proof_required": true,
+    "gates_required": true,
+    "human_blockers_stop": true
+  },
+  "delivery_policy": "local",
+  "merge_policy": "disabled",
+  "slice_execution": false,
+  "artifacts": [
+    {
+      "kind": "plan",
+      "path": "/home/user/.local/state/omk/goal/goal-20260519-abc123/plan.md",
+      "created_at": "2026-05-19T10:05:00Z"
+    }
+  ],
+  "failure": null,
+  "state_dir": "/home/user/.local/state/omk/goal/goal-20260519-abc123"
+}
+```
+
+**Status values:** `running`, `ready`, `not_ready`, `blocked_on_human`, `blocked_on_external`, `needs_more_budget`, `failed_infra`, `paused`, `cancelled`.
+
+**Phase values:** `intake`, `planning`, `decomposition`, `execution`, `verification_design`, `proof`.
+
+#### `omk goal proof --json`
+
+Serializes the current `GoalProof` artifact:
+
+```json
+{
+  "version": 1,
+  "goal_id": "goal-20260519-abc123",
+  "status": "not_ready",
+  "readiness": "not ready: verification gates and bounded agent execution passed, but review/security evidence is missing",
+  "summary": "Goal 'refactor authentication module' has 3 gate result(s) and remains not ready until all required execution and review evidence exists.",
+  "generated_at": "2026-05-19T10:30:00Z",
+  "artifacts": [
+    {
+      "kind": "plan",
+      "path": "/home/user/.local/state/omk/goal/goal-20260519-abc123/plan.md",
+      "created_at": "2026-05-19T10:05:00Z"
+    }
+  ],
+  "task_graph_summary": {
+    "total_tasks": 5,
+    "pending_tasks": 1,
+    "blocked_tasks": 0,
+    "done_tasks": 4
+  },
+  "changed_files": [
+    "src/auth/mod.rs",
+    "src/auth/oauth.rs"
+  ],
+  "commits": [
+    "a1b2c3d"
+  ],
+  "gates": [
+    {
+      "name": "cargo test",
+      "passed": true,
+      "stdout": "...",
+      "stderr": "",
+      "duration_ms": 12500,
+      "required": true,
+      "command_line": "cargo test",
+      "exit_code": 0,
+      "timed_out": false
+    }
+  ],
+  "post_mutation_gates_ran": false,
+  "known_gaps": [
+    "review evidence has not run for this goal yet",
+    "security review evidence has not run for this goal yet"
+  ],
+  "human_decisions_required": []
+}
+```
+
+#### `omk goal replay --json`
+
+Serializes the deduplicated goal timeline:
+
+```json
+{
+  "version": 1,
+  "goal_id": "goal-20260519-abc123",
+  "status": "running",
+  "phase": "execution",
+  "generated_at": "2026-05-19T10:30:00Z",
+  "event_count": 12,
+  "task_graph_summary": {
+    "total_tasks": 5,
+    "pending_tasks": 1,
+    "blocked_tasks": 0,
+    "done_tasks": 4
+  },
+  "timeline": [
+    {
+      "index": 0,
+      "ts": "2026-05-19T10:00:05Z",
+      "kind": "goal_created",
+      "actor": null,
+      "summary": "status=running, phase=intake"
+    },
+    {
+      "index": 3,
+      "ts": "2026-05-19T10:15:00Z",
+      "kind": "task_started",
+      "actor": "agent-1",
+      "summary": "task_id=goal-agent-execute"
+    }
+  ],
+  "recovery_status": null,
+  "known_gaps": [],
+  "duplicate_events": 0,
+  "parse_failures": 0
+}
+```
+
+#### `omk goal budget --json`
+
+Serializes the `GoalBudgetReport` with checkpoints:
+
+```json
+{
+  "version": 1,
+  "goal_id": "goal-20260519-abc123",
+  "generated_at": "2026-05-19T10:30:00Z",
+  "budget_time": "8h",
+  "total_budget_secs": 28800,
+  "budget_tokens": 500000,
+  "used_tokens": 125000,
+  "remaining_budget_tokens": 375000,
+  "budget_usd": 10.0,
+  "estimated_cost_usd": 2.5,
+  "remaining_budget_usd": 7.5,
+  "latest": {
+    "version": 1,
+    "goal_id": "goal-20260519-abc123",
+    "label": "budget_extended",
+    "status": "running",
+    "phase": "execution",
+    "recorded_at": "2026-05-19T10:20:00Z",
+    "budget_time": "8h",
+    "total_budget_secs": 28800,
+    "elapsed_since_created_secs": 1200,
+    "remaining_budget_secs": 27600,
+    "budget_tokens": 500000,
+    "used_tokens": 125000,
+    "remaining_budget_tokens": 375000,
+    "budget_usd": 10.0,
+    "estimated_cost_usd": 2.5,
+    "remaining_budget_usd": 7.5
+  },
+  "checkpoints": [
+    {
+      "version": 1,
+      "goal_id": "goal-20260519-abc123",
+      "label": "budget_extended",
+      "status": "running",
+      "phase": "execution",
+      "recorded_at": "2026-05-19T10:20:00Z",
+      "budget_time": "8h",
+      "total_budget_secs": 28800,
+      "elapsed_since_created_secs": 1200,
+      "remaining_budget_secs": 27600,
+      "budget_tokens": 500000,
+      "used_tokens": 125000,
+      "remaining_budget_tokens": 375000,
+      "budget_usd": 10.0,
+      "estimated_cost_usd": 2.5,
+      "remaining_budget_usd": 7.5
+    }
+  ],
+  "spent_usd": 2.5,
+  "spent_tokens": 125000,
+  "spent_seconds": 1200
+}
+```
