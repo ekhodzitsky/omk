@@ -2,9 +2,8 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
-use tokio::process::Command;
 
+use crate::git::GitRepo;
 use super::proof::write_json_artifact;
 use super::state::{
     GoalArtifact, GoalState, GOAL_ARTIFACTS_DIR, GOAL_GATE_ARTIFACTS_DIR, GOAL_PROOF_FILE,
@@ -83,36 +82,16 @@ pub(crate) fn record_artifact_path_once(
 }
 
 pub(crate) async fn detect_git_evidence(project_dir: &Path) -> Option<GoalGitEvidence> {
-    let inside = git_stdout(project_dir, &["rev-parse", "--is-inside-work-tree"]).await?;
-    if inside != "true" {
-        return None;
-    }
-    let branch = git_stdout(project_dir, &["rev-parse", "--abbrev-ref", "HEAD"]).await?;
-    let head = git_stdout(project_dir, &["rev-parse", "HEAD"]).await?;
-    let status = git_stdout(project_dir, &["status", "--porcelain"]).await?;
+    let repo = GitRepo::open(project_dir).ok()?;
+    let branch = repo.current_branch().await.ok()?;
+    let head = repo.head_commit().await.ok()?;
+    let files = repo.changed_files().await.ok()?;
 
     Some(GoalGitEvidence {
         branch,
         head,
-        dirty: !status.is_empty(),
+        dirty: !files.is_empty(),
     })
-}
-
-async fn git_stdout(project_dir: &Path, args: &[&str]) -> Option<String> {
-    let output = tokio::time::timeout(
-        Duration::from_secs(10),
-        Command::new("git")
-            .args(args)
-            .current_dir(project_dir)
-            .output(),
-    )
-    .await
-    .ok()?
-    .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 pub(crate) fn agent_execution_task_evidence(
@@ -304,20 +283,8 @@ pub(crate) async fn write_goal_agent_mutation_snapshot(
 }
 
 async fn git_diff(project_dir: &Path) -> Option<String> {
-    let output = tokio::time::timeout(
-        Duration::from_secs(10),
-        Command::new("git")
-            .args(["diff", "--no-ext-diff", "--"])
-            .current_dir(project_dir)
-            .output(),
-    )
-    .await
-    .ok()?
-    .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&output.stdout).to_string())
+    let repo = GitRepo::open(project_dir).ok()?;
+    repo.diff().await.ok()
 }
 
 pub(crate) fn extract_goal_agent_task_proposals(
