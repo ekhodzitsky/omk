@@ -138,3 +138,56 @@ pub(crate) fn propose_goal_agent_tasks(state: &GoalState) -> Vec<GoalAgentTaskPr
         },
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::goal::state::GoalState;
+
+    #[test]
+    fn propose_goal_agent_tasks_returns_three_tasks() {
+        let state = GoalState {
+            version: 1,
+            goal_id: "g1".to_string(),
+            original_goal: "test".to_string(),
+            normalized_goal: "test goal".to_string(),
+            status: crate::runtime::goal::state::GoalStatus::Running,
+            phase: crate::runtime::goal::state::GoalPhase::Execution,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            completed_at: None,
+            until_ready: false,
+            budget_time: None,
+            budget_tokens: None,
+            budget_usd: None,
+            max_agents: None,
+            terminal_criteria: Default::default(),
+            artifacts: vec![],
+            failure: None,
+            state_dir: std::path::PathBuf::from("/tmp/test"),
+            cost_tracker_path: None,
+            delivery_policy: Default::default(),
+            merge_policy: Default::default(),
+            slice_execution: false,
+        };
+        let tasks = propose_goal_agent_tasks(&state);
+        assert_eq!(tasks.len(), 3);
+        assert_eq!(
+            tasks[0].id,
+            crate::runtime::goal::state::GOAL_AGENT_IMPLEMENT_TASK_ID
+        );
+        assert_eq!(
+            tasks[1].id,
+            crate::runtime::goal::state::GOAL_AGENT_VERIFY_TASK_ID
+        );
+        assert_eq!(
+            tasks[2].id,
+            crate::runtime::goal::state::GOAL_AGENT_PUBLISH_TASK_ID
+        );
+    }
+
+    #[test]
+    fn default_goal_agent_task_risk_is_moderate() {
+        assert_eq!(default_goal_agent_task_risk(), "moderate");
+    }
+}

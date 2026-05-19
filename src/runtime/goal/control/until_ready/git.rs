@@ -243,3 +243,38 @@ pub(super) async fn git_command(
 fn output_stderr(output: &std::process::Output) -> String {
     String::from_utf8_lossy(&output.stderr).trim().to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_stderr_extracts_utf8() {
+        let output = std::process::Output {
+            stdout: vec![],
+            stderr: b"error message".to_vec(),
+            status: std::process::ExitStatus::default(),
+        };
+        assert_eq!(output_stderr(&output), "error message");
+    }
+
+    #[test]
+    fn output_stderr_trims_whitespace() {
+        let output = std::process::Output {
+            stdout: vec![],
+            stderr: b"  trimmed  \n".to_vec(),
+            status: std::process::ExitStatus::default(),
+        };
+        assert_eq!(output_stderr(&output), "trimmed");
+    }
+
+    #[test]
+    fn output_stderr_empty_when_no_stderr() {
+        let output = std::process::Output {
+            stdout: vec![],
+            stderr: vec![],
+            status: std::process::ExitStatus::default(),
+        };
+        assert_eq!(output_stderr(&output), "");
+    }
+}

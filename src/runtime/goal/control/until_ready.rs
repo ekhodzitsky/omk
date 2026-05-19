@@ -178,7 +178,7 @@ pub(crate) async fn run_goal_until_ready(
     blocker::finalize_until_ready_blocker(&state.goal_id, steps, blocker).await
 }
 
-fn verification_summary(proof: &GoalProof) -> String {
+pub(crate) fn verification_summary(proof: &GoalProof) -> String {
     if proof.gates.is_empty() {
         return "no verification gates were detected or configured".to_string();
     }
@@ -189,16 +189,16 @@ fn verification_summary(proof: &GoalProof) -> String {
     )
 }
 
-fn verification_can_continue(proof: &GoalProof) -> bool {
+pub(crate) fn verification_can_continue(proof: &GoalProof) -> bool {
     !proof.gates.is_empty() && crate::runtime::gates::gates_passed(&proof.gates)
 }
 
-fn proof_can_continue(proof: &GoalProof) -> bool {
+pub(crate) fn proof_can_continue(proof: &GoalProof) -> bool {
     matches!(proof.status, GoalStatus::NotReady | GoalStatus::Running)
         && verification_can_continue(proof)
 }
 
-fn verification_blocker(proof: &GoalProof) -> String {
+pub(crate) fn verification_blocker(proof: &GoalProof) -> String {
     if proof.gates.is_empty() {
         return "verification blocked: no local gates were detected or configured".to_string();
     }
@@ -212,7 +212,7 @@ fn verification_blocker(proof: &GoalProof) -> String {
     format!("verification blocked: required gate(s) failed: {failed}")
 }
 
-fn terminal_blocker(proof: &GoalProof) -> UntilReadyBlocker {
+pub(crate) fn terminal_blocker(proof: &GoalProof) -> UntilReadyBlocker {
     match proof.status {
         GoalStatus::NeedsMoreBudget => {
             UntilReadyBlocker::policy("budget exhausted before proof-backed readiness")
@@ -287,7 +287,7 @@ async fn readiness_blocker(goal_id: &str, proof: &GoalProof) -> Result<UntilRead
     ))
 }
 
-fn review_wall_blocker(proof: &GoalProof) -> Option<String> {
+pub(crate) fn review_wall_blocker(proof: &GoalProof) -> Option<String> {
     proof
         .known_gaps
         .iter()
@@ -295,7 +295,7 @@ fn review_wall_blocker(proof: &GoalProof) -> Option<String> {
         .cloned()
 }
 
-fn manual_integration_acceptance_required(
+pub(crate) fn manual_integration_acceptance_required(
     task_graph: &crate::runtime::goal::task_graph::GoalTaskGraph,
     proof: &GoalProof,
 ) -> bool {
@@ -335,3 +335,6 @@ async fn emit_narrative(
         let _ = writer.append(&event).await;
     }
 }
+
+#[cfg(test)]
+mod tests;
