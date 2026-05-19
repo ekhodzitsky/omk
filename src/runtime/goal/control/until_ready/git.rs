@@ -1,44 +1,19 @@
-use std::ffi::OsString;
 use std::path::Path;
 
-use anyhow::{Context, Result};
-
-const GIT_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+use anyhow::Result;
+use crate::git::GitRepo;
 
 pub(crate) async fn resolve_base_branch(repo_dir: &Path) -> Option<String> {
+    let repo = GitRepo::open(repo_dir).ok()?;
+
     // First try to detect from origin/HEAD (works when remote is configured).
-    if let Ok(output) = git_command(
-        repo_dir,
-        vec![
-            OsString::from("symbolic-ref"),
-            OsString::from("refs/remotes/origin/HEAD"),
-        ],
-    )
-    .await
-    {
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        // Output format: refs/remotes/origin/main
-        if output.status.success() {
-            if let Some(branch) = stdout.strip_prefix("refs/remotes/origin/") {
-                return Some(branch.to_string());
-            }
-        }
+    if let Ok(branch) = repo.default_branch().await {
+        return Some(branch);
     }
 
     // Fall back to checking for local main/master branches.
     for branch in ["main", "master"] {
-        let output = git_command(
-            repo_dir,
-            vec![
-                OsString::from("show-ref"),
-                OsString::from("--verify"),
-                OsString::from("--quiet"),
-                OsString::from(format!("refs/heads/{branch}")),
-            ],
-        )
-        .await
-        .ok()?;
-        if output.status.success() {
+        if repo.branch_exists(branch).await.ok()? {
             return Some(branch.to_string());
         }
     }
@@ -49,43 +24,30 @@ pub(crate) async fn create_integrator_branch(
     repo_dir: &Path,
     integrator_branch: &str,
     base_branch: &str,
-) -> anyhow::Result<()> {
-    let output = git_command(
-        repo_dir,
-        vec![
-            OsString::from("checkout"),
-            OsString::from("-b"),
-            OsString::from(integrator_branch),
-            OsString::from(base_branch),
-        ],
-    )
-    .await?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        anyhow::bail!("git checkout -b failed: {}", output_stderr(&output))
-    }
+) -> Result<()> {
+    let repo = GitRepo::open(repo_dir)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    repo.branch_create(integrator_branch, Some(base_branch))
+        .await
+        .map_err(|e| anyhow::anyhow!("git checkout -b failed: {e}"))?;
+    repo.checkout(integrator_branch)
+        .await
+        .map_err(|e| anyhow::anyhow!("git checkout failed: {e}"))?;
+    Ok(())
 }
 
 pub(crate) async fn merge_tree_is_clean(
     repo_dir: &Path,
     branch: &str,
     integrator_branch: &str,
-) -> anyhow::Result<()> {
-    let output = git_command(
-        repo_dir,
-        vec![
-            OsString::from("merge-tree"),
-            OsString::from(integrator_branch),
-            OsString::from(branch),
-        ],
-    )
-    .await?;
-    if !output.status.success() {
-        anyhow::bail!("git merge-tree failed: {}", output_stderr(&output));
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if stdout.contains("<<<<<<<") || stdout.contains("=======") || stdout.contains(">>>>>>>") {
+) -> Result<()> {
+    let repo = GitRepo::open(repo_dir)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let result = repo
+        .merge_tree(integrator_branch, branch)
+        .await
+        .map_err(|e| anyhow::anyhow!("git merge-tree failed: {e}"))?;
+    if result.has_conflicts {
         anyhow::bail!("merge-tree predicts conflicts between {integrator_branch} and {branch}");
     }
     Ok(())
@@ -95,186 +57,48 @@ pub(crate) async fn merge_branch_into_integrator(
     repo_dir: &Path,
     branch: &str,
     integrator_branch: &str,
-) -> anyhow::Result<()> {
-    let checkout = git_command(
-        repo_dir,
-        vec![
-            OsString::from("checkout"),
-            OsString::from(integrator_branch),
-        ],
-    )
-    .await?;
-    if !checkout.status.success() {
-        anyhow::bail!(
-            "git checkout integrator failed: {}",
-            output_stderr(&checkout)
-        );
-    }
+) -> Result<()> {
+    let repo = GitRepo::open(repo_dir)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
 
-    let output = git_command(
-        repo_dir,
-        vec![
-            OsString::from("merge"),
-            OsString::from(branch),
-            OsString::from("--no-edit"),
-        ],
-    )
-    .await?;
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let rebase = git_command(
-        repo_dir,
-        vec![OsString::from("checkout"), OsString::from(branch)],
-    )
-    .await?;
-    if !rebase.status.success() {
-        anyhow::bail!(
-            "git merge failed and rebase checkout failed: {}",
-            output_stderr(&output)
-        );
-    }
-    let rebase = git_command(
-        repo_dir,
-        vec![OsString::from("rebase"), OsString::from(integrator_branch)],
-    )
-    .await?;
-    if !rebase.status.success() {
-        let _ = git_command(
-            repo_dir,
-            vec![OsString::from("rebase"), OsString::from("--abort")],
-        )
-        .await;
-        let _ = git_command(
-            repo_dir,
-            vec![
-                OsString::from("checkout"),
-                OsString::from(integrator_branch),
-            ],
-        )
-        .await;
-        anyhow::bail!(
-            "git merge failed and auto-rebase failed: {}",
-            output_stderr(&output)
-        );
-    }
-
-    let push = git_command(
-        repo_dir,
-        vec![
-            OsString::from("push"),
-            OsString::from("-f"),
-            OsString::from("origin"),
-            OsString::from(branch),
-        ],
-    )
-    .await?;
-    if !push.status.success() {
-        anyhow::bail!(
-            "git merge failed and rebase push failed: {}",
-            output_stderr(&push)
-        );
-    }
-
-    let checkout = git_command(
-        repo_dir,
-        vec![
-            OsString::from("checkout"),
-            OsString::from(integrator_branch),
-        ],
-    )
-    .await?;
-    if !checkout.status.success() {
-        anyhow::bail!(
-            "git checkout integrator failed after rebase: {}",
-            output_stderr(&checkout)
-        );
-    }
-    let output = git_command(
-        repo_dir,
-        vec![
-            OsString::from("merge"),
-            OsString::from(branch),
-            OsString::from("--no-edit"),
-        ],
-    )
-    .await?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        anyhow::bail!(
-            "git merge failed even after auto-rebase: {}",
-            output_stderr(&output)
-        );
-    }
-}
-
-pub(crate) async fn push_branch(repo_dir: &Path, branch: &str) -> anyhow::Result<()> {
-    let output = git_command(
-        repo_dir,
-        vec![
-            OsString::from("push"),
-            OsString::from("-u"),
-            OsString::from("origin"),
-            OsString::from(branch),
-        ],
-    )
-    .await?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        anyhow::bail!("git push failed: {}", output_stderr(&output))
-    }
-}
-
-pub(super) async fn git_command(
-    repo_dir: &Path,
-    args: Vec<OsString>,
-) -> Result<std::process::Output> {
-    let mut command = tokio::process::Command::new("git");
-    command.arg("-C").arg(repo_dir).args(args);
-    tokio::time::timeout(GIT_COMMAND_TIMEOUT, command.output())
+    repo.checkout(integrator_branch)
         .await
-        .with_context(|| "Timed out while running git command")?
-        .with_context(|| "Failed to run git command")
+        .map_err(|e| anyhow::anyhow!("git checkout integrator failed: {e}"))?;
+
+    let merge_err = match repo.merge(branch, true).await {
+        Ok(()) => return Ok(()),
+        Err(e) => e,
+    };
+
+    repo.checkout(branch)
+        .await
+        .map_err(|e| anyhow::anyhow!("git merge failed and rebase checkout failed: {e}"))?;
+
+    if let Err(_e) = repo.rebase(integrator_branch).await {
+        let _ = repo.rebase_abort().await;
+        let _ = repo.checkout(integrator_branch).await;
+        anyhow::bail!("git merge failed and auto-rebase failed: {merge_err}");
+    }
+
+    repo.push_force("origin", branch)
+        .await
+        .map_err(|e| anyhow::anyhow!("git merge failed and rebase push failed: {e}"))?;
+
+    repo.checkout(integrator_branch)
+        .await
+        .map_err(|e| anyhow::anyhow!("git checkout integrator failed after rebase: {e}"))?;
+
+    repo.merge(branch, true)
+        .await
+        .map_err(|e| anyhow::anyhow!("git merge failed even after auto-rebase: {e}"))?;
+    Ok(())
 }
 
-fn output_stderr(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stderr).trim().to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn output_stderr_extracts_utf8() {
-        let output = std::process::Output {
-            stdout: vec![],
-            stderr: b"error message".to_vec(),
-            status: std::process::ExitStatus::default(),
-        };
-        assert_eq!(output_stderr(&output), "error message");
-    }
-
-    #[test]
-    fn output_stderr_trims_whitespace() {
-        let output = std::process::Output {
-            stdout: vec![],
-            stderr: b"  trimmed  \n".to_vec(),
-            status: std::process::ExitStatus::default(),
-        };
-        assert_eq!(output_stderr(&output), "trimmed");
-    }
-
-    #[test]
-    fn output_stderr_empty_when_no_stderr() {
-        let output = std::process::Output {
-            stdout: vec![],
-            stderr: vec![],
-            status: std::process::ExitStatus::default(),
-        };
-        assert_eq!(output_stderr(&output), "");
-    }
+pub(crate) async fn push_branch(repo_dir: &Path, branch: &str) -> Result<()> {
+    let repo = GitRepo::open(repo_dir)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    repo.push_force("origin", branch)
+        .await
+        .map_err(|e| anyhow::anyhow!("git push failed: {e}"))?;
+    Ok(())
 }
