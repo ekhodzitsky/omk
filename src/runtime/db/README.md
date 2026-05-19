@@ -84,7 +84,12 @@ src/runtime/db/
     proof.rs      — ProofRepo trait + impl
     budget.rs     — BudgetRepo trait + impl
     artifact.rs   — ArtifactRepo trait + impl
-  tests.rs        — integration tests (18 tests)
+  tests/
+    mod.rs        — shared helpers, test_open_create_migrate
+    crud.rs       — CRUD tests for all repositories
+    transaction.rs — commit, rollback tests
+    concurrent.rs — WAL concurrency tests
+    misc.rs       — cascading delete, backup, migration idempotency
 ```
 
 ## Invariants
