@@ -26,8 +26,9 @@ impl ProofRepo for ProofRepoImpl {
                         goal_id, version, status, readiness, summary, task_graph_summary,
                         changed_files, commits, git, gates, gates_passed, gates_total,
                         post_mutation_gates_ran, known_gaps, human_decisions_required,
-                        recovery_status, generated_at
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                        recovery_status, delivery_metadata, review_artifacts,
+                        integration_evidence, oracle_evidence, generated_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
                     ON CONFLICT(goal_id) DO UPDATE SET
                         version = excluded.version,
                         status = excluded.status,
@@ -44,6 +45,10 @@ impl ProofRepo for ProofRepoImpl {
                         known_gaps = excluded.known_gaps,
                         human_decisions_required = excluded.human_decisions_required,
                         recovery_status = excluded.recovery_status,
+                        delivery_metadata = excluded.delivery_metadata,
+                        review_artifacts = excluded.review_artifacts,
+                        integration_evidence = excluded.integration_evidence,
+                        oracle_evidence = excluded.oracle_evidence,
                         generated_at = excluded.generated_at",
                     params![
                         proof.goal_id,
@@ -62,6 +67,10 @@ impl ProofRepo for ProofRepoImpl {
                         proof.known_gaps,
                         proof.human_decisions_required,
                         proof.recovery_status,
+                        proof.delivery_metadata,
+                        proof.review_artifacts,
+                        proof.integration_evidence,
+                        proof.oracle_evidence,
                         proof.generated_at,
                     ],
                 )?;
@@ -80,7 +89,8 @@ impl ProofRepo for ProofRepoImpl {
                         goal_id, version, status, readiness, summary, task_graph_summary,
                         changed_files, commits, git, gates, gates_passed, gates_total,
                         post_mutation_gates_ran, known_gaps, human_decisions_required,
-                        recovery_status, generated_at
+                        recovery_status, delivery_metadata, review_artifacts,
+                        integration_evidence, oracle_evidence, generated_at
                     FROM proofs WHERE goal_id = ?1",
                 )?;
                 let mut rows = stmt.query(params![goal_id])?;
@@ -102,7 +112,11 @@ impl ProofRepo for ProofRepoImpl {
                         known_gaps: row.get(13)?,
                         human_decisions_required: row.get(14)?,
                         recovery_status: row.get(15)?,
-                        generated_at: row.get(16)?,
+                        delivery_metadata: row.get(16)?,
+                        review_artifacts: row.get(17)?,
+                        integration_evidence: row.get(18)?,
+                        oracle_evidence: row.get(19)?,
+                        generated_at: row.get(20)?,
                     }))
                 } else {
                     Ok(None)

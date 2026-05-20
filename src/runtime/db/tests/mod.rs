@@ -83,5 +83,6 @@ async fn test_open_create_migrate() {
 
 mod concurrent;
 mod crud;
+mod decision;
 mod misc;
 mod transaction;

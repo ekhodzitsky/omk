@@ -86,7 +86,27 @@ pub struct ProofRecord {
     pub known_gaps: Option<String>,               // JSON array
     pub human_decisions_required: Option<String>, // JSON array
     pub recovery_status: Option<String>,
+    pub delivery_metadata: Option<String>,        // JSON array
+    pub review_artifacts: Option<String>,         // JSON array
+    pub integration_evidence: Option<String>,     // JSON
+    pub oracle_evidence: Option<String>,          // JSON
     pub generated_at: i64,
+}
+
+/// A persisted decision record.
+#[derive(Debug, Clone)]
+pub struct DecisionRecord {
+    pub decision_id: Option<i64>,
+    pub goal_id: String,
+    pub version: i32,
+    pub actor: String,
+    pub phase: String,
+    pub kind: String,
+    pub decision: String,
+    pub rationale: String,
+    pub constraints: Option<String>, // JSON array
+    pub artifacts: Option<String>,   // JSON array
+    pub created_at: i64,
 }
 
 /// A budget checkpoint.

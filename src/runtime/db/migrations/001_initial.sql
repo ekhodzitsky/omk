@@ -86,6 +86,10 @@ CREATE TABLE IF NOT EXISTS proofs (
     known_gaps TEXT,
     human_decisions_required TEXT,
     recovery_status TEXT,
+    delivery_metadata TEXT,
+    review_artifacts TEXT,
+    integration_evidence TEXT,
+    oracle_evidence TEXT,
     generated_at INTEGER NOT NULL
 );
 
@@ -124,3 +128,19 @@ CREATE TABLE IF NOT EXISTS artifacts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_goal_id ON artifacts(goal_id);
+
+CREATE TABLE IF NOT EXISTS decisions (
+    decision_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    goal_id TEXT NOT NULL REFERENCES goals(goal_id) ON DELETE CASCADE,
+    version INTEGER NOT NULL DEFAULT 1,
+    actor TEXT NOT NULL,
+    phase TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    constraints TEXT,
+    artifacts TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_decisions_goal_id ON decisions(goal_id);
