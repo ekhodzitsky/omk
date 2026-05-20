@@ -61,6 +61,12 @@ impl GitRepo {
         Ok(out.stdout.trim().to_string())
     }
 
+    /// Get the full SHA of HEAD.
+    pub async fn head_commit_full(&self) -> Result<String, GitError> {
+        let out = self.cmd.run(&["rev-parse", "HEAD"]).await?;
+        Ok(out.stdout.trim().to_string())
+    }
+
     /// List changed files (modified, staged, untracked).
     pub async fn changed_files(&self) -> Result<Vec<String>, GitError> {
         let out = self.cmd.run(&["status", "--porcelain"]).await?;
@@ -304,6 +310,12 @@ impl GitRepo {
         Ok(out.stdout)
     }
 
+    /// Stage all changes (including untracked).
+    pub async fn add_all(&self) -> Result<(), GitError> {
+        self.cmd.run(&["add", "-A"]).await?;
+        Ok(())
+    }
+
     /// Stash changes with an optional message.
     pub async fn stash(&self, message: Option<&str>) -> Result<(), GitError> {
         let mut args = vec!["stash", "push"];
@@ -318,6 +330,54 @@ impl GitRepo {
     /// Pop the latest stash.
     pub async fn stash_pop(&self) -> Result<(), GitError> {
         self.cmd.run(&["stash", "pop"]).await?;
+        Ok(())
+    }
+
+    /// Merge branch into current HEAD (mutating).
+    /// If no_edit is true, passes --no-edit.
+    pub async fn merge(&self, branch: &str, no_edit: bool) -> Result<(), GitError> {
+        let mut args = vec!["merge", branch];
+        if no_edit {
+            args.push("--no-edit");
+        }
+        self.cmd.run(&args).await?;
+        Ok(())
+    }
+
+    /// Rebase current HEAD onto branch.
+    /// Returns error if conflicts; caller must handle abort externally.
+    pub async fn rebase(&self, branch: &str) -> Result<(), GitError> {
+        self.cmd.run(&["rebase", branch]).await?;
+        Ok(())
+    }
+
+    /// Abort an in-progress rebase.
+    pub async fn rebase_abort(&self) -> Result<(), GitError> {
+        self.cmd.run(&["rebase", "--abort"]).await?;
+        Ok(())
+    }
+
+    /// Get the default branch name from remote (e.g. "main" from origin).
+    /// Uses `git symbolic-ref refs/remotes/origin/HEAD`.
+    pub async fn default_branch(&self) -> Result<String, GitError> {
+        let out = self
+            .cmd
+            .run(&["symbolic-ref", "refs/remotes/origin/HEAD"])
+            .await?;
+        let stdout = out.stdout.trim();
+        if let Some(branch) = stdout.strip_prefix("refs/remotes/origin/") {
+            if !branch.is_empty() {
+                return Ok(branch.to_string());
+            }
+        }
+        Err(GitError::Parse(format!(
+            "unexpected origin/HEAD format: {stdout}"
+        )))
+    }
+
+    /// Push with --force (not --force-with-lease), preserving semantics of existing code.
+    pub async fn push_force(&self, remote: &str, branch: &str) -> Result<(), GitError> {
+        self.cmd.run(&["push", "--force", remote, branch]).await?;
         Ok(())
     }
 }

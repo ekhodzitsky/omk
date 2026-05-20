@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::path::Path;
-use std::time::Duration;
 
 use super::{
     GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrOperation,
@@ -18,9 +17,7 @@ mod git;
 mod merge_check;
 mod rebase;
 
-const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_BASE_BRANCH: &str = "main";
-const STASH_MESSAGE: &str = "omk-merge-check";
 const DEFAULT_REMOTE: &str = "origin";
 
 /// Options for delivering a slice PR.

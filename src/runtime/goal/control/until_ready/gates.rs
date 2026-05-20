@@ -1,7 +1,7 @@
 use anyhow::Result;
-use std::ffi::OsString;
 use std::path::Path;
 
+use crate::git::GitRepo;
 use crate::runtime::goal::state;
 use crate::runtime::goal::state::GoalStatus;
 use crate::runtime::goal::types::{GoalControllerStep, GoalControllerStepKind};
@@ -28,11 +28,9 @@ pub(super) async fn run_integrator_gates(
     let integrator_gates_ok =
         !integrator_gates.is_empty() && crate::runtime::gates::gates_passed(&integrator_gates);
     if !integrator_gates_ok {
-        let _ = super::git::git_command(
-            project_dir,
-            vec![OsString::from("checkout"), OsString::from(base_branch)],
-        )
-        .await;
+        if let Ok(repo) = GitRepo::open(project_dir) {
+            let _ = repo.checkout(base_branch).await;
+        }
         anyhow::bail!("integrator verification gates failed; switched back to base branch");
     }
     steps.push(GoalControllerStep {

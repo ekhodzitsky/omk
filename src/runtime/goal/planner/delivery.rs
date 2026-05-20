@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::path::Path;
 
+use crate::git::GitRepo;
 use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::{self, GoalTaskGraph};
 use crate::runtime::goal::worktree::{
@@ -24,22 +25,13 @@ pub(super) async fn materialize_delivery_slices(
     // Skip worktree materialization if the repo has uncommitted changes.
     // This keeps `omk goal run --until-ready` usable on real projects
     // that naturally have untracked files.
-    let clean = match tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        tokio::process::Command::new("git")
-            .arg("-C")
-            .arg(project_dir)
-            .args(["status", "--porcelain"])
-            .output(),
-    )
-    .await
-    {
-        Ok(Ok(out)) => {
-            out.status.success() && String::from_utf8_lossy(&out.stdout).trim().is_empty()
-        }
-        _ => false,
-    };
-    if !clean {
+    let repo =
+        GitRepo::open(project_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let files = repo
+        .changed_files()
+        .await
+        .map_err(|e| anyhow::anyhow!("git status failed: {e}"))?;
+    if !files.is_empty() {
         return Ok(());
     }
 

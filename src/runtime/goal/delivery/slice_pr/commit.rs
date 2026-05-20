@@ -1,8 +1,7 @@
 use anyhow::Result;
-use std::ffi::OsString;
 use std::path::Path;
 
-use super::git::{git_output, output_stderr, output_stdout};
+use crate::git::GitRepo;
 use crate::runtime::goal::task_graph::GoalDeliverySlice;
 
 /// Auto-commit all changes in the slice worktree with a structured message.
@@ -11,16 +10,13 @@ pub(super) async fn commit_slice_changes(
     slice: &GoalDeliverySlice,
     goal_id: &str,
 ) -> Result<String> {
+    let repo = GitRepo::open(worktree_path)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+
     // Stage all changes
-    let add_output = git_output(
-        worktree_path,
-        vec![OsString::from("add"), OsString::from("-A")],
-        "stage slice changes",
-    )
-    .await?;
-    if !add_output.status.success() {
-        anyhow::bail!("git add failed: {}", output_stderr(&add_output));
-    }
+    repo.add_all()
+        .await
+        .map_err(|e| anyhow::anyhow!("git add failed: {e}"))?;
 
     // Build commit message
     let write_scope_text = if slice.write_scope.is_empty() {
@@ -34,56 +30,24 @@ pub(super) async fn commit_slice_changes(
     );
 
     // Commit
-    let commit_output = git_output(
-        worktree_path,
-        vec![
-            OsString::from("commit"),
-            OsString::from("-m"),
-            OsString::from(message),
-        ],
-        "commit slice changes",
-    )
-    .await?;
-    if !commit_output.status.success() {
-        anyhow::bail!("git commit failed: {}", output_stderr(&commit_output));
-    }
+    repo.commit(&message, &[] as &[&std::path::Path])
+        .await
+        .map_err(|e| anyhow::anyhow!("git commit failed: {e}"))?;
 
-    // Get the commit SHA
-    let sha_output = git_output(
-        worktree_path,
-        vec![
-            OsString::from("rev-parse"),
-            OsString::from("--verify"),
-            OsString::from("HEAD"),
-        ],
-        "get slice commit sha",
-    )
-    .await?;
-    if !sha_output.status.success() {
-        anyhow::bail!("git rev-parse failed: {}", output_stderr(&sha_output));
-    }
-
-    Ok(output_stdout(&sha_output))
+    // Return the commit SHA
+    repo.head_commit()
+        .await
+        .map_err(|e| anyhow::anyhow!("git rev-parse failed: {e}"))
 }
 
 /// Push the slice branch to origin.
 pub(super) async fn push_slice_branch(worktree_path: &Path, branch: &str) -> Result<()> {
-    let output = git_output(
-        worktree_path,
-        vec![
-            OsString::from("push"),
-            OsString::from("-u"),
-            OsString::from(super::DEFAULT_REMOTE),
-            OsString::from(branch),
-        ],
-        "push slice branch",
-    )
-    .await?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        anyhow::bail!("git push failed: {}", output_stderr(&output))
-    }
+    let repo = GitRepo::open(worktree_path)
+        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    repo.push(super::DEFAULT_REMOTE, branch, false)
+        .await
+        .map_err(|e| anyhow::anyhow!("git push failed: {e}"))?;
+    Ok(())
 }
 
 #[cfg(test)]
