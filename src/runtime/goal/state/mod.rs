@@ -1,4 +1,5 @@
 mod constants;
+mod db_store;
 mod duration;
 mod error;
 mod path;
@@ -19,6 +20,7 @@ pub use constants::{
 pub use error::GoalStateError;
 pub(super) use persistence::goals_dir;
 pub use store::{FileSystemGoalStateStore, GoalStateStore};
+pub use db_store::DbGoalStateStore;
 
 #[cfg(test)]
 pub use store::InMemoryGoalStateStore;

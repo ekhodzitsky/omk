@@ -16,7 +16,7 @@ pub struct GoalRecord {
     pub until_ready: bool,
     pub slice_execution: bool,
     pub max_agents: Option<i32>,
-    pub budget_time_secs: Option<i64>,
+    pub budget_time: Option<String>,
     pub budget_tokens: Option<i64>,
     pub budget_usd: Option<i64>, // cents
     pub cost_tracker_path: Option<String>,

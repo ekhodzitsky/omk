@@ -1,6 +1,6 @@
 use super::{
-    format_goal_duration_secs, is_safe_goal_agent_path, normalize_goal, FileSystemGoalStateStore,
-    GoalPhase, GoalStateStore, GoalStatus, GOAL_STATE_FILE,
+    format_goal_duration_secs, is_safe_goal_agent_path, normalize_goal, DbGoalStateStore,
+    FileSystemGoalStateStore, GoalPhase, GoalState, GoalStateStore, GoalStatus, GOAL_STATE_FILE,
 };
 use std::fs;
 
@@ -182,4 +182,122 @@ fn is_safe_goal_agent_path_preserves_special_alias() {
     // (which accepts them as a literal relative file name).
     assert!(is_safe_goal_agent_path("project files"));
     assert!(is_safe_goal_agent_path("  project files  "));
+}
+
+#[tokio::test]
+async fn db_goal_state_store_save_and_load() {
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("goals.db");
+    let db = crate::runtime::db::DbHandle::open(&db_path).await.unwrap();
+    let store = DbGoalStateStore::new(db);
+
+    let goal_dir = dir.path().join("goal-test-1");
+    let state = GoalState {
+        version: 1,
+        goal_id: "goal-test-1".to_string(),
+        original_goal: "Test goal".to_string(),
+        normalized_goal: "test goal".to_string(),
+        status: GoalStatus::Running,
+        phase: GoalPhase::Execution,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+        completed_at: None,
+        until_ready: false,
+        budget_time: Some("1h".to_string()),
+        budget_tokens: Some(1_000_000),
+        budget_usd: Some(5.50),
+        max_agents: Some(4),
+        cost_tracker_path: None,
+        terminal_criteria: Default::default(),
+        delivery_policy: Default::default(),
+        merge_policy: Default::default(),
+        slice_execution: false,
+        artifacts: Vec::new(),
+        failure: None,
+        state_dir: goal_dir.clone(),
+    };
+
+    store.save(&state).await.unwrap();
+    let loaded = store.load(&goal_dir).await.unwrap();
+
+    assert_eq!(loaded.goal_id, state.goal_id);
+    assert_eq!(loaded.original_goal, state.original_goal);
+    assert_eq!(loaded.normalized_goal, state.normalized_goal);
+    assert_eq!(loaded.status, state.status);
+    assert_eq!(loaded.phase, state.phase);
+    assert_eq!(loaded.until_ready, state.until_ready);
+    assert_eq!(loaded.budget_time, state.budget_time);
+    assert_eq!(loaded.budget_tokens, state.budget_tokens);
+    assert_eq!(loaded.budget_usd, state.budget_usd);
+    assert_eq!(loaded.max_agents, state.max_agents);
+    assert_eq!(loaded.state_dir, goal_dir);
+}
+
+#[tokio::test]
+async fn db_goal_state_store_list_returns_goals_newest_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("goals.db");
+    let db = crate::runtime::db::DbHandle::open(&db_path).await.unwrap();
+    let store = DbGoalStateStore::new(db);
+
+    let t1 = chrono::Utc::now();
+    let t2 = t1 + chrono::Duration::seconds(10);
+
+    let goal_a = GoalState {
+        version: 1,
+        goal_id: "goal-a".to_string(),
+        original_goal: "Goal A".to_string(),
+        normalized_goal: "goal a".to_string(),
+        status: GoalStatus::Running,
+        phase: GoalPhase::Execution,
+        created_at: t1,
+        updated_at: t1,
+        completed_at: None,
+        until_ready: false,
+        budget_time: None,
+        budget_tokens: None,
+        budget_usd: None,
+        max_agents: None,
+        cost_tracker_path: None,
+        terminal_criteria: Default::default(),
+        delivery_policy: Default::default(),
+        merge_policy: Default::default(),
+        slice_execution: false,
+        artifacts: Vec::new(),
+        failure: None,
+        state_dir: dir.path().join("goal-a"),
+    };
+
+    let goal_b = GoalState {
+        version: 1,
+        goal_id: "goal-b".to_string(),
+        original_goal: "Goal B".to_string(),
+        normalized_goal: "goal b".to_string(),
+        status: GoalStatus::Running,
+        phase: GoalPhase::Execution,
+        created_at: t2,
+        updated_at: t2,
+        completed_at: None,
+        until_ready: false,
+        budget_time: None,
+        budget_tokens: None,
+        budget_usd: None,
+        max_agents: None,
+        cost_tracker_path: None,
+        terminal_criteria: Default::default(),
+        delivery_policy: Default::default(),
+        merge_policy: Default::default(),
+        slice_execution: false,
+        artifacts: Vec::new(),
+        failure: None,
+        state_dir: dir.path().join("goal-b"),
+    };
+
+    store.save(&goal_a).await.unwrap();
+    store.save(&goal_b).await.unwrap();
+
+    let goals = store.list().await.unwrap();
+    assert_eq!(goals.len(), 2);
+    assert_eq!(goals[0].goal_id, "goal-b");
+    assert_eq!(goals[1].goal_id, "goal-a");
 }

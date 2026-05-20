@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS goals (
     until_ready INTEGER NOT NULL DEFAULT 0 CHECK(until_ready IN (0, 1)),
     slice_execution INTEGER NOT NULL DEFAULT 0 CHECK(slice_execution IN (0, 1)),
     max_agents INTEGER,
-    budget_time_secs INTEGER,
+    budget_time TEXT,
     budget_tokens INTEGER,
     budget_usd INTEGER,
     cost_tracker_path TEXT,
