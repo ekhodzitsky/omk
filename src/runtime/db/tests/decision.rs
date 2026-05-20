@@ -1,8 +1,6 @@
 use super::test_goal;
 use crate::runtime::db::handle::DbHandle;
-use crate::runtime::db::repo::{
-    decision::DecisionRepo, goal::GoalRepo,
-};
+use crate::runtime::db::repo::{decision::DecisionRepo, goal::GoalRepo};
 use crate::runtime::db::types::DecisionRecord;
 
 fn test_decision(goal_id: &str, kind: &str) -> DecisionRecord {
@@ -48,7 +46,11 @@ async fn test_decision_get_by_missing_goal() {
     let path = dir.path().join("test.db");
     let db = DbHandle::open(&path).await.unwrap();
 
-    let decisions = db.decision_repo().get_by_goal("no-such-goal").await.unwrap();
+    let decisions = db
+        .decision_repo()
+        .get_by_goal("no-such-goal")
+        .await
+        .unwrap();
     assert!(decisions.is_empty());
 
     db.close().await.unwrap();

@@ -301,3 +301,178 @@ async fn db_goal_state_store_list_returns_goals_newest_first() {
     assert_eq!(goals[0].goal_id, "goal-b");
     assert_eq!(goals[1].goal_id, "goal-a");
 }
+
+#[tokio::test]
+async fn db_full_goal_persistence_roundtrip() {
+    use crate::runtime::db::types::BudgetCheckpoint;
+    use crate::runtime::db::{BudgetRepo, EventRepo};
+    use crate::runtime::gates::GateResult;
+    use crate::runtime::goal::proof::GoalProof;
+    use crate::runtime::goal::state::db_store::{load_proof_from_db, load_task_graph_from_db};
+    use crate::runtime::goal::task_graph::{GoalTask, GoalTaskGraph, GoalTaskStatus};
+
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("goals.db");
+    let db = crate::runtime::db::DbHandle::open(&db_path).await.unwrap();
+
+    let goal_dir = dir.path().join("goal-roundtrip");
+    let store = DbGoalStateStore::new(db.clone());
+
+    let now = chrono::Utc::now();
+    let state = GoalState {
+        version: 1,
+        goal_id: "goal-roundtrip".to_string(),
+        original_goal: "Roundtrip test".to_string(),
+        normalized_goal: "roundtrip test".to_string(),
+        status: GoalStatus::Running,
+        phase: GoalPhase::Execution,
+        created_at: now,
+        updated_at: now,
+        completed_at: None,
+        until_ready: false,
+        budget_time: Some("1h".to_string()),
+        budget_tokens: Some(1_000_000),
+        budget_usd: Some(5.50),
+        max_agents: Some(4),
+        cost_tracker_path: None,
+        terminal_criteria: Default::default(),
+        delivery_policy: Default::default(),
+        merge_policy: Default::default(),
+        slice_execution: false,
+        artifacts: Vec::new(),
+        failure: None,
+        state_dir: goal_dir.clone(),
+    };
+
+    // Save goal state
+    store.save(&state).await.unwrap();
+
+    // Save task graph
+    let task_graph = GoalTaskGraph {
+        version: 1,
+        goal_id: "goal-roundtrip".to_string(),
+        generated_at: now,
+        tasks: vec![GoalTask {
+            id: "task-1".to_string(),
+            title: "Task 1".to_string(),
+            description: "Do something".to_string(),
+            status: GoalTaskStatus::Pending,
+            owner_role: None,
+            completed_at: None,
+            evidence: Vec::new(),
+            retry_count: 0,
+            max_retries: 3,
+            lease_expires_at: None,
+            dependencies: Vec::new(),
+            read_set: vec!["src/lib.rs".to_string()],
+            write_set: vec!["src/lib.rs".to_string()],
+            risk: "low".to_string(),
+            acceptance: vec!["works".to_string()],
+        }],
+    };
+    crate::runtime::goal::state::db_store::save_task_graph_to_db(&db, &task_graph)
+        .await
+        .unwrap();
+
+    // Save proof
+    let proof = GoalProof {
+        version: 1,
+        goal_id: "goal-roundtrip".to_string(),
+        status: GoalStatus::NotReady,
+        readiness: "not ready".to_string(),
+        summary: "Test proof".to_string(),
+        generated_at: now,
+        artifacts: Vec::new(),
+        task_graph_summary: Default::default(),
+        changed_files: vec!["src/lib.rs".to_string()],
+        commits: vec!["abc123".to_string()],
+        git: None,
+        gates: vec![GateResult {
+            name: "compile".to_string(),
+            passed: true,
+            stdout: String::new(),
+            stderr: String::new(),
+            duration_ms: 0,
+            required: true,
+            command_line: String::new(),
+            exit_code: Some(0),
+            timed_out: false,
+            stdout_summary: None,
+            stderr_summary: None,
+            output_path: None,
+            timeout_secs: 0,
+        }],
+        post_mutation_gates_ran: false,
+        known_gaps: vec![],
+        human_decisions_required: vec![],
+        recovery_status: None,
+    };
+    crate::runtime::goal::state::db_store::save_proof_to_db(&db, &proof)
+        .await
+        .unwrap();
+
+    // Save event directly via EventRepo (bypasses global_db)
+    db.event_repo()
+        .append("goal-roundtrip", "RunStarted", "{}")
+        .await
+        .unwrap();
+
+    // Save budget checkpoint directly via BudgetRepo (bypasses global_db)
+    let checkpoint = BudgetCheckpoint {
+        checkpoint_id: None,
+        goal_id: "goal-roundtrip".to_string(),
+        version: 1,
+        label: "test_checkpoint".to_string(),
+        status: GoalStatus::Running.to_string(),
+        phase: GoalPhase::Execution.to_string(),
+        recorded_at: now.timestamp(),
+        budget_time: Some("1h".to_string()),
+        total_budget_secs: Some(3600),
+        elapsed_since_created_secs: 60,
+        remaining_budget_secs: Some(3540),
+        budget_tokens: Some(1_000_000),
+        used_tokens: 1000,
+        remaining_budget_tokens: Some(999_000),
+        budget_usd: Some(550),
+        estimated_cost_usd: 50,
+        remaining_budget_usd: Some(500),
+        limit_value: None,
+        used_value: None,
+        created_at: now.timestamp(),
+    };
+    db.budget_repo()
+        .append_checkpoint(&checkpoint)
+        .await
+        .unwrap();
+
+    // Load everything back
+    let loaded_state = store.load(&goal_dir).await.unwrap();
+    let loaded_graph = load_task_graph_from_db(&db, "goal-roundtrip")
+        .await
+        .unwrap()
+        .expect("task graph should exist");
+    let loaded_proof = load_proof_from_db(&db, "goal-roundtrip")
+        .await
+        .unwrap()
+        .expect("proof should exist");
+    let loaded_events = db
+        .event_repo()
+        .get_by_goal("goal-roundtrip", None, None)
+        .await
+        .unwrap();
+    let loaded_checkpoints = db
+        .budget_repo()
+        .get_by_goal("goal-roundtrip")
+        .await
+        .unwrap();
+
+    // Assertions
+    assert_eq!(loaded_state.goal_id, state.goal_id);
+    assert_eq!(loaded_graph.tasks.len(), 1);
+    assert_eq!(loaded_graph.tasks[0].id, "task-1");
+    assert_eq!(loaded_proof.changed_files, vec!["src/lib.rs"]);
+    assert_eq!(loaded_proof.gates.len(), 1);
+    assert!(loaded_proof.gates[0].passed);
+    assert_eq!(loaded_events.len(), 1);
+    assert_eq!(loaded_checkpoints.len(), 1);
+}

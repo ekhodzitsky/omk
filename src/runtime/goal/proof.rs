@@ -115,7 +115,9 @@ impl GoalProof {
     pub async fn load(goal_dir: &Path) -> Result<Self> {
         if let Some(db) = crate::runtime::db::global_db() {
             if let Some(goal_id) = goal_dir.file_name().and_then(|n| n.to_str()) {
-                if let Some(proof) = crate::runtime::goal::state::db_store::load_proof_from_db(&db, goal_id).await? {
+                if let Some(proof) =
+                    crate::runtime::goal::state::db_store::load_proof_from_db(&db, goal_id).await?
+                {
                     return Ok(proof);
                 }
             }

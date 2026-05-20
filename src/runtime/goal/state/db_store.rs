@@ -2,9 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use crate::runtime::db::{
-    handle::DbHandle, repo::goal::GoalRepo, types::GoalRecord, DbError,
-};
+use crate::runtime::db::{handle::DbHandle, repo::goal::GoalRepo, types::GoalRecord, DbError};
 
 use super::store::GoalStateStore;
 use super::types::GoalState;
@@ -15,10 +13,12 @@ use super::types::GoalState;
 /// per-goal JSON files. The `state_dir` field is still materialised on
 /// load so that downstream code can locate artifact directories.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct DbGoalStateStore {
     db: DbHandle,
 }
 
+#[allow(dead_code)]
 impl DbGoalStateStore {
     pub fn new(db: DbHandle) -> Self {
         Self { db }
@@ -28,7 +28,11 @@ impl DbGoalStateStore {
 impl GoalStateStore for DbGoalStateStore {
     async fn save(&self, state: &GoalState) -> Result<()> {
         let record = goal_state_to_record(state)?;
-        self.db.goal_repo().create(&record).await.map_err(map_db_err)
+        self.db
+            .goal_repo()
+            .create(&record)
+            .await
+            .map_err(map_db_err)
     }
 
     async fn load(&self, goal_dir: &Path) -> Result<GoalState> {
@@ -92,6 +96,7 @@ fn map_db_err(e: DbError) -> anyhow::Error {
     anyhow::anyhow!("db error: {e}")
 }
 
+#[allow(dead_code)]
 fn goal_state_to_record(state: &GoalState) -> Result<GoalRecord> {
     Ok(GoalRecord {
         goal_id: state.goal_id.clone(),
@@ -112,12 +117,15 @@ fn goal_state_to_record(state: &GoalState) -> Result<GoalRecord> {
         budget_time: state.budget_time.clone(),
         budget_tokens: state.budget_tokens.map(|v| v as i64),
         budget_usd: state.budget_usd.map(|v| (v * 100.0) as i64),
-        cost_tracker_path: state.cost_tracker_path.as_ref().map(|p| p.display().to_string()),
+        cost_tracker_path: state
+            .cost_tracker_path
+            .as_ref()
+            .map(|p| p.display().to_string()),
         terminal_criteria: Some(serde_json::to_string(&state.terminal_criteria)?),
         failure: state
             .failure
             .as_ref()
-            .map(|f| serde_json::to_string(f))
+            .map(serde_json::to_string)
             .transpose()?,
         created_at: state.created_at.timestamp(),
         updated_at: state.updated_at.timestamp(),
@@ -127,6 +135,7 @@ fn goal_state_to_record(state: &GoalState) -> Result<GoalRecord> {
     })
 }
 
+#[allow(dead_code)]
 fn record_to_goal_state(record: GoalRecord) -> Result<GoalState> {
     let status = parse_goal_status(&record.status)?;
     let phase = parse_goal_phase(&record.phase)?;
@@ -156,10 +165,12 @@ fn record_to_goal_state(record: GoalRecord) -> Result<GoalState> {
         status,
         phase,
         created_at: chrono::DateTime::from_timestamp(record.created_at, 0)
-            .unwrap_or_else(|| chrono::Utc::now()),
+            .unwrap_or_else(chrono::Utc::now),
         updated_at: chrono::DateTime::from_timestamp(record.updated_at, 0)
-            .unwrap_or_else(|| chrono::Utc::now()),
-        completed_at: record.completed_at.and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)),
+            .unwrap_or_else(chrono::Utc::now),
+        completed_at: record
+            .completed_at
+            .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)),
         until_ready: record.until_ready,
         budget_time: record.budget_time,
         budget_tokens: record.budget_tokens.map(|v| v as u64),
@@ -191,6 +202,7 @@ fn parse_goal_status(s: &str) -> Result<super::types::GoalStatus> {
     }
 }
 
+#[allow(dead_code)]
 fn parse_goal_phase(s: &str) -> Result<super::types::GoalPhase> {
     match s {
         "intake" => Ok(super::types::GoalPhase::Intake),
@@ -203,6 +215,7 @@ fn parse_goal_phase(s: &str) -> Result<super::types::GoalPhase> {
     }
 }
 
+#[allow(dead_code)]
 fn parse_delivery_policy(s: &str) -> Result<super::super::GoalDeliveryPolicy> {
     match s {
         "local" => Ok(super::super::GoalDeliveryPolicy::Local),
@@ -212,6 +225,7 @@ fn parse_delivery_policy(s: &str) -> Result<super::super::GoalDeliveryPolicy> {
     }
 }
 
+#[allow(dead_code)]
 fn parse_merge_policy(s: &str) -> Result<super::super::GoalMergePolicy> {
     match s {
         "disabled" => Ok(super::super::GoalMergePolicy::Disabled),
@@ -226,8 +240,8 @@ fn parse_merge_policy(s: &str) -> Result<super::super::GoalMergePolicy> {
 // ---------------------------------------------------------------------------
 
 pub async fn save_proof_to_db(db: &DbHandle, proof: &super::super::proof::GoalProof) -> Result<()> {
-    use crate::runtime::db::ProofRepo;
     use crate::runtime::db::types::ProofRecord;
+    use crate::runtime::db::ProofRepo;
     use crate::runtime::goal::proof::sidecar;
 
     let delivery_metadata = sidecar::remembered_goal_proof_delivery_metadata(proof);
@@ -244,7 +258,7 @@ pub async fn save_proof_to_db(db: &DbHandle, proof: &super::super::proof::GoalPr
         task_graph_summary: Some(serde_json::to_string(&proof.task_graph_summary)?),
         changed_files: Some(serde_json::to_string(&proof.changed_files)?),
         commits: Some(serde_json::to_string(&proof.commits)?),
-        git: proof.git.as_ref().map(|g| serde_json::to_string(g)).transpose()?,
+        git: proof.git.as_ref().map(serde_json::to_string).transpose()?,
         gates: Some(serde_json::to_string(&proof.gates)?),
         gates_passed: proof.gates.iter().filter(|g| g.passed).count() as i32,
         gates_total: proof.gates.len() as i32,
@@ -252,10 +266,22 @@ pub async fn save_proof_to_db(db: &DbHandle, proof: &super::super::proof::GoalPr
         known_gaps: Some(serde_json::to_string(&proof.known_gaps)?),
         human_decisions_required: Some(serde_json::to_string(&proof.human_decisions_required)?),
         recovery_status: proof.recovery_status.clone(),
-        delivery_metadata: delivery_metadata.as_ref().map(|v| serde_json::to_string(v)).transpose()?,
-        review_artifacts: review_artifacts.as_ref().map(|v| serde_json::to_string(v)).transpose()?,
-        integration_evidence: integration_evidence.as_ref().map(|v| serde_json::to_string(v)).transpose()?,
-        oracle_evidence: oracle_evidence.as_ref().map(|v| serde_json::to_string(v)).transpose()?,
+        delivery_metadata: delivery_metadata
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?,
+        review_artifacts: review_artifacts
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?,
+        integration_evidence: integration_evidence
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?,
+        oracle_evidence: oracle_evidence
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?,
         generated_at: proof.generated_at.timestamp(),
     };
 
@@ -267,15 +293,11 @@ pub async fn load_proof_from_db(
     db: &DbHandle,
     goal_id: &str,
 ) -> Result<Option<super::super::proof::GoalProof>> {
-    use crate::runtime::db::ProofRepo;
     use crate::runtime::db::types::ProofRecord;
+    use crate::runtime::db::ProofRepo;
     use crate::runtime::goal::proof::sidecar;
 
-    let record: Option<ProofRecord> = db
-        .proof_repo()
-        .get(goal_id)
-        .await
-        .map_err(map_db_err)?;
+    let record: Option<ProofRecord> = db.proof_repo().get(goal_id).await.map_err(map_db_err)?;
 
     let Some(record) = record else {
         return Ok(None);
@@ -299,10 +321,8 @@ pub async fn load_proof_from_db(
         .transpose()?
         .unwrap_or_default();
 
-    let git: Option<super::super::evidence::GoalGitEvidence> = record
-        .git
-        .map(|s| serde_json::from_str(&s))
-        .transpose()?;
+    let git: Option<super::super::evidence::GoalGitEvidence> =
+        record.git.map(|s| serde_json::from_str(&s)).transpose()?;
 
     let gates: Vec<crate::runtime::gates::GateResult> = record
         .gates
@@ -322,14 +342,14 @@ pub async fn load_proof_from_db(
         .transpose()?
         .unwrap_or_default();
 
-    let mut proof = super::super::proof::GoalProof {
+    let proof = super::super::proof::GoalProof {
         version: record.version as u32,
         goal_id: record.goal_id,
         status: parse_goal_status(&record.status)?,
         readiness: record.readiness,
         summary: record.summary,
         generated_at: chrono::DateTime::from_timestamp(record.generated_at, 0)
-            .unwrap_or_else(|| chrono::Utc::now()),
+            .unwrap_or_else(chrono::Utc::now),
         artifacts: Vec::new(),
         task_graph_summary,
         changed_files,
@@ -370,8 +390,8 @@ pub async fn save_task_graph_to_db(
     db: &DbHandle,
     graph: &super::super::task_graph::GoalTaskGraph,
 ) -> Result<()> {
-    use crate::runtime::db::TaskRepo;
     use crate::runtime::db::types::TaskRecord;
+    use crate::runtime::db::TaskRepo;
 
     let tasks: Vec<TaskRecord> = graph
         .tasks
@@ -451,7 +471,9 @@ fn record_to_task(
         description: record.description,
         status: parse_task_status(&record.status)?,
         owner_role: record.owner,
-        completed_at: record.completed_at.and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)),
+        completed_at: record
+            .completed_at
+            .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)),
         evidence: record
             .evidence
             .map(|s| serde_json::from_str(&s))
@@ -459,7 +481,9 @@ fn record_to_task(
             .unwrap_or_default(),
         retry_count: record.retry_count as u32,
         max_retries: record.max_retries as u32,
-        lease_expires_at: record.lease_expires_at.and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)),
+        lease_expires_at: record
+            .lease_expires_at
+            .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0)),
         dependencies: record
             .depends_on
             .map(|s| serde_json::from_str(&s))

@@ -86,10 +86,10 @@ pub struct ProofRecord {
     pub known_gaps: Option<String>,               // JSON array
     pub human_decisions_required: Option<String>, // JSON array
     pub recovery_status: Option<String>,
-    pub delivery_metadata: Option<String>,        // JSON array
-    pub review_artifacts: Option<String>,         // JSON array
-    pub integration_evidence: Option<String>,     // JSON
-    pub oracle_evidence: Option<String>,          // JSON
+    pub delivery_metadata: Option<String>,    // JSON array
+    pub review_artifacts: Option<String>,     // JSON array
+    pub integration_evidence: Option<String>, // JSON
+    pub oracle_evidence: Option<String>,      // JSON
     pub generated_at: i64,
 }
 

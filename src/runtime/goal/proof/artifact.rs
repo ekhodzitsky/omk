@@ -11,17 +11,26 @@ pub(crate) async fn write_json_artifact<T: Serialize>(path: &Path, value: &T) ->
     value = crate::wire::protocol::redact_wire_secrets(&value);
     enrich_goal_json_artifact(path, &mut value).await?;
 
-    if let Some(goal_id) = path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()) {
+    if path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .is_some()
+    {
         if let Some(db) = crate::runtime::db::global_db() {
             let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if file_name == GOAL_PROOF_FILE {
-                if let Ok(proof) = serde_json::from_value::<super::super::proof::GoalProof>(value.clone()) {
+                if let Ok(proof) =
+                    serde_json::from_value::<super::super::proof::GoalProof>(value.clone())
+                {
                     super::super::state::db_store::save_proof_to_db(&db, &proof).await?;
                     return Ok(());
                 }
             }
             if file_name == GOAL_TASK_GRAPH_FILE {
-                if let Ok(graph) = serde_json::from_value::<super::super::task_graph::GoalTaskGraph>(value.clone()) {
+                if let Ok(graph) =
+                    serde_json::from_value::<super::super::task_graph::GoalTaskGraph>(value.clone())
+                {
                     super::super::state::db_store::save_task_graph_to_db(&db, &graph).await?;
                     return Ok(());
                 }

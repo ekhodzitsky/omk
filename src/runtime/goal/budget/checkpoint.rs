@@ -1,8 +1,8 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 
-use crate::runtime::db::{global_db, BudgetRepo};
 use crate::runtime::db::types::BudgetCheckpoint;
+use crate::runtime::db::{global_db, BudgetRepo};
 use crate::runtime::goal::state::{parse_goal_duration_secs, GoalState};
 
 use super::events::append_budget_checkpoint_event;
@@ -15,7 +15,10 @@ pub(crate) async fn append_budget_checkpoint(
     let checkpoint = build_budget_checkpoint(state, label, Utc::now()).await;
     if let Some(db) = global_db() {
         let record = goal_checkpoint_to_record(&checkpoint)?;
-        db.budget_repo().append_checkpoint(&record).await.map_err(|e| anyhow::anyhow!("db error: {e}"))?;
+        db.budget_repo()
+            .append_checkpoint(&record)
+            .await
+            .map_err(|e| anyhow::anyhow!("db error: {e}"))?;
     } else {
         // Fallback to JSONL when global DB is not initialized (tests, legacy paths).
         let line = serde_json::to_vec(&checkpoint)?;
@@ -31,7 +34,11 @@ pub(super) async fn read_budget_checkpoints(
     state: &GoalState,
 ) -> Result<Vec<GoalBudgetCheckpoint>> {
     if let Some(db) = global_db() {
-        let records = db.budget_repo().get_by_goal(&state.goal_id).await.map_err(|e| anyhow::anyhow!("db error: {e}"))?;
+        let records = db
+            .budget_repo()
+            .get_by_goal(&state.goal_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("db error: {e}"))?;
         return Ok(records.into_iter().map(record_to_goal_checkpoint).collect());
     }
 
@@ -131,9 +138,11 @@ fn record_to_goal_checkpoint(record: BudgetCheckpoint) -> GoalBudgetCheckpoint {
         version: record.version as u32,
         goal_id: record.goal_id,
         label: record.label,
-        status: parse_goal_status(&record.status).unwrap_or(super::super::state::GoalStatus::NotReady),
+        status: parse_goal_status(&record.status)
+            .unwrap_or(super::super::state::GoalStatus::NotReady),
         phase: parse_goal_phase(&record.phase).unwrap_or(super::super::state::GoalPhase::Intake),
-        recorded_at: chrono::DateTime::from_timestamp(record.recorded_at, 0).unwrap_or_else(|| chrono::Utc::now()),
+        recorded_at: chrono::DateTime::from_timestamp(record.recorded_at, 0)
+            .unwrap_or_else(chrono::Utc::now),
         budget_time: record.budget_time,
         total_budget_secs: record.total_budget_secs.map(|v| v as u64),
         elapsed_since_created_secs: record.elapsed_since_created_secs as u64,
@@ -175,5 +184,7 @@ fn parse_goal_phase(s: &str) -> Result<super::super::state::GoalPhase> {
 }
 
 fn budget_checkpoints_path(state: &GoalState) -> std::path::PathBuf {
-    state.state_dir.join(crate::runtime::goal::state::GOAL_BUDGET_CHECKPOINTS_FILE)
+    state
+        .state_dir
+        .join(crate::runtime::goal::state::GOAL_BUDGET_CHECKPOINTS_FILE)
 }

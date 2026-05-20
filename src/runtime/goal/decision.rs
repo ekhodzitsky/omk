@@ -98,7 +98,10 @@ async fn append_goal_decisions(state: &GoalState, decisions: &[GoalDecisionRecor
         use crate::runtime::db::DecisionRepo;
         for decision in decisions {
             let record = decision_to_record(decision)?;
-            db.decision_repo().append(&record).await.map_err(|e| anyhow::anyhow!("db error: {e}"))?;
+            db.decision_repo()
+                .append(&record)
+                .await
+                .map_err(|e| anyhow::anyhow!("db error: {e}"))?;
         }
         return Ok(());
     }
@@ -120,7 +123,9 @@ async fn append_goal_decisions(state: &GoalState, decisions: &[GoalDecisionRecor
     Ok(())
 }
 
-fn decision_to_record(decision: &GoalDecisionRecord) -> Result<crate::runtime::db::types::DecisionRecord> {
+fn decision_to_record(
+    decision: &GoalDecisionRecord,
+) -> Result<crate::runtime::db::types::DecisionRecord> {
     Ok(crate::runtime::db::types::DecisionRecord {
         decision_id: None,
         goal_id: decision.goal_id.clone(),

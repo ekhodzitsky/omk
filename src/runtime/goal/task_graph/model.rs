@@ -69,7 +69,10 @@ impl GoalTaskGraph {
     pub async fn load(goal_dir: &Path) -> Result<Self> {
         if let Some(db) = crate::runtime::db::global_db() {
             if let Some(goal_id) = goal_dir.file_name().and_then(|n| n.to_str()) {
-                if let Some(graph) = crate::runtime::goal::state::db_store::load_task_graph_from_db(&db, goal_id).await? {
+                if let Some(graph) =
+                    crate::runtime::goal::state::db_store::load_task_graph_from_db(&db, goal_id)
+                        .await?
+                {
                     graph.validate()?;
                     return Ok(graph);
                 }
