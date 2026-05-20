@@ -61,6 +61,12 @@ impl GitRepo {
         Ok(out.stdout.trim().to_string())
     }
 
+    /// Get the full SHA of HEAD.
+    pub async fn head_commit_full(&self) -> Result<String, GitError> {
+        let out = self.cmd.run(&["rev-parse", "HEAD"]).await?;
+        Ok(out.stdout.trim().to_string())
+    }
+
     /// List changed files (modified, staged, untracked).
     pub async fn changed_files(&self) -> Result<Vec<String>, GitError> {
         let out = self.cmd.run(&["status", "--porcelain"]).await?;

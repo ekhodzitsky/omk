@@ -84,7 +84,7 @@ pub(crate) fn record_artifact_path_once(
 pub(crate) async fn detect_git_evidence(project_dir: &Path) -> Option<GoalGitEvidence> {
     let repo = GitRepo::open(project_dir).ok()?;
     let branch = repo.current_branch().await.ok()?;
-    let head = repo.head_commit().await.ok()?;
+    let head = repo.head_commit_full().await.ok()?;
     let files = repo.changed_files().await.ok()?;
 
     Some(GoalGitEvidence {

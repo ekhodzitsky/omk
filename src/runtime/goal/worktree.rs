@@ -162,8 +162,12 @@ async fn ensure_git_worktree(repo_dir: &Path) -> Result<()> {
 async fn ensure_clean_git_worktree(repo_dir: &Path) -> Result<()> {
     let repo =
         GitRepo::open(repo_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
-    if let Err(e) = repo.ensure_clean().await {
-        let sample = format!("{e}");
+    let files = repo
+        .changed_files()
+        .await
+        .map_err(|e| anyhow::anyhow!("git status failed: {e}"))?;
+    if !files.is_empty() {
+        let sample = files.iter().take(5).cloned().collect::<Vec<_>>().join("; ");
         anyhow::bail!(
             "goal worktree materialization requires a clean git worktree: {} has changes ({sample})",
             repo_dir.display()

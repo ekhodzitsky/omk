@@ -27,8 +27,11 @@ pub(super) async fn materialize_delivery_slices(
     // that naturally have untracked files.
     let repo =
         GitRepo::open(project_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
-    let clean = repo.ensure_clean().await.is_ok();
-    if !clean {
+    let files = repo
+        .changed_files()
+        .await
+        .map_err(|e| anyhow::anyhow!("git status failed: {e}"))?;
+    if !files.is_empty() {
         return Ok(());
     }
 
