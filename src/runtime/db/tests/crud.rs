@@ -313,6 +313,10 @@ async fn test_proof_upsert() {
         known_gaps: None,
         human_decisions_required: None,
         recovery_status: None,
+        delivery_metadata: None,
+        review_artifacts: None,
+        integration_evidence: None,
+        oracle_evidence: None,
         generated_at: 1_700_000_000,
     };
     db.proof_repo().upsert(&proof).await.unwrap();
@@ -338,6 +342,10 @@ async fn test_proof_upsert() {
         known_gaps: None,
         human_decisions_required: None,
         recovery_status: Some("none".to_string()),
+        delivery_metadata: None,
+        review_artifacts: None,
+        integration_evidence: None,
+        oracle_evidence: None,
         generated_at: 1_700_000_001,
     };
     db.proof_repo().upsert(&updated).await.unwrap();

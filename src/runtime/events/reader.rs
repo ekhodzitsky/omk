@@ -6,6 +6,9 @@ use tracing::warn;
 use crate::runtime::events::{Event, EventKind};
 
 /// Event reader that tolerates partial or corrupt trailing lines.
+///
+/// TODO: Add SQLite fallback when `global_db()` is initialized, mirroring
+/// `EventWriter`'s dual backend. Currently only reads from JSONL files.
 #[derive(Debug)]
 pub struct EventReader;
 

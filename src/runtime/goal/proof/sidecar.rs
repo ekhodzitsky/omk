@@ -10,7 +10,7 @@ static LOADED_PROOF_REVIEW_ARTIFACTS: OnceLock<Mutex<HashMap<String, Vec<Value>>
 static LOADED_PROOF_INTEGRATION_EVIDENCE: OnceLock<Mutex<HashMap<String, Value>>> = OnceLock::new();
 static LOADED_PROOF_ORACLE_EVIDENCE: OnceLock<Mutex<HashMap<String, Value>>> = OnceLock::new();
 
-pub(super) fn proof_delivery_metadata_from_value(value: &Value) -> Vec<Value> {
+pub(crate) fn proof_delivery_metadata_from_value(value: &Value) -> Vec<Value> {
     value
         .get("delivery_metadata")
         .and_then(Value::as_array)
@@ -20,7 +20,7 @@ pub(super) fn proof_delivery_metadata_from_value(value: &Value) -> Vec<Value> {
         .collect()
 }
 
-pub(super) fn proof_review_artifacts_from_value(value: &Value) -> Vec<Value> {
+pub(crate) fn proof_review_artifacts_from_value(value: &Value) -> Vec<Value> {
     value
         .get("review_artifacts")
         .and_then(Value::as_array)
@@ -30,15 +30,15 @@ pub(super) fn proof_review_artifacts_from_value(value: &Value) -> Vec<Value> {
         .collect()
 }
 
-pub(super) fn proof_integration_evidence_from_value(value: &Value) -> Option<Value> {
+pub(crate) fn proof_integration_evidence_from_value(value: &Value) -> Option<Value> {
     value.get("integration_evidence").cloned()
 }
 
-pub(super) fn proof_oracle_evidence_from_value(value: &Value) -> Option<Value> {
+pub(crate) fn proof_oracle_evidence_from_value(value: &Value) -> Option<Value> {
     value.get("oracle_evidence").cloned()
 }
 
-pub(super) fn remember_goal_proof_delivery_metadata_for_value(
+pub(crate) fn remember_goal_proof_delivery_metadata_for_value(
     proof_value: &Value,
     delivery_metadata: Vec<Value>,
 ) {
@@ -48,14 +48,14 @@ pub(super) fn remember_goal_proof_delivery_metadata_for_value(
     remember_goal_proof_delivery_metadata_with_key(key, delivery_metadata);
 }
 
-pub(super) fn remember_goal_proof_delivery_metadata(
+pub(crate) fn remember_goal_proof_delivery_metadata(
     proof: &GoalProof,
     delivery_metadata: Vec<Value>,
 ) {
     remember_goal_proof_delivery_metadata_with_key(proof_cache_key(proof), delivery_metadata);
 }
 
-pub(super) fn remember_goal_proof_review_artifacts(
+pub(crate) fn remember_goal_proof_review_artifacts(
     proof: &GoalProof,
     review_artifacts: Vec<Value>,
 ) {
@@ -80,7 +80,7 @@ pub(crate) fn remember_goal_proof_acceptance_evidence(
     );
 }
 
-pub(super) fn remember_goal_proof_acceptance_evidence_for_value(
+pub(crate) fn remember_goal_proof_acceptance_evidence_for_value(
     proof_value: &Value,
     integration_evidence: Option<Value>,
     oracle_evidence: Option<Value>,
@@ -100,7 +100,7 @@ pub(super) fn remember_goal_proof_acceptance_evidence_for_value(
     );
 }
 
-pub(super) fn remembered_goal_proof_delivery_metadata(proof: &GoalProof) -> Option<Vec<Value>> {
+pub(crate) fn remembered_goal_proof_delivery_metadata(proof: &GoalProof) -> Option<Vec<Value>> {
     let cache = LOADED_PROOF_METADATA.get_or_init(|| Mutex::new(HashMap::new()));
     let Ok(cache) = cache.lock() else {
         return None;
@@ -108,7 +108,7 @@ pub(super) fn remembered_goal_proof_delivery_metadata(proof: &GoalProof) -> Opti
     cache.get(&proof_cache_key(proof)).cloned()
 }
 
-pub(super) fn remembered_goal_proof_review_artifacts(proof: &GoalProof) -> Option<Vec<Value>> {
+pub(crate) fn remembered_goal_proof_review_artifacts(proof: &GoalProof) -> Option<Vec<Value>> {
     let cache = LOADED_PROOF_REVIEW_ARTIFACTS.get_or_init(|| Mutex::new(HashMap::new()));
     let Ok(cache) = cache.lock() else {
         return None;
@@ -116,14 +116,14 @@ pub(super) fn remembered_goal_proof_review_artifacts(proof: &GoalProof) -> Optio
     cache.get(&proof_cache_key(proof)).cloned()
 }
 
-pub(super) fn remembered_goal_proof_integration_evidence(proof: &GoalProof) -> Option<Value> {
+pub(crate) fn remembered_goal_proof_integration_evidence(proof: &GoalProof) -> Option<Value> {
     remembered_value(
         LOADED_PROOF_INTEGRATION_EVIDENCE.get_or_init(|| Mutex::new(HashMap::new())),
         &proof_cache_key(proof),
     )
 }
 
-pub(super) fn remembered_goal_proof_oracle_evidence(proof: &GoalProof) -> Option<Value> {
+pub(crate) fn remembered_goal_proof_oracle_evidence(proof: &GoalProof) -> Option<Value> {
     remembered_value(
         LOADED_PROOF_ORACLE_EVIDENCE.get_or_init(|| Mutex::new(HashMap::new())),
         &proof_cache_key(proof),
