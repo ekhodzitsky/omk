@@ -101,10 +101,7 @@ impl GoalStateStore for FileSystemGoalStateStore {
             }
         }
         Err(GoalStateError::MissingFile {
-            path: goal_dir
-                .join(GOAL_STATE_FILE)
-                .to_string_lossy()
-                .to_string(),
+            path: goal_dir.join(GOAL_STATE_FILE).to_string_lossy().to_string(),
         }
         .into())
     }

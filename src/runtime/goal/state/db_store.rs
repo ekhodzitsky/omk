@@ -55,7 +55,13 @@ impl GoalStateStore for DbGoalStateStore {
             anyhow::bail!("goal_dir has no valid goal_id: {}", goal_dir.display());
         }
 
-        match self.db.goal_repo().get(&goal_id).await.map_err(map_db_err)? {
+        match self
+            .db
+            .goal_repo()
+            .get(&goal_id)
+            .await
+            .map_err(map_db_err)?
+        {
             Some(record) => {
                 let mut state = record_to_goal_state(record)?;
                 state.state_dir = goal_dir.to_path_buf();

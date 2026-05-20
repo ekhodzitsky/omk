@@ -16,13 +16,12 @@ const GOAL_STALE_THRESHOLD_SECS: i64 = 30;
 pub async fn claim_goal(goal_id: &str) -> anyhow::Result<GoalHeartbeatHandle> {
     let db = DbHandle::open(goals_db_path()).await?;
     let pid = std::process::id() as i32;
-    db.goal_repo().update_controller_pid(goal_id, Some(pid)).await?;
+    db.goal_repo()
+        .update_controller_pid(goal_id, Some(pid))
+        .await?;
 
     let cancel = CancellationToken::new();
-    let task = tokio::spawn(heartbeat_loop(
-        goal_id.to_string(),
-        cancel.clone(),
-    ));
+    let task = tokio::spawn(heartbeat_loop(goal_id.to_string(), cancel.clone()));
 
     Ok(GoalHeartbeatHandle {
         _task: task,
@@ -59,8 +58,8 @@ pub async fn list_orphaned_goals() -> anyhow::Result<Vec<OrphanedGoal>> {
             _ => true,
         };
 
-        let heartbeat_stale = chrono::Utc::now().timestamp() - record.updated_at
-            > GOAL_STALE_THRESHOLD_SECS;
+        let heartbeat_stale =
+            chrono::Utc::now().timestamp() - record.updated_at > GOAL_STALE_THRESHOLD_SECS;
 
         if stale || heartbeat_stale {
             orphaned.push(OrphanedGoal {
@@ -138,7 +137,11 @@ mod tests {
     use super::*;
     use crate::runtime::db::repo::goal::GoalRepo;
 
-    fn test_goal_record(goal_id: &str, status: &str, pid: Option<i32>) -> crate::runtime::db::types::GoalRecord {
+    fn test_goal_record(
+        goal_id: &str,
+        status: &str,
+        pid: Option<i32>,
+    ) -> crate::runtime::db::types::GoalRecord {
         crate::runtime::db::types::GoalRecord {
             goal_id: goal_id.to_string(),
             status: status.to_string(),
@@ -204,7 +207,13 @@ mod tests {
         db.goal_repo().create(&goal).await.unwrap();
 
         db.goal_repo().heartbeat("goal-hb").await.unwrap();
-        let after = db.goal_repo().get("goal-hb").await.unwrap().unwrap().updated_at;
+        let after = db
+            .goal_repo()
+            .get("goal-hb")
+            .await
+            .unwrap()
+            .unwrap()
+            .updated_at;
         assert!(
             after >= chrono::Utc::now().timestamp() - 1,
             "heartbeat should bump updated_at to near-current time"

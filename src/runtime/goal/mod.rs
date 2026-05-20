@@ -30,7 +30,6 @@ pub use budget::{
     GoalBudgetCheckpoint, GoalBudgetReport, PerTaskBudgetSnapshot,
 };
 pub use control::{cancel_goal, pause_goal, resume_goal};
-pub use supervisor::{claim_goal, list_orphaned_goals, release_goal};
 pub use delivery::{
     deliver_goal_open_pr_with_client, open_goal_pr_with_client, poll_github_pr_checks,
     GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrDeliveryOptions,
@@ -54,6 +53,7 @@ pub use state::{
     GOAL_FAILURE_FILE, GOAL_GATE_ARTIFACTS_DIR, GOAL_PRD_FILE, GOAL_PROOF_FILE, GOAL_STATE_FILE,
     GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
 };
+pub use supervisor::{claim_goal, list_orphaned_goals, release_goal};
 pub use task_graph::{
     load_goal_task_delivery_records, plan_goal_delivery_slices, read_goal_task_delivery_metadata,
     record_goal_delivery_slice_plan, update_goal_task_delivery_metadata,

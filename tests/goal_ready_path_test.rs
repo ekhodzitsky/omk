@@ -151,8 +151,14 @@ fn run_goal_to_review(
         .args(["goal", "run", goal])
         .output()
         .expect("omk goal run");
-    eprintln!("omk goal run stdout: {}", String::from_utf8_lossy(&run_output.stdout));
-    eprintln!("omk goal run stderr: {}", String::from_utf8_lossy(&run_output.stderr));
+    eprintln!(
+        "omk goal run stdout: {}",
+        String::from_utf8_lossy(&run_output.stdout)
+    );
+    eprintln!(
+        "omk goal run stderr: {}",
+        String::from_utf8_lossy(&run_output.stderr)
+    );
     assert!(run_output.status.success(), "omk goal run failed");
 
     let exec_output = omk_cmd(envs)
@@ -164,8 +170,14 @@ fn run_goal_to_review(
         .args(["goal", "execute", "latest"])
         .output()
         .expect("omk goal execute");
-    eprintln!("omk goal execute stdout: {}", String::from_utf8_lossy(&exec_output.stdout));
-    eprintln!("omk goal execute stderr: {}", String::from_utf8_lossy(&exec_output.stderr));
+    eprintln!(
+        "omk goal execute stdout: {}",
+        String::from_utf8_lossy(&exec_output.stdout)
+    );
+    eprintln!(
+        "omk goal execute stderr: {}",
+        String::from_utf8_lossy(&exec_output.stderr)
+    );
     assert!(exec_output.status.success(), "omk goal execute failed");
 
     omk_cmd(envs)

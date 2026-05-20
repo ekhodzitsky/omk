@@ -1,45 +1,125 @@
 ---
-schema_version: "1.0"
+schema_version: 1
 module: llm
-status: "active"
-surface_api:
-  - LlmClient
-  - MockLlmClient
-  - WireLlmClient
-  - Planner
-  - LlmPlanner
-  - MockPlanner
-  - CostEstimator
-  - TokenBudget
-  - RetryPolicy
-  - LlmError
-  - Plan
-  - Slice
-  - GoalClassification
-  - GoalKind
-  - Complexity
-  - Difficulty
-  - RepoContext
-  - LlmResponse
-  - LlmUsage
+level: root
+purpose: LLM client, planner, cost estimation, and structured-output parsing
+status: experimental
+surface:
+  - name: LlmClient
+    kind: trait
+    visibility: pub
+    contract: Async trait for LLM completion. Generic, non-object-safe.
+    proof:
+      kind: unit-test
+      target: llm::client
+      command: cargo test --lib llm::client
+  - name: MockLlmClient
+    kind: struct
+    visibility: pub
+    contract: In-memory test double for LlmClient.
+    proof:
+      kind: unit-test
+      target: llm::client
+      command: cargo test --lib llm::client
+  - name: WireLlmClient
+    kind: struct
+    visibility: pub
+    contract: Production implementation over the Wire protocol.
+    proof:
+      kind: unit-test
+      target: llm::client
+      command: cargo test --lib llm::client
+  - name: Planner
+    kind: trait
+    visibility: pub
+    contract: Trait for goal classification, decomposition, and estimation.
+    proof:
+      kind: unit-test
+      target: llm::planner
+      command: cargo test --lib llm::planner
+  - name: LlmPlanner
+    kind: struct
+    visibility: pub
+    contract: LLM-backed planner implementation.
+    proof:
+      kind: unit-test
+      target: llm::planner
+      command: cargo test --lib llm::planner
+  - name: MockPlanner
+    kind: struct
+    visibility: pub
+    contract: Configurable test planner.
+    proof:
+      kind: unit-test
+      target: llm::planner
+      command: cargo test --lib llm::planner
+  - name: CostEstimator
+    kind: struct
+    visibility: pub
+    contract: Token counting and USD estimation using tiktoken-rs.
+    proof:
+      kind: unit-test
+      target: llm::cost
+      command: cargo test --lib llm::cost
+  - name: TokenBudget
+    kind: struct
+    visibility: pub
+    contract: Tracks token consumption against a cap.
+    proof:
+      kind: unit-test
+      target: llm::types
+      command: cargo test --lib llm::types
+  - name: RetryPolicy
+    kind: struct
+    visibility: pub
+    contract: Exponential-backoff configuration.
+    proof:
+      kind: unit-test
+      target: llm::retry
+      command: cargo test --lib llm::retry
+  - name: LlmError
+    kind: enum
+    visibility: pub
+    contract: Structured error enum for LLM operations.
+    proof:
+      kind: unit-test
+      target: llm::error
+      command: cargo test --lib llm::error
 dependencies:
-  - wire (read-only adapter)
-  - cost (tiktoken-rs token counting pattern)
-  - tokio (async runtime)
-  - serde / serde_json (structured output)
-  - thiserror (structured errors)
-  - tracing (observability)
-  - tiktoken-rs (token counting)
+  internal: []
+  external: []
+consumers:
+  - path: runtime/goal/planner/scaffold/generate.rs
+    uses: [Planner, RepoContext]
+  - path: runtime/goal/mod.rs
+    uses: [Planner]
 invariants:
-  - "No dependency on runtime::goal, cli::goal, task graphs, or proof semantics"
-  - "All public types implement Debug"
-  - "No unwrap/expect in production code"
-  - "WireLlmClient does not mutate src/wire/"
-  - "Parser functions are pure and side-effect free"
-verification_commands:
-  - "cargo test --lib llm"
-  - "cargo clippy --all-targets --all-features -- -D warnings"
-  - "cargo doc --no-deps"
+  - id: no-runtime-goal-dep
+    rule: This module must not import runtime::goal, cli::goal, task graphs, or proof semantics.
+    proof:
+      kind: static-check
+      target: llm module
+      command: cargo check
+  - id: pure-parsers
+    rule: Parser functions in parser.rs must be deterministic and side-effect free. No IO, no randomness, no mutable state.
+    proof:
+      kind: unit-test
+      target: llm::parser
+      command: cargo test --lib llm::parser
+  - id: no-unwrap-production
+    rule: All error paths return LlmError. No unwrap/expect/panic in production code.
+    proof:
+      kind: static-check
+      target: llm module
+      command: cargo clippy --all-targets --all-features -- -D warnings
+verification:
+  pre_change:
+    - cargo test --lib llm
+    - cargo clippy --all-targets --all-features -- -D warnings
+  full:
+    - cargo test
+    - cargo clippy --all-targets --all-features -- -D warnings
+    - cargo doc --no-deps
 ---
 
 # src/llm/ — LLM Client & Planner

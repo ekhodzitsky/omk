@@ -31,9 +31,10 @@ pub(crate) async fn create_goal_with_scaffold(
     let now = chrono::Utc::now();
     let normalized_goal = crate::runtime::goal::state::normalize_goal(goal);
     let oracle = if let Some(planner) = planner {
-        let classification = planner.classify(&normalized_goal).await.map_err(|e| {
-            anyhow::anyhow!("LLM classification failed: {e}")
-        })?;
+        let classification = planner
+            .classify(&normalized_goal)
+            .await
+            .map_err(|e| anyhow::anyhow!("LLM classification failed: {e}"))?;
         crate::runtime::goal::oracle::GoalOracleAssessment {
             testable: classification.is_testable,
             human_decisions_required: classification.suggested_refinement.into_iter().collect(),

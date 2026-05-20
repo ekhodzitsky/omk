@@ -20,10 +20,7 @@ use crate::runtime::goal::{
 /// Postconditions:
 /// - The PR is merged via `client.merge_pr(pr_url)`.
 /// - The goal state is updated with a `pr_merge` artifact.
-pub async fn merge_goal(
-    goal_id: &str,
-    client: &mut impl GoalGithubPrClient,
-) -> Result<GoalState> {
+pub async fn merge_goal(goal_id: &str, client: &mut impl GoalGithubPrClient) -> Result<GoalState> {
     let mut state = resolve_goal(goal_id).await?;
 
     if !state.merge_policy.permits_merge() && state.merge_policy != GoalMergePolicy::Manual {
@@ -85,12 +82,8 @@ mod tests {
     use crate::runtime::goal::delivery::{
         GoalGithubPrMutation, GoalGithubPrOperation, GoalGithubPrRequest,
     };
-    use crate::runtime::goal::state::{
-        CreateGoalOptions, GoalPhase, GoalStatus, GOAL_PROOF_FILE,
-    };
-    use crate::runtime::goal::{
-        create_goal, FileSystemGoalStateStore, GoalProof, GoalStateStore,
-    };
+    use crate::runtime::goal::state::{CreateGoalOptions, GoalPhase, GoalStatus, GOAL_PROOF_FILE};
+    use crate::runtime::goal::{create_goal, FileSystemGoalStateStore, GoalProof, GoalStateStore};
 
     #[derive(Debug, Default)]
     struct MockMergeClient {
@@ -156,7 +149,11 @@ mod tests {
         for (key, value) in &envs {
             std::env::set_var(key, value);
         }
-        let xdg_state = envs.iter().find(|(k, _)| *k == "XDG_STATE_HOME").map(|(_, v)| v).unwrap();
+        let xdg_state = envs
+            .iter()
+            .find(|(k, _)| *k == "XDG_STATE_HOME")
+            .map(|(_, v)| v)
+            .unwrap();
         std::fs::create_dir_all(xdg_state.join("omk")).unwrap();
 
         let now = chrono::Utc::now();
@@ -258,9 +255,13 @@ mod tests {
             pr_url: Some("https://github.com/example/omk/pull/42".to_string()),
             ..Default::default()
         };
-        crate::runtime::goal::task_graph::update_goal_task_delivery_metadata(&state_dir, "integrator", update)
-            .await
-            .expect("update delivery metadata");
+        crate::runtime::goal::task_graph::update_goal_task_delivery_metadata(
+            &state_dir,
+            "integrator",
+            update,
+        )
+        .await
+        .expect("update delivery metadata");
 
         crate::runtime::goal::proof::write_json_artifact(&state_dir.join(GOAL_PROOF_FILE), &proof)
             .await
@@ -288,10 +289,7 @@ mod tests {
             "https://github.com/example/omk/pull/42"
         );
         assert_eq!(state.status, GoalStatus::Ready);
-        assert!(state
-            .artifacts
-            .iter()
-            .any(|a| a.kind == "pr_merge"));
+        assert!(state.artifacts.iter().any(|a| a.kind == "pr_merge"));
         restore_env(saved);
     }
 
@@ -303,7 +301,11 @@ mod tests {
         for (key, value) in &envs {
             std::env::set_var(key, value);
         }
-        let xdg_state = envs.iter().find(|(k, _)| *k == "XDG_STATE_HOME").map(|(_, v)| v).unwrap();
+        let xdg_state = envs
+            .iter()
+            .find(|(k, _)| *k == "XDG_STATE_HOME")
+            .map(|(_, v)| v)
+            .unwrap();
         std::fs::create_dir_all(xdg_state.join("omk")).unwrap();
 
         let goal = create_goal(
@@ -328,7 +330,10 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        assert!(err.contains("not eligible for merge"), "expected not-eligible error, got: {err}");
+        assert!(
+            err.contains("not eligible for merge"),
+            "expected not-eligible error, got: {err}"
+        );
         assert!(client.merge_calls.is_empty());
 
         drop(tmp);
@@ -366,7 +371,10 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        assert!(err.contains("does not permit merge"), "expected policy error, got: {err}");
+        assert!(
+            err.contains("does not permit merge"),
+            "expected policy error, got: {err}"
+        );
         assert!(client.merge_calls.is_empty());
 
         drop(tmp);
@@ -383,9 +391,7 @@ mod tests {
             ..Default::default()
         };
 
-        let err = merge_goal(&goal_id, &mut client)
-            .await
-            .unwrap_err();
+        let err = merge_goal(&goal_id, &mut client).await.unwrap_err();
         let err_str = format!("{err:?}");
         assert!(
             err_str.contains("simulated merge failure"),

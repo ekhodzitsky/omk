@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use super::{Complexity, GoalClassification, LlmError, Plan, Planner, RepoContext};
+use async_trait::async_trait;
 
 /// A mock planner that returns pre-configured results.
 #[derive(Debug, Clone)]

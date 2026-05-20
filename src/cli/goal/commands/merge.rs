@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
 
-use crate::runtime::goal::{
-    merge_goal, GoalGithubPrCommandClient,
-};
+use crate::runtime::goal::{merge_goal, GoalGithubPrCommandClient};
 
 pub(in crate::cli::goal) async fn cmd_merge(goal_id: &str) -> Result<()> {
     let mut client = GoalGithubPrCommandClient::default();

@@ -1,8 +1,8 @@
+use super::db_store::DbGoalStateStore;
 use super::{
     format_goal_duration_secs, is_safe_goal_agent_path, normalize_goal, FileSystemGoalStateStore,
     GoalPhase, GoalState, GoalStateStore, GoalStatus, GOAL_STATE_FILE,
 };
-use super::db_store::DbGoalStateStore;
 use std::fs;
 
 fn test_goal_state(goal_id: &str) -> super::GoalState {

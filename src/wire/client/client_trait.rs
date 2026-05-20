@@ -129,7 +129,10 @@ pub trait WireClient: Send {
     }
 
     /// Enable or disable plan mode.
-    fn set_plan_mode(&mut self, enabled: bool) -> impl Future<Output = Result<SetPlanModeResult>> + Send {
+    fn set_plan_mode(
+        &mut self,
+        enabled: bool,
+    ) -> impl Future<Output = Result<SetPlanModeResult>> + Send {
         async move {
             let id = self.next_id();
             let req = JsonRpcRequest {

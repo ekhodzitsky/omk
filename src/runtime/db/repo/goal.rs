@@ -10,11 +10,7 @@ pub trait GoalRepo {
     async fn upsert(&self, goal: &GoalRecord) -> Result<(), DbError>;
     async fn get(&self, goal_id: &str) -> Result<Option<GoalRecord>, DbError>;
     async fn update_status(&self, goal_id: &str, status: &str, phase: &str) -> Result<(), DbError>;
-    async fn update_controller_pid(
-        &self,
-        goal_id: &str,
-        pid: Option<i32>,
-    ) -> Result<(), DbError>;
+    async fn update_controller_pid(&self, goal_id: &str, pid: Option<i32>) -> Result<(), DbError>;
     async fn heartbeat(&self, goal_id: &str) -> Result<(), DbError>;
     async fn list_running(&self) -> Result<Vec<GoalSummary>, DbError>;
     async fn list(&self, filter: GoalFilter) -> Result<Vec<GoalSummary>, DbError>;
@@ -268,11 +264,7 @@ impl GoalRepo for GoalRepoImpl {
             .map_err(DbError::Connection)
     }
 
-    async fn update_controller_pid(
-        &self,
-        goal_id: &str,
-        pid: Option<i32>,
-    ) -> Result<(), DbError> {
+    async fn update_controller_pid(&self, goal_id: &str, pid: Option<i32>) -> Result<(), DbError> {
         let goal_id = goal_id.to_string();
         let goal_id_for_err = goal_id.clone();
         let count = self
