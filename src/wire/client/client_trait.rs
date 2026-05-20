@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::future::Future;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -17,114 +18,145 @@ use crate::wire::protocol::{
 /// Implementations may communicate over a child process (see
 /// [`ProcessWireClient`](super::ProcessWireClient)) or through an in-memory
 /// channel for testing.
-#[allow(async_fn_in_trait)]
-pub trait WireClient {
+pub trait WireClient: Send {
     /// Generate the next request id.
     fn next_id(&mut self) -> String;
 
     /// Send a JSON-RPC request.
-    async fn send_request<Params: Serialize>(&mut self, req: &JsonRpcRequest<Params>)
-        -> Result<()>;
+    fn send_request<Params: Serialize + Sync>(
+        &mut self,
+        req: &JsonRpcRequest<Params>,
+    ) -> impl Future<Output = Result<()>> + Send;
 
     /// Read the next incoming message.
-    async fn read_message(&mut self) -> Result<WireMessage>;
+    fn read_message(&mut self) -> impl Future<Output = Result<WireMessage>> + Send;
 
     /// Read the next incoming message with a timeout.
-    async fn read_message_timeout(&mut self, timeout: Duration) -> Result<WireMessage>;
+    fn read_message_timeout(
+        &mut self,
+        timeout: Duration,
+    ) -> impl Future<Output = Result<WireMessage>> + Send;
 
     /// Wait for a response matching `expected_id`, buffering out-of-order
     /// messages internally.
-    async fn read_response<T: DeserializeOwned>(&mut self, expected_id: &str) -> Result<T>;
+    fn read_response<T: DeserializeOwned + Send>(
+        &mut self,
+        expected_id: &str,
+    ) -> impl Future<Output = Result<T>> + Send;
 
     /// Send a JSON-RPC success response.
-    async fn send_response<T: Serialize>(&mut self, id: &str, result: T) -> Result<()>;
+    fn send_response<T: Serialize + Send>(
+        &mut self,
+        id: &str,
+        result: T,
+    ) -> impl Future<Output = Result<()>> + Send;
 
     /// Send a JSON-RPC error response.
-    async fn send_error(&mut self, id: &str, code: i32, message: &str) -> Result<()>;
+    fn send_error(
+        &mut self,
+        id: &str,
+        code: i32,
+        message: &str,
+    ) -> impl Future<Output = Result<()>> + Send;
 
     /// Perform the initialize handshake.
-    async fn initialize(&mut self, params: InitializeParams) -> Result<InitializeResult>;
+    fn initialize(
+        &mut self,
+        params: InitializeParams,
+    ) -> impl Future<Output = Result<InitializeResult>> + Send;
 
     /// Returns true if the initialize handshake has completed.
     fn is_handshake_done(&self) -> bool;
 
     /// Gracefully shut down the client.
-    async fn shutdown(self) -> Result<()>;
+    fn shutdown(self) -> impl Future<Output = Result<()>> + Send;
 
     /// Send a prompt and wait for the result.
-    async fn prompt(&mut self, user_input: &str) -> Result<PromptResult> {
-        let id = self.start_prompt(user_input).await?;
-        self.read_response(&id).await
+    fn prompt(&mut self, user_input: &str) -> impl Future<Output = Result<PromptResult>> + Send {
+        async move {
+            let id = self.start_prompt(user_input).await?;
+            self.read_response(&id).await
+        }
     }
 
     /// Send a prompt without waiting for the result.
-    async fn start_prompt(&mut self, user_input: &str) -> Result<String> {
-        let id = self.next_id();
-        let req = JsonRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            method: "prompt".to_string(),
-            id: id.clone(),
-            params: PromptParams {
-                user_input: UserInput::Text(user_input.to_string()),
-            },
-        };
-        self.send_request(&req).await?;
-        Ok(id)
+    fn start_prompt(&mut self, user_input: &str) -> impl Future<Output = Result<String>> + Send {
+        async move {
+            let id = self.next_id();
+            let req = JsonRpcRequest {
+                jsonrpc: "2.0".to_string(),
+                method: "prompt".to_string(),
+                id: id.clone(),
+                params: PromptParams {
+                    user_input: UserInput::Text(user_input.to_string()),
+                },
+            };
+            self.send_request(&req).await?;
+            Ok(id)
+        }
     }
 
     /// Replay events and requests from the current session.
-    async fn replay(&mut self) -> Result<ReplayResult> {
-        let id = self.next_id();
-        let req = JsonRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            method: "replay".to_string(),
-            id: id.clone(),
-            params: ReplayParams::default(),
-        };
-        self.send_request(&req).await?;
-        self.read_response(&id).await
+    fn replay(&mut self) -> impl Future<Output = Result<ReplayResult>> + Send {
+        async move {
+            let id = self.next_id();
+            let req = JsonRpcRequest {
+                jsonrpc: "2.0".to_string(),
+                method: "replay".to_string(),
+                id: id.clone(),
+                params: ReplayParams::default(),
+            };
+            self.send_request(&req).await?;
+            self.read_response(&id).await
+        }
     }
 
     /// Steer the current turn with additional user input.
-    async fn steer(&mut self, user_input: &str) -> Result<SteerResult> {
-        let id = self.next_id();
-        let req = JsonRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            method: "steer".to_string(),
-            id: id.clone(),
-            params: SteerParams {
-                user_input: UserInput::Text(user_input.to_string()),
-            },
-        };
-        self.send_request(&req).await?;
-        self.read_response(&id).await
+    fn steer(&mut self, user_input: &str) -> impl Future<Output = Result<SteerResult>> + Send {
+        async move {
+            let id = self.next_id();
+            let req = JsonRpcRequest {
+                jsonrpc: "2.0".to_string(),
+                method: "steer".to_string(),
+                id: id.clone(),
+                params: SteerParams {
+                    user_input: UserInput::Text(user_input.to_string()),
+                },
+            };
+            self.send_request(&req).await?;
+            self.read_response(&id).await
+        }
     }
 
     /// Enable or disable plan mode.
-    async fn set_plan_mode(&mut self, enabled: bool) -> Result<SetPlanModeResult> {
-        let id = self.next_id();
-        let req = JsonRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            method: "set_plan_mode".to_string(),
-            id: id.clone(),
-            params: SetPlanModeParams { enabled },
-        };
-        self.send_request(&req).await?;
-        self.read_response(&id).await
+    fn set_plan_mode(&mut self, enabled: bool) -> impl Future<Output = Result<SetPlanModeResult>> + Send {
+        async move {
+            let id = self.next_id();
+            let req = JsonRpcRequest {
+                jsonrpc: "2.0".to_string(),
+                method: "set_plan_mode".to_string(),
+                id: id.clone(),
+                params: SetPlanModeParams { enabled },
+            };
+            self.send_request(&req).await?;
+            self.read_response(&id).await
+        }
     }
 
     /// Cancel the current turn.
-    async fn cancel(&mut self) -> Result<()> {
-        let id = self.next_id();
-        let req = JsonRpcRequest {
-            jsonrpc: "2.0".to_string(),
-            method: "cancel".to_string(),
-            id: id.clone(),
-            params: CancelParams::default(),
-        };
-        self.send_request(&req).await?;
-        let _: CancelResult = self.read_response(&id).await?;
-        Ok(())
+    fn cancel(&mut self) -> impl Future<Output = Result<()>> + Send {
+        async move {
+            let id = self.next_id();
+            let req = JsonRpcRequest {
+                jsonrpc: "2.0".to_string(),
+                method: "cancel".to_string(),
+                id: id.clone(),
+                params: CancelParams::default(),
+            };
+            self.send_request(&req).await?;
+            let _: CancelResult = self.read_response(&id).await?;
+            Ok(())
+        }
     }
 }
 

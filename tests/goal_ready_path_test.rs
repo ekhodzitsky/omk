@@ -146,21 +146,27 @@ fn run_goal_to_review(
     write_file: &str,
     write_body: &str,
 ) {
-    omk_cmd(envs)
+    let run_output = omk_cmd(envs)
         .current_dir(project_dir)
         .args(["goal", "run", goal])
-        .assert()
-        .success();
+        .output()
+        .expect("omk goal run");
+    eprintln!("omk goal run stdout: {}", String::from_utf8_lossy(&run_output.stdout));
+    eprintln!("omk goal run stderr: {}", String::from_utf8_lossy(&run_output.stderr));
+    assert!(run_output.status.success(), "omk goal run failed");
 
-    omk_cmd(envs)
+    let exec_output = omk_cmd(envs)
         .env("MOCK_KIMI", assert_cmd::cargo::cargo_bin("mock-kimi"))
         .env("MOCK_KIMI_WRITE_FILE", write_file)
         .env("MOCK_KIMI_WRITE_BODY", write_body)
         .env("OMK_WIRE_WORKER_POLL_INTERVAL_MS", "50")
         .current_dir(project_dir)
         .args(["goal", "execute", "latest"])
-        .assert()
-        .success();
+        .output()
+        .expect("omk goal execute");
+    eprintln!("omk goal execute stdout: {}", String::from_utf8_lossy(&exec_output.stdout));
+    eprintln!("omk goal execute stderr: {}", String::from_utf8_lossy(&exec_output.stderr));
+    assert!(exec_output.status.success(), "omk goal execute failed");
 
     omk_cmd(envs)
         .current_dir(project_dir)

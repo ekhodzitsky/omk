@@ -13,7 +13,7 @@ pub(crate) async fn cmd_run(
         return Ok(());
     }
 
-    let state = crate::runtime::goal::create_goal(goal, options).await?;
+    let state = crate::runtime::goal::create_goal(goal, options, None).await?;
     print_goal_scaffold(&state);
     Ok(())
 }

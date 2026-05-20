@@ -1,15 +1,30 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+
+use crate::runtime::goal::{
+    merge_goal, GoalGithubPrCommandClient,
+};
 
 pub(in crate::cli::goal) async fn cmd_merge(goal_id: &str) -> Result<()> {
-    println!("Goal merge {}", goal_id);
-    println!("Merging PR is not yet fully implemented in the standalone merge command.");
+    let mut client = GoalGithubPrCommandClient::default();
+    let state = merge_goal(goal_id, &mut client)
+        .await
+        .with_context(|| format!("Failed to merge goal {goal_id}"))?;
+
+    let pr_url = state
+        .artifacts
+        .iter()
+        .find(|a| a.kind == "pr_merge")
+        .map(|a| a.path.display().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
     println!(
-        "Workaround: use 'omk goal open-pr {} --dry-run --format markdown' to render the PR body,",
-        goal_id
+        "Successfully merged PR for goal {}: {}",
+        state.goal_id, pr_url
     );
-    println!("then run 'gh pr merge <pr-url> --squash --delete-branch' manually.");
     println!(
-        "For automated merge, use '--merge-policy gated' with 'omk goal run ... --until-ready'."
+        "Run 'omk goal show {}' to inspect the updated state.",
+        state.goal_id
     );
+
     Ok(())
 }

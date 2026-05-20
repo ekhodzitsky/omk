@@ -16,6 +16,7 @@ use crate::runtime::goal::task_graph::{GoalTaskGraph, GoalTaskStatus};
 pub(crate) async fn create_goal_with_scaffold(
     goal: &str,
     options: crate::runtime::goal::state::CreateGoalOptions,
+    planner: Option<&dyn crate::llm::Planner>,
 ) -> anyhow::Result<crate::runtime::goal::state::GoalState> {
     let id = crate::runtime::goal::types::GoalId::generate();
     let id_string = id.to_string();
@@ -29,7 +30,17 @@ pub(crate) async fn create_goal_with_scaffold(
 
     let now = chrono::Utc::now();
     let normalized_goal = crate::runtime::goal::state::normalize_goal(goal);
-    let oracle = crate::runtime::goal::oracle::assess_goal_oracle(&normalized_goal);
+    let oracle = if let Some(planner) = planner {
+        let classification = planner.classify(&normalized_goal).await.map_err(|e| {
+            anyhow::anyhow!("LLM classification failed: {e}")
+        })?;
+        crate::runtime::goal::oracle::GoalOracleAssessment {
+            testable: classification.is_testable,
+            human_decisions_required: classification.suggested_refinement.into_iter().collect(),
+        }
+    } else {
+        crate::runtime::goal::oracle::assess_goal_oracle(&normalized_goal)
+    };
     let failure = (!oracle.testable).then(|| GoalFailure {
         reason: oracle.human_decisions_required.join("; "),
         recorded_at: now,
@@ -64,10 +75,13 @@ pub(crate) async fn create_goal_with_scaffold(
     };
     FileSystemGoalStateStore::new().save(&state).await?;
 
-    run_controller_scaffold(state).await
+    run_controller_scaffold(state, planner).await
 }
 
-pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<GoalState> {
+pub(crate) async fn run_controller_scaffold(
+    mut state: GoalState,
+    planner: Option<&dyn crate::llm::Planner>,
+) -> Result<GoalState> {
     let writer = EventWriter::new(state.state_dir.join(crate::runtime::config::EVENTS_FILE));
     let builder = EventBuilder::new(RunId(state.goal_id.clone()));
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -87,7 +101,7 @@ pub(crate) async fn run_controller_scaffold(mut state: GoalState) -> Result<Goal
     record_artifact(&mut state, "technical_plan", GOAL_TECHNICAL_PLAN_FILE, now);
 
     state.phase = GoalPhase::Decomposition;
-    let task_graph = write_task_graph(&state, now).await?;
+    let task_graph = write_task_graph(&state, now, planner).await?;
     record_artifact(&mut state, "task_graph", GOAL_TASK_GRAPH_FILE, now);
 
     state.phase = GoalPhase::VerificationDesign;
@@ -146,7 +160,11 @@ async fn write_blocked_goal_failure_artifact(state: &GoalState) -> Result<()> {
     .await
 }
 
-async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Result<GoalTaskGraph> {
+async fn write_task_graph(
+    state: &GoalState,
+    generated_at: DateTime<Utc>,
+    planner: Option<&dyn crate::llm::Planner>,
+) -> Result<GoalTaskGraph> {
     let mut tasks = vec![
         super::scaffold_intake_task(generated_at),
         super::scaffold_plan_task(generated_at),
@@ -156,7 +174,24 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
     let slice_mode = state.slice_execution;
     let max_features = state.max_agents.unwrap_or(2).max(2);
     let features = if slice_mode {
-        super::super::decompose_goal_for_slices(&state.normalized_goal, max_features)
+        if let Some(planner) = planner {
+            let context = crate::llm::RepoContext {
+                primary_language: None,
+                file_count: 0,
+                top_level_files: Vec::new(),
+                has_tests: false,
+                has_ci: false,
+            };
+            match planner.decompose(&state.normalized_goal, &context).await {
+                Ok(plan) => plan.slices.into_iter().map(|s| s.description).collect(),
+                Err(e) => {
+                    tracing::warn!(error = %e, "LLM decomposition failed; falling back to heuristic");
+                    super::super::decompose_goal_for_slices(&state.normalized_goal, max_features)
+                }
+            }
+        } else {
+            super::super::decompose_goal_for_slices(&state.normalized_goal, max_features)
+        }
     } else {
         Vec::new()
     };
@@ -248,6 +283,6 @@ async fn write_task_graph(state: &GoalState, generated_at: DateTime<Utc>) -> Res
         generated_at,
         tasks,
     };
-    write_json_artifact(&state.state_dir.join(GOAL_TASK_GRAPH_FILE), &graph).await?;
+    graph.save(&state.state_dir).await?;
     Ok(graph)
 }

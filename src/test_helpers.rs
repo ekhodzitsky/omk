@@ -21,6 +21,11 @@ use crate::wire::protocol::{
 // Isolated XDG environment
 // ---------------------------------------------------------------------------
 
+/// Global mutex for tests that mutate `XDG_STATE_HOME` / `HOME` env vars.
+/// Acquire this before calling [`isolated_xdg_env`] and releasing after
+/// cleanup to prevent cross-test races.
+pub static TEST_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Sets up isolated `HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`,
 /// `XDG_DATA_HOME`, and `XDG_CACHE_HOME` inside a temporary directory.
 ///
@@ -93,7 +98,7 @@ impl WireClient for MockWireClient {
         self.inner.next_id()
     }
 
-    async fn send_request<Params: serde::Serialize>(
+    async fn send_request<Params: serde::Serialize + Sync>(
         &mut self,
         req: &JsonRpcRequest<Params>,
     ) -> anyhow::Result<()> {
@@ -111,14 +116,14 @@ impl WireClient for MockWireClient {
         self.inner.read_message_timeout(timeout).await
     }
 
-    async fn read_response<T: serde::de::DeserializeOwned>(
+    async fn read_response<T: serde::de::DeserializeOwned + Send>(
         &mut self,
         expected_id: &str,
     ) -> anyhow::Result<T> {
         self.inner.read_response(expected_id).await
     }
 
-    async fn send_response<T: serde::Serialize>(
+    async fn send_response<T: serde::Serialize + Send>(
         &mut self,
         id: &str,
         result: T,

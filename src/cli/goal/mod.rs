@@ -228,12 +228,15 @@ pub(crate) enum GoalCommands {
         #[arg(default_value = "latest", value_name = "GOAL_ID")]
         goal_id: String,
     },
-    /// Resume a paused goal
+    /// Resume a paused or orphaned goal
     #[command(after_help = help::GOAL_RESUME_AFTER_HELP)]
     Resume {
         /// Goal ID or "latest"
         #[arg(default_value = "latest", value_name = "GOAL_ID")]
         goal_id: String,
+        /// Automatically resume all orphaned goals (dead controller PID)
+        #[arg(long)]
+        auto: bool,
     },
     /// Cancel a goal and record a failure artifact
     #[command(after_help = help::GOAL_CANCEL_AFTER_HELP)]
@@ -383,9 +386,13 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             let goal_id = validate_goal_id(&goal_id)?;
             commands::cmd_pause(goal_id).await
         }
-        GoalCommands::Resume { goal_id } => {
-            let goal_id = validate_goal_id(&goal_id)?;
-            commands::cmd_resume(goal_id).await
+        GoalCommands::Resume { goal_id, auto } => {
+            if auto {
+                commands::cmd_resume_auto().await
+            } else {
+                let goal_id = validate_goal_id(&goal_id)?;
+                commands::cmd_resume(goal_id).await
+            }
         }
         GoalCommands::Cancel { goal_id } => {
             let goal_id = validate_goal_id(&goal_id)?;

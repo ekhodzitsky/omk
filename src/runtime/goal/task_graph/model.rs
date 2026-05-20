@@ -67,6 +67,24 @@ pub struct GoalTaskGraph {
 
 impl GoalTaskGraph {
     pub async fn load(goal_dir: &Path) -> Result<Self> {
+        // Try DB first, then fallback to JSON.
+        let goal_id = goal_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        match super::db::try_load_from_db(goal_id).await {
+            Ok(Some(graph)) => {
+                graph
+                    .validate()
+                    .with_context(|| format!("Invalid DB goal task graph for {}", goal_id))?;
+                return Ok(graph);
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(goal_id, error = %e, "DB task graph load failed; falling back to JSON");
+            }
+        }
+
         let path = goal_dir.join(GOAL_TASK_GRAPH_FILE);
         let json = tokio::fs::read_to_string(&path)
             .await
@@ -77,6 +95,28 @@ impl GoalTaskGraph {
             .validate()
             .with_context(|| format!("Invalid goal task graph: {}", path.display()))?;
         Ok(graph)
+    }
+
+    /// Persist to DB (primary) and JSON (backup).
+    ///
+    /// JSON is written through the artifact pipeline so that sidecar metadata
+    /// (e.g. `delivery` on task nodes) is preserved even though it is not
+    /// represented in the typed `GoalTask` struct.
+    pub async fn save(&self, goal_dir: &Path) -> Result<()> {
+        let path = goal_dir.join(GOAL_TASK_GRAPH_FILE);
+        crate::runtime::goal::proof::write_json_artifact(&path, self).await?;
+
+        match super::db::try_save_to_db(self).await {
+            Ok(()) => {}
+            Err(e) => {
+                tracing::warn!(
+                    goal_id = %self.goal_id,
+                    error = %e,
+                    "DB task graph save failed; JSON backup written"
+                );
+            }
+        }
+        Ok(())
     }
 
     pub fn validate(&self) -> Result<()> {

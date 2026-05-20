@@ -12,4 +12,18 @@
 - [x] Add golden tests for proof reconciliation
 - [x] Split `wave.rs` into `wave/{mod,policy,runner,results}.rs`
 
+## Done (DB Integration)
+- [x] Wire `src/runtime/db/` into `GoalStateStore` — dual-write SQLite + JSON fallback
+- [x] Wire `src/runtime/db/` into `GoalTaskGraph::load/save` — dual-write SQLite + JSON fallback
+- [x] Add `upsert` to `GoalRepo`
+- [x] Unit tests for DB-backed state and task graph roundtrips
+
+## Done (Crash Recovery / Supervisor)
+- [x] `GoalRepo::update_controller_pid` + `heartbeat` + `list_running`
+- [x] `supervisor::claim_goal` / `release_goal` with PID + heartbeat loop
+- [x] `supervisor::list_orphaned_goals` — dead-PID + stale-heartbeat detection
+- [x] Integrate claim/release into `execute_goal_with_dispatcher`
+- [x] CLI: `omk goal resume --auto`
+- [x] Unit tests for supervisor logic
+
 ## Later

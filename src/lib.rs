@@ -12,6 +12,7 @@ pub mod cost;
 pub mod error;
 pub mod git;
 pub mod kimi_native;
+pub mod llm;
 pub mod marketplace;
 pub mod mcp;
 pub mod notifications;
