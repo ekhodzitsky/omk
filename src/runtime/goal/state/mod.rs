@@ -1,5 +1,5 @@
 mod constants;
-mod db_store;
+pub(crate) mod db_store;
 mod duration;
 mod error;
 mod path;
@@ -19,8 +19,6 @@ pub use constants::{
 };
 pub use error::GoalStateError;
 pub(super) use persistence::goals_dir;
-#[allow(unused_imports)]
-pub(crate) use db_store::DbGoalStateStore;
 pub use db_store::goals_db_path;
 pub use store::{FileSystemGoalStateStore, GoalStateStore};
 

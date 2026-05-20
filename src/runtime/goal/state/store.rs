@@ -6,6 +6,7 @@ use std::collections::HashMap;
 #[cfg(test)]
 use std::path::PathBuf;
 
+use super::constants::GOAL_STATE_FILE;
 use super::error::GoalStateError;
 use super::types::GoalState;
 
@@ -101,7 +102,7 @@ impl GoalStateStore for FileSystemGoalStateStore {
         }
         Err(GoalStateError::MissingFile {
             path: goal_dir
-                .join(super::constants::GOAL_STATE_FILE)
+                .join(GOAL_STATE_FILE)
                 .to_string_lossy()
                 .to_string(),
         }
@@ -119,7 +120,6 @@ impl GoalStateStore for FileSystemGoalStateStore {
             Err(e) => tracing::warn!(error = %e, "Failed to open goals DB; falling back to JSON"),
         }
 
-        // Fallback: original JSON filesystem scan.
         let dir = super::persistence::goals_dir();
         if !dir.exists() {
             return Ok(Vec::new());

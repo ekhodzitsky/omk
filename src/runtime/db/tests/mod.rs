@@ -18,7 +18,7 @@ pub(crate) fn test_goal() -> GoalRecord {
         until_ready: false,
         slice_execution: false,
         max_agents: Some(4),
-        budget_time_secs: Some(3600),
+        budget_time: Some("1h".to_string()),
         budget_tokens: Some(1_000_000),
         budget_usd: Some(500),
         cost_tracker_path: None,
@@ -83,5 +83,6 @@ async fn test_open_create_migrate() {
 
 mod concurrent;
 mod crud;
+mod decision;
 mod misc;
 mod transaction;

@@ -4,7 +4,6 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::path::PathBuf;
-use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct GoalDecisionRecord {
@@ -95,6 +94,19 @@ pub(crate) async fn append_controller_scaffold_decisions(
 }
 
 async fn append_goal_decisions(state: &GoalState, decisions: &[GoalDecisionRecord]) -> Result<()> {
+    if let Some(db) = crate::runtime::db::global_db() {
+        use crate::runtime::db::DecisionRepo;
+        for decision in decisions {
+            let record = decision_to_record(decision)?;
+            db.decision_repo()
+                .append(&record)
+                .await
+                .map_err(|e| anyhow::anyhow!("db error: {e}"))?;
+        }
+        return Ok(());
+    }
+
+    // Fallback to JSONL when global DB is not initialized.
     let mut buffer = Vec::new();
     for decision in decisions {
         serde_json::to_writer(&mut buffer, decision)?;
@@ -106,7 +118,25 @@ async fn append_goal_decisions(state: &GoalState, decisions: &[GoalDecisionRecor
         .append(true)
         .open(state.state_dir.join(GOAL_DECISIONS_FILE))
         .await?;
-    file.write_all(&buffer).await?;
-    file.flush().await?;
+    tokio::io::AsyncWriteExt::write_all(&mut file, &buffer).await?;
+    tokio::io::AsyncWriteExt::flush(&mut file).await?;
     Ok(())
+}
+
+fn decision_to_record(
+    decision: &GoalDecisionRecord,
+) -> Result<crate::runtime::db::types::DecisionRecord> {
+    Ok(crate::runtime::db::types::DecisionRecord {
+        decision_id: None,
+        goal_id: decision.goal_id.clone(),
+        version: decision.version as i32,
+        actor: decision.actor.clone(),
+        phase: decision.phase.to_string(),
+        kind: decision.kind.clone(),
+        decision: decision.decision.clone(),
+        rationale: decision.rationale.clone(),
+        constraints: Some(serde_json::to_string(&decision.constraints)?),
+        artifacts: Some(serde_json::to_string(&decision.artifacts)?),
+        created_at: decision.created_at.timestamp(),
+    })
 }

@@ -1,4 +1,3 @@
-mod db;
 mod delivery;
 mod model;
 mod mutation;

@@ -135,59 +135,126 @@ fn redact_event(event: &Event) -> Event {
     event
 }
 
-/// Append-only JSONL writer for [`Event`] records.
+/// Append-only writer for [`Event`] records.
 ///
-/// Internally backed by a [`JsonlWriter`] actor so concurrent appends across
-/// any number of clones are guaranteed to be line-atomic and ordered.
+/// When a global SQLite database is initialized, events for goal directories
+/// are written to the `events` table instead of a JSONL file. Otherwise falls
+/// back to the original [`JsonlWriter`] file behaviour.
 #[derive(Clone, Debug)]
 pub struct EventWriter {
-    inner: JsonlWriter,
+    backend: EventWriterBackend,
+}
+
+#[derive(Clone, Debug)]
+enum EventWriterBackend {
+    File(JsonlWriter),
+    Db {
+        db: crate::runtime::db::DbHandle,
+        goal_id: String,
+    },
 }
 
 impl EventWriter {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self {
-            inner: JsonlWriter::new(path),
+            backend: Self::backend_for_path(path.into(), JsonlWriter::new),
         }
     }
 
     pub fn new_with_cancel(path: impl Into<PathBuf>, cancel_token: CancellationToken) -> Self {
         Self {
-            inner: JsonlWriter::new_with_cancel(path, cancel_token),
+            backend: Self::backend_for_path(path.into(), |p| {
+                JsonlWriter::new_with_cancel(p, cancel_token)
+            }),
         }
+    }
+
+    fn backend_for_path(
+        path: PathBuf,
+        make_file: impl FnOnce(PathBuf) -> JsonlWriter,
+    ) -> EventWriterBackend {
+        if let Some(db) = crate::runtime::db::global_db() {
+            if let Some(goal_id) = path
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+            {
+                if path.file_name() == Some(std::ffi::OsStr::new("events.jsonl")) {
+                    return EventWriterBackend::Db {
+                        db,
+                        goal_id: goal_id.to_string(),
+                    };
+                }
+            }
+        }
+        EventWriterBackend::File(make_file(path))
     }
 
     /// Serialize one event and append it.
     pub async fn append(&self, event: &Event) -> Result<()> {
         let event = redact_event(event);
-        let mut buf = serde_json::to_vec(&event)
-            .with_context(|| format!("failed to serialize event {}", event.id))?;
-        buf.push(b'\n');
-        self.inner
-            .append_line(buf)
-            .await
-            .with_context(|| format!("failed to append event {}", event.id))?;
-        debug!(event_id = %event.id, "Appended event");
+        match &self.backend {
+            EventWriterBackend::File(writer) => {
+                let mut buf = serde_json::to_vec(&event)
+                    .with_context(|| format!("failed to serialize event {}", event.id))?;
+                buf.push(b'\n');
+                writer
+                    .append_line(buf)
+                    .await
+                    .with_context(|| format!("failed to append event {}", event.id))?;
+                debug!(event_id = %event.id, "Appended event");
+            }
+            EventWriterBackend::Db { db, goal_id } => {
+                self.append_event_to_db(db, goal_id, &event).await?;
+            }
+        }
         Ok(())
     }
 
     /// Serialize many events and append them as a single contiguous batch.
-    ///
-    /// The batch is sent as one message to the writer actor, so all events
-    /// in the batch are guaranteed to land contiguously in the file with
-    /// no interleaving from concurrent producers.
     pub async fn append_many(&self, events: &[Event]) -> Result<()> {
-        let mut buffer = Vec::new();
-        for event in events {
-            let event = redact_event(event);
-            serde_json::to_writer(&mut buffer, &event)
-                .with_context(|| format!("failed to serialize event {}", event.id))?;
-            buffer.push(b'\n');
+        match &self.backend {
+            EventWriterBackend::File(writer) => {
+                let mut buffer = Vec::new();
+                for event in events {
+                    let event = redact_event(event);
+                    serde_json::to_writer(&mut buffer, &event)
+                        .with_context(|| format!("failed to serialize event {}", event.id))?;
+                    buffer.push(b'\n');
+                }
+                writer.append_line(buffer).await.with_context(|| {
+                    format!("failed to append batch of {} events", events.len())
+                })?;
+            }
+            EventWriterBackend::Db { db, goal_id } => {
+                for event in events {
+                    let event = redact_event(event);
+                    self.append_event_to_db(db, goal_id, &event).await?;
+                }
+            }
         }
-        self.inner
-            .append_line(buffer)
+        Ok(())
+    }
+
+    async fn append_event_to_db(
+        &self,
+        db: &crate::runtime::db::DbHandle,
+        goal_id: &str,
+        event: &Event,
+    ) -> Result<()> {
+        use crate::runtime::db::EventRepo;
+        let payload = serde_json::to_string(event)
+            .with_context(|| format!("failed to serialize event {}", event.id))?;
+        let kind = serde_json::to_value(&event.kind)?
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string();
+        db.event_repo()
+            .append(goal_id, &kind, &payload)
             .await
-            .with_context(|| format!("failed to append batch of {} events", events.len()))
+            .map_err(|e| anyhow!("db error: {e}"))?;
+        debug!(event_id = %event.id, goal_id = %goal_id, "Appended event to DB");
+        Ok(())
     }
 }
 

@@ -155,7 +155,7 @@ mod tests {
             until_ready: false,
             slice_execution: false,
             max_agents: None,
-            budget_time_secs: None,
+            budget_time: None,
             budget_tokens: None,
             budget_usd: None,
             cost_tracker_path: None,

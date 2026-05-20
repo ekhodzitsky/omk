@@ -39,6 +39,10 @@ async fn test_cascading_delete() {
             known_gaps: None,
             human_decisions_required: None,
             recovery_status: None,
+            delivery_metadata: None,
+            review_artifacts: None,
+            integration_evidence: None,
+            oracle_evidence: None,
             generated_at: 1,
         })
         .await
