@@ -16,7 +16,7 @@ use crate::runtime::gates::{gates_passed, GateResult};
 
 mod artifact;
 mod review;
-mod sidecar;
+pub(crate) mod sidecar;
 mod status;
 
 pub(crate) use artifact::write_json_artifact;
@@ -113,6 +113,14 @@ impl Serialize for GoalProof {
 
 impl GoalProof {
     pub async fn load(goal_dir: &Path) -> Result<Self> {
+        if let Some(db) = crate::runtime::db::global_db() {
+            if let Some(goal_id) = goal_dir.file_name().and_then(|n| n.to_str()) {
+                if let Some(proof) = crate::runtime::goal::state::db_store::load_proof_from_db(&db, goal_id).await? {
+                    return Ok(proof);
+                }
+            }
+        }
+
         let path = goal_dir.join(GOAL_PROOF_FILE);
         let json = tokio::fs::read_to_string(&path)
             .await

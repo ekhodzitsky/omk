@@ -24,6 +24,21 @@ use repo::{
     event::EventRepoImpl, goal::GoalRepoImpl, proof::ProofRepoImpl, task::TaskRepoImpl,
 };
 
+use std::sync::OnceLock;
+
+static GLOBAL_DB: OnceLock<DbHandle> = OnceLock::new();
+
+/// Set the global database handle used by runtime/goal code that does not
+/// receive an explicit `DbHandle` parameter. Called once during app startup.
+pub fn set_global_db(db: DbHandle) -> Result<(), DbHandle> {
+    GLOBAL_DB.set(db)
+}
+
+/// Access the global database handle, if one has been set.
+pub fn global_db() -> Option<DbHandle> {
+    GLOBAL_DB.get().cloned()
+}
+
 impl DbHandle {
     /// Access the goal repository directly (auto-commit mode).
     pub fn goal_repo(&self) -> GoalRepoImpl {

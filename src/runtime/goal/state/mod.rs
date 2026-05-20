@@ -1,5 +1,5 @@
 mod constants;
-mod db_store;
+pub(crate) mod db_store;
 mod duration;
 mod error;
 mod path;
