@@ -148,6 +148,7 @@ pub struct CreateGoalOptions {
     pub delivery_policy: super::super::GoalDeliveryPolicy,
     pub merge_policy: super::super::GoalMergePolicy,
     pub slice_execution: bool,
+    pub enforce_protection: bool,
 }
 
 impl Default for CreateGoalOptions {
@@ -161,6 +162,7 @@ impl Default for CreateGoalOptions {
             delivery_policy: super::super::GoalDeliveryPolicy::Local,
             merge_policy: super::super::GoalMergePolicy::Disabled,
             slice_execution: false,
+            enforce_protection: false,
         }
     }
 }

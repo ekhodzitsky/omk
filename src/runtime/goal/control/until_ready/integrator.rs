@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 
 use crate::runtime::events::{Event, EventKind, EventWriter, RunId};
 use crate::runtime::goal::delivery::{
-    poll_github_pr_checks, GoalDeliveryPolicy, GoalGithubPrClient, GoalMergePolicy,
+    ensure_branch_protection, parse_github_owner_repo, poll_github_pr_checks,
+    BranchProtectionPolicy, GoalDeliveryPolicy, GoalGithubPrClient, GoalMergePolicy,
 };
 use crate::runtime::goal::proof::GoalProof;
 use crate::runtime::goal::state::{
@@ -31,6 +32,7 @@ pub(crate) async fn finalize_slice_integrator(
     mut steps: Vec<GoalControllerStep>,
     policy: GoalDeliveryPolicy,
     merge_policy: GoalMergePolicy,
+    enforce_protection: bool,
     project_dir: &Path,
 ) -> Result<GoalRunUntilReadyOutcome> {
     let mut state = crate::runtime::goal::resolve_goal(goal_id).await?;
@@ -138,6 +140,70 @@ pub(crate) async fn finalize_slice_integrator(
         let _ = integrator_event_writer.append(&event).await;
     }
 
+    // Enforce branch protection on main/master when explicitly requested.
+    if enforce_protection && (base_branch == "main" || base_branch == "master") {
+        let remote_url = match crate::git::GitRepo::open(project_dir) {
+            Ok(repo) => match repo.remote_url("origin").await {
+                Ok(Some(url)) => url,
+                Ok(None) => {
+                    return finalize_until_ready_blocker(
+                        goal_id,
+                        steps,
+                        UntilReadyBlocker::policy(
+                            "branch protection enforcement failed: no origin remote URL",
+                        ),
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    return finalize_until_ready_blocker(
+                        goal_id,
+                        steps,
+                        UntilReadyBlocker::policy(format!("branch protection enforcement failed: could not read origin remote ({e})")),
+                    ).await;
+                }
+            },
+            Err(e) => {
+                return finalize_until_ready_blocker(
+                    goal_id,
+                    steps,
+                    UntilReadyBlocker::policy(format!(
+                        "branch protection enforcement failed: could not open git repo ({e})"
+                    )),
+                )
+                .await;
+            }
+        };
+        let (owner, repo) = match parse_github_owner_repo(&remote_url) {
+            Some(pair) => pair,
+            None => {
+                return finalize_until_ready_blocker(
+                    goal_id,
+                    steps,
+                    UntilReadyBlocker::policy(format!("branch protection enforcement failed: could not parse owner/repo from remote URL: {remote_url}")),
+                ).await;
+            }
+        };
+        let gate_config = crate::runtime::gates::load_or_detect_gates(project_dir).await;
+        let required_status_checks: Vec<String> = gate_config
+            .gates
+            .iter()
+            .filter(|g| g.required)
+            .map(|g| g.name.clone())
+            .collect();
+        let policy = BranchProtectionPolicy {
+            required_status_checks,
+            ..Default::default()
+        };
+        if let Err(e) = ensure_branch_protection(&owner, &repo, &base_branch, &policy).await {
+            return finalize_until_ready_blocker(
+                goal_id,
+                steps,
+                UntilReadyBlocker::policy(format!("branch protection enforcement failed: {e}")),
+            )
+            .await;
+        }
+    }
     let (pr_outcome, mut client) = match create_integrator_pr(
         &state,
         &slice_branches,

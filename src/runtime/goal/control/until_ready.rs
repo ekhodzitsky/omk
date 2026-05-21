@@ -162,6 +162,7 @@ pub(crate) async fn run_goal_until_ready(
                 steps,
                 options.delivery_policy,
                 options.merge_policy,
+                options.enforce_protection,
                 project_dir,
             )
             .await;
@@ -171,6 +172,7 @@ pub(crate) async fn run_goal_until_ready(
             steps,
             options.delivery_policy,
             options.merge_policy,
+            options.enforce_protection,
             project_dir,
         )
         .await;

@@ -72,6 +72,9 @@ pub(crate) enum GoalCommands {
         /// Run agents in per-slice git worktrees instead of the main repo
         #[arg(long)]
         slice_execution: bool,
+        /// Enforce GitHub branch protection on main/master before integrator PR
+        #[arg(long)]
+        enforce_protection: bool,
     },
     /// Create a durable plan/proof scaffold without execution intent
     #[command(after_help = help::GOAL_PLAN_AFTER_HELP)]
@@ -266,6 +269,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             policy,
             merge_policy,
             slice_execution,
+            enforce_protection,
         } => {
             let goal = validate_goal_text(&goal)?;
             let budget_time = validate_budget_time(budget_time.as_deref(), "--budget-time", false)?;
@@ -283,6 +287,7 @@ pub(crate) async fn run(args: Args) -> Result<()> {
                     delivery_policy: map_open_pr_policy(policy),
                     merge_policy: map_merge_policy(merge_policy),
                     slice_execution,
+                    enforce_protection,
                 },
             )
             .await

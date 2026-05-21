@@ -25,6 +25,7 @@ pub(crate) async fn finalize_until_ready_delivery(
     mut steps: Vec<GoalControllerStep>,
     policy: GoalDeliveryPolicy,
     merge_policy: GoalMergePolicy,
+    enforce_protection: bool,
     project_dir: &Path,
 ) -> Result<GoalRunUntilReadyOutcome> {
     let state = crate::runtime::goal::resolve_goal(goal_id).await?;
@@ -35,6 +36,7 @@ pub(crate) async fn finalize_until_ready_delivery(
             steps,
             policy,
             merge_policy,
+            enforce_protection,
             project_dir,
         )
         .await;

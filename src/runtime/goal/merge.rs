@@ -319,6 +319,7 @@ mod tests {
                 delivery_policy: crate::runtime::goal::GoalDeliveryPolicy::Local,
                 merge_policy: GoalMergePolicy::Gated,
                 slice_execution: false,
+                enforce_protection: false,
             },
             None,
         )
@@ -360,6 +361,7 @@ mod tests {
                 delivery_policy: crate::runtime::goal::GoalDeliveryPolicy::Local,
                 merge_policy: GoalMergePolicy::Disabled,
                 slice_execution: false,
+                enforce_protection: false,
             },
             None,
         )
