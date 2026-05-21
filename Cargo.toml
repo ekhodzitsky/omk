@@ -92,6 +92,7 @@ tiktoken-rs = "0.6"
 
 # Async cache for compiled skill regexes and tokeniser state
 moka = { version = "0.12", features = ["future"] }
+lru = "0.18"
 
 # Tree-sitter parsing for language-aware context extraction
 tree-sitter = "0.25"
