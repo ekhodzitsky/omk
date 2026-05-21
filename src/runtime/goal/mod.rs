@@ -5,6 +5,7 @@ mod decision;
 mod delivery;
 mod dispatch;
 pub(crate) mod evidence;
+mod git_ops;
 mod integration;
 mod lifecycle;
 mod merge;
