@@ -1,5 +1,6 @@
 pub mod error;
 pub mod handle;
+pub mod migrations;
 pub mod repo;
 pub mod schema;
 pub mod transaction;

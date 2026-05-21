@@ -3,11 +3,8 @@ use std::path::Path;
 use tokio_rusqlite::Connection;
 
 use super::error::DbError;
-use super::schema::INITIAL_SCHEMA;
+use super::migrations::MigrationRunner;
 use super::transaction::DbTransaction;
-
-/// Target schema version. Bump this when adding new migrations.
-const TARGET_USER_VERSION: i32 = 1;
 
 /// A cloneable handle to a SQLite database.
 #[derive(Clone, Debug)]
@@ -23,14 +20,11 @@ impl DbHandle {
         let conn = Connection::open(path).await.map_err(DbError::Connection)?;
 
         conn.call(|conn| {
-            let current: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-            if current < TARGET_USER_VERSION {
-                conn.execute_batch(INITIAL_SCHEMA)?;
-            }
-            conn.execute(
-                &format!("PRAGMA user_version = {}", TARGET_USER_VERSION),
-                [],
-            )?;
+            let current: u32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+            let runner = MigrationRunner::default();
+            runner.run(conn, current).map_err(|e| {
+                tokio_rusqlite::Error::Other(Box::new(std::io::Error::other(e.to_string())))
+            })?;
             Ok(())
         })
         .await
