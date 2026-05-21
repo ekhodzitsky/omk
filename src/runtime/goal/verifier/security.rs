@@ -99,7 +99,10 @@ pub(crate) async fn scan_goal_security_findings_structured(
                 path: changed_file.to_string(),
                 kind: SecurityFindingKind::OversizedFile,
                 line: None,
-                evidence_snippet: Some(format!("file size {} bytes exceeds 512 KiB", metadata.len())),
+                evidence_snippet: Some(format!(
+                    "file size {} bytes exceeds 512 KiB",
+                    metadata.len()
+                )),
             });
             continue;
         }

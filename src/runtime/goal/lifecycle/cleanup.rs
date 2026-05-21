@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use crate::runtime::goal::state::{GoalState, GoalStatus};
-use crate::runtime::goal::task_graph::{GoalDeliverySlice, GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus};
-use crate::runtime::goal::verifier::{
-    scan_goal_security_findings_structured, SecurityFinding,
+use crate::runtime::goal::task_graph::{
+    GoalDeliverySlice, GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus,
 };
+use crate::runtime::goal::verifier::{scan_goal_security_findings_structured, SecurityFinding};
 use crate::runtime::goal::{evidence, proof, review, state, task_graph};
 
 pub(crate) async fn process_slice_delivery_and_review(
@@ -427,11 +427,7 @@ pub(crate) fn spawn_security_cleanup_task_from_findings(
 
     // Upsert pattern: update existing task if description changed, otherwise
     // create new.
-    if let Some(existing) = task_graph
-        .tasks
-        .iter_mut()
-        .find(|t| t.id == task_id)
-    {
+    if let Some(existing) = task_graph.tasks.iter_mut().find(|t| t.id == task_id) {
         if existing.description != description {
             existing.description = description;
             existing.status = GoalTaskStatus::Pending;
@@ -473,14 +469,8 @@ pub(crate) fn spawn_security_cleanup_task_from_findings(
 
     // Make the slice task depend on the cleanup task so it cannot be
     // re-delivered until cleanup is done.
-    if let Some(slice_task) = task_graph
-        .tasks
-        .iter_mut()
-        .find(|t| t.id == slice_task_id)
-    {
-        slice_task
-            .dependencies
-            .push(task_id.clone());
+    if let Some(slice_task) = task_graph.tasks.iter_mut().find(|t| t.id == slice_task_id) {
+        slice_task.dependencies.push(task_id.clone());
         slice_task.status = GoalTaskStatus::Pending;
     }
 
