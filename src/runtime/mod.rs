@@ -1,6 +1,7 @@
 pub mod ask;
 pub mod atomic;
 pub mod autopilot;
+pub mod classifier;
 pub mod config;
 pub mod db;
 pub mod events;
