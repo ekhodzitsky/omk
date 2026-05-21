@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use crate::runtime::goal::state::{GoalState, GoalStatus};
-use crate::runtime::goal::task_graph::{GoalDeliverySlice, GoalTaskGraph, GoalTaskStatus};
+use crate::runtime::goal::task_graph::{
+    GoalDeliverySlice, GoalTask, GoalTaskEvidence, GoalTaskGraph, GoalTaskStatus,
+};
+use crate::runtime::goal::verifier::{scan_goal_security_findings_structured, SecurityFinding};
 use crate::runtime::goal::{evidence, proof, review, state, task_graph};
 
 pub(crate) async fn process_slice_delivery_and_review(
@@ -75,6 +78,48 @@ pub(crate) async fn process_slice_delivery_and_review(
                 serde_json::Value::String(format!(
                     "Anti-slop review found {} rough edge(s). Refactor task spawned for slice {}.",
                     slop_findings.len(),
+                    slice.task_id
+                )),
+            );
+        }
+
+        // Spawn a security cleanup task whenever security findings are present.
+        let changed_files = crate::runtime::gates::detect_changed_files(exec_project_dir).await;
+        let security_findings =
+            scan_goal_security_findings_structured(exec_project_dir, &changed_files).await?;
+        if !security_findings.is_empty() {
+            if let Some(security_task_id) = spawn_security_cleanup_task_from_findings(
+                task_graph,
+                &slice.task_id,
+                &security_findings,
+                &changed_files,
+                chrono::Utc::now(),
+            ) {
+                let writer = crate::runtime::events::EventWriter::new(
+                    state.state_dir.join(crate::runtime::config::EVENTS_FILE),
+                );
+                if let Ok(event) = crate::runtime::events::Event::new(
+                    crate::runtime::events::RunId(state.goal_id.clone()),
+                    crate::runtime::events::EventKind::TaskGraphMutated,
+                )
+                .with_actor(state::GOAL_CONTROLLER_ACTOR)
+                .with_payload(crate::runtime::events::TaskGraphMutationPayload {
+                    action: "task_added".to_string(),
+                    source: "security_cleanup".to_string(),
+                    task_id: crate::runtime::events::TaskId(security_task_id),
+                    task_graph_path: PathBuf::from(state::GOAL_TASK_GRAPH_FILE),
+                    proposal_path: PathBuf::new(),
+                    total_tasks_after: task_graph.tasks.len(),
+                }) {
+                    let _ = writer.append(&event).await;
+                }
+            }
+
+            extra.insert(
+                "review_feedback".to_string(),
+                serde_json::Value::String(format!(
+                    "Security review found {} high-confidence secret marker(s). Security cleanup task spawned for slice {}.",
+                    security_findings.len(),
                     slice.task_id
                 )),
             );
@@ -359,4 +404,240 @@ pub(crate) async fn append_proof_event(
             &proof.status.to_string(),
         )?)
         .await
+}
+
+pub(crate) fn spawn_security_cleanup_task_from_findings(
+    task_graph: &mut GoalTaskGraph,
+    slice_task_id: &str,
+    findings: &[SecurityFinding],
+    _changed_files: &[String],
+    generated_at: chrono::DateTime<chrono::Utc>,
+) -> Option<String> {
+    let actionable: Vec<&SecurityFinding> = findings
+        .iter()
+        .filter(|f| !f.kind.is_quarantine_only())
+        .collect();
+    if actionable.is_empty() {
+        return None;
+    }
+
+    let kind = "security-cleanup";
+    let task_id = format!("goal-agent-{kind}-{slice_task_id}");
+    let description = build_security_cleanup_description(&actionable);
+
+    // Upsert pattern: update existing task if description changed, otherwise
+    // create new.
+    if let Some(existing) = task_graph.tasks.iter_mut().find(|t| t.id == task_id) {
+        if existing.description != description {
+            existing.description = description;
+            existing.status = GoalTaskStatus::Pending;
+            existing.completed_at = None;
+            existing.retry_count = 0;
+        }
+        return Some(task_id);
+    }
+
+    let new_task = GoalTask {
+        id: task_id.clone(),
+        title: "Security cleanup".to_string(),
+        description,
+        status: GoalTaskStatus::Pending,
+        owner_role: Some(kind.to_string()),
+        completed_at: None,
+        evidence: vec![GoalTaskEvidence {
+            kind: "security_verifier".to_string(),
+            path: PathBuf::new(),
+            summary: format!(
+                "kind={} generated_at={} findings_count={}",
+                kind,
+                generated_at.to_rfc3339(),
+                findings.len()
+            ),
+        }],
+        retry_count: 0,
+        max_retries: 3,
+        lease_expires_at: None,
+        dependencies: vec![slice_task_id.to_string()],
+        read_set: actionable.iter().map(|f| f.path.clone()).collect(),
+        write_set: actionable.iter().map(|f| f.path.clone()).collect(),
+        risk: "critical".to_string(),
+        acceptance: vec![
+            "All secret markers are removed or rotated".to_string(),
+            "No raw credentials remain in source files".to_string(),
+        ],
+    };
+
+    // Make the slice task depend on the cleanup task so it cannot be
+    // re-delivered until cleanup is done.
+    if let Some(slice_task) = task_graph.tasks.iter_mut().find(|t| t.id == slice_task_id) {
+        slice_task.dependencies.push(task_id.clone());
+        slice_task.status = GoalTaskStatus::Pending;
+    }
+
+    task_graph.tasks.push(new_task);
+    Some(task_id)
+}
+
+fn build_security_cleanup_description(findings: &[&SecurityFinding]) -> String {
+    use crate::wire::protocol::redact_wire_secrets;
+    let mut lines =
+        vec!["Auto-security-cleanup task generated from security verifier findings:".to_string()];
+    for finding in findings {
+        let location = finding
+            .line
+            .map(|l| format!("line {}", l))
+            .unwrap_or_else(|| "file level".to_string());
+        let redacted = finding
+            .evidence_snippet
+            .as_ref()
+            .map(|s| redact_wire_secrets(&serde_json::json!(s)).to_string())
+            .unwrap_or_default();
+        lines.push(format!(
+            "- [{}] {} at {}: {}",
+            finding.kind, finding.path, location, redacted
+        ));
+    }
+    lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::goal::verifier::SecurityFindingKind;
+    use chrono::Utc;
+
+    fn slice_task(id: &str) -> GoalTask {
+        GoalTask {
+            id: id.to_string(),
+            title: format!("Task {id}"),
+            description: format!("Task {id} description"),
+            status: GoalTaskStatus::Done,
+            owner_role: None,
+            completed_at: None,
+            evidence: Vec::new(),
+            retry_count: 0,
+            max_retries: 0,
+            lease_expires_at: None,
+            dependencies: Vec::new(),
+            read_set: Vec::new(),
+            write_set: Vec::new(),
+            risk: "low".to_string(),
+            acceptance: vec![format!("Task {id} acceptance")],
+        }
+    }
+
+    fn graph(tasks: Vec<GoalTask>) -> GoalTaskGraph {
+        GoalTaskGraph {
+            version: 1,
+            goal_id: "goal-test".to_string(),
+            generated_at: Utc::now(),
+            tasks,
+        }
+    }
+
+    #[test]
+    fn spawn_security_cleanup_returns_none_on_empty_findings() {
+        let mut tg = graph(vec![slice_task("slice-a")]);
+        let result = spawn_security_cleanup_task_from_findings(
+            &mut tg,
+            "slice-a",
+            &[],
+            &["src/main.rs".to_string()],
+            Utc::now(),
+        );
+        assert!(result.is_none());
+        assert_eq!(tg.tasks.len(), 1);
+    }
+
+    #[test]
+    fn spawn_security_cleanup_creates_task_for_private_key_finding() {
+        let mut tg = graph(vec![slice_task("slice-a")]);
+        let findings = vec![SecurityFinding {
+            path: "src/secrets.txt".to_string(),
+            kind: SecurityFindingKind::PrivateKey,
+            line: Some(5),
+            evidence_snippet: Some("-----BEGIN PRIVATE KEY-----".to_string()),
+        }];
+        let result = spawn_security_cleanup_task_from_findings(
+            &mut tg,
+            "slice-a",
+            &findings,
+            &["src/secrets.txt".to_string()],
+            Utc::now(),
+        );
+        assert_eq!(
+            result,
+            Some("goal-agent-security-cleanup-slice-a".to_string())
+        );
+        assert_eq!(tg.tasks.len(), 2);
+
+        let cleanup = tg
+            .tasks
+            .iter()
+            .find(|t| t.id == "goal-agent-security-cleanup-slice-a")
+            .expect("security cleanup task exists");
+        assert!(cleanup.description.contains("private_key"));
+        assert!(cleanup.description.contains("src/secrets.txt"));
+        assert!(cleanup.description.contains("line 5"));
+        assert_eq!(cleanup.status, GoalTaskStatus::Pending);
+        assert_eq!(cleanup.owner_role, Some("security-cleanup".to_string()));
+
+        let slice = tg
+            .tasks
+            .iter()
+            .find(|t| t.id == "slice-a")
+            .expect("slice task exists");
+        assert!(slice
+            .dependencies
+            .contains(&"goal-agent-security-cleanup-slice-a".to_string()));
+        assert_eq!(slice.status, GoalTaskStatus::Pending);
+    }
+
+    #[test]
+    fn spawn_security_cleanup_does_not_leak_secret_value_into_task_prompt() {
+        let mut tg = graph(vec![slice_task("slice-a")]);
+        let secret_value = "ghp_abcdefghijklmnopqrstuvwxyz123";
+        let findings = vec![SecurityFinding {
+            path: "src/config.rs".to_string(),
+            kind: SecurityFindingKind::SecretAssignment,
+            line: Some(10),
+            evidence_snippet: Some(format!("api_key = \"{secret_value}\"")),
+        }];
+        let result = spawn_security_cleanup_task_from_findings(
+            &mut tg,
+            "slice-a",
+            &findings,
+            &["src/config.rs".to_string()],
+            Utc::now(),
+        );
+        assert!(result.is_some());
+
+        let cleanup = tg
+            .tasks
+            .iter()
+            .find(|t| t.id == "goal-agent-security-cleanup-slice-a")
+            .unwrap();
+        assert!(!cleanup.description.contains(secret_value));
+        assert!(cleanup.description.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn spawn_security_cleanup_skips_quarantine_only_findings() {
+        let mut tg = graph(vec![slice_task("slice-a")]);
+        let findings = vec![SecurityFinding {
+            path: "src/huge.log".to_string(),
+            kind: SecurityFindingKind::OversizedFile,
+            line: None,
+            evidence_snippet: None,
+        }];
+        let result = spawn_security_cleanup_task_from_findings(
+            &mut tg,
+            "slice-a",
+            &findings,
+            &["src/huge.log".to_string()],
+            Utc::now(),
+        );
+        assert!(result.is_none());
+        assert_eq!(tg.tasks.len(), 1);
+    }
 }
