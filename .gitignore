@@ -32,3 +32,10 @@ Cargo.lock
 # Environment variables
 .env
 .env.*
+
+# Sibling reference clones — kept locally for comparison, not vendored.
+# Re-enable individually with `git add -f` if a real submodule is added later.
+/bernstein/
+/cline/
+/cli-agent-orchestrator/
+/SWE-agent/
