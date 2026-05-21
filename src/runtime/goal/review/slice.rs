@@ -14,6 +14,12 @@ use crate::runtime::goal::verifier::scan_goal_security_findings;
 /// Confidence threshold above which anti-slop issues are considered actionable.
 pub(crate) const ANTI_SLOP_ACTIONABLE_THRESHOLD: f64 = 0.5;
 
+/// Context passed to each review pass.
+/// Fields will be expanded by individual pass PRs as needed.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct SliceReviewContext;
+
 /// A single review pass artifact for a slice.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SliceReviewArtifact {
