@@ -112,3 +112,23 @@ tokio-console = ["dep:console-subscriber", "tokio/tracing"]
 criterion = { version = "0.8", features = ["async_tokio"] }
 assert_cmd = "2.0"
 predicates = "3.1"
+
+[[bench]]
+name = "event_writer_benchmark"
+path = "benches/event_writer_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "goal_task_graph_benchmark"
+path = "benches/goal_task_graph_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "redact_benchmark"
+path = "benches/redact_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "state_benchmark"
+path = "benches/state_benchmark.rs"
+harness = false
