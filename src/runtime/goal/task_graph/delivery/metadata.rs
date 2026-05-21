@@ -76,6 +76,15 @@ pub struct GoalTaskDeliveryMetadata {
     pub commit_sha: Option<String>,
     pub verification_summary: Option<String>,
     pub status: Option<GoalTaskDeliveryStatus>,
+    /// Path to the artifact recording why a slice merge was blocked
+    /// (used by worktree conflict detection and rollback flows).
+    pub conflict_evidence_path: Option<PathBuf>,
+    /// Human-readable summary of the blocking reason, persisted alongside
+    /// conflict_evidence_path so rollback plans can disambiguate causes.
+    pub conflict_blocking_reason: Option<String>,
+    /// Identifier of the active lease claiming this slice's write-set.
+    /// `None` when no agent currently owns the slice.
+    pub slice_lease_id: Option<String>,
     pub extra: Map<String, Value>,
 }
 
@@ -99,6 +108,10 @@ impl GoalTaskDeliveryMetadata {
         let commit_sha = take_string(&mut extra, "commit_sha");
         let verification_summary = take_string(&mut extra, "verification_summary");
         let status = take_string(&mut extra, "status").map(GoalTaskDeliveryStatus::from);
+        let conflict_evidence_path =
+            take_string(&mut extra, "conflict_evidence_path").map(PathBuf::from);
+        let conflict_blocking_reason = take_string(&mut extra, "conflict_blocking_reason");
+        let slice_lease_id = take_string(&mut extra, "slice_lease_id");
 
         Self {
             slice_id,
@@ -115,6 +128,9 @@ impl GoalTaskDeliveryMetadata {
             commit_sha,
             verification_summary,
             status,
+            conflict_evidence_path,
+            conflict_blocking_reason,
+            slice_lease_id,
             extra,
         }
     }
@@ -147,6 +163,25 @@ impl GoalTaskDeliveryMetadata {
             "status",
             self.status.as_ref().map(GoalTaskDeliveryStatus::as_str),
         );
+        let conflict_evidence_path = self
+            .conflict_evidence_path
+            .as_ref()
+            .map(|path| path.display().to_string());
+        insert_string(
+            &mut object,
+            "conflict_evidence_path",
+            conflict_evidence_path.as_deref(),
+        );
+        insert_string(
+            &mut object,
+            "conflict_blocking_reason",
+            self.conflict_blocking_reason.as_deref(),
+        );
+        insert_string(
+            &mut object,
+            "slice_lease_id",
+            self.slice_lease_id.as_deref(),
+        );
         Value::Object(object)
     }
 
@@ -175,6 +210,15 @@ impl GoalTaskDeliveryMetadata {
         replace_if_some(&mut self.commit_sha, update.commit_sha);
         replace_if_some(&mut self.verification_summary, update.verification_summary);
         replace_if_some(&mut self.status, update.status);
+        replace_if_some(
+            &mut self.conflict_evidence_path,
+            update.conflict_evidence_path,
+        );
+        replace_if_some(
+            &mut self.conflict_blocking_reason,
+            update.conflict_blocking_reason,
+        );
+        replace_if_some(&mut self.slice_lease_id, update.slice_lease_id);
         self.extra.extend(update.extra);
     }
 
@@ -235,6 +279,18 @@ pub struct GoalTaskDeliveryMetadataUpdate {
     pub verification_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<GoalTaskDeliveryStatus>,
+    /// Path to the artifact recording why a slice merge was blocked
+    /// (used by worktree conflict detection and rollback flows).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conflict_evidence_path: Option<PathBuf>,
+    /// Human-readable summary of the blocking reason, persisted alongside
+    /// conflict_evidence_path so rollback plans can disambiguate causes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conflict_blocking_reason: Option<String>,
+    /// Identifier of the active lease claiming this slice's write-set.
+    /// `None` when no agent currently owns the slice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slice_lease_id: Option<String>,
     #[serde(default, flatten)]
     pub extra: Map<String, Value>,
 }
@@ -286,5 +342,38 @@ fn insert_string_array(object: &mut Map<String, Value>, key: &str, value: &[Stri
 fn replace_if_some<T>(target: &mut Option<T>, value: Option<T>) {
     if let Some(value) = value {
         *target = Some(value);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metadata_roundtrip_with_none_extra_fields() {
+        let original = GoalTaskDeliveryMetadata {
+            slice_id: Some("slice-1".to_string()),
+            owner: Some("agent-a".to_string()),
+            read_scope: vec!["src/lib.rs".to_string()],
+            write_scope: vec!["src/main.rs".to_string()],
+            dependencies: vec!["dep-1".to_string()],
+            branch: Some("feature/foo".to_string()),
+            worktree_name: Some("wt-1".to_string()),
+            worktree_path: Some(PathBuf::from("/tmp/wt1")),
+            gates: vec!["test".to_string()],
+            review_needs: vec!["code".to_string()],
+            pr_url: Some("https://github.com/org/repo/pull/1".to_string()),
+            commit_sha: Some("abc123".to_string()),
+            verification_summary: Some("ok".to_string()),
+            status: Some(GoalTaskDeliveryStatus::InProgress),
+            conflict_evidence_path: None,
+            conflict_blocking_reason: None,
+            slice_lease_id: None,
+            extra: Map::new(),
+        };
+
+        let json = serde_json::to_value(&original).unwrap();
+        let deserialized: GoalTaskDeliveryMetadata = serde_json::from_value(json).unwrap();
+        assert_eq!(original, deserialized);
     }
 }
