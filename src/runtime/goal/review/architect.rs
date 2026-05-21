@@ -8,12 +8,17 @@ use crate::runtime::goal::review::slice::{
 
 /// Architecture review pass enforcing file-size budgets and cross-module
 /// import boundaries.
+///
+/// Defaults:
+/// - `max_file_loc`: 400 lines (AGENTS.md hard limit)
+/// - `forbidden_cross_module_imports`: empty (no restrictions)
+/// - `worktree_path`: `std::env::current_dir()` or `"."`
 pub struct ArchitectReviewPass {
     max_file_loc: usize,
-    #[allow(dead_code)]
-    max_module_dependencies: usize,
     forbidden_cross_module_imports: Vec<(String, String)>,
     worktree_path: PathBuf,
+    /// When set, bypasses `git status` and uses this exact list.
+    changed_files: Option<Vec<String>>,
 }
 
 #[allow(dead_code)]
@@ -25,68 +30,37 @@ impl ArchitectReviewPass {
         };
         Self {
             max_file_loc: 400,
-            max_module_dependencies: 15,
             forbidden_cross_module_imports: Vec::new(),
             worktree_path,
+            changed_files: None,
         }
     }
 
+    /// Set the maximum allowed lines of code for a single `.rs` file.
     pub fn with_max_file_loc(mut self, n: usize) -> Self {
         self.max_file_loc = n;
         self
     }
 
-    #[allow(dead_code)]
-    pub fn with_max_module_dependencies(mut self, n: usize) -> Self {
-        self.max_module_dependencies = n;
-        self
-    }
-
+    /// Set pairs of `(from_module, to_module)` that are architecturally
+    /// forbidden to import from one another.
     pub fn with_forbidden_cross_module_imports(mut self, pairs: Vec<(String, String)>) -> Self {
         self.forbidden_cross_module_imports = pairs;
         self
     }
 
+    /// Set the worktree path used to resolve relative file paths.
     pub fn with_worktree_path(mut self, path: impl AsRef<Path>) -> Self {
         self.worktree_path = path.as_ref().to_path_buf();
         self
     }
 
-    /// Detect changed files by running `git status --porcelain` in the
-    /// worktree.  Any failure (missing git, not a repo, etc.) returns an
-    /// empty list — a soft-fail so the pass never panics.
-    fn detect_changed_files(&self) -> Vec<String> {
-        let output = Command::new("git")
-            .args(["status", "--porcelain", "--untracked-files=all"])
-            .current_dir(&self.worktree_path)
-            .output();
-
-        match output {
-            Ok(o) if o.status.success() => {
-                let mut files: Vec<String> = String::from_utf8_lossy(&o.stdout)
-                    .lines()
-                    .filter_map(|line| {
-                        if line.len() < 4 {
-                            return None;
-                        }
-                        let path = line.get(3..)?.trim();
-                        if path.is_empty() {
-                            return None;
-                        }
-                        let path = path.split(" -> ").last().unwrap_or(path).trim_matches('"');
-                        if path.is_empty() {
-                            None
-                        } else {
-                            Some(path.to_string())
-                        }
-                    })
-                    .collect();
-                files.sort();
-                files.dedup();
-                files
-            }
-            _ => Vec::new(),
-        }
+    /// Override the list of changed files.  When set, the pass skips the
+    /// `git status` discovery step and uses this list directly.  Useful for
+    /// unit tests and for callers that already know the changed set.
+    pub fn with_changed_files(mut self, files: Vec<String>) -> Self {
+        self.changed_files = Some(files);
+        self
     }
 
     /// Check a single Rust source file against the configured rules.
@@ -97,15 +71,13 @@ impl ArchitectReviewPass {
         forbidden: &[(String, String)],
     ) -> Vec<String> {
         let mut findings = Vec::new();
-        let lines: Vec<&str> = content.lines().collect();
+        let line_count = content.lines().count();
 
         // File size budget.
-        if lines.len() > self.max_file_loc {
+        if line_count > self.max_file_loc {
             findings.push(format!(
                 "File {} has {} lines, exceeding architect budget of {}",
-                file_name,
-                lines.len(),
-                self.max_file_loc
+                file_name, line_count, self.max_file_loc
             ));
         }
 
@@ -114,7 +86,9 @@ impl ArchitectReviewPass {
             if !file_name.starts_with(from_mod) {
                 continue;
             }
-            for line in &lines {
+            let to_norm = to_mod.trim_end_matches('/');
+            let to_prefix = format!("{}/", to_norm);
+            for line in content.lines() {
                 let trimmed = line.trim();
                 if !trimmed.starts_with("use crate::")
                     && !trimmed.starts_with("pub use crate::")
@@ -126,12 +100,15 @@ impl ArchitectReviewPass {
                     let after = &trimmed[idx + "crate::".len()..];
                     let end = after.find([';', '{', '*', ',']).unwrap_or(after.len());
                     let import_path = after[..end].trim();
-                    // Strip optional `as` alias.
-                    let import_path = import_path.split_whitespace().next().unwrap_or(import_path);
+                    // Strip optional `as` alias and any stray spaces.
+                    let import_path = import_path
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or(import_path)
+                        .replace(" ", "");
                     let dir_path = format!("src/{}", import_path.replace("::", "/"));
                     let dir_norm = dir_path.trim_end_matches('/');
-                    let to_norm = to_mod.trim_end_matches('/');
-                    if dir_norm == to_norm || dir_norm.starts_with(&format!("{}/", to_norm)) {
+                    if dir_norm == to_norm || dir_norm.starts_with(&to_prefix) {
                         findings.push(format!(
                             "Forbidden import in {}: `{}` crosses into `{}`",
                             file_name, trimmed, to_mod
@@ -157,7 +134,10 @@ impl ReviewPass for ArchitectReviewPass {
     }
 
     fn run(&self, _ctx: &SliceReviewContext) -> SliceReviewOutcome {
-        let changed_files = self.detect_changed_files();
+        let changed_files = match &self.changed_files {
+            Some(files) => files.clone(),
+            None => detect_changed_files(&self.worktree_path),
+        };
         let mut all_findings: Vec<String> = Vec::new();
 
         let normalized_forbidden: Vec<(String, String)> = self
@@ -226,6 +206,45 @@ impl ReviewPass for ArchitectReviewPass {
     }
 }
 
+/// Detect changed files by running `git status --porcelain` in the
+/// worktree.  Any failure (missing git, not a repo, etc.) returns an
+/// empty list — a soft-fail so the caller never panics.
+fn detect_changed_files(worktree: &Path) -> Vec<String> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain", "--untracked-files=all"])
+        .current_dir(worktree)
+        .output();
+
+    match output {
+        Ok(o) if o.status.success() => {
+            let mut files: Vec<String> = String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .filter_map(parse_porcelain_path)
+                .collect();
+            files.sort();
+            files.dedup();
+            files
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn parse_porcelain_path(line: &str) -> Option<String> {
+    if line.len() < 4 {
+        return None;
+    }
+    let path = line.get(3..)?.trim();
+    if path.is_empty() {
+        return None;
+    }
+    let path = path.split(" -> ").last().unwrap_or(path).trim_matches('"');
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,14 +257,7 @@ mod tests {
 
     #[test]
     fn architect_passes_when_changed_files_empty() {
-        let tmp = tempfile::tempdir().unwrap();
-        Command::new("git")
-            .args(["init"])
-            .current_dir(tmp.path())
-            .output()
-            .expect("git must be available for tests");
-
-        let pass = ArchitectReviewPass::new().with_worktree_path(tmp.path());
+        let pass = ArchitectReviewPass::new().with_changed_files(Vec::new());
         let outcome = pass.run(&SliceReviewContext);
         assert!(outcome.passed);
         let artifact = outcome
@@ -260,15 +272,11 @@ mod tests {
     fn architect_passes_when_files_under_loc_limit() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("small.rs"), "fn main() {}\n").unwrap();
-        Command::new("git")
-            .args(["init"])
-            .current_dir(tmp.path())
-            .output()
-            .expect("git must be available for tests");
 
         let pass = ArchitectReviewPass::new()
             .with_max_file_loc(10)
-            .with_worktree_path(tmp.path());
+            .with_worktree_path(tmp.path())
+            .with_changed_files(vec!["small.rs".to_string()]);
         let outcome = pass.run(&SliceReviewContext);
         assert!(outcome.passed);
         let artifact = outcome
@@ -287,15 +295,11 @@ mod tests {
             content.push_str(&format!("line {i}\n"));
         }
         std::fs::write(tmp.path().join("big.rs"), content).unwrap();
-        Command::new("git")
-            .args(["init"])
-            .current_dir(tmp.path())
-            .output()
-            .expect("git must be available for tests");
 
         let pass = ArchitectReviewPass::new()
             .with_max_file_loc(10)
-            .with_worktree_path(tmp.path());
+            .with_worktree_path(tmp.path())
+            .with_changed_files(vec!["big.rs".to_string()]);
         let outcome = pass.run(&SliceReviewContext);
         assert!(!outcome.passed);
         let artifact = outcome
@@ -321,14 +325,10 @@ mod tests {
             "use crate::runtime::goal::state::GoalState;\nfn main() {}\n",
         )
         .unwrap();
-        Command::new("git")
-            .args(["init"])
-            .current_dir(tmp.path())
-            .output()
-            .expect("git must be available for tests");
 
         let pass = ArchitectReviewPass::new()
             .with_worktree_path(tmp.path())
+            .with_changed_files(vec!["src/cli/main.rs".to_string()])
             .with_forbidden_cross_module_imports(vec![(
                 "src/cli/".to_string(),
                 "src/runtime/goal/".to_string(),
@@ -346,5 +346,28 @@ mod tests {
             "expected forbidden-import finding, got: {}",
             artifact.feedback
         );
+    }
+
+    #[test]
+    fn architect_detects_changed_files_via_git() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("tracked.rs"), "fn main() {}\n").unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(tmp.path())
+            .output()
+            .expect("git must be available for tests");
+
+        let pass = ArchitectReviewPass::new()
+            .with_max_file_loc(10)
+            .with_worktree_path(tmp.path());
+        let outcome = pass.run(&SliceReviewContext);
+        assert!(outcome.passed);
+        let artifact = outcome
+            .artifacts
+            .iter()
+            .find(|a| a.kind == "architect")
+            .expect("architect artifact present");
+        assert!(artifact.passed);
     }
 }
