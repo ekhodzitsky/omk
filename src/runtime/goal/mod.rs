@@ -63,6 +63,13 @@ pub use task_graph::{
     GoalTaskDeliveryStatus, GoalTaskEvidence, GoalTaskGraph, GoalTaskGraphSummary, GoalTaskStatus,
 };
 pub use types::{GoalBudget, GoalControllerStepKind, GoalId};
+
+// Test-only helpers for integration tests.  Not for production use.
+#[doc(hidden)]
+pub use supervisor::test_goal_record;
+#[doc(hidden)]
+pub use supervisor::{claim_goal_for_test, list_orphaned_goals_for_test, release_goal_for_test};
+
 pub use worktree::{
     detect_goal_merge_conflicts, materialize_goal_worktrees, plan_goal_worktree,
     plan_goal_worktrees, GoalMergeConflictCheckRequest, GoalMergeConflictEvidence,
