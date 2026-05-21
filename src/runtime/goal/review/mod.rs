@@ -1,3 +1,4 @@
+pub mod architect;
 pub mod pass;
 mod slice;
 pub(crate) mod slop;
