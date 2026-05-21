@@ -43,35 +43,80 @@ impl Default for FileSystemGoalStateStore {
 
 impl GoalStateStore for FileSystemGoalStateStore {
     async fn save(&self, state: &GoalState) -> Result<()> {
-        let path = state.state_dir.join(GOAL_STATE_FILE);
-        let json = serde_json::to_string_pretty(state)?;
-        crate::runtime::atomic::atomic_write(&path, json.as_bytes()).await
+        // Primary: SQLite (best-effort; never blocks on DB errors).
+        match super::db_store::DbGoalStateStore::open().await {
+            Ok(db) => {
+                if let Err(e) = db.save(state).await {
+                    tracing::warn!(
+                        error = %e,
+                        goal_id = %state.goal_id,
+                        "DB goal save failed; keeping JSON backup only"
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to open goals DB; writing JSON backup only");
+            }
+        }
+
+        // Always write JSON backup for backward compatibility.
+        super::db_store::json_backup_save(state).await
     }
 
     async fn load(&self, goal_dir: &Path) -> Result<GoalState> {
-        let path = goal_dir.join(GOAL_STATE_FILE);
-        let json = tokio::fs::read_to_string(&path).await.map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                GoalStateError::MissingFile {
-                    path: path.display().to_string(),
-                }
-            } else {
-                GoalStateError::IoError {
-                    path: path.display().to_string(),
-                    reason: e.to_string(),
+        // Primary: JSON (canonical per-goal source of truth).
+        // DB is fallback only when the JSON file is missing, so that external
+        // tools which modify JSON directly continue to work and so that
+        // corrupted/unreadable JSON surfaces as a real error rather than being
+        // silently masked by a stale DB record.
+        match super::db_store::json_backup_load(goal_dir).await {
+            Ok(state) => return Ok(state),
+            Err(e) => {
+                let is_missing = e
+                    .downcast_ref::<GoalStateError>()
+                    .is_some_and(|ge| matches!(ge, GoalStateError::MissingFile { .. }));
+                if !is_missing {
+                    return Err(e);
                 }
             }
-        })?;
-        let mut state: GoalState =
-            serde_json::from_str(&json).map_err(|e| GoalStateError::InvalidFormat {
-                path: path.display().to_string(),
-                reason: e.to_string(),
-            })?;
-        state.state_dir = goal_dir.to_path_buf();
-        Ok(state)
+        }
+
+        match super::db_store::DbGoalStateStore::open().await {
+            Ok(db) => match db.load(goal_dir).await {
+                Ok(state) => return Ok(state),
+                Err(e) => {
+                    tracing::warn!(
+                        goal_dir = %goal_dir.display(),
+                        error = %e,
+                        "DB load failed after JSON miss"
+                    );
+                }
+            },
+            Err(e) => {
+                tracing::warn!(
+                    goal_dir = %goal_dir.display(),
+                    error = %e,
+                    "Failed to open goals DB after JSON miss"
+                );
+            }
+        }
+        Err(GoalStateError::MissingFile {
+            path: goal_dir.join(GOAL_STATE_FILE).to_string_lossy().to_string(),
+        }
+        .into())
     }
 
     async fn list(&self) -> Result<Vec<GoalState>> {
+        // Primary: SQLite with JSON fallback.
+        match super::db_store::DbGoalStateStore::open().await {
+            Ok(db) => match db.list().await {
+                Ok(goals) if !goals.is_empty() => return Ok(goals),
+                Ok(_) => {} // empty DB, fall through to JSON scan
+                Err(e) => tracing::warn!(error = %e, "DB list failed; falling back to JSON"),
+            },
+            Err(e) => tracing::warn!(error = %e, "Failed to open goals DB; falling back to JSON"),
+        }
+
         let dir = super::persistence::goals_dir();
         if !dir.exists() {
             return Ok(Vec::new());

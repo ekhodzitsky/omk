@@ -38,11 +38,7 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> anyhow::Result<Go
         updated_tasks.push(task);
     }
     verifier::append_goal_review_task_events(&state, &updated_tasks).await?;
-    proof::write_json_artifact(
-        &state.state_dir.join(state::GOAL_TASK_GRAPH_FILE),
-        &task_graph,
-    )
-    .await?;
+    task_graph.save(&state.state_dir).await?;
 
     evidence::record_artifact_path_once(
         &mut state,

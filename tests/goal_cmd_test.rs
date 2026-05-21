@@ -2312,7 +2312,7 @@ fn test_goal_cost_budget_stops_after_wire_usage_estimate_exceeds_limit() {
             "run",
             "Stop this goal after estimated cost budget is exhausted",
             "--budget-usd",
-            "0.000001",
+            "0.01",
         ])
         .assert()
         .success();
@@ -2321,7 +2321,7 @@ fn test_goal_cost_budget_stops_after_wire_usage_estimate_exceeds_limit() {
     execute
         .current_dir(&project)
         .env("MOCK_KIMI", mock_kimi_path())
-        .env("MOCK_KIMI_WIRE_TOKEN_USAGE", "1000")
+        .env("MOCK_KIMI_WIRE_TOKEN_USAGE", "2000")
         .args(["goal", "execute", "latest"])
         .assert()
         .success();
@@ -2349,12 +2349,12 @@ fn test_goal_cost_budget_stops_after_wire_usage_estimate_exceeds_limit() {
     );
     let budget_json: Value =
         serde_json::from_slice(&budget_output.stdout).expect("budget output should be JSON");
-    assert_eq!(budget_json["budget_usd"], 0.000001);
+    assert_eq!(budget_json["budget_usd"], 0.01);
     assert!(
         budget_json["estimated_cost_usd"]
             .as_f64()
             .unwrap_or_default()
-            > 0.000001,
+            > 0.01,
         "wire token usage should produce an estimated cost above the budget"
     );
     assert_eq!(budget_json["remaining_budget_usd"], 0.0);
@@ -2382,7 +2382,7 @@ fn test_goal_budget_add_extends_token_and_cost_budgets() {
             "--budget-tokens",
             "10",
             "--budget-usd",
-            "0.000001",
+            "0.01",
         ])
         .assert()
         .success();
@@ -2391,7 +2391,7 @@ fn test_goal_budget_add_extends_token_and_cost_budgets() {
     execute
         .current_dir(&project)
         .env("MOCK_KIMI", mock_kimi_path())
-        .env("MOCK_KIMI_WIRE_TOKEN_USAGE", "1000")
+        .env("MOCK_KIMI_WIRE_TOKEN_USAGE", "2000")
         .args(["goal", "execute", "latest"])
         .assert()
         .success();

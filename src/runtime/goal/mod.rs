@@ -4,9 +4,10 @@ mod control;
 mod decision;
 mod delivery;
 mod dispatch;
-mod evidence;
+pub(crate) mod evidence;
 mod integration;
 mod lifecycle;
+mod merge;
 mod open_pr;
 mod oracle;
 mod planner;
@@ -16,6 +17,7 @@ mod queries;
 mod replay;
 mod review;
 mod state;
+mod supervisor;
 mod task_graph;
 mod types;
 mod verifier;
@@ -36,6 +38,7 @@ pub use delivery::{
 };
 pub use evidence::GoalGitEvidence;
 pub use lifecycle::{execute_goal, review_goal, verify_goal, verify_goal_with_slices};
+pub use merge::merge_goal;
 pub use open_pr::GoalOpenPrDraft;
 pub use oracle::GoalKind;
 pub use planner::discover_relevant_files;
@@ -50,6 +53,7 @@ pub use state::{
     GOAL_FAILURE_FILE, GOAL_GATE_ARTIFACTS_DIR, GOAL_PRD_FILE, GOAL_PROOF_FILE, GOAL_STATE_FILE,
     GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE, GOAL_TEST_SPEC_FILE,
 };
+pub use supervisor::{claim_goal, list_orphaned_goals, release_goal};
 pub use task_graph::{
     load_goal_task_delivery_records, plan_goal_delivery_slices, read_goal_task_delivery_metadata,
     record_goal_delivery_slice_plan, update_goal_task_delivery_metadata,
@@ -77,11 +81,18 @@ pub use evidence::GoalAgentRunEvidence;
 pub use lifecycle::execute_goal_with_dispatcher;
 
 // Facade functions
-pub async fn create_goal(goal: &str, options: CreateGoalOptions) -> anyhow::Result<GoalState> {
-    planner::create_goal_with_scaffold(goal, options).await
+pub async fn create_goal(
+    goal: &str,
+    options: CreateGoalOptions,
+    planner: Option<&dyn crate::llm::Planner>,
+) -> anyhow::Result<GoalState> {
+    planner::create_goal_with_scaffold(goal, options, planner).await
 }
 
-pub async fn plan_goal(goal: &str) -> anyhow::Result<GoalState> {
+pub async fn plan_goal(
+    goal: &str,
+    planner: Option<&dyn crate::llm::Planner>,
+) -> anyhow::Result<GoalState> {
     planner::create_goal_with_scaffold(
         goal,
         CreateGoalOptions {
@@ -94,6 +105,7 @@ pub async fn plan_goal(goal: &str) -> anyhow::Result<GoalState> {
             merge_policy: GoalMergePolicy::Disabled,
             slice_execution: false,
         },
+        planner,
     )
     .await
 }

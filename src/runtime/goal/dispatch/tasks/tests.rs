@@ -109,7 +109,12 @@ async fn setup_goal_state(budget_time: Option<String>) -> (GoalState, GoalTaskGr
 
 #[tokio::test]
 async fn task_rejected_when_budget_exceeded() {
+    let _guard = crate::test_helpers::TEST_MUTEX.lock().await;
     ensure_short_lease();
+    let (_xdg_tmp, envs) = crate::test_helpers::isolated_xdg_env();
+    for (key, value) in &envs {
+        std::env::set_var(key, value);
+    }
     let (state, task_graph, project_dir) = setup_goal_state(Some("10s".to_string())).await;
     let proposal = test_proposal("task-a", 120, &["README.md"]);
     let dispatch = GoalAgentDispatchPlan {
@@ -160,7 +165,12 @@ async fn task_rejected_when_budget_exceeded() {
 
 #[tokio::test]
 async fn task_rejected_when_path_policy_violated() {
+    let _guard = crate::test_helpers::TEST_MUTEX.lock().await;
     ensure_short_lease();
+    let (_xdg_tmp, envs) = crate::test_helpers::isolated_xdg_env();
+    for (key, value) in &envs {
+        std::env::set_var(key, value);
+    }
     let (state, task_graph, project_dir) = setup_goal_state(None).await;
     let proposal = test_proposal("task-b", 120, &["/absolute/path.md"]);
     let dispatch = GoalAgentDispatchPlan {
@@ -199,7 +209,12 @@ async fn task_rejected_when_path_policy_violated() {
 
 #[tokio::test]
 async fn accepted_task_writes_deterministic_accepted_event() {
+    let _guard = crate::test_helpers::TEST_MUTEX.lock().await;
     ensure_short_lease();
+    let (_xdg_tmp, envs) = crate::test_helpers::isolated_xdg_env();
+    for (key, value) in &envs {
+        std::env::set_var(key, value);
+    }
     let (state, task_graph, project_dir) = setup_goal_state(Some("1h".to_string())).await;
     let proposal = test_proposal("task-c", 120, &["README.md"]);
     let dispatch = GoalAgentDispatchPlan {
@@ -238,7 +253,12 @@ async fn accepted_task_writes_deterministic_accepted_event() {
 
 #[tokio::test]
 async fn rejected_task_does_not_change_execution_state_as_completed() {
+    let _guard = crate::test_helpers::TEST_MUTEX.lock().await;
     ensure_short_lease();
+    let (_xdg_tmp, envs) = crate::test_helpers::isolated_xdg_env();
+    for (key, value) in &envs {
+        std::env::set_var(key, value);
+    }
     let (state, task_graph, project_dir) = setup_goal_state(Some("10s".to_string())).await;
     let proposal = test_proposal("task-d", 120, &["README.md"]);
     let dispatch = GoalAgentDispatchPlan {

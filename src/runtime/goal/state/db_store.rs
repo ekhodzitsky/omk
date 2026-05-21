@@ -18,10 +18,20 @@ pub struct DbGoalStateStore {
     db: DbHandle,
 }
 
+/// Path to the central SQLite database for all goal state.
+pub fn goals_db_path() -> std::path::PathBuf {
+    crate::runtime::config::omk_state_dir().join("omk.db")
+}
+
 #[allow(dead_code)]
 impl DbGoalStateStore {
     pub fn new(db: DbHandle) -> Self {
         Self { db }
+    }
+
+    pub async fn open() -> Result<Self, DbError> {
+        let db = DbHandle::open(goals_db_path()).await?;
+        Ok(Self::new(db))
     }
 }
 
@@ -30,7 +40,7 @@ impl GoalStateStore for DbGoalStateStore {
         let record = goal_state_to_record(state)?;
         self.db
             .goal_repo()
-            .create(&record)
+            .upsert(&record)
             .await
             .map_err(map_db_err)
     }
@@ -45,19 +55,30 @@ impl GoalStateStore for DbGoalStateStore {
             anyhow::bail!("goal_dir has no valid goal_id: {}", goal_dir.display());
         }
 
-        let record = self
+        match self
             .db
             .goal_repo()
             .get(&goal_id)
             .await
             .map_err(map_db_err)?
-            .ok_or_else(|| super::GoalStateError::MissingFile {
-                path: goal_dir.display().to_string(),
-            })?;
-
-        let mut state = record_to_goal_state(record)?;
-        state.state_dir = goal_dir.to_path_buf();
-        Ok(state)
+        {
+            Some(record) => {
+                let mut state = record_to_goal_state(record)?;
+                state.state_dir = goal_dir.to_path_buf();
+                // JSON may contain artifacts that are not stored in the DB
+                // schema yet; merge them in when present.
+                if let Ok(json_state) = json_backup_load(goal_dir).await {
+                    if !json_state.artifacts.is_empty() {
+                        state.artifacts = json_state.artifacts;
+                    }
+                }
+                Ok(state)
+            }
+            None => {
+                // Fallback to JSON for goals created before DB integration.
+                json_backup_load(goal_dir).await
+            }
+        }
     }
 
     async fn list(&self) -> Result<Vec<GoalState>> {
@@ -515,4 +536,37 @@ fn parse_task_status(s: &str) -> Result<super::super::task_graph::GoalTaskStatus
         "done" => Ok(super::super::task_graph::GoalTaskStatus::Done),
         _ => anyhow::bail!("unknown task status: {s}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// JSON backup helpers (for backward compatibility and external tools)
+// ---------------------------------------------------------------------------
+
+pub(crate) async fn json_backup_save(state: &GoalState) -> Result<()> {
+    let path = state.state_dir.join(super::constants::GOAL_STATE_FILE);
+    let json = serde_json::to_string_pretty(state)?;
+    crate::runtime::atomic::atomic_write(&path, json.as_bytes()).await
+}
+
+pub(crate) async fn json_backup_load(goal_dir: &Path) -> Result<GoalState> {
+    let path = goal_dir.join(super::constants::GOAL_STATE_FILE);
+    let json = tokio::fs::read_to_string(&path).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            super::GoalStateError::MissingFile {
+                path: path.display().to_string(),
+            }
+        } else {
+            super::GoalStateError::IoError {
+                path: path.display().to_string(),
+                reason: e.to_string(),
+            }
+        }
+    })?;
+    let mut state: GoalState =
+        serde_json::from_str(&json).map_err(|e| super::GoalStateError::InvalidFormat {
+            path: path.display().to_string(),
+            reason: e.to_string(),
+        })?;
+    state.state_dir = goal_dir.to_path_buf();
+    Ok(state)
 }

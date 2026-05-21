@@ -31,7 +31,7 @@ pub(crate) async fn run_goal_until_ready(
     options: state::CreateGoalOptions,
     project_dir: &Path,
 ) -> Result<GoalRunUntilReadyOutcome> {
-    let state = crate::runtime::goal::create_goal(goal, options.clone()).await?;
+    let state = crate::runtime::goal::create_goal(goal, options.clone(), None).await?;
     let events_path = state.state_dir.join(crate::runtime::config::EVENTS_FILE);
     let event_writer = EventWriter::new(events_path);
     let event_builder = EventBuilder::new(RunId(state.goal_id.clone()));

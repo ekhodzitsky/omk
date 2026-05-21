@@ -8,7 +8,7 @@ use crate::runtime::goal::state::{
 use crate::runtime::goal::task_graph::{
     ready_delivery_slices, GoalDeliverySlice, GoalTaskGraph, GoalTaskStatus,
 };
-use crate::runtime::goal::{agent, budget, dispatch, evidence, proof, state, task_graph};
+use crate::runtime::goal::{agent, budget, dispatch, evidence, state, supervisor, task_graph};
 
 pub async fn execute_goal(goal_id: &str, project_dir: &Path) -> anyhow::Result<GoalProof> {
     let dispatcher = dispatch::DefaultGoalDispatcher;
@@ -29,6 +29,8 @@ pub async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 
     state.updated_at = chrono::Utc::now();
     state.completed_at = None;
     FileSystemGoalStateStore::new().save(&state).await?;
+
+    let _heartbeat = supervisor::claim_goal(&state.goal_id).await?;
 
     let now = chrono::Utc::now();
     let max_agents = state.max_agents.unwrap_or(1);
@@ -318,11 +320,7 @@ pub async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 
         GoalStatus::Paused | GoalStatus::Cancelled | GoalStatus::NeedsMoreBudget
     );
 
-    proof::write_json_artifact(
-        &state.state_dir.join(state::GOAL_TASK_GRAPH_FILE),
-        &task_graph,
-    )
-    .await?;
+    task_graph.save(&state.state_dir).await?;
 
     let state = super::finalize_execution_state(
         state,
@@ -344,8 +342,12 @@ pub async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 
     )
     .await;
 
+    if let Err(e) = supervisor::release_goal(&state.goal_id).await {
+        tracing::warn!(goal_id = %state.goal_id, error = %e, "Failed to release goal controller PID");
+    }
+
     let phase_duration = tokio::time::Instant::now() - phase_start;
-    if let Ok(state) = crate::runtime::goal::resolve_goal(goal_id).await {
+    if let Ok(state) = crate::runtime::goal::resolve_goal(&state.goal_id).await {
         if let Ok(tracker) = budget::init_goal_cost_tracker(&state) {
             let cost = crate::cost::types::SessionCost {
                 session_type: "execute".to_string(),

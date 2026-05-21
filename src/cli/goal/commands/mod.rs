@@ -22,7 +22,7 @@ use std::path::PathBuf;
 use super::OutputFormat;
 
 pub(super) async fn cmd_plan(goal: &str) -> Result<()> {
-    let state = crate::runtime::goal::plan_goal(goal).await?;
+    let state = crate::runtime::goal::plan_goal(goal, None).await?;
 
     println!("Goal plan created: {}", state.goal_id);
     println!("  Status: {}", state.status);
@@ -332,5 +332,41 @@ pub(super) async fn cmd_resume(goal_id: &str) -> Result<()> {
     println!("Status: {}", goal.status);
     println!("Phase: {}", goal.phase);
     println!("Updated: {}", goal.updated_at);
+    Ok(())
+}
+
+pub(super) async fn cmd_resume_auto() -> Result<()> {
+    let orphaned = crate::runtime::goal::list_orphaned_goals().await?;
+    if orphaned.is_empty() {
+        println!("No orphaned goals found.");
+        return Ok(());
+    }
+
+    println!("Found {} orphaned goal(s):", orphaned.len());
+    for goal in &orphaned {
+        let pid_str = goal
+            .controller_pid
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "none".to_string());
+        println!(
+            "  {} (pid={}, last_update={})",
+            goal.goal_id,
+            pid_str,
+            chrono::DateTime::from_timestamp(goal.last_updated_at, 0)
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_default()
+        );
+    }
+
+    for goal in orphaned {
+        match crate::runtime::goal::resume_goal(&goal.goal_id).await {
+            Ok(g) => {
+                println!("Resumed: {} → status={}", g.goal_id, g.status);
+            }
+            Err(e) => {
+                eprintln!("Failed to resume {}: {e}", goal.goal_id);
+            }
+        }
+    }
     Ok(())
 }

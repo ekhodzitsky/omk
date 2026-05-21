@@ -91,6 +91,29 @@ impl GoalTaskGraph {
         Ok(graph)
     }
 
+    /// Persist to DB (primary) and JSON (backup).
+    ///
+    /// JSON is written through the artifact pipeline so that sidecar metadata
+    /// (e.g. `delivery` on task nodes) is preserved even though it is not
+    /// represented in the typed `GoalTask` struct.
+    pub async fn save(&self, goal_dir: &Path) -> Result<()> {
+        let path = goal_dir.join(GOAL_TASK_GRAPH_FILE);
+        crate::runtime::goal::proof::write_json_artifact(&path, self).await?;
+
+        if let Some(db) = crate::runtime::db::global_db() {
+            if let Err(e) =
+                crate::runtime::goal::state::db_store::save_task_graph_to_db(&db, self).await
+            {
+                tracing::warn!(
+                    goal_id = %self.goal_id,
+                    error = %e,
+                    "DB task graph save failed; JSON backup written"
+                );
+            }
+        }
+        Ok(())
+    }
+
     pub fn validate(&self) -> Result<()> {
         let mut errors = Vec::new();
 

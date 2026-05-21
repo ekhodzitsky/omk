@@ -1,8 +1,8 @@
 # src/runtime/db/ TODO
 
-## In Progress
+## Done
 
-- [ ] Integration into `runtime/goal/` (separate PR)
+- [x] Integration into `runtime/goal/` state and task graph storage
 
 ## Known Gaps
 

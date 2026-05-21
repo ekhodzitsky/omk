@@ -17,8 +17,7 @@ pub use constants::{
     GOAL_PROOF_FILE, GOAL_STATE_FILE, GOAL_TASK_GRAPH_FILE, GOAL_TECHNICAL_PLAN_FILE,
     GOAL_TEST_SPEC_FILE,
 };
-#[cfg(test)]
-pub use db_store::DbGoalStateStore;
+pub use db_store::goals_db_path;
 pub use error::GoalStateError;
 pub(super) use persistence::goals_dir;
 pub use store::{FileSystemGoalStateStore, GoalStateStore};

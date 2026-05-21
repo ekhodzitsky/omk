@@ -69,11 +69,7 @@ pub async fn verify_goal_with_slices(
     if let Some(task) = &updated_task {
         verifier::append_local_verification_task_events(&state, task).await?;
     }
-    proof::write_json_artifact(
-        &state.state_dir.join(state::GOAL_TASK_GRAPH_FILE),
-        &task_graph,
-    )
-    .await?;
+    task_graph.save(&state.state_dir).await?;
 
     state.status = crate::runtime::goal::state::GoalStatus::NotReady;
     state.phase = crate::runtime::goal::state::GoalPhase::Proof;

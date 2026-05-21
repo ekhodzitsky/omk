@@ -1,8 +1,79 @@
+use super::db_store::DbGoalStateStore;
 use super::{
-    format_goal_duration_secs, is_safe_goal_agent_path, normalize_goal, DbGoalStateStore,
-    FileSystemGoalStateStore, GoalPhase, GoalState, GoalStateStore, GoalStatus, GOAL_STATE_FILE,
+    format_goal_duration_secs, is_safe_goal_agent_path, normalize_goal, FileSystemGoalStateStore,
+    GoalPhase, GoalState, GoalStateStore, GoalStatus, GOAL_STATE_FILE,
 };
 use std::fs;
+
+fn test_goal_state(goal_id: &str) -> super::GoalState {
+    super::GoalState {
+        version: 1,
+        goal_id: goal_id.to_string(),
+        original_goal: format!("Goal {goal_id}"),
+        normalized_goal: format!("Goal {goal_id}"),
+        status: GoalStatus::NotReady,
+        phase: GoalPhase::Planning,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+        completed_at: None,
+        until_ready: false,
+        budget_time: Some("1h".to_string()),
+        budget_tokens: Some(1_000_000),
+        budget_usd: Some(10.50),
+        max_agents: Some(2),
+        cost_tracker_path: None,
+        terminal_criteria: super::GoalTerminalCriteria::default(),
+        delivery_policy: crate::runtime::goal::GoalDeliveryPolicy::Local,
+        merge_policy: crate::runtime::goal::GoalMergePolicy::Disabled,
+        slice_execution: false,
+        artifacts: vec![],
+        failure: None,
+        state_dir: std::path::PathBuf::from(format!("/tmp/omk/goals/{goal_id}")),
+    }
+}
+
+#[tokio::test]
+async fn db_goal_state_store_roundtrip() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db");
+    let db = crate::runtime::db::DbHandle::open(&db_path).await.unwrap();
+    let store = DbGoalStateStore::new(db);
+
+    let goal_dir = tmp.path().join("goal-db-1");
+    fs::create_dir_all(&goal_dir).unwrap();
+    let mut state = test_goal_state("goal-db-1");
+    state.state_dir = goal_dir.clone();
+    store.save(&state).await.unwrap();
+
+    let loaded = store.load(&goal_dir).await.unwrap();
+    assert_eq!(loaded.goal_id, state.goal_id);
+    assert_eq!(loaded.original_goal, state.original_goal);
+    assert_eq!(loaded.status, state.status);
+    assert_eq!(loaded.phase, state.phase);
+    assert_eq!(loaded.budget_time, state.budget_time);
+    assert_eq!(loaded.budget_tokens, state.budget_tokens);
+    assert_eq!(loaded.budget_usd, state.budget_usd);
+    assert_eq!(loaded.max_agents, state.max_agents);
+}
+
+#[tokio::test]
+async fn db_store_falls_back_to_json_for_legacy_goals() {
+    let tmp = tempfile::tempdir().unwrap();
+    let goal_dir = tmp.path().join("goal-legacy");
+    fs::create_dir_all(&goal_dir).unwrap();
+    fs::write(
+        goal_dir.join(GOAL_STATE_FILE),
+        serde_json::to_string_pretty(&test_goal_state("goal-legacy")).unwrap(),
+    )
+    .unwrap();
+
+    let db_path = tmp.path().join("empty.db");
+    let db = crate::runtime::db::DbHandle::open(&db_path).await.unwrap();
+    let store = DbGoalStateStore::new(db);
+
+    let loaded = store.load(&goal_dir).await.unwrap();
+    assert_eq!(loaded.goal_id, "goal-legacy");
+}
 
 #[test]
 fn goal_status_serializes_as_snake_case() {
