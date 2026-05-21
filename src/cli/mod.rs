@@ -20,3 +20,4 @@ pub(crate) mod team;
 pub(crate) mod ultrawork;
 
 pub use app::run;
+pub mod chat;

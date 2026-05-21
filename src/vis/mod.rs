@@ -9,3 +9,6 @@ pub mod hud_tui;
 
 #[cfg(feature = "server")]
 pub mod server;
+
+#[cfg(feature = "tui")]
+pub mod shell;
