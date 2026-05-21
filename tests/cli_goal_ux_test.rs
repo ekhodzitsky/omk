@@ -390,3 +390,12 @@ fn test_goal_budget_add_rejects_zero_time_extension() {
         .failure()
         .stderr(predicate::str::contains("--time must be greater than zero"));
 }
+
+#[test]
+fn test_goal_run_help_includes_enforce_protection_flag() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.arg("goal").arg("run").arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("--enforce-protection"));
+}

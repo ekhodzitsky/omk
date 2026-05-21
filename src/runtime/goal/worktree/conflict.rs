@@ -4,6 +4,7 @@ use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 
 use crate::git::GitRepo;
+use crate::runtime::goal::git_ops::auto_rebase::{attempt_auto_rebase, RebaseOutcome};
 use crate::runtime::goal::state::GOAL_ARTIFACTS_DIR;
 use crate::runtime::goal::task_graph::{
     update_goal_task_delivery_metadata, GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryStatus,
@@ -43,14 +44,46 @@ pub async fn detect_goal_merge_conflicts(
         .await
         .map_err(|e| anyhow::anyhow!("git merge-tree failed: {e}"))?;
 
-    let clean_merge = !result.has_conflicts;
-    let conflicting_files = result.conflict_files.clone();
+    let mut clean_merge = !result.has_conflicts;
+    let mut conflicting_files = result.conflict_files.clone();
+    let mut rebase_error = None;
+
+    if !clean_merge {
+        match attempt_auto_rebase(&request.repo_dir, &request.source_ref, &request.target_ref).await
+        {
+            Ok(RebaseOutcome::Clean) => {
+                match repo
+                    .merge_tree(&request.target_ref, &request.source_ref)
+                    .await
+                {
+                    Ok(recheck) => {
+                        clean_merge = !recheck.has_conflicts;
+                        conflicting_files = recheck.conflict_files.clone();
+                    }
+                    Err(e) => {
+                        rebase_error = Some(format!("merge_tree_recheck_failed: {e}"));
+                    }
+                }
+            }
+            Ok(RebaseOutcome::ConflictUnresolvable) => {
+                rebase_error = Some("auto-rebase could not resolve conflicts".to_string());
+            }
+            Err(e) => {
+                rebase_error = Some(format!("auto_rebase_failed: {e}"));
+            }
+        }
+    }
 
     if !clean_merge && conflicting_files.is_empty() {
         anyhow::bail!("merge-tree detected conflicts but no conflicting files were parsed");
     }
 
     let artifact_path = conflict_artifact_path(&request.task_id)?;
+    let stdout_summary = if clean_merge {
+        "clean merge".to_string()
+    } else {
+        conflicting_files.join("\n")
+    };
     let evidence = GoalMergeConflictEvidence {
         task_id: request.task_id.clone(),
         source_ref: request.source_ref.clone(),
@@ -61,17 +94,14 @@ pub async fn detect_goal_merge_conflicts(
             "git merge-tree {} {}",
             request.target_ref, request.source_ref
         ),
-        stdout_summary: if clean_merge {
-            "clean merge".to_string()
-        } else {
-            result.conflict_files.join("\n")
-        },
+        stdout_summary,
         stderr_summary: String::new(),
         artifact_path,
     };
 
     write_conflict_artifact(&request.goal_dir, &evidence).await?;
-    record_conflict_delivery_metadata(&request.goal_dir, &evidence).await?;
+    record_conflict_delivery_metadata(&request.goal_dir, &evidence, rebase_error.as_deref())
+        .await?;
     Ok(evidence)
 }
 
@@ -110,6 +140,7 @@ async fn write_conflict_artifact(
 async fn record_conflict_delivery_metadata(
     goal_dir: &Path,
     evidence: &GoalMergeConflictEvidence,
+    conflict_blocking_reason: Option<&str>,
 ) -> Result<()> {
     let status = if evidence.clean_merge {
         GoalTaskDeliveryStatus::ReadyForReview
@@ -145,6 +176,12 @@ async fn record_conflict_delivery_metadata(
         GoalTaskDeliveryMetadataUpdate {
             verification_summary: Some(summary),
             status: Some(status),
+            conflict_evidence_path: if evidence.clean_merge {
+                None
+            } else {
+                Some(evidence.artifact_path.clone())
+            },
+            conflict_blocking_reason: conflict_blocking_reason.map(|s| s.to_string()),
             extra,
             ..GoalTaskDeliveryMetadataUpdate::default()
         },

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use crate::git::GitRepo;
+use crate::runtime::goal::git_ops::auto_rebase::{attempt_auto_rebase, RebaseOutcome};
 
 use super::git::validate_git_ref;
 use super::merge_check::check_slice_branch_merge_clean;
@@ -27,10 +27,18 @@ pub(super) async fn ensure_slice_branch_merge_clean(
     }
 
     // Branch is stale or conflicting — try auto-rebase
-    if let Err(e) = rebase_slice_branch_onto_base(worktree_path, branch, base_branch).await {
-        anyhow::bail!(
-            "slice branch {branch} cannot merge cleanly into {base_branch} and auto-rebase failed: {e}"
-        );
+    match attempt_auto_rebase(worktree_path, branch, base_branch).await {
+        Ok(RebaseOutcome::Clean) => {}
+        Ok(RebaseOutcome::ConflictUnresolvable) => {
+            anyhow::bail!(
+                "slice branch {branch} cannot merge cleanly into {base_branch} and auto-rebase failed: rebase conflicts could not be resolved"
+            );
+        }
+        Err(e) => {
+            anyhow::bail!(
+                "slice branch {branch} cannot merge cleanly into {base_branch} and auto-rebase failed: {e}"
+            );
+        }
     }
 
     // Rebase succeeded — re-check merge-tree
@@ -41,40 +49,6 @@ pub(super) async fn ensure_slice_branch_merge_clean(
             "slice branch {branch} still has merge conflicts after auto-rebase onto {base_branch}"
         )
         })
-}
-
-/// Attempt to rebase the slice branch onto the latest base branch.
-async fn rebase_slice_branch_onto_base(
-    worktree_path: &Path,
-    branch: &str,
-    base_branch: &str,
-) -> Result<()> {
-    validate_git_ref(branch)?;
-    validate_git_ref(base_branch)?;
-
-    let repo = GitRepo::open(worktree_path)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
-
-    // Checkout the slice branch
-    repo.checkout(branch)
-        .await
-        .map_err(|e| anyhow::anyhow!("git checkout {branch} failed: {e}"))?;
-
-    // Try to fetch first; fall back to local ref
-    let fetch_ok = repo.fetch(super::DEFAULT_REMOTE).await.is_ok();
-    let base_ref = if fetch_ok {
-        format!("{}/{base_branch}", super::DEFAULT_REMOTE)
-    } else {
-        base_branch.to_string()
-    };
-
-    // Rebase onto the base branch
-    if let Err(e) = repo.rebase(&base_ref).await {
-        let _ = repo.rebase_abort().await;
-        anyhow::bail!("git rebase {branch} onto {base_ref} failed: {e}");
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

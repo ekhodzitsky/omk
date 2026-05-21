@@ -2,10 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
 
+mod github_api;
 mod pr_client;
 mod pr_draft;
 mod slice_pr;
 
+pub use github_api::{ensure_branch_protection, parse_github_owner_repo, BranchProtectionPolicy};
 pub use pr_client::{poll_github_pr_checks, GoalGithubPrCommandClient};
 pub use pr_draft::{deliver_goal_open_pr_with_client, open_goal_pr_with_client};
 pub(super) use slice_pr::{deliver_slice_pr, SlicePrDeliveryOptions};
