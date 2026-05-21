@@ -112,6 +112,7 @@ pub async fn plan_goal(
             delivery_policy: GoalDeliveryPolicy::Local,
             merge_policy: GoalMergePolicy::Disabled,
             slice_execution: false,
+            enforce_protection: false,
         },
         planner,
     )
