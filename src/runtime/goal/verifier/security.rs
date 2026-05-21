@@ -2,10 +2,62 @@ use anyhow::Result;
 use regex::Regex;
 use std::path::{Component, Path, PathBuf};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SecurityFindingKind {
+    PrivateKey,
+    SecretAssignment,
+    #[allow(dead_code)]
+    SymlinkEscape,
+    OversizedFile,
+}
+
+impl SecurityFindingKind {
+    pub(crate) fn is_quarantine_only(&self) -> bool {
+        matches!(self, SecurityFindingKind::OversizedFile)
+    }
+}
+
+impl std::fmt::Display for SecurityFindingKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            SecurityFindingKind::PrivateKey => "private_key",
+            SecurityFindingKind::SecretAssignment => "secret_assignment",
+            SecurityFindingKind::SymlinkEscape => "symlink_escape",
+            SecurityFindingKind::OversizedFile => "oversized_file",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SecurityFinding {
+    pub(crate) path: String,
+    pub(crate) kind: SecurityFindingKind,
+    pub(crate) line: Option<usize>,
+    pub(crate) evidence_snippet: Option<String>,
+}
+
 pub(crate) async fn scan_goal_security_findings(
     project_dir: &Path,
     changed_files: &[String],
 ) -> Result<Vec<String>> {
+    let findings = scan_goal_security_findings_structured(project_dir, changed_files).await?;
+    Ok(findings
+        .into_iter()
+        .map(|f| {
+            format!(
+                "{}:{} contains a high-confidence secret marker",
+                f.path,
+                f.line.map(|l| l.to_string()).unwrap_or_default()
+            )
+        })
+        .collect())
+}
+
+pub(crate) async fn scan_goal_security_findings_structured(
+    project_dir: &Path,
+    changed_files: &[String],
+) -> Result<Vec<SecurityFinding>> {
     let private_key = Regex::new(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")?;
     let secret_assignment =
         Regex::new(r#"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*["'][^"']{16,}["']"#)?;
@@ -39,19 +91,36 @@ pub(crate) async fn scan_goal_security_findings(
         let Ok(metadata) = tokio::fs::metadata(&resolved).await else {
             continue;
         };
-        if !metadata.is_file() || metadata.len() > 512 * 1024 {
+        if !metadata.is_file() {
+            continue;
+        }
+        if metadata.len() > 512 * 1024 {
+            findings.push(SecurityFinding {
+                path: changed_file.to_string(),
+                kind: SecurityFindingKind::OversizedFile,
+                line: None,
+                evidence_snippet: Some(format!("file size {} bytes exceeds 512 KiB", metadata.len())),
+            });
             continue;
         }
         let Ok(content) = tokio::fs::read_to_string(&resolved).await else {
             continue;
         };
         for (line_index, line) in content.lines().enumerate() {
-            if private_key.is_match(line) || secret_assignment.is_match(line) {
-                findings.push(format!(
-                    "{}:{} contains a high-confidence secret marker",
-                    changed_file,
-                    line_index + 1
-                ));
+            if private_key.is_match(line) {
+                findings.push(SecurityFinding {
+                    path: changed_file.to_string(),
+                    kind: SecurityFindingKind::PrivateKey,
+                    line: Some(line_index + 1),
+                    evidence_snippet: Some(line.to_string()),
+                });
+            } else if secret_assignment.is_match(line) {
+                findings.push(SecurityFinding {
+                    path: changed_file.to_string(),
+                    kind: SecurityFindingKind::SecretAssignment,
+                    line: Some(line_index + 1),
+                    evidence_snippet: Some(line.to_string()),
+                });
             }
         }
     }
