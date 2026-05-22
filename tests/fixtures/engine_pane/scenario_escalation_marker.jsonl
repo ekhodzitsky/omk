@@ -1,0 +1,3 @@
+{"RouterEscalating":{"intent":"Small","target_mode":"WireWorker","preflight":false}}
+{"WorkerStarted":{"worker_id":"wire-001","kind":"edit","task":"rename foo to bar"}}
+{"WorkerCompleted":{"worker_id":"wire-001","files_touched":0,"ok":false}}
