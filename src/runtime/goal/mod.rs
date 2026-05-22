@@ -1,4 +1,4 @@
-mod agent;
+pub mod agent;
 mod budget;
 pub mod chat_api;
 mod control;
@@ -26,6 +26,8 @@ mod verifier;
 mod worktree;
 
 // Public API
+#[doc(hidden)]
+pub use agent::leases::{LeaseError, LeaseGuard, LeaseManager};
 pub use agent::{check_task_path_policy, GoalAgentTaskProposal};
 pub use budget::{
     add_goal_budget, add_goal_budget_limits, evaluate_task_budget, goal_budget, GoalBudgetAdd,
