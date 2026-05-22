@@ -63,6 +63,7 @@ fn test_chat_args_default_is_no_session_no_new() {
 }
 
 #[tokio::test]
+#[ignore = "requires kimi binary in PATH; pending ProcessWireClient lifecycle refactor"]
 async fn test_production_backend_builds_without_panic() {
     let temp = tempfile::tempdir().expect("tempdir");
     let result = omk::cli::chat::composed_backend::ProductionBackend::build(
