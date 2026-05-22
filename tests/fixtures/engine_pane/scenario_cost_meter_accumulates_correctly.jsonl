@@ -1,0 +1,5 @@
+{"CostDelta":{"source":"llm-1","tokens_in":100,"tokens_out":50,"usd":0.012}}
+{"CostDelta":{"source":"llm-2","tokens_in":200,"tokens_out":100,"usd":0.030}}
+{"CostDelta":{"source":"llm-3","tokens_in":500,"tokens_out":200,"usd":0.045}}
+{"CostDelta":{"source":"llm-4","tokens_in":1000,"tokens_out":400,"usd":0.080}}
+{"CostDelta":{"source":"llm-5","tokens_in":50,"tokens_out":20,"usd":0.005}}
