@@ -78,6 +78,9 @@ pub use worktree::{
     GoalWorktreeMaterializeOutcome, GoalWorktreeMaterializeRequest, GoalWorktreePlan,
 };
 
+#[doc(hidden)]
+pub use integration::write_rejection_rollback_plan;
+
 // Internal API
 pub(crate) use control::run_goal_until_ready;
 pub(crate) use integration::{accept_goal, reject_goal};
