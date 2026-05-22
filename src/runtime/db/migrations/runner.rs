@@ -13,11 +13,18 @@ pub struct MigrationRunner {
 impl MigrationRunner {
     pub fn new() -> Self {
         Self {
-            migrations: vec![Migration {
-                version: 1,
-                name: "initial",
-                sql: include_str!("001_initial.sql"),
-            }],
+            migrations: vec![
+                Migration {
+                    version: 1,
+                    name: "initial",
+                    sql: include_str!("001_initial.sql"),
+                },
+                Migration {
+                    version: 2,
+                    name: "slice_leases",
+                    sql: include_str!("002_slice_leases.sql"),
+                },
+            ],
         }
     }
 
@@ -99,8 +106,14 @@ mod tests {
     fn runner_rollback_on_failing_migration() {
         let mut conn = rusqlite::Connection::open_in_memory().unwrap();
 
-        // Apply version 1 using the real runner.
-        let initial_runner = MigrationRunner::new();
+        // Apply version 1 only, simulating a pre-v2 database.
+        let initial_runner = MigrationRunner {
+            migrations: vec![Migration {
+                version: 1,
+                name: "initial",
+                sql: include_str!("001_initial.sql"),
+            }],
+        };
         let v1 = initial_runner.run(&mut conn, 0).unwrap();
         assert_eq!(v1, 1);
 
