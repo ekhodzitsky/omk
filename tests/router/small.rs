@@ -67,6 +67,7 @@ async fn test_small_intent_emits_disclosure_then_spawns_worker() {
 #[tokio::test]
 async fn test_small_with_protected_path_preflights() {
     let config = RouterConfig {
+        interactive_preflight: true,
         protected_paths: vec![PathBuf::from(".github/")],
         first_prompt_threshold: 0.0,
         ..Default::default()
