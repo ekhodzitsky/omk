@@ -1,0 +1,9 @@
+{"ClassifierDecided":{"intent":"Large","confidence":0.88,"latency_ms":342,"reasoning":"refactor authentication module"}}
+{"RouterEscalating":{"intent":"Large","target_mode":"GoalRun","preflight":true}}
+{"GoalCreated":{"goal_id":"g-large-001","parent_session":"sess-42","plan":["analyse codebase","extract auth service","update tests","run gates"]}}
+{"GoalPlanUpdated":{"goal_id":"g-large-001","revision":1,"nodes":[{"id":"p0","label":"analyse codebase","status":"Done"},{"id":"p1","label":"extract auth service","status":"Running"},{"id":"p2","label":"update tests","status":"Pending"},{"id":"p3","label":"run gates","status":"Pending"}]}}
+{"WorkerStarted":{"worker_id":"wire-001","kind":"edit","task":"extract auth module"}}
+{"WorkerStarted":{"worker_id":"wire-002","kind":"test","task":"update auth tests"}}
+{"GoalGateTransition":{"goal_id":"g-large-001","gate":"tests","from":"pending","to":"running"}}
+{"GoalGateTransition":{"goal_id":"g-large-001","gate":"security","from":"pending","to":"waiting"}}
+{"SliceOpened":{"goal_id":"g-large-001","slice_id":"oauth-001","worktree":".worktrees/oauth-001","pr_url":"https://github.com/org/repo/pull/347"}}

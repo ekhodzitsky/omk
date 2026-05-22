@@ -1,0 +1,6 @@
+{"GoalCreated":{"goal_id":"g1","parent_session":"s1","plan":["A","B","C","D"]}}
+{"GoalPlanUpdated":{"goal_id":"g1","revision":1,"nodes":[{"id":"p0","label":"A","status":"Done"},{"id":"p1","label":"B","status":"Pending"},{"id":"p2","label":"C","status":"Pending"},{"id":"p3","label":"D","status":"Pending"}]}}
+{"GoalPlanUpdated":{"goal_id":"g1","revision":2,"nodes":[{"id":"p0","label":"A","status":"Done"},{"id":"p1","label":"B","status":"Done"},{"id":"p2","label":"C","status":"Pending"},{"id":"p3","label":"D","status":"Pending"}]}}
+{"GoalPlanUpdated":{"goal_id":"g1","revision":3,"nodes":[{"id":"p0","label":"A","status":"Done"},{"id":"p1","label":"B","status":"Done"},{"id":"p2","label":"C","status":"Done"},{"id":"p3","label":"D","status":"Pending"}]}}
+{"GoalPlanUpdated":{"goal_id":"g1","revision":4,"nodes":[{"id":"p0","label":"A","status":"Done"},{"id":"p1","label":"B","status":"Done"},{"id":"p2","label":"C","status":"Done"},{"id":"p3","label":"D","status":"Running"}]}}
+{"RouterEscalating":{"intent":"Medium","target_mode":"PlannerWorkers","preflight":false}}
