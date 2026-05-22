@@ -73,3 +73,47 @@ pub struct CostBlock {
     pub tokens_out: u64,
     pub usd: f32,
 }
+
+#[derive(Debug, Clone)]
+pub struct EscalationBlock {
+    pub kind: EscalationKindUi,
+    pub intent: Option<crate::vis::bus::Intent>,
+    pub summary: String,
+    pub goal_id: Option<String>,
+    pub ts: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EscalationKindUi {
+    Router,
+    Worker,
+    Goal,
+    Refused,
+    Failed,
+}
+
+impl EscalationKindUi {
+    pub fn glyph(&self) -> char {
+        match self {
+            Self::Router => '●',
+            Self::Worker => '◆',
+            Self::Goal => '▣',
+            Self::Refused => '⊘',
+            Self::Failed => '✗',
+        }
+    }
+}
+
+/// Truncate a string to `max_chars` Unicode scalar values, appending "…" when truncated.
+pub(crate) fn truncate_text(s: &str, max_chars: usize) -> String {
+    if s.chars().count() > max_chars {
+        let idx = s
+            .char_indices()
+            .nth(max_chars - 1)
+            .map(|(i, _)| i)
+            .unwrap_or(s.len());
+        format!("{}…", &s[..idx])
+    } else {
+        s.to_string()
+    }
+}

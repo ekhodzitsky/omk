@@ -2,10 +2,10 @@ use std::collections::{HashMap, VecDeque};
 
 use chrono::{DateTime, Utc};
 
-use crate::vis::bus::{ActiveMode, EngineEvent, PlanNode, PlanNodeStatus};
+use crate::vis::bus::{ActiveMode, EngineEvent, Intent, PlanNode, PlanNodeStatus};
 pub use crate::vis::engine::blocks::{
-    ClassifierBlock, CostBlock, GateBlock, PlanBlock, SessionInfo, SliceBlock, WorkerBlock,
-    WorkerStatus,
+    ClassifierBlock, CostBlock, EscalationBlock, EscalationKindUi, GateBlock, PlanBlock,
+    SessionInfo, SliceBlock, WorkerBlock, WorkerStatus,
 };
 use crate::vis::engine::state::PaneState;
 
@@ -22,6 +22,7 @@ pub struct PaneModel {
     pub evidence_gates: HashMap<String, GateBlock>,
     pub slices: Vec<SliceBlock>,
     pub cost: CostBlock,
+    pub escalations: VecDeque<EscalationBlock>,
     pub state: PaneState,
     /// Current time as last seen via `SessionTick`.  Used for elapsed-time
     /// calculations so rendering stays deterministic in tests.
@@ -49,6 +50,7 @@ impl PaneModel {
             evidence_gates: HashMap::new(),
             slices: Vec::new(),
             cost: CostBlock::default(),
+            escalations: VecDeque::with_capacity(10),
             state: state_machine.state,
             now,
             tick_count: 0,
@@ -63,6 +65,76 @@ impl PaneModel {
 
     /// Apply a single engine event to the model.
     pub fn apply(&mut self, ev: EngineEvent) {
+        // Escalation tracking — separate match so we never touch the main
+        // exhaustive match arms below.
+        match &ev {
+            EngineEvent::RouterEscalating { intent, .. } if *intent != Intent::Trivial => {
+                self.push_escalation(EscalationBlock {
+                    kind: EscalationKindUi::Router,
+                    intent: Some(*intent),
+                    summary: format!("router escalation to {:?}", intent).to_lowercase(),
+                    goal_id: None,
+                    ts: self.now,
+                });
+            }
+            EngineEvent::WorkerStarted {
+                worker_id,
+                kind,
+                task,
+            } => {
+                self.push_escalation(EscalationBlock {
+                    kind: EscalationKindUi::Worker,
+                    intent: None,
+                    summary: format!("{kind}: {task} ({worker_id})"),
+                    goal_id: None,
+                    ts: self.now,
+                });
+            }
+            EngineEvent::WorkerCompleted {
+                worker_id,
+                ok: false,
+                ..
+            } => {
+                self.push_escalation(EscalationBlock {
+                    kind: EscalationKindUi::Failed,
+                    intent: None,
+                    summary: format!("worker {worker_id} failed"),
+                    goal_id: None,
+                    ts: self.now,
+                });
+            }
+            EngineEvent::GoalCreated { goal_id, .. } => {
+                self.push_escalation(EscalationBlock {
+                    kind: EscalationKindUi::Goal,
+                    intent: None,
+                    summary: "goal created".into(),
+                    goal_id: Some(goal_id.clone()),
+                    ts: self.now,
+                });
+            }
+            EngineEvent::GoalGateTransition {
+                goal_id, gate, to, ..
+            } => {
+                self.push_escalation(EscalationBlock {
+                    kind: EscalationKindUi::Goal,
+                    intent: None,
+                    summary: format!("gate {gate} -> {to}"),
+                    goal_id: Some(goal_id.clone()),
+                    ts: self.now,
+                });
+            }
+            EngineEvent::GoalProofReady { goal_id, path } => {
+                self.push_escalation(EscalationBlock {
+                    kind: EscalationKindUi::Goal,
+                    intent: None,
+                    summary: format!("proof ready at {}", path.display()),
+                    goal_id: Some(goal_id.clone()),
+                    ts: self.now,
+                });
+            }
+            _ => {}
+        }
+
         match ev {
             EngineEvent::ClassifierDecided {
                 intent,
@@ -235,6 +307,13 @@ impl PaneModel {
     pub fn has_failed_gate(&self) -> bool {
         self.evidence_gates.values().any(|g| g.state == "failed")
     }
+
+    fn push_escalation(&mut self, block: EscalationBlock) {
+        self.escalations.push_back(block);
+        while self.escalations.len() > 10 {
+            self.escalations.pop_front();
+        }
+    }
 }
 
 impl Default for PaneModel {
@@ -256,6 +335,7 @@ impl Default for PaneModel {
             evidence_gates: HashMap::new(),
             slices: Vec::new(),
             cost: CostBlock::default(),
+            escalations: VecDeque::with_capacity(10),
             state: PaneState::Collapsed,
             now: epoch,
             tick_count: 0,

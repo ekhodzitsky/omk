@@ -1,19 +1,19 @@
 session: engine  ·  omk  ·  up 00:00  ·  $0.000                                 
-mode: planner+workers                                                           
-plan:                                                                           
-✓ A                                                                             
-✓ B                                                                             
-✓ C                                                                             
-▸ D                                                                             
+mode: wire-worker                                                               
+workers:                                                                        
+✗ wire-001   rename foo to bar        00:00                                     
+                                                                                
+                                                                                
+                                                                                
                                                                                 
                                                                                 
                                                                                 
                                                                                 
                                                                                 
 Escalations                                                                     
-● 00:00:00 medium router escalation to medium                                   
-▣ 00:00:00 goal created                                                         
-                                                                                
+✗ 00:00:00 worker wire-001 failed                                               
+◆ 00:00:00 edit: rename foo to bar (wire-001)                                   
+● 00:00:00 small router escalation to small                                     
                                                                                 
                                                                                 
                                                                                 

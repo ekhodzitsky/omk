@@ -2,7 +2,6 @@ session: engine  ·  omk  ·  up 00:00  ·  $0.000
 intent: large  conf 0.88  ·  342ms                                              
 reasoning: refactor authentication module                                       
 recent:                                                                         
-  00:00:00  large     "refactor authenticat…"                                   
 mode: goal-run · g-large-001 · executing                                        
 plan:                                                                           
 ✓ analyse codebase                                                              
@@ -11,14 +10,15 @@ plan:
 workers:                                                                        
 ● wire-001   extract auth module      00:00                                     
 ● wire-002   update auth tests        00:00                                     
-                                                                                
+Escalations                                                                     
+▣ 00:00:00 gate security -> waiting                                             
+▣ 00:00:00 gate tests -> running                                                
 gates:                                                                          
 ⧗ security     waiting                                                          
 ● tests        running                                                          
                                                                                 
 slices:                                                                         
 oauth-001 · .worktrees/oauth-001 · PR #347                                      
-                                                                                
                                                                                 
 cost: 0 in / 0 out  ·  $0.000                                                   
 [P]ause  [I]nject  [A]pprove  [R]eject  [/] cmd                                 

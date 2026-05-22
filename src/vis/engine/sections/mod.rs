@@ -1,6 +1,7 @@
 pub mod active_mode;
 pub mod classifier;
 pub mod cost;
+pub mod escalations;
 pub mod evidence_gates;
 pub mod footer;
 pub mod header;
