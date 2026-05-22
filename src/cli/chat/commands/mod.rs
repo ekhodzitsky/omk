@@ -1,3 +1,21 @@
+pub mod backend;
+pub mod completions;
+pub mod dispatch;
+pub mod help;
+pub mod parser;
+pub mod registry;
+
+pub use backend::{CommandBackend, CommandResponse, StubBackend};
+pub use completions::{complete, completions_for_show};
+pub use dispatch::{CommandDispatcher, CommandSessionState, InputDecision};
+pub use help::{render_help_grouped, render_help_table};
+pub use parser::{parse_command, Command, ParseError};
+pub use registry::{find_spec, CommandCategory, CommandSpec, COMMAND_REGISTRY};
+
+// ------------------------------------------------------------------
+// Legacy W1 compatibility — retained until coordination day
+// ------------------------------------------------------------------
+
 /// Built-in slash commands available in W1.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BuiltinCommand {
@@ -49,7 +67,7 @@ pub fn tab_complete(input: &str) -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests {
+mod legacy_tests {
     use super::*;
 
     #[test]
