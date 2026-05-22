@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-pub(crate) struct Args {
+pub struct Args {
     /// Number of lines to show (like tail -n)
     #[arg(short, long, default_value = "50")]
     lines: usize,

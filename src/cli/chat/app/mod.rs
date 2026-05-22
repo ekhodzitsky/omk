@@ -1,37 +1,20 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
 
-use super::commands::{parse_slash, tab_complete, BuiltinCommand};
+use super::commands::backend::CommandBackend;
+use super::commands::{parse_command, tab_complete, CommandDispatcher, CommandSessionState};
 use super::input::{ChatEvent, InputHistory, InputMode, KeyCode, KeyEvent};
 use super::persistence::{ConversationLog, SessionMeta};
+pub mod dispatch;
+pub mod state;
+pub use state::{AppAction, PaneState, SessionState};
 
-/// Visibility state of the right-hand engine pane.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PaneState {
-    Collapsed,
-    Compact,
-    Expanded,
-}
-
-/// High-level action returned by the event handler.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppAction {
-    Continue,
-    Quit,
-    Redraw,
-}
-
-/// Persistent session container.
-#[derive(Debug)]
-pub struct SessionState {
-    pub meta: SessionMeta,
-    pub conversation: ConversationLog,
-}
+use self::state::{check_tab_hint, default_config_dir, default_state_dir};
 
 /// Main application state machine for the chat shell.
-#[derive(Debug)]
 pub struct App {
     pub session: SessionState,
     pub pane_state: PaneState,
@@ -44,14 +27,50 @@ pub struct App {
     pub tab_hint_seen: bool,
     pub state_dir: PathBuf,
     pub config_dir: PathBuf,
+    backend: Arc<dyn CommandBackend>,
+}
+
+impl std::fmt::Debug for App {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("App")
+            .field("session", &self.session)
+            .field("pane_state", &self.pane_state)
+            .field("input_buffer", &self.input_buffer)
+            .field("input_mode", &self.input_mode)
+            .field("history", &self.history)
+            .field("last_activity", &self.last_activity)
+            .field("conversation_scroll", &self.conversation_scroll)
+            .field("confirm_quit", &self.confirm_quit)
+            .field("tab_hint_seen", &self.tab_hint_seen)
+            .field("state_dir", &self.state_dir)
+            .field("config_dir", &self.config_dir)
+            .finish_non_exhaustive()
+    }
 }
 
 impl App {
-    /// Create a new App with default state directories.
+    /// Create a new App with default state directories and the stub backend.
     pub fn new(project_root: String, session_id: String) -> Result<Self> {
-        let state_dir = default_state_dir(&session_id);
-        let config_dir = default_config_dir();
-        Self::with_dirs(state_dir, config_dir, project_root, session_id)
+        Self::new_with_backend(
+            project_root,
+            session_id,
+            Arc::new(super::commands::StubBackend),
+        )
+    }
+
+    /// Create a new App with an explicit backend.
+    pub fn new_with_backend(
+        project_root: String,
+        session_id: String,
+        backend: Arc<dyn CommandBackend>,
+    ) -> Result<Self> {
+        Self::with_dirs(
+            default_state_dir(&session_id),
+            default_config_dir(),
+            project_root,
+            session_id,
+            backend,
+        )
     }
 
     /// Create a new App with explicit directories (used by tests).
@@ -60,6 +79,7 @@ impl App {
         config_dir: PathBuf,
         project_root: String,
         session_id: String,
+        backend: Arc<dyn CommandBackend>,
     ) -> Result<Self> {
         std::fs::create_dir_all(&state_dir)?;
         std::fs::create_dir_all(&config_dir)?;
@@ -105,6 +125,7 @@ impl App {
             tab_hint_seen,
             state_dir,
             config_dir,
+            backend,
         };
         app.save_meta()?;
         Ok(app)
@@ -289,32 +310,30 @@ impl App {
     }
 
     fn execute_command(&mut self, input: &str) -> AppAction {
-        match parse_slash(input) {
-            Some(BuiltinCommand::Quit) => {
-                self.confirm_quit = true;
+        let dispatcher =
+            CommandDispatcher::new(self.backend.clone(), Arc::new(CommandSessionState::new()));
+
+        match parse_command(input) {
+            Ok(cmd) => {
+                let resp = match tokio::runtime::Handle::try_current() {
+                    Ok(handle) => handle.block_on(dispatcher.dispatch(cmd)),
+                    Err(_) => {
+                        let _ = self
+                            .session
+                            .conversation
+                            .append_assistant("Error: async runtime not available");
+                        return AppAction::Redraw;
+                    }
+                };
+                dispatch::apply_response(self, resp)
+            }
+            Err(_) => {
+                let _ = self
+                    .session
+                    .conversation
+                    .append_assistant("Invalid command syntax");
                 AppAction::Redraw
             }
-            Some(BuiltinCommand::ThemeDark) => {
-                self.session.meta.theme = "dark".to_string();
-                self.touch_meta();
-                AppAction::Redraw
-            }
-            Some(BuiltinCommand::ThemeLight) => {
-                self.session.meta.theme = "light".to_string();
-                self.touch_meta();
-                AppAction::Redraw
-            }
-            Some(BuiltinCommand::Help) => {
-                let help = "Commands: /quit, /theme dark, /theme light, /help";
-                let _ = self.session.conversation.append_assistant(help);
-                AppAction::Redraw
-            }
-            Some(BuiltinCommand::Unknown(cmd)) => {
-                let text = format!("{}: not yet wired (W5)", cmd);
-                let _ = self.session.conversation.append_assistant(&text);
-                AppAction::Redraw
-            }
-            None => AppAction::Redraw,
         }
     }
 
@@ -336,41 +355,4 @@ impl App {
         let path = self.config_dir.join("seen.json");
         let _ = std::fs::write(&path, r#"{"tab_hint":true}"#);
     }
-}
-
-fn default_state_dir(session_id: &str) -> PathBuf {
-    home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".local")
-        .join("state")
-        .join("omk")
-        .join("sessions")
-        .join(session_id)
-}
-
-fn default_config_dir() -> PathBuf {
-    home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".config")
-        .join("omk")
-}
-
-fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
-}
-
-fn check_tab_hint(config_dir: &std::path::Path) -> bool {
-    let path = config_dir.join("seen.json");
-    if !path.exists() {
-        return false;
-    }
-    let Ok(contents) = std::fs::read_to_string(&path) else {
-        return false;
-    };
-    let Ok(val) = serde_json::from_str::<serde_json::Value>(&contents) else {
-        return false;
-    };
-    val.get("tab_hint")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false)
 }

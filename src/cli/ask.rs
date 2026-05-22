@@ -6,7 +6,7 @@ use crate::runtime::ask::{self, is_known_provider};
 
 /// Ask a provider advisor (cross-consultation)
 #[derive(Parser, Debug, Clone)]
-pub(crate) struct Args {
+pub struct Args {
     /// Provider: claude, codex, gemini, kimi
     #[arg(value_name = "PROVIDER", default_value = "")]
     pub provider: String,

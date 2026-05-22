@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crate::kimi_native::role_packs::RolePack;
 
 #[derive(Parser, Debug, Clone)]
-pub(crate) struct Args {
+pub struct Args {
     #[command(subcommand)]
     pub(crate) command: TeamCommands,
 }

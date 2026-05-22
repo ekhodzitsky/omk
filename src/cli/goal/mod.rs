@@ -35,7 +35,7 @@ use validate::{
     long_about = help::GOAL_LONG_ABOUT,
     after_help = help::GOAL_TOP_AFTER_HELP
 )]
-pub(crate) struct Args {
+pub struct Args {
     #[command(subcommand)]
     pub(crate) command: GoalCommands,
 }

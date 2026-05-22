@@ -4,7 +4,7 @@ use std::path::Path;
 use tracing::info;
 
 #[derive(Parser, Debug)]
-pub(crate) struct Args {
+pub struct Args {
     /// Remove all state (teams, autopilot, ralph)
     #[arg(long)]
     all: bool,

@@ -3,7 +3,7 @@ use clap::Parser;
 
 /// HUD / statusline
 #[derive(Parser, Debug, Clone)]
-pub(crate) struct Args {
+pub struct Args {
     /// Team name to monitor
     pub team_name: Option<String>,
 
