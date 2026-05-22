@@ -1,13 +1,13 @@
-use std::io;
-use std::path::PathBuf;
-use std::time::Duration;
-
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Args;
 
-use super::app::{App, AppAction, PaneState};
-use super::input::{ChatEvent, KeyCode, KeyEvent, KeyModifiers};
+#[cfg(feature = "tui")]
+use std::path::PathBuf;
+#[cfg(feature = "tui")]
+use anyhow::Context;
+#[cfg(feature = "tui")]
 use super::persistence::SessionMeta;
+#[cfg(feature = "tui")]
 use super::session_id;
 
 /// CLI arguments for `omk` when invoked without a subcommand.
@@ -23,6 +23,12 @@ pub struct ChatArgs {
 
 #[cfg(feature = "tui")]
 pub fn run_chat(args: ChatArgs) -> Result<()> {
+    use std::io;
+    use std::time::Duration;
+
+    use super::app::{App, AppAction};
+    use super::input::{ChatEvent, KeyCode, KeyEvent, KeyModifiers};
+
     use crossterm::{
         event::{
             self, Event as CrosstermEvent, KeyCode as CKeyCode, KeyModifiers as CKeyModifiers,
@@ -102,6 +108,10 @@ pub fn run_chat(args: ChatArgs) -> Result<()> {
 pub fn run_chat(_args: ChatArgs) -> Result<()> {
     anyhow::bail!("tui feature not enabled")
 }
+
+#[cfg(feature = "tui")]
+#[cfg(feature = "tui")]
+use super::app::{App, PaneState};
 
 #[cfg(feature = "tui")]
 fn draw(f: &mut ratatui::Frame<'_>, app: &App) {
@@ -186,6 +196,7 @@ fn draw(f: &mut ratatui::Frame<'_>, app: &App) {
     }
 }
 
+#[cfg(feature = "tui")]
 fn resolve_project_root() -> String {
     use std::process::Command;
     let output = Command::new("git")
@@ -199,6 +210,7 @@ fn resolve_project_root() -> String {
     }
 }
 
+#[cfg(feature = "tui")]
 fn resolve_session_id(args: &ChatArgs, project_root: &str) -> Result<String> {
     if args.new {
         return Ok(session_id::new_session_id());
@@ -247,6 +259,7 @@ fn resolve_session_id(args: &ChatArgs, project_root: &str) -> Result<String> {
     }
 }
 
+#[cfg(feature = "tui")]
 fn default_state_dir(session_id: &str) -> PathBuf {
     home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -257,6 +270,7 @@ fn default_state_dir(session_id: &str) -> PathBuf {
         .join(session_id)
 }
 
+#[cfg(feature = "tui")]
 fn default_config_dir() -> PathBuf {
     home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -264,6 +278,7 @@ fn default_config_dir() -> PathBuf {
         .join("omk")
 }
 
+#[cfg(feature = "tui")]
 fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }

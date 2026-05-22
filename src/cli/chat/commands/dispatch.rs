@@ -1,13 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
-
 use super::backend::{CommandBackend, CommandResponse};
 use super::help::render_help_table;
 use super::parser::{parse_command, Command};
 use super::registry::find_spec;
-use crate::vis::shell::theme::Theme;
 
 /// Shared mutable state for the command subsystem.
 ///
@@ -16,15 +13,19 @@ use crate::vis::shell::theme::Theme;
 #[derive(Debug)]
 pub struct CommandSessionState {
     pub unknown_command_hinted: AtomicBool,
-    pub theme: Mutex<Theme>,
     pub has_active_large_goal: AtomicBool,
 }
 
+impl Default for CommandSessionState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CommandSessionState {
-    pub fn new(theme: Theme) -> Self {
+    pub fn new() -> Self {
         Self {
             unknown_command_hinted: AtomicBool::new(false),
-            theme: Mutex::new(theme),
             has_active_large_goal: AtomicBool::new(false),
         }
     }

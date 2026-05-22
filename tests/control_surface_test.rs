@@ -8,7 +8,6 @@ use omk::cli::chat::commands::dispatch::{CommandDispatcher, CommandSessionState,
 use omk::cli::chat::commands::help::{render_help_grouped, render_help_table};
 use omk::cli::chat::commands::parser::{parse_command, Command, ParseError};
 use omk::cli::chat::commands::registry::{find_spec, COMMAND_REGISTRY};
-use omk::vis::shell::theme::Theme;
 
 // ===================================================================
 // Mock backend that records every call.
@@ -114,7 +113,7 @@ impl CommandBackend for MockBackend {
 
 fn make_dispatcher() -> (CommandDispatcher, Arc<MockBackend>) {
     let backend = Arc::new(MockBackend::default());
-    let session = Arc::new(CommandSessionState::new(Theme::Dark));
+    let session = Arc::new(CommandSessionState::new());
     let dispatcher = CommandDispatcher::new(backend.clone(), session);
     (dispatcher, backend)
 }
