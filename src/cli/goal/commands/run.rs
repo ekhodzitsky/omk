@@ -1,10 +1,22 @@
 use anyhow::{Context, Result};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+use crate::llm::planner::{LlmPlanner, Planner};
+use crate::llm::types::TokenBudget;
+use crate::llm::{LlmClientConfig, WireLlmClient};
+use crate::wire::client::ProcessWireClient;
 
 pub(crate) async fn cmd_run(
     goal: &str,
     options: crate::runtime::goal::CreateGoalOptions,
+    no_llm_planner: bool,
+    planner_token_budget: u32,
 ) -> Result<()> {
     if options.until_ready {
+        // NOTE: run_goal_until_ready hard-codes planner=None internally.
+        // Wiring the LLM planner for the --until-ready path requires
+        // architectural changes to runtime::goal (out of scope for WS-10).
         let project_dir = std::env::current_dir()
             .context("Failed to resolve current directory for the goal controller loop")?;
         let outcome =
@@ -13,9 +25,114 @@ pub(crate) async fn cmd_run(
         return Ok(());
     }
 
-    let state = crate::runtime::goal::create_goal(goal, options, None).await?;
+    let (planner_holder, disclosure) = if no_llm_planner {
+        (None, format_planner_disclosure(PlannerState::Stub))
+    } else {
+        match build_llm_planner(planner_token_budget).await {
+            Ok(p) => (
+                Some(Box::new(p) as Box<dyn Planner>),
+                format_planner_disclosure(PlannerState::Llm),
+            ),
+            Err(e) => (
+                None,
+                format_planner_disclosure(PlannerState::Fallback(e.to_string())),
+            ),
+        }
+    };
+    eprintln!("{disclosure}");
+
+    let planner_ref = planner_holder.as_deref();
+    let goals_dir = crate::runtime::config::omk_state_dir().join(crate::runtime::goal::GOALS_DIR);
+    let existing_entries: std::collections::HashSet<_> = std::fs::read_dir(&goals_dir)
+        .ok()
+        .map(|rd| rd.filter_map(|e| e.ok().map(|e| e.path())).collect())
+        .unwrap_or_default();
+
+    let state = match crate::runtime::goal::create_goal(goal, options.clone(), planner_ref).await {
+        Ok(s) => s,
+        Err(e) if planner_ref.is_some() => {
+            // Remove any empty goal directories left behind by the failed
+            // LLM attempt so that retrying with the stub does not create
+            // phantom goals.
+            if let Ok(new_dirs) = std::fs::read_dir(&goals_dir) {
+                for entry in new_dirs.filter_map(|e| e.ok()) {
+                    let path = entry.path();
+                    if !existing_entries.contains(&path) && is_empty_goal_dir(&path) {
+                        let _ = std::fs::remove_dir_all(&path);
+                    }
+                }
+            }
+            let reason = format!("LLM planner failed at runtime: {e}");
+            eprintln!(
+                "{}",
+                format_planner_disclosure(PlannerState::Fallback(reason))
+            );
+            crate::runtime::goal::create_goal(goal, options, None).await?
+        }
+        Err(e) => return Err(e),
+    };
     print_goal_scaffold(&state);
     Ok(())
+}
+
+/// Which planner variant is active.
+#[derive(Debug, Clone)]
+pub(crate) enum PlannerState {
+    Llm,
+    Stub,
+    Fallback(String),
+}
+
+/// Format the single-line disclosure message printed to stderr.
+pub(crate) fn format_planner_disclosure(state: PlannerState) -> String {
+    match state {
+        PlannerState::Llm => "goal: using llm planner (kimi)".into(),
+        PlannerState::Stub => "goal: using stub planner (--no-llm-planner)".into(),
+        PlannerState::Fallback(reason) => format!(
+            "goal: llm planner unavailable ({}); falling back to stub planner",
+            reason
+        ),
+    }
+}
+
+/// Returns true if the directory exists and has no entries.  Used to clean
+/// up goal directories left behind by a failed planner attempt before any
+/// files were written.
+fn is_empty_goal_dir(path: &std::path::Path) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+    std::fs::read_dir(path)
+        .ok()
+        .map(|mut rd| rd.next().is_none())
+        .unwrap_or(false)
+}
+
+async fn build_llm_planner(
+    token_budget: u32,
+) -> anyhow::Result<LlmPlanner<WireLlmClient<ProcessWireClient>>> {
+    let kimi_bin = which::which("kimi")
+        .ok()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| "kimi".to_string());
+
+    let wire = ProcessWireClient::spawn(&kimi_bin, None, None, None)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to spawn kimi wire client: {e}"))?;
+
+    let wire_arc = Arc::new(Mutex::new(wire));
+
+    let config = LlmClientConfig {
+        model: "kimi-k2".to_string(),
+        max_tokens: token_budget as usize,
+        temperature: 0.2,
+        timeout: std::time::Duration::from_secs(60),
+        retry_policy: crate::llm::RetryPolicy::default(),
+    };
+
+    let client = WireLlmClient::new(wire_arc, config, crate::llm::CostEstimator::new());
+    let budget = TokenBudget::new(token_budget as usize);
+    Ok(LlmPlanner::new(Arc::new(client), budget))
 }
 
 fn print_goal_scaffold(state: &crate::runtime::goal::GoalState) {
@@ -93,5 +210,35 @@ fn step_icon(kind: crate::runtime::goal::GoalControllerStepKind) -> &'static str
         GoalControllerStepKind::Review => "👁 ",
         GoalControllerStepKind::Deliver => "🚀",
         GoalControllerStepKind::Blocked => "🚧",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_disclosure_format_llm() {
+        assert_eq!(
+            format_planner_disclosure(PlannerState::Llm),
+            "goal: using llm planner (kimi)"
+        );
+    }
+
+    #[test]
+    fn test_disclosure_format_stub() {
+        assert_eq!(
+            format_planner_disclosure(PlannerState::Stub),
+            "goal: using stub planner (--no-llm-planner)"
+        );
+    }
+
+    #[test]
+    fn test_disclosure_format_fallback() {
+        let msg = format_planner_disclosure(PlannerState::Fallback("no binary".into()));
+        assert_eq!(
+            msg,
+            "goal: llm planner unavailable (no binary); falling back to stub planner"
+        );
     }
 }
