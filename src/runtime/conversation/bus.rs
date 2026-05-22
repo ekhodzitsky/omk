@@ -86,6 +86,16 @@ pub enum BusEvent {
     },
     PreflightRequest(Preflight),
     PreflightResponse(PreflightAction),
+    /// Router would have prompted user (preflight kind matched)
+    /// but is operating in autonomous mode. The dispatch proceeds
+    /// as if Accept was received. Emitted for observability and
+    /// session escalation log; UI/listeners can render a marker.
+    AutonomousProceed {
+        kind: PreflightKind,
+        intent: Intent,
+        confidence: f32,
+        reasoning: String,
+    },
     DisclosureLine(String),
     Refused {
         reason: String,

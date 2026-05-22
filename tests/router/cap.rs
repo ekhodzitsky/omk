@@ -15,6 +15,7 @@ use crate::common::{make_classifier_output, make_handle, make_session};
 #[tokio::test]
 async fn test_concurrency_cap_blocks_fourth_medium_goal() {
     let config = RouterConfig {
+        interactive_preflight: true,
         medium_goal_cap: 3,
         ..Default::default()
     };

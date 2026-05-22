@@ -1,3 +1,5 @@
+#[path = "router/autonomous.rs"]
+mod autonomous;
 #[path = "router/cap.rs"]
 mod cap;
 #[path = "router/common.rs"]

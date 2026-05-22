@@ -26,6 +26,15 @@ pub struct RouterConfig {
     pub protected_paths: Vec<std::path::PathBuf>,
     pub small_files_preflight_threshold: u32,
     pub preflight_timeout_ms: u32,
+
+    /// When true, large escalations and low-confidence preflight
+    /// kinds block on user response via PreflightInbox.
+    /// When false (default), the router emits an AutonomousProceed
+    /// marker on the event bus and proceeds with Accept semantics
+    /// without waiting.
+    ///
+    /// Default: false (autonomous-first product positioning).
+    pub interactive_preflight: bool,
 }
 
 impl Default for RouterConfig {
@@ -44,6 +53,7 @@ impl Default for RouterConfig {
             protected_paths: vec![],
             small_files_preflight_threshold: 5,
             preflight_timeout_ms: 60_000,
+            interactive_preflight: false,
         }
     }
 }
