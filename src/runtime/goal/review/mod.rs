@@ -1,5 +1,6 @@
 pub mod architect;
 pub mod pass;
+pub mod performance;
 mod slice;
 pub(crate) mod slop;
 
