@@ -1,5 +1,6 @@
 mod agent;
 mod budget;
+pub mod chat_api;
 mod control;
 mod decision;
 mod delivery;
@@ -30,6 +31,7 @@ pub use budget::{
     add_goal_budget, add_goal_budget_limits, evaluate_task_budget, goal_budget, GoalBudgetAdd,
     GoalBudgetCheckpoint, GoalBudgetReport, PerTaskBudgetSnapshot,
 };
+pub use chat_api::{create_child, ChildGoalHandle};
 pub use control::{cancel_goal, pause_goal, resume_goal};
 pub use delivery::{
     deliver_goal_open_pr_with_client, open_goal_pr_with_client, poll_github_pr_checks,
