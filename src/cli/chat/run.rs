@@ -2,13 +2,13 @@ use anyhow::Result;
 use clap::Args;
 
 #[cfg(feature = "tui")]
-use std::path::PathBuf;
-#[cfg(feature = "tui")]
-use anyhow::Context;
-#[cfg(feature = "tui")]
 use super::persistence::SessionMeta;
 #[cfg(feature = "tui")]
 use super::session_id;
+#[cfg(feature = "tui")]
+use anyhow::Context;
+#[cfg(feature = "tui")]
+use std::path::PathBuf;
 
 /// CLI arguments for `omk` when invoked without a subcommand.
 #[derive(Args, Debug, Clone)]
