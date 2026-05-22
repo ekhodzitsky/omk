@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use crate::runtime::classifier::{ClassifierOutput, Intent};
 use crate::runtime::conversation::{
-    bus::{ActiveMode, BusEvent},
+    bus::{ActiveMode, BusEvent, PreflightKind},
     disclosure::format_disclosure,
     outcome::RouteOutcome,
     session::SessionCtx,
@@ -39,10 +39,32 @@ impl Router {
 
         let preflight_kind = self.preflight_kind(output, prompt, session).await;
         if let Some(kind) = preflight_kind {
-            let action = self.run_preflight(kind, output).await;
-            return self
-                .handle_preflight_action(prompt, output, action, session)
-                .await;
+            if self.config.interactive_preflight {
+                let action = self.run_preflight(kind, output).await;
+                return self
+                    .handle_preflight_action(prompt, output, action, session)
+                    .await;
+            }
+
+            self.event_bus.publish(BusEvent::AutonomousProceed {
+                kind,
+                intent: output.intent,
+                confidence: output.confidence,
+                reasoning: output.reasoning.clone(),
+            });
+
+            let queued = matches!(
+                kind,
+                PreflightKind::QueueLargeOnActiveLarge | PreflightKind::QueueMediumAtConcurrencyCap
+            );
+            if queued {
+                return RouteOutcome::Queued {
+                    intent: output.intent,
+                    position: session.active_medium_goals.lock().await.len(),
+                };
+            }
+
+            return self.dispatch_direct(prompt, output, session).await;
         }
 
         self.dispatch_direct(prompt, output, session).await
