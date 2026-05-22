@@ -3,7 +3,7 @@ use clap::Parser;
 use tokio::process::Command;
 
 #[derive(Parser, Debug)]
-pub(crate) struct Args {}
+pub struct Args {}
 
 pub(crate) async fn run(_args: Args) -> Result<()> {
     println!("🔍 omk doctor");

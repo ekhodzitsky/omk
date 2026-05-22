@@ -80,16 +80,20 @@ async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
     info!("omk starting");
 
     match omk.command {
-        Commands::Team(args) => team::run(args, cancel.clone()).await,
-        Commands::Autopilot(args) => autopilot::run(args, cancel.clone()).await,
-        Commands::Ralph(args) => ralph::run(args, cancel.clone()).await,
-        Commands::Ask(args) => ask::run(args).await,
-        Commands::Hud(args) => hud::run(args).await,
-        Commands::Setup => setup::run_setup().await,
-        Commands::Update(args) => update::run_update(args).await,
-        Commands::Mcp(args) => mcp_cmd::run(args).await,
-        Commands::McpServer => crate::mcp::run_mcp_server().await,
-        Commands::Completions(args) => {
+        Some(Commands::Chat(args)) => crate::cli::chat::run::run_chat_async(args).await,
+        None => {
+            crate::cli::chat::run::run_chat_async(crate::cli::chat::run::ChatArgs::default()).await
+        }
+        Some(Commands::Team(args)) => team::run(args, cancel.clone()).await,
+        Some(Commands::Autopilot(args)) => autopilot::run(args, cancel.clone()).await,
+        Some(Commands::Ralph(args)) => ralph::run(args, cancel.clone()).await,
+        Some(Commands::Ask(args)) => ask::run(args).await,
+        Some(Commands::Hud(args)) => hud::run(args).await,
+        Some(Commands::Setup) => setup::run_setup().await,
+        Some(Commands::Update(args)) => update::run_update(args).await,
+        Some(Commands::Mcp(args)) => mcp_cmd::run(args).await,
+        Some(Commands::McpServer) => crate::mcp::run_mcp_server().await,
+        Some(Commands::Completions(args)) => {
             let shell = match args.shell {
                 ShellArg::Bash => Shell::Bash,
                 ShellArg::Zsh => Shell::Zsh,
@@ -101,27 +105,27 @@ async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
             generate(shell, &mut cmd, "omk", &mut std::io::stdout());
             Ok(())
         }
-        Commands::Man => {
+        Some(Commands::Man) => {
             let cmd = Omk::command();
             let man = clap_mangen::Man::new(cmd);
             man.render(&mut std::io::stdout())?;
             Ok(())
         }
-        Commands::Doctor(args) => doctor::run(args).await,
-        Commands::Cleanup(args) => cleanup::run(args).await,
-        Commands::Logs(args) => logs::run(args).await,
-        Commands::Cost(args) => cost_cmd::run(args).await,
-        Commands::Goal(args) => goal::run(args).await,
-        Commands::Config(args) => config_cmd::run(args).await,
-        Commands::Backup(args) => backup::run(args).await,
-        Commands::State(args) => state::run(args).await,
-        Commands::Skill(args) => skill::run(args).await,
-        Commands::Marketplace(args) => marketplace::run(args).await,
-        Commands::Ultrawork(args) => ultrawork::run(args).await,
-        Commands::KimiNative(args) => kimi_native_cmd::run(args).await,
-        Commands::Run(args) => run_cmd::run(args).await,
-        Commands::Proof(args) => proof_cmd::run(args).await,
-        Commands::Version => {
+        Some(Commands::Doctor(args)) => doctor::run(args).await,
+        Some(Commands::Cleanup(args)) => cleanup::run(args).await,
+        Some(Commands::Logs(args)) => logs::run(args).await,
+        Some(Commands::Cost(args)) => cost_cmd::run(args).await,
+        Some(Commands::Goal(args)) => goal::run(args).await,
+        Some(Commands::Config(args)) => config_cmd::run(args).await,
+        Some(Commands::Backup(args)) => backup::run(args).await,
+        Some(Commands::State(args)) => state::run(args).await,
+        Some(Commands::Skill(args)) => skill::run(args).await,
+        Some(Commands::Marketplace(args)) => marketplace::run(args).await,
+        Some(Commands::Ultrawork(args)) => ultrawork::run(args).await,
+        Some(Commands::KimiNative(args)) => kimi_native_cmd::run(args).await,
+        Some(Commands::Run(args)) => run_cmd::run(args).await,
+        Some(Commands::Proof(args)) => proof_cmd::run(args).await,
+        Some(Commands::Version) => {
             println!("omk {}", env!("CARGO_PKG_VERSION"));
             println!("  Repository: {}", env!("CARGO_PKG_REPOSITORY"));
             Ok(())

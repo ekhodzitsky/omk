@@ -7,7 +7,7 @@ use tracing::info;
 use crate::runtime::sanitize::sanitize_name;
 
 #[derive(Parser, Debug)]
-pub(crate) struct Args {
+pub struct Args {
     #[command(subcommand)]
     command: StateCommands,
 }

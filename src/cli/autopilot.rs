@@ -5,7 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 /// Autonomous execution with single lead agent
 #[derive(Parser, Debug, Clone)]
-pub(crate) struct Args {
+pub struct Args {
     /// Task description
     #[arg(trailing_var_arg = true, value_name = "TASK")]
     pub task: Vec<String>,

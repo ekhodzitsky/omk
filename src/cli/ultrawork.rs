@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 /// Parallel burst execution — run multiple tasks concurrently without a team
 #[derive(Parser, Debug, Clone)]
-pub(crate) struct Args {
+pub struct Args {
     /// Tasks to execute in parallel (one per arg)
     #[arg(trailing_var_arg = true, value_name = "TASK")]
     pub tasks: Vec<String>,

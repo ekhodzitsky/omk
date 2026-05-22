@@ -11,13 +11,13 @@ mod skills;
 mod sync;
 
 #[derive(Parser, Debug)]
-pub(crate) struct KimiNativeArgs {
+pub struct KimiNativeArgs {
     #[command(subcommand)]
     pub command: KimiNativeCommands,
 }
 
 #[derive(Subcommand, Debug)]
-pub(crate) enum KimiNativeCommands {
+pub enum KimiNativeCommands {
     /// Sync OMK assets for current Kimi surfaces (project + user scope)
     Sync {
         #[arg(short, long, default_value = ".")]

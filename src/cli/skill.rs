@@ -5,13 +5,13 @@ use tracing::info;
 use crate::runtime::sanitize::sanitize_name;
 
 #[derive(Parser, Debug)]
-pub(crate) struct Args {
+pub struct Args {
     #[command(subcommand)]
     pub command: SkillCommands,
 }
 
 #[derive(Subcommand, Debug)]
-pub(crate) enum SkillCommands {
+pub enum SkillCommands {
     /// Install a skill from a git repository
     Install {
         /// Git URL or local path

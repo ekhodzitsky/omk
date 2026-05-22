@@ -5,7 +5,7 @@ use tokio::process::Command;
 use tracing::info;
 
 #[derive(Parser, Debug)]
-pub(crate) struct Args {
+pub struct Args {
     #[command(subcommand)]
     command: BackupCommands,
 }

@@ -5,7 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 /// Persistent mode with verify/fix loops
 #[derive(Parser, Debug, Clone)]
-pub(crate) struct Args {
+pub struct Args {
     /// Task description
     #[arg(trailing_var_arg = true, value_name = "TASK")]
     pub task: Vec<String>,

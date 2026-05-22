@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-pub(crate) struct Args {
+pub struct Args {
     #[command(subcommand)]
     command: ConfigCommands,
 }
