@@ -99,7 +99,7 @@ jobs:
       - name: Check supply chain
         if: github.event_name != 'pull_request' || needs.changes.outputs.rust == 'true'
         # SHA-pinned third-party action (v2.0.18 at time of pin).
-        uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1
+        uses: EmbarkStudios/cargo-deny-action@a531616d8ce3b9177443e48a1159bc945a099823
         with:
           command: check advisories licenses sources
           arguments: --all-features
@@ -120,7 +120,7 @@ jobs:
       - name: Check supply chain
         if: github.event_name != 'pull_request' || needs.changes.outputs.deps == 'true'
         # SHA-pinned third-party action (v2.0.18 at time of pin).
-        uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1
+        uses: EmbarkStudios/cargo-deny-action@a531616d8ce3b9177443e48a1159bc945a099823
         with:
           command: check advisories licenses sources
           arguments: --all-features
