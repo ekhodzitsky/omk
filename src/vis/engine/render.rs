@@ -15,6 +15,7 @@ mod sections {
     pub use super::super::sections::active_mode;
     pub use super::super::sections::classifier;
     pub use super::super::sections::cost;
+    pub use super::super::sections::escalations;
     pub use super::super::sections::evidence_gates;
     pub use super::super::sections::footer;
     pub use super::super::sections::header;
@@ -49,6 +50,14 @@ fn render_collapsed(model: &PaneModel, frame: &mut Frame, area: Rect, theme: The
         parts.push(Span::styled(" · ", Style::default().fg(theme.fg_muted())));
         parts.push(Span::styled(
             format!("workers {active}/{total}"),
+            Style::default().fg(theme.fg_normal()),
+        ));
+    }
+
+    if !model.escalations.is_empty() {
+        parts.push(Span::styled(" · ", Style::default().fg(theme.fg_muted())));
+        parts.push(Span::styled(
+            format!("{} esc", model.escalations.len()),
             Style::default().fg(theme.fg_normal()),
         ));
     }
@@ -93,6 +102,11 @@ fn render_compact(model: &PaneModel, frame: &mut Frame, area: Rect, theme: Theme
         constraints.push(Constraint::Min(0));
     }
 
+    let show_escalations = !model.escalations.is_empty();
+    if show_escalations {
+        constraints.push(Constraint::Min(0));
+    }
+
     constraints.push(Constraint::Length(1)); // cost
     constraints.push(Constraint::Length(1)); // footer
 
@@ -118,6 +132,11 @@ fn render_compact(model: &PaneModel, frame: &mut Frame, area: Rect, theme: Theme
         idx += 1;
     }
 
+    if show_escalations {
+        sections::escalations::render(model, frame, chunks[idx], theme);
+        idx += 1;
+    }
+
     sections::cost::render(model, frame, chunks[idx], theme);
     idx += 1;
     sections::footer::render(model, frame, chunks[idx], theme);
@@ -140,6 +159,11 @@ fn render_expanded(model: &PaneModel, frame: &mut Frame, area: Rect, theme: Them
 
     let show_workers = !model.workers.is_empty();
     if show_workers {
+        constraints.push(Constraint::Min(0));
+    }
+
+    let show_escalations = !model.escalations.is_empty();
+    if show_escalations {
         constraints.push(Constraint::Min(0));
     }
 
@@ -180,6 +204,11 @@ fn render_expanded(model: &PaneModel, frame: &mut Frame, area: Rect, theme: Them
 
     if show_workers {
         sections::workers::render(model, frame, chunks[idx], theme);
+        idx += 1;
+    }
+
+    if show_escalations {
+        sections::escalations::render(model, frame, chunks[idx], theme);
         idx += 1;
     }
 

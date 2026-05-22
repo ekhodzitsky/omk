@@ -1,5 +1,6 @@
 pub mod bus;
 pub mod disclosure;
+pub mod escalation_log;
 pub mod goal_bridge;
 pub mod outcome;
 pub mod session;

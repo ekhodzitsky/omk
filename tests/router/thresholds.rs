@@ -14,6 +14,7 @@ use crate::common::{make_classifier_output, make_handle, make_session};
 #[tokio::test]
 async fn test_first_prompt_threshold_is_stricter_than_subsequent() {
     let config = RouterConfig {
+        interactive_preflight: true,
         first_prompt_threshold: 0.85,
         preflight_timeout_ms: 5_000,
         ..Default::default()
