@@ -131,6 +131,13 @@ fn scenario_empty_sections_hide_correctly() {
     check_snapshot("scenario_empty_sections_hide_correctly", &lines);
 }
 
+#[test]
+fn scenario_escalation_marker_renders_in_expanded_mode() {
+    let events = read_fixture("scenario_escalation_marker");
+    let lines = render_scenario(&events, PaneState::Expanded, 80, 24);
+    check_snapshot("scenario_escalation_marker", &lines);
+}
+
 // ---------------------------------------------------------------------------
 // State-machine scenarios
 // ---------------------------------------------------------------------------

@@ -48,6 +48,7 @@ async fn test_quick_override_forces_small_intent_regardless_of_classifier() {
 #[tokio::test]
 async fn test_escalate_override_forces_large_with_preflight() {
     let config = RouterConfig {
+        interactive_preflight: true,
         preflight_timeout_ms: 5_000,
         ..Default::default()
     };
@@ -103,6 +104,7 @@ async fn test_escalate_override_forces_large_with_preflight() {
 #[tokio::test]
 async fn test_preflight_q_downgrades_one_level() {
     let config = RouterConfig {
+        interactive_preflight: true,
         preflight_timeout_ms: 5_000,
         ..Default::default()
     };
@@ -163,6 +165,7 @@ async fn test_preflight_q_downgrades_one_level() {
 #[tokio::test]
 async fn test_preflight_q_on_small_is_noop_log() {
     let config = RouterConfig {
+        interactive_preflight: true,
         protected_paths: vec![PathBuf::from(".github/")],
         first_prompt_threshold: 0.0,
         preflight_timeout_ms: 5_000,

@@ -2,11 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
 
+mod auto_merge;
 mod github_api;
 mod pr_client;
 mod pr_draft;
 mod slice_pr;
 
+pub use auto_merge::{attempt_auto_merge, AutoMergeAction, AutoMergeContext};
 pub use github_api::{ensure_branch_protection, parse_github_owner_repo, BranchProtectionPolicy};
 pub use pr_client::{poll_github_pr_checks, GoalGithubPrCommandClient};
 pub use pr_draft::{deliver_goal_open_pr_with_client, open_goal_pr_with_client};

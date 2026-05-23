@@ -6,9 +6,6 @@ recent:
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
-                                                                                
 mode: wire-worker                                                               
 workers:                                                                        
 ● wire-001   rename foo to bar        00:00                                     
@@ -16,6 +13,9 @@ workers:
                                                                                 
                                                                                 
                                                                                 
+Escalations                                                                     
+◆ 00:00:00 edit: rename foo to bar (wire-001)                                   
+● 00:00:00 small router escalation to small                                     
                                                                                 
                                                                                 
                                                                                 

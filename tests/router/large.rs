@@ -14,6 +14,7 @@ use crate::common::{make_classifier_output, make_handle, make_session};
 #[tokio::test]
 async fn test_large_intent_always_preflights_before_creating_goal() {
     let config = RouterConfig {
+        interactive_preflight: true,
         preflight_timeout_ms: 100,
         ..Default::default()
     };
@@ -59,6 +60,7 @@ async fn test_large_intent_always_preflights_before_creating_goal() {
 #[tokio::test]
 async fn test_large_preflight_accept_creates_child_goal() {
     let config = RouterConfig {
+        interactive_preflight: true,
         preflight_timeout_ms: 5_000,
         ..Default::default()
     };

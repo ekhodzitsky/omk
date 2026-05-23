@@ -1,17 +1,19 @@
-use anyhow::Result;
+use std::io;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
+use anyhow::{Context, Result};
 use clap::Args;
 
-#[cfg(feature = "tui")]
+use super::app::{App, AppAction, PaneState};
+use super::commands::backend::CommandBackend;
+use super::input::{ChatEvent, KeyCode, KeyEvent, KeyModifiers};
 use super::persistence::SessionMeta;
-#[cfg(feature = "tui")]
 use super::session_id;
-#[cfg(feature = "tui")]
-use anyhow::Context;
-#[cfg(feature = "tui")]
-use std::path::PathBuf;
 
 /// CLI arguments for `omk` when invoked without a subcommand.
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, Default)]
 pub struct ChatArgs {
     /// Resume a specific session by id.
     #[arg(long)]
@@ -22,13 +24,36 @@ pub struct ChatArgs {
 }
 
 #[cfg(feature = "tui")]
-pub fn run_chat(args: ChatArgs) -> Result<()> {
-    use std::io;
-    use std::time::Duration;
+pub async fn run_chat_async(args: ChatArgs) -> Result<()> {
+    let project_root = resolve_project_root();
+    let session_id = resolve_session_id(&args, &project_root)?;
+    let backend = Arc::new(
+        super::composed_backend::ProductionBackend::build(
+            session_id.clone(),
+            PathBuf::from(&project_root),
+        )
+        .await
+        .context("build production backend")?,
+    );
 
-    use super::app::{App, AppAction};
-    use super::input::{ChatEvent, KeyCode, KeyEvent, KeyModifiers};
+    let state_dir = default_state_dir(&session_id);
+    // The adapter task exits automatically when the EventBus sender is dropped.
+    let _adapter = super::events_adapter::start(state_dir, backend.event_bus());
 
+    // run_chat is sync/blocking (crossterm event loop). It terminates when the
+    // user quits or on terminal error, at which point spawn_blocking returns.
+    tokio::task::spawn_blocking(move || run_chat(args, backend))
+        .await
+        .context("chat task panicked")?
+}
+
+#[cfg(not(feature = "tui"))]
+pub async fn run_chat_async(_args: ChatArgs) -> Result<()> {
+    anyhow::bail!("tui feature not enabled")
+}
+
+#[cfg(feature = "tui")]
+pub fn run_chat(args: ChatArgs, backend: Arc<dyn CommandBackend>) -> Result<()> {
     use crossterm::{
         event::{
             self, Event as CrosstermEvent, KeyCode as CKeyCode, KeyModifiers as CKeyModifiers,
@@ -42,16 +67,14 @@ pub fn run_chat(args: ChatArgs) -> Result<()> {
     enable_raw_mode().context("enable raw mode")?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen).context("enter alt screen")?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend).context("create terminal")?;
+    let backend_term = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend_term).context("create terminal")?;
 
     // Resolve session.
     let project_root = resolve_project_root();
     let session_id = resolve_session_id(&args, &project_root)?;
-    let state_dir = default_state_dir(&session_id);
 
-    let mut app = App::with_dirs(state_dir, default_config_dir(), project_root, session_id)
-        .context("build app")?;
+    let mut app = App::new_with_backend(project_root, session_id, backend).context("build app")?;
 
     let tick_rate = Duration::from_millis(100);
     let result = loop {
@@ -103,15 +126,6 @@ pub fn run_chat(args: ChatArgs) -> Result<()> {
 
     result
 }
-
-#[cfg(not(feature = "tui"))]
-pub fn run_chat(_args: ChatArgs) -> Result<()> {
-    anyhow::bail!("tui feature not enabled")
-}
-
-#[cfg(feature = "tui")]
-#[cfg(feature = "tui")]
-use super::app::{App, PaneState};
 
 #[cfg(feature = "tui")]
 fn draw(f: &mut ratatui::Frame<'_>, app: &App) {
@@ -196,7 +210,6 @@ fn draw(f: &mut ratatui::Frame<'_>, app: &App) {
     }
 }
 
-#[cfg(feature = "tui")]
 fn resolve_project_root() -> String {
     use std::process::Command;
     let output = Command::new("git")
@@ -210,7 +223,6 @@ fn resolve_project_root() -> String {
     }
 }
 
-#[cfg(feature = "tui")]
 fn resolve_session_id(args: &ChatArgs, project_root: &str) -> Result<String> {
     if args.new {
         return Ok(session_id::new_session_id());
@@ -243,7 +255,7 @@ fn resolve_session_id(args: &ChatArgs, project_root: &str) -> Result<String> {
                 if meta.project_root == project_root {
                     if let Ok(m) = entry.metadata() {
                         if let Ok(modified) = m.modified() {
-                            if latest.as_ref().map_or(true, |(_, t)| *t < modified) {
+                            if latest.as_ref().map_or(true, |l| l.1 < modified) {
                                 latest = Some((entry, modified));
                             }
                         }
@@ -259,7 +271,6 @@ fn resolve_session_id(args: &ChatArgs, project_root: &str) -> Result<String> {
     }
 }
 
-#[cfg(feature = "tui")]
 fn default_state_dir(session_id: &str) -> PathBuf {
     home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -270,15 +281,6 @@ fn default_state_dir(session_id: &str) -> PathBuf {
         .join(session_id)
 }
 
-#[cfg(feature = "tui")]
-fn default_config_dir() -> PathBuf {
-    home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".config")
-        .join("omk")
-}
-
-#[cfg(feature = "tui")]
 fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }

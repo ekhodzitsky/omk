@@ -1,4 +1,5 @@
 use omk::cli::chat::app::{App, PaneState};
+use omk::cli::chat::commands::StubBackend;
 use omk::cli::chat::input::{ChatEvent, KeyCode, KeyEvent, KeyModifiers};
 use tempfile::TempDir;
 
@@ -41,6 +42,7 @@ fn make_app(temp: &TempDir) -> App {
         config_dir,
         "/tmp/project".to_string(),
         "o7k_test1234".to_string(),
+        std::sync::Arc::new(StubBackend),
     )
     .unwrap()
 }
@@ -121,6 +123,7 @@ fn test_session_resume_loads_persisted_conversation() {
             config_dir.clone(),
             "/tmp/project".to_string(),
             "o7k_test1234".to_string(),
+            std::sync::Arc::new(StubBackend),
         )
         .unwrap();
 
@@ -142,6 +145,7 @@ fn test_session_resume_loads_persisted_conversation() {
             config_dir,
             "/tmp/project".to_string(),
             "o7k_test1234".to_string(),
+            std::sync::Arc::new(StubBackend),
         )
         .unwrap();
 

@@ -35,7 +35,7 @@ use validate::{
     long_about = help::GOAL_LONG_ABOUT,
     after_help = help::GOAL_TOP_AFTER_HELP
 )]
-pub(crate) struct Args {
+pub struct Args {
     #[command(subcommand)]
     pub(crate) command: GoalCommands,
 }
@@ -75,6 +75,15 @@ pub(crate) enum GoalCommands {
         /// Enforce GitHub branch protection on main/master before integrator PR
         #[arg(long)]
         enforce_protection: bool,
+        /// Disable the LLM planner; fall back to the heuristic stub
+        /// planner. Mostly useful for offline / CI runs and reproducible
+        /// fixtures. Default: planner enabled.
+        #[arg(long)]
+        no_llm_planner: bool,
+        /// Token budget per planner LLM call (max tokens). Default: 8000.
+        /// Lower values truncate context aggressively; higher costs more.
+        #[arg(long, default_value = "8000")]
+        planner_token_budget: u32,
     },
     /// Create a durable plan/proof scaffold without execution intent
     #[command(after_help = help::GOAL_PLAN_AFTER_HELP)]
@@ -270,6 +279,8 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             merge_policy,
             slice_execution,
             enforce_protection,
+            no_llm_planner,
+            planner_token_budget,
         } => {
             let goal = validate_goal_text(&goal)?;
             let budget_time = validate_budget_time(budget_time.as_deref(), "--budget-time", false)?;
@@ -289,6 +300,8 @@ pub(crate) async fn run(args: Args) -> Result<()> {
                     slice_execution,
                     enforce_protection,
                 },
+                no_llm_planner,
+                planner_token_budget,
             )
             .await
         }

@@ -22,7 +22,7 @@ pub(crate) struct SliceReviewContext;
 
 /// A single review pass artifact for a slice.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SliceReviewArtifact {
+pub struct SliceReviewArtifact {
     pub kind: String,
     pub passed: bool,
     pub feedback: String,
@@ -31,13 +31,13 @@ pub(crate) struct SliceReviewArtifact {
 
 /// Outcome of a per-slice review.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SliceReviewOutcome {
+pub struct SliceReviewOutcome {
     pub passed: bool,
     pub review_path: Option<PathBuf>,
     pub security_review_path: Option<PathBuf>,
     pub feedback: Option<String>,
     pub artifacts: Vec<SliceReviewArtifact>,
-    pub slop_findings: Vec<SlopFinding>,
+    pub(crate) slop_findings: Vec<SlopFinding>,
 }
 
 /// Compute anti-slop confidence from slice review artifacts and real slop findings.

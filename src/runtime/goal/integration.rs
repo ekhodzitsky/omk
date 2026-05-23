@@ -9,7 +9,10 @@ use super::state::{
     GOAL_ARTIFACTS_DIR, GOAL_LOCAL_VERIFY_TASK_ID, GOAL_PROOF_FILE, GOAL_REVIEW_TASK_ID,
     GOAL_SECURITY_REVIEW_TASK_ID,
 };
-use super::task_graph::{goal_agent_execution_done, goal_task_done, GoalTaskGraph};
+use super::task_graph::{
+    goal_agent_execution_done, goal_task_done, load_goal_task_delivery_records,
+    GoalTaskDeliveryMetadata, GoalTaskGraph,
+};
 use crate::runtime::events::{EventBuilder, EventWriter, RunId};
 use crate::runtime::gates::gates_passed;
 
@@ -295,13 +298,64 @@ fn artifact_path(file_name: &str) -> PathBuf {
         .join(file_name)
 }
 
-async fn write_rejection_rollback_plan(
+const MAX_EVIDENCE_EMBED_BYTES: usize = 64 * 1024;
+
+fn read_evidence_summary(path: &Path, max_bytes: usize) -> std::io::Result<String> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let mut buf = Vec::new();
+    file.by_ref().take(max_bytes as u64).read_to_end(&mut buf)?;
+    let mut summary = String::from_utf8_lossy(&buf).into_owned();
+    let mut extra = [0u8; 1];
+    if file.read(&mut extra)? > 0 {
+        summary.push_str(&format!("\n...(truncated at {} bytes)", max_bytes));
+    }
+    Ok(summary)
+}
+
+fn render_conflict_evidence_section(
+    slice_id: &str,
+    metadata: &GoalTaskDeliveryMetadata,
+    goal_dir: &Path,
+) -> Option<String> {
+    let has_path = metadata.conflict_evidence_path.is_some();
+    let has_reason = metadata.conflict_blocking_reason.is_some();
+    if !has_path && !has_reason {
+        return None;
+    }
+    let mut out = String::new();
+    out.push_str(&format!("## Conflict evidence — slice `{}`\n\n", slice_id));
+    if let Some(reason) = &metadata.conflict_blocking_reason {
+        out.push_str(&format!("**Blocking reason:** {}\n\n", reason));
+    }
+    if let Some(path) = &metadata.conflict_evidence_path {
+        out.push_str(&format!("**Evidence artifact:** `{}`\n\n", path.display()));
+        let abs_path = goal_dir.join(path);
+        match read_evidence_summary(&abs_path, MAX_EVIDENCE_EMBED_BYTES) {
+            Ok(summary) => {
+                out.push_str("```\n");
+                out.push_str(&summary);
+                if !summary.ends_with('\n') {
+                    out.push('\n');
+                }
+                out.push_str("```\n\n");
+            }
+            Err(e) => {
+                out.push_str(&format!("_(unreadable: {})_\n\n", e));
+            }
+        }
+    }
+    Some(out)
+}
+
+#[doc(hidden)]
+pub async fn write_rejection_rollback_plan(
     state: &GoalState,
     proof: &GoalProof,
     reason: &str,
 ) -> Result<()> {
     let changed_files = rollback_changed_files(proof);
-    let body = format!(
+    let mut body = format!(
         "# Rejected Goal Rollback Plan\n\n\
          Goal: `{}`\n\n\
          Rejection reason: {}\n\n\
@@ -314,6 +368,34 @@ async fn write_rejection_rollback_plan(
          3. Re-run the goal verification gates and integrator review before accepting again.\n",
         state.goal_id, reason, changed_files
     );
+
+    if let Ok(records) = load_goal_task_delivery_records(&state.state_dir).await {
+        let mut conflict_records: Vec<_> = records
+            .into_iter()
+            .filter(|record| {
+                record.metadata.conflict_evidence_path.is_some()
+                    || record.metadata.conflict_blocking_reason.is_some()
+            })
+            .collect();
+        conflict_records.sort_by(|a, b| {
+            let a_id = a.metadata.slice_id.as_deref().unwrap_or(&a.task_id);
+            let b_id = b.metadata.slice_id.as_deref().unwrap_or(&b.task_id);
+            a_id.cmp(b_id)
+        });
+        for record in conflict_records {
+            let slice_id = record
+                .metadata
+                .slice_id
+                .as_deref()
+                .unwrap_or(&record.task_id);
+            if let Some(section) =
+                render_conflict_evidence_section(slice_id, &record.metadata, &state.state_dir)
+            {
+                body.push_str(&section);
+            }
+        }
+    }
+
     crate::runtime::atomic::atomic_write(
         &state
             .state_dir

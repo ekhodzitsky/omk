@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use serde_json::Value;
 
 #[derive(Parser, Debug)]
-pub(crate) struct Args {
+pub struct Args {
     #[command(subcommand)]
     pub(crate) command: RunCommands,
 }

@@ -18,9 +18,9 @@ pub use run::run;
 #[command(name = "omk")]
 #[command(about = "Scheduler-backed team orchestration and Kimi asset tooling")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
-pub(super) struct Omk {
+pub struct Omk {
     #[command(subcommand)]
-    command: Commands,
+    pub command: Option<Commands>,
 
     /// Enable verbose logging
     #[arg(short, long, global = true)]
@@ -28,7 +28,10 @@ pub(super) struct Omk {
 }
 
 #[derive(Subcommand, Debug)]
-pub(super) enum Commands {
+pub enum Commands {
+    /// Open the unified chat (default when no subcommand given)
+    #[command(visible_alias = "c")]
+    Chat(crate::cli::chat::run::ChatArgs),
     /// Team orchestration (Wire scheduler runtime)
     #[command(visible_alias = "t")]
     Team(team::Args),
@@ -92,20 +95,20 @@ pub(super) enum Commands {
 }
 
 #[derive(Parser, Debug)]
-pub(super) struct UpdateArgs {
+pub struct UpdateArgs {
     /// Check for updates without installing
     #[arg(long)]
     check: bool,
 }
 
 #[derive(Parser, Debug)]
-pub(super) struct CompletionsArgs {
+pub struct CompletionsArgs {
     #[arg(value_enum)]
     shell: ShellArg,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
-pub(super) enum ShellArg {
+pub enum ShellArg {
     Bash,
     Zsh,
     Fish,

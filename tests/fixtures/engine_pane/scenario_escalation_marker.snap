@@ -1,0 +1,24 @@
+session: engine  ·  omk  ·  up 00:00  ·  $0.000                                 
+mode: wire-worker                                                               
+workers:                                                                        
+✗ wire-001   rename foo to bar        00:00                                     
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+Escalations                                                                     
+✗ 00:00:00 worker wire-001 failed                                               
+◆ 00:00:00 edit: rename foo to bar (wire-001)                                   
+● 00:00:00 small router escalation to small                                     
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+cost: 0 in / 0 out  ·  $0.000                                                   
+[P]ause  [I]nject  [A]pprove  [R]eject  [/] cmd                                 

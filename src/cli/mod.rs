@@ -1,4 +1,4 @@
-mod app;
+pub mod app;
 pub(crate) mod ask;
 pub(crate) mod autopilot;
 pub(crate) mod backup;

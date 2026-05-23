@@ -16,13 +16,20 @@ pub use types::{
 
 // Re-export repository traits so consumers don't need to reach into repo::.
 pub use repo::{
-    artifact::ArtifactRepo, budget::BudgetRepo, decision::DecisionRepo, event::EventRepo,
-    goal::GoalRepo, proof::ProofRepo, task::TaskRepo,
+    artifact::ArtifactRepo,
+    budget::BudgetRepo,
+    decision::DecisionRepo,
+    event::EventRepo,
+    goal::GoalRepo,
+    proof::ProofRepo,
+    slice_lease::{SliceLease, SliceLeaseRepo},
+    task::TaskRepo,
 };
 
 use repo::{
     artifact::ArtifactRepoImpl, budget::BudgetRepoImpl, decision::DecisionRepoImpl,
-    event::EventRepoImpl, goal::GoalRepoImpl, proof::ProofRepoImpl, task::TaskRepoImpl,
+    event::EventRepoImpl, goal::GoalRepoImpl, proof::ProofRepoImpl,
+    slice_lease::SliceLeaseRepoImpl, task::TaskRepoImpl,
 };
 
 use std::sync::OnceLock;
@@ -86,6 +93,13 @@ impl DbHandle {
     /// Access the decision repository directly (auto-commit mode).
     pub fn decision_repo(&self) -> DecisionRepoImpl {
         DecisionRepoImpl {
+            conn: self.conn.clone(),
+        }
+    }
+
+    /// Access the slice lease repository directly (auto-commit mode).
+    pub fn slice_lease_repo(&self) -> SliceLeaseRepoImpl {
+        SliceLeaseRepoImpl {
             conn: self.conn.clone(),
         }
     }

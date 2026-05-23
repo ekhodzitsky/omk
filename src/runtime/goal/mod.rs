@@ -1,4 +1,4 @@
-mod agent;
+pub mod agent;
 mod budget;
 pub mod chat_api;
 mod control;
@@ -26,6 +26,8 @@ mod verifier;
 mod worktree;
 
 // Public API
+#[doc(hidden)]
+pub use agent::leases::{LeaseError, LeaseGuard, LeaseManager};
 pub use agent::{check_task_path_policy, GoalAgentTaskProposal};
 pub use budget::{
     add_goal_budget, add_goal_budget_limits, evaluate_task_budget, goal_budget, GoalBudgetAdd,
@@ -34,16 +36,24 @@ pub use budget::{
 pub use chat_api::{create_child, ChildGoalHandle};
 pub use control::{cancel_goal, pause_goal, resume_goal};
 pub use delivery::{
-    deliver_goal_open_pr_with_client, open_goal_pr_with_client, poll_github_pr_checks,
-    GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrDeliveryOptions,
-    GoalGithubPrDeliveryOutcome, GoalGithubPrMutation, GoalGithubPrOperation, GoalGithubPrRequest,
-    GoalMergePolicy,
+    attempt_auto_merge, deliver_goal_open_pr_with_client, open_goal_pr_with_client,
+    poll_github_pr_checks, AutoMergeAction, AutoMergeContext, GoalDeliveryPolicy, GoalGithubPrClient,
+    GoalGithubPrCommandClient, GoalGithubPrDeliveryOptions, GoalGithubPrDeliveryOutcome,
+    GoalGithubPrMutation, GoalGithubPrOperation, GoalGithubPrRequest, GoalMergePolicy,
 };
 pub use evidence::GoalGitEvidence;
 pub use lifecycle::{execute_goal, review_goal, verify_goal, verify_goal_with_slices};
 pub use merge::merge_goal;
 pub use open_pr::GoalOpenPrDraft;
 pub use oracle::GoalKind;
+
+// Review gate types for integration tests.
+#[doc(hidden)]
+pub use review::dispatcher::{aggregate_verdict, AggregateReviewVerdict};
+#[doc(hidden)]
+pub use review::test_slice_review_outcome;
+#[doc(hidden)]
+pub use review::SliceReviewArtifact;
 pub use planner::discover_relevant_files;
 pub use progress::{GoalProgressLine, GoalProgressLineKind, GoalProgressSnapshot};
 pub use proof::GoalProof;
@@ -77,6 +87,9 @@ pub use worktree::{
     plan_goal_worktrees, GoalMergeConflictCheckRequest, GoalMergeConflictEvidence,
     GoalWorktreeMaterializeOutcome, GoalWorktreeMaterializeRequest, GoalWorktreePlan,
 };
+
+#[doc(hidden)]
+pub use integration::write_rejection_rollback_plan;
 
 // Internal API
 pub(crate) use control::run_goal_until_ready;

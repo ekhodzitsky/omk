@@ -92,6 +92,14 @@ pub enum EventKind {
     HookResolved,
     ApprovalRequested,
     ApprovalDecided,
+    #[serde(rename = "slice.lease.claimed")]
+    SliceLeaseClaimed,
+    #[serde(rename = "slice.lease.released")]
+    SliceLeaseReleased,
+    #[serde(rename = "slice.lease.expired")]
+    SliceLeaseExpired,
+    #[serde(rename = "slice.lease.skipped")]
+    SliceLeaseSkipped,
 }
 
 // ---------------------------------------------------------------------------
