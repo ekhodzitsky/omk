@@ -14,9 +14,7 @@ pub(crate) use slice::{
 };
 
 #[doc(hidden)]
-pub fn test_slice_review_outcome(
-    artifacts: Vec<SliceReviewArtifact>,
-) -> SliceReviewOutcome {
+pub fn test_slice_review_outcome(artifacts: Vec<SliceReviewArtifact>) -> SliceReviewOutcome {
     SliceReviewOutcome {
         passed: artifacts.iter().all(|a| a.passed),
         review_path: None,
