@@ -35,7 +35,7 @@ pub fn count_tokens(text: &str, model: &str) -> usize {
     } else {
         tiktoken_rs::cl100k_base_singleton()
     };
-    let tokens = bpe.lock().encode_with_special_tokens(text);
+    let tokens = bpe.encode_with_special_tokens(text);
     tokens.len()
 }
 
@@ -129,5 +129,34 @@ mod tests {
 
         let usd2 = estimated_usd_from_exact_tokens(0, 1_000_000, &tier);
         assert!((usd2 - 8.0).abs() < f64::EPSILON);
+    }
+
+    /// Smoke-test the new tiktoken-rs 0.11 API across all tokenizer branches.
+    #[test]
+    fn test_token_count_non_negative_and_stable_across_models() {
+        let text = "fn main() { println!(\"Hello, tiktoken-rs 0.11!\"); }";
+
+        // cl100k_base branch (gpt-4, kimi, claude, etc.)
+        let gpt4 = count_tokens(text, "gpt-4");
+        let kimi = count_tokens(text, "kimi-k2");
+        let claude = count_tokens(text, "claude-3-sonnet");
+        assert!(gpt4 > 0);
+        assert_eq!(gpt4, kimi);
+        assert_eq!(gpt4, claude);
+
+        // p50k_base branch (davinci-003, code-davinci, etc.)
+        let davinci = count_tokens(text, "text-davinci-003");
+        assert!(davinci > 0);
+
+        // r50k_base branch (legacy davinci, ada, gpt2, etc.)
+        let legacy = count_tokens(text, "davinci");
+        let gpt2 = count_tokens(text, "gpt2");
+        assert!(legacy > 0);
+        assert_eq!(legacy, gpt2);
+
+        // Empty string is always zero
+        assert_eq!(count_tokens("", "gpt-4"), 0);
+        assert_eq!(count_tokens("", "davinci"), 0);
+        assert_eq!(count_tokens("", "gpt2"), 0);
     }
 }

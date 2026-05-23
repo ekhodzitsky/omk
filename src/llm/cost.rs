@@ -72,7 +72,7 @@ impl CostEstimator {
             tiktoken_rs::cl100k_base_singleton()
         };
 
-        let tokens = bpe.lock().encode_with_special_tokens(text);
+        let tokens = bpe.encode_with_special_tokens(text);
         Ok(tokens.len())
     }
 
