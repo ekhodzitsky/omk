@@ -66,14 +66,14 @@ async fn test_open_create_migrate() {
 
     let journal = db
         .conn
-        .call(|conn| Ok(conn.query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))?))
+        .call(|conn| conn.query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0)))
         .await
         .unwrap();
     assert_eq!(journal.to_lowercase(), "wal");
 
     let fk = db
         .conn
-        .call(|conn| Ok(conn.query_row("PRAGMA foreign_keys", [], |row| row.get::<_, i32>(0))?))
+        .call(|conn| conn.query_row("PRAGMA foreign_keys", [], |row| row.get::<_, i32>(0)))
         .await
         .unwrap();
     assert_eq!(fk, 1);

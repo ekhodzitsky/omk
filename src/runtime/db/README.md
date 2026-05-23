@@ -58,8 +58,8 @@ into `repo::`.
 
 | Crate            | Version | Purpose                       |
 |------------------|---------|-------------------------------|
-| `tokio-rusqlite` | 0.5     | Async SQLite connection       |
-| `rusqlite`       | 0.30    | Sync SQLite driver + backup   |
+| `tokio-rusqlite` | 0.7     | Async SQLite connection       |
+| `rusqlite`       | 0.37    | Sync SQLite driver + backup   |
 | `chrono`         | —       | Timestamps (project-wide)     |
 | `thiserror`      | —       | Error derives (project-wide)  |
 | `tempfile`       | —       | Test temp directories         |

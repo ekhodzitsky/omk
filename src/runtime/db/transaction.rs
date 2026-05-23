@@ -22,9 +22,9 @@ impl DbTransaction {
             return Err(DbError::TransactionExpired);
         }
         self.conn
-            .call(|conn| {
-                conn.execute("COMMIT", [])
-                    .map_err(tokio_rusqlite::Error::Rusqlite)
+            .call(|conn| -> Result<(), rusqlite::Error> {
+                conn.execute("COMMIT", [])?;
+                Ok(())
             })
             .await
             .map_err(DbError::Connection)?;
@@ -38,9 +38,9 @@ impl DbTransaction {
             return Err(DbError::TransactionExpired);
         }
         self.conn
-            .call(|conn| {
-                conn.execute("ROLLBACK", [])
-                    .map_err(tokio_rusqlite::Error::Rusqlite)
+            .call(|conn| -> Result<(), rusqlite::Error> {
+                conn.execute("ROLLBACK", [])?;
+                Ok(())
             })
             .await
             .map_err(DbError::Connection)?;
@@ -99,7 +99,7 @@ impl Drop for DbTransaction {
                 let conn = self.conn.clone();
                 handle.spawn(async move {
                     let _ = conn
-                        .call(|conn| {
+                        .call(|conn| -> Result<(), rusqlite::Error> {
                             let _ = conn.execute("ROLLBACK", []);
                             Ok(())
                         })

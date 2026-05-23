@@ -28,7 +28,7 @@ impl EventRepo for EventRepoImpl {
         let payload = payload.to_string();
         let created_at = chrono::Utc::now().timestamp();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<i64, rusqlite::Error> {
                 conn.execute(
                     "INSERT INTO events (goal_id, kind, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
                     params![goal_id, kind, payload, created_at],
@@ -48,7 +48,7 @@ impl EventRepo for EventRepoImpl {
         let goal_id = goal_id.to_string();
         let limit_i64 = limit.map(|l| l as i64);
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<Vec<EventRecord>, rusqlite::Error> {
                 let mut stmt = conn.prepare(
                     "SELECT event_id, event_uuid, run_id, goal_id, schema_version, kind, actor, payload, created_at
                      FROM events
@@ -84,7 +84,7 @@ impl EventRepo for EventRepoImpl {
     async fn delete_by_goal(&self, goal_id: &str) -> Result<(), DbError> {
         let goal_id = goal_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute("DELETE FROM events WHERE goal_id = ?1", params![goal_id])?;
                 Ok(())
             })

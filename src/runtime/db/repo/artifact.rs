@@ -40,7 +40,7 @@ impl ArtifactRepo for ArtifactRepoImpl {
         let mime_type = mime_type.map(String::from);
         let created_at = chrono::Utc::now().timestamp();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute(
                     "INSERT INTO artifacts (goal_id, kind, path, mime_type, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
                     params![goal_id, kind, path, mime_type.as_deref(), created_at],
@@ -59,30 +59,32 @@ impl ArtifactRepo for ArtifactRepoImpl {
         let goal_id = goal_id.to_string();
         let kind = kind.map(String::from);
         self.conn
-            .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT artifact_id, goal_id, kind, path, mime_type, created_at
+            .call(
+                move |conn| -> Result<Vec<ArtifactRecord>, rusqlite::Error> {
+                    let mut stmt = conn.prepare(
+                        "SELECT artifact_id, goal_id, kind, path, mime_type, created_at
                      FROM artifacts
                      WHERE goal_id = ?1
                        AND (?2 IS NULL OR kind = ?2)
                      ORDER BY created_at",
-                )?;
-                let rows = stmt.query_map(params![goal_id, kind.as_deref()], |row| {
-                    Ok(ArtifactRecord {
-                        artifact_id: row.get(0)?,
-                        goal_id: row.get(1)?,
-                        kind: row.get(2)?,
-                        path: row.get(3)?,
-                        mime_type: row.get(4)?,
-                        created_at: row.get(5)?,
-                    })
-                })?;
-                let mut results = Vec::new();
-                for row in rows {
-                    results.push(row?);
-                }
-                Ok(results)
-            })
+                    )?;
+                    let rows = stmt.query_map(params![goal_id, kind.as_deref()], |row| {
+                        Ok(ArtifactRecord {
+                            artifact_id: row.get(0)?,
+                            goal_id: row.get(1)?,
+                            kind: row.get(2)?,
+                            path: row.get(3)?,
+                            mime_type: row.get(4)?,
+                            created_at: row.get(5)?,
+                        })
+                    })?;
+                    let mut results = Vec::new();
+                    for row in rows {
+                        results.push(row?);
+                    }
+                    Ok(results)
+                },
+            )
             .await
             .map_err(DbError::Connection)
     }
@@ -90,7 +92,7 @@ impl ArtifactRepo for ArtifactRepoImpl {
     async fn delete_by_goal(&self, goal_id: &str) -> Result<(), DbError> {
         let goal_id = goal_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute("DELETE FROM artifacts WHERE goal_id = ?1", params![goal_id])?;
                 Ok(())
             })

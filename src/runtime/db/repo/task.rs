@@ -30,7 +30,7 @@ impl TaskRepo for TaskRepoImpl {
         let goal_id = goal_id.to_string();
         let tasks: Vec<TaskRecord> = tasks.to_vec();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 let mut stmt = conn.prepare(
                     "INSERT INTO tasks (
                         task_id, goal_id, title, description, kind, status, owner,
@@ -71,7 +71,7 @@ impl TaskRepo for TaskRepoImpl {
     async fn get_by_id(&self, task_id: &str) -> Result<Option<TaskRecord>, DbError> {
         let task_id = task_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<Option<TaskRecord>, rusqlite::Error> {
                 let mut stmt = conn.prepare(
                     "SELECT
                         task_id, goal_id, title, description, kind, status, owner,
@@ -114,7 +114,7 @@ impl TaskRepo for TaskRepoImpl {
     async fn get_by_goal(&self, goal_id: &str) -> Result<Vec<TaskRecord>, DbError> {
         let goal_id = goal_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<Vec<TaskRecord>, rusqlite::Error> {
                 let mut stmt = conn.prepare(
                     "SELECT
                         task_id, goal_id, title, description, kind, status, owner,
@@ -163,12 +163,11 @@ impl TaskRepo for TaskRepoImpl {
         let task_id_for_err = task_id.clone();
         let count = self
             .conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<usize, rusqlite::Error> {
                 conn.execute(
                     "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE task_id = ?3",
                     params![status, updated_at, task_id],
                 )
-                .map_err(tokio_rusqlite::Error::Rusqlite)
             })
             .await
             .map_err(DbError::Connection)?;
@@ -182,7 +181,7 @@ impl TaskRepo for TaskRepoImpl {
         let goal_id = goal_id.to_string();
         let tasks: Vec<TaskRecord> = tasks.to_vec();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute("DELETE FROM tasks WHERE goal_id = ?1", params![goal_id])?;
                 let mut stmt = conn.prepare(
                     "INSERT INTO tasks (
@@ -224,7 +223,7 @@ impl TaskRepo for TaskRepoImpl {
     async fn delete_by_goal(&self, goal_id: &str) -> Result<(), DbError> {
         let goal_id = goal_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute("DELETE FROM tasks WHERE goal_id = ?1", params![goal_id])?;
                 Ok(())
             })
