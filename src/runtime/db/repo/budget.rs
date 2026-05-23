@@ -20,7 +20,7 @@ impl BudgetRepo for BudgetRepoImpl {
     async fn append_checkpoint(&self, checkpoint: &BudgetCheckpoint) -> Result<(), DbError> {
         let checkpoint = checkpoint.clone();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute(
                     "INSERT INTO budget_checkpoints (
                         goal_id, version, label, status, phase, recorded_at,
@@ -60,9 +60,10 @@ impl BudgetRepo for BudgetRepoImpl {
     async fn get_by_goal(&self, goal_id: &str) -> Result<Vec<BudgetCheckpoint>, DbError> {
         let goal_id = goal_id.to_string();
         self.conn
-            .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT
+            .call(
+                move |conn| -> Result<Vec<BudgetCheckpoint>, rusqlite::Error> {
+                    let mut stmt = conn.prepare(
+                        "SELECT
                         checkpoint_id, goal_id, version, label, status, phase, recorded_at,
                         budget_time, total_budget_secs, elapsed_since_created_secs,
                         remaining_budget_secs, budget_tokens, used_tokens,
@@ -71,37 +72,38 @@ impl BudgetRepo for BudgetRepoImpl {
                     FROM budget_checkpoints
                     WHERE goal_id = ?1
                     ORDER BY created_at ASC",
-                )?;
-                let rows = stmt.query_map(params![goal_id], |row| {
-                    Ok(BudgetCheckpoint {
-                        checkpoint_id: row.get(0)?,
-                        goal_id: row.get(1)?,
-                        version: row.get(2)?,
-                        label: row.get(3)?,
-                        status: row.get(4)?,
-                        phase: row.get(5)?,
-                        recorded_at: row.get(6)?,
-                        budget_time: row.get(7)?,
-                        total_budget_secs: row.get(8)?,
-                        elapsed_since_created_secs: row.get(9)?,
-                        remaining_budget_secs: row.get(10)?,
-                        budget_tokens: row.get(11)?,
-                        used_tokens: row.get(12)?,
-                        remaining_budget_tokens: row.get(13)?,
-                        budget_usd: row.get(14)?,
-                        estimated_cost_usd: row.get(15)?,
-                        remaining_budget_usd: row.get(16)?,
-                        limit_value: row.get(17)?,
-                        used_value: row.get(18)?,
-                        created_at: row.get(19)?,
-                    })
-                })?;
-                let mut results = Vec::new();
-                for row in rows {
-                    results.push(row?);
-                }
-                Ok(results)
-            })
+                    )?;
+                    let rows = stmt.query_map(params![goal_id], |row| {
+                        Ok(BudgetCheckpoint {
+                            checkpoint_id: row.get(0)?,
+                            goal_id: row.get(1)?,
+                            version: row.get(2)?,
+                            label: row.get(3)?,
+                            status: row.get(4)?,
+                            phase: row.get(5)?,
+                            recorded_at: row.get(6)?,
+                            budget_time: row.get(7)?,
+                            total_budget_secs: row.get(8)?,
+                            elapsed_since_created_secs: row.get(9)?,
+                            remaining_budget_secs: row.get(10)?,
+                            budget_tokens: row.get(11)?,
+                            used_tokens: row.get(12)?,
+                            remaining_budget_tokens: row.get(13)?,
+                            budget_usd: row.get(14)?,
+                            estimated_cost_usd: row.get(15)?,
+                            remaining_budget_usd: row.get(16)?,
+                            limit_value: row.get(17)?,
+                            used_value: row.get(18)?,
+                            created_at: row.get(19)?,
+                        })
+                    })?;
+                    let mut results = Vec::new();
+                    for row in rows {
+                        results.push(row?);
+                    }
+                    Ok(results)
+                },
+            )
             .await
             .map_err(DbError::Connection)
     }
@@ -109,7 +111,7 @@ impl BudgetRepo for BudgetRepoImpl {
     async fn delete_by_goal(&self, goal_id: &str) -> Result<(), DbError> {
         let goal_id = goal_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute(
                     "DELETE FROM budget_checkpoints WHERE goal_id = ?1",
                     params![goal_id],

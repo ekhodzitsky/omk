@@ -17,13 +17,13 @@ impl DbHandle {
     /// Open or create a database at `path`, applying migrations and enabling WAL.
     pub async fn open(path: impl AsRef<Path>) -> Result<Self, DbError> {
         let path = path.as_ref().to_path_buf();
-        let conn = Connection::open(path).await.map_err(DbError::Connection)?;
+        let conn = Connection::open(path).await.map_err(DbError::Rusqlite)?;
 
-        conn.call(|conn| {
+        conn.call(|conn| -> Result<(), rusqlite::Error> {
             let current: u32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
             let runner = MigrationRunner::default();
             runner.run(conn, current).map_err(|e| {
-                tokio_rusqlite::Error::Other(Box::new(std::io::Error::other(e.to_string())))
+                rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(1), Some(e.to_string()))
             })?;
             Ok(())
         })
@@ -41,9 +41,9 @@ impl DbHandle {
     /// Begin a new transaction.
     pub async fn transaction(&self) -> Result<DbTransaction, DbError> {
         self.conn
-            .call(|conn| {
-                conn.execute("BEGIN", [])
-                    .map_err(tokio_rusqlite::Error::Rusqlite)
+            .call(|conn| -> Result<(), rusqlite::Error> {
+                conn.execute("BEGIN", [])?;
+                Ok(())
             })
             .await
             .map_err(DbError::Connection)?;
@@ -57,9 +57,9 @@ impl DbHandle {
     pub async fn backup_to(&self, dest: impl AsRef<Path>) -> Result<(), DbError> {
         let dest = dest.as_ref().to_path_buf();
         self.conn
-            .call(move |conn| {
-                conn.backup(rusqlite::DatabaseName::Main, &dest, None)
-                    .map_err(tokio_rusqlite::Error::Rusqlite)
+            .call(move |conn| -> Result<(), rusqlite::Error> {
+                conn.backup(rusqlite::MAIN_DB, &dest, None)?;
+                Ok(())
             })
             .await
             .map_err(DbError::Connection)

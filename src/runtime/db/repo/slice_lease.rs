@@ -80,14 +80,14 @@ impl SliceLeaseRepo for SliceLeaseRepoImpl {
         let lease_id = format!("{}-{}-{}", goal_id, slice_id, uuid::Uuid::new_v4());
 
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<Option<SliceLease>, rusqlite::Error> {
                 if let Err(e) = conn.execute("BEGIN IMMEDIATE", []) {
                     if let rusqlite::Error::SqliteFailure(code, _) = &e {
                         if code.code == rusqlite::ErrorCode::DatabaseBusy {
                             return Ok(None);
                         }
                     }
-                    return Err(tokio_rusqlite::Error::Rusqlite(e));
+                    return Err(e);
                 }
 
                 let result = (|| -> Result<Option<SliceLease>, rusqlite::Error> {
@@ -159,8 +159,7 @@ impl SliceLeaseRepo for SliceLeaseRepoImpl {
 
                 match result {
                     Ok(Some(lease)) => {
-                        conn.execute("COMMIT", [])
-                            .map_err(tokio_rusqlite::Error::Rusqlite)?;
+                        conn.execute("COMMIT", [])?;
                         Ok(Some(lease))
                     }
                     Ok(None) => {
@@ -169,7 +168,7 @@ impl SliceLeaseRepo for SliceLeaseRepoImpl {
                     }
                     Err(e) => {
                         let _ = conn.execute("ROLLBACK", []);
-                        Err(tokio_rusqlite::Error::Rusqlite(e))
+                        Err(e)
                     }
                 }
             })
@@ -180,7 +179,7 @@ impl SliceLeaseRepo for SliceLeaseRepoImpl {
     async fn release(&self, lease_id: &str, now_unix: i64) -> Result<(), DbError> {
         let lease_id = lease_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute(
                     "UPDATE goal_slice_leases SET released_at = ?1 WHERE lease_id = ?2",
                     params![now_unix, lease_id],
@@ -194,7 +193,7 @@ impl SliceLeaseRepo for SliceLeaseRepoImpl {
     async fn heartbeat(&self, lease_id: &str, now_unix: i64) -> Result<(), DbError> {
         let lease_id = lease_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute(
                     "UPDATE goal_slice_leases SET heartbeat_at = ?1 WHERE lease_id = ?2",
                     params![now_unix, lease_id],
@@ -212,7 +211,7 @@ impl SliceLeaseRepo for SliceLeaseRepoImpl {
     ) -> Result<Vec<SliceLease>, DbError> {
         let threshold = now_unix - threshold_secs;
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<Vec<SliceLease>, rusqlite::Error> {
                 let mut stmt = conn.prepare(
                     "UPDATE goal_slice_leases
                      SET expired_at = ?1
@@ -252,7 +251,7 @@ impl SliceLeaseRepo for SliceLeaseRepoImpl {
     async fn active_for_goal(&self, goal_id: &str) -> Result<Vec<SliceLease>, DbError> {
         let goal_id = goal_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<Vec<SliceLease>, rusqlite::Error> {
                 let mut stmt = conn.prepare(
                     "SELECT lease_id, goal_id, slice_id, owner_pid, owner_role,
                             claimed_at, heartbeat_at, released_at, expired_at, write_set
@@ -291,7 +290,7 @@ impl SliceLeaseRepo for SliceLeaseRepoImpl {
     async fn get(&self, lease_id: &str) -> Result<Option<SliceLease>, DbError> {
         let lease_id = lease_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<Option<SliceLease>, rusqlite::Error> {
                 let mut stmt = conn.prepare(
                     "SELECT lease_id, goal_id, slice_id, owner_pid, owner_role,
                             claimed_at, heartbeat_at, released_at, expired_at, write_set

@@ -156,9 +156,7 @@ pub(crate) async fn deliver_slice_pr(
             pr_url: outcome.pr_url.as_deref().unwrap_or(""),
         };
         let mut client = GoalGithubPrCommandClient::default();
-        Some(
-            attempt_auto_merge(&mut client, &verdict, ctx).await,
-        )
+        Some(attempt_auto_merge(&mut client, &verdict, ctx).await)
     } else {
         None
     };

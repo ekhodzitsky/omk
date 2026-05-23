@@ -205,12 +205,11 @@ impl GoalRepo for GoalRepoImpl {
         let goal_id_for_err = goal_id.clone();
         let count = self
             .conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<usize, rusqlite::Error> {
                 conn.execute(
                     "UPDATE goals SET status = ?1, phase = ?2, updated_at = ?3 WHERE goal_id = ?4",
                     params![status, phase, updated_at, goal_id],
                 )
-                .map_err(tokio_rusqlite::Error::Rusqlite)
             })
             .await
             .map_err(DbError::Connection)?;
@@ -222,7 +221,7 @@ impl GoalRepo for GoalRepoImpl {
 
     async fn list(&self, filter: GoalFilter) -> Result<Vec<GoalSummary>, DbError> {
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<Vec<GoalSummary>, rusqlite::Error> {
                 let mut stmt = conn.prepare(
                     "SELECT goal_id, status, phase, goal_text, created_at, updated_at
                      FROM goals
@@ -269,12 +268,11 @@ impl GoalRepo for GoalRepoImpl {
         let goal_id_for_err = goal_id.clone();
         let count = self
             .conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<usize, rusqlite::Error> {
                 conn.execute(
                     "UPDATE goals SET controller_pid = ?1, updated_at = ?2 WHERE goal_id = ?3",
                     params![pid, chrono::Utc::now().timestamp(), goal_id],
                 )
-                .map_err(tokio_rusqlite::Error::Rusqlite)
             })
             .await
             .map_err(DbError::Connection)?;
@@ -289,12 +287,11 @@ impl GoalRepo for GoalRepoImpl {
         let goal_id_for_err = goal_id.clone();
         let count = self
             .conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<usize, rusqlite::Error> {
                 conn.execute(
                     "UPDATE goals SET updated_at = ?1 WHERE goal_id = ?2",
                     params![chrono::Utc::now().timestamp(), goal_id],
                 )
-                .map_err(tokio_rusqlite::Error::Rusqlite)
             })
             .await
             .map_err(DbError::Connection)?;
@@ -306,7 +303,7 @@ impl GoalRepo for GoalRepoImpl {
 
     async fn list_running(&self) -> Result<Vec<GoalSummary>, DbError> {
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<Vec<GoalSummary>, rusqlite::Error> {
                 let mut stmt = conn.prepare(
                     "SELECT goal_id, status, phase, goal_text, created_at, updated_at
                      FROM goals
@@ -338,9 +335,8 @@ impl GoalRepo for GoalRepoImpl {
         let goal_id_for_err = goal_id.clone();
         let count = self
             .conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<usize, rusqlite::Error> {
                 conn.execute("DELETE FROM goals WHERE goal_id = ?1", params![goal_id])
-                    .map_err(tokio_rusqlite::Error::Rusqlite)
             })
             .await
             .map_err(DbError::Connection)?;

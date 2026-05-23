@@ -20,7 +20,7 @@ impl ProofRepo for ProofRepoImpl {
     async fn upsert(&self, proof: &ProofRecord) -> Result<(), DbError> {
         let proof = proof.clone();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute(
                     "INSERT INTO proofs (
                         goal_id, version, status, readiness, summary, task_graph_summary,
@@ -83,45 +83,47 @@ impl ProofRepo for ProofRepoImpl {
     async fn get(&self, goal_id: &str) -> Result<Option<ProofRecord>, DbError> {
         let goal_id = goal_id.to_string();
         self.conn
-            .call(move |conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT
+            .call(
+                move |conn| -> Result<Option<ProofRecord>, rusqlite::Error> {
+                    let mut stmt = conn.prepare(
+                        "SELECT
                         goal_id, version, status, readiness, summary, task_graph_summary,
                         changed_files, commits, git, gates, gates_passed, gates_total,
                         post_mutation_gates_ran, known_gaps, human_decisions_required,
                         recovery_status, delivery_metadata, review_artifacts,
                         integration_evidence, oracle_evidence, generated_at
                     FROM proofs WHERE goal_id = ?1",
-                )?;
-                let mut rows = stmt.query(params![goal_id])?;
-                if let Some(row) = rows.next()? {
-                    Ok(Some(ProofRecord {
-                        goal_id: row.get(0)?,
-                        version: row.get(1)?,
-                        status: row.get(2)?,
-                        readiness: row.get(3)?,
-                        summary: row.get(4)?,
-                        task_graph_summary: row.get(5)?,
-                        changed_files: row.get(6)?,
-                        commits: row.get(7)?,
-                        git: row.get(8)?,
-                        gates: row.get(9)?,
-                        gates_passed: row.get(10)?,
-                        gates_total: row.get(11)?,
-                        post_mutation_gates_ran: row.get::<_, i32>(12)? != 0,
-                        known_gaps: row.get(13)?,
-                        human_decisions_required: row.get(14)?,
-                        recovery_status: row.get(15)?,
-                        delivery_metadata: row.get(16)?,
-                        review_artifacts: row.get(17)?,
-                        integration_evidence: row.get(18)?,
-                        oracle_evidence: row.get(19)?,
-                        generated_at: row.get(20)?,
-                    }))
-                } else {
-                    Ok(None)
-                }
-            })
+                    )?;
+                    let mut rows = stmt.query(params![goal_id])?;
+                    if let Some(row) = rows.next()? {
+                        Ok(Some(ProofRecord {
+                            goal_id: row.get(0)?,
+                            version: row.get(1)?,
+                            status: row.get(2)?,
+                            readiness: row.get(3)?,
+                            summary: row.get(4)?,
+                            task_graph_summary: row.get(5)?,
+                            changed_files: row.get(6)?,
+                            commits: row.get(7)?,
+                            git: row.get(8)?,
+                            gates: row.get(9)?,
+                            gates_passed: row.get(10)?,
+                            gates_total: row.get(11)?,
+                            post_mutation_gates_ran: row.get::<_, i32>(12)? != 0,
+                            known_gaps: row.get(13)?,
+                            human_decisions_required: row.get(14)?,
+                            recovery_status: row.get(15)?,
+                            delivery_metadata: row.get(16)?,
+                            review_artifacts: row.get(17)?,
+                            integration_evidence: row.get(18)?,
+                            oracle_evidence: row.get(19)?,
+                            generated_at: row.get(20)?,
+                        }))
+                    } else {
+                        Ok(None)
+                    }
+                },
+            )
             .await
             .map_err(DbError::Connection)
     }
@@ -129,7 +131,7 @@ impl ProofRepo for ProofRepoImpl {
     async fn delete(&self, goal_id: &str) -> Result<(), DbError> {
         let goal_id = goal_id.to_string();
         self.conn
-            .call(move |conn| {
+            .call(move |conn| -> Result<(), rusqlite::Error> {
                 conn.execute("DELETE FROM proofs WHERE goal_id = ?1", params![goal_id])?;
                 Ok(())
             })
