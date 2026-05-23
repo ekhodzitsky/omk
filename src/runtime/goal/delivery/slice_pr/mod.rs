@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::path::Path;
 
 use super::{
-    GoalDeliveryPolicy, GoalGithubPrClient, GoalGithubPrCommandClient, GoalGithubPrOperation,
-    GoalGithubPrRequest,
+    attempt_auto_merge, AutoMergeAction, AutoMergeContext, GoalDeliveryPolicy, GoalGithubPrClient,
+    GoalGithubPrCommandClient, GoalGithubPrOperation, GoalGithubPrRequest,
 };
 use crate::runtime::goal::control::resolve_base_branch;
 use crate::runtime::goal::review::{
@@ -37,6 +37,7 @@ pub(crate) struct SlicePrDeliveryOutcome {
     pub reason: String,
     pub review_artifacts: Option<Vec<crate::runtime::goal::review::SliceReviewArtifact>>,
     pub slop_findings: Vec<crate::runtime::goal::review::slop::SlopFinding>,
+    pub auto_merge_action: Option<AutoMergeAction>,
 }
 
 /// Full pipeline: detect changes → commit → push → open/update PR for one slice.
@@ -55,6 +56,7 @@ pub(crate) async fn deliver_slice_pr(
             reason: "dry-run: skipped slice PR delivery".to_string(),
             review_artifacts: None,
             slop_findings: Vec::new(),
+            auto_merge_action: None,
         });
     }
     if !options.policy.permits_github_mutation() {
@@ -65,6 +67,7 @@ pub(crate) async fn deliver_slice_pr(
             reason: "local delivery policy does not permit GitHub mutation".to_string(),
             review_artifacts: None,
             slop_findings: Vec::new(),
+            auto_merge_action: None,
         });
     }
 
@@ -78,6 +81,7 @@ pub(crate) async fn deliver_slice_pr(
             reason: "no changes to commit in slice worktree".to_string(),
             review_artifacts: None,
             slop_findings: Vec::new(),
+            auto_merge_action: None,
         });
     }
 
@@ -97,6 +101,7 @@ pub(crate) async fn deliver_slice_pr(
             ),
             review_artifacts: Some(review.artifacts),
             slop_findings: review.slop_findings,
+            auto_merge_action: None,
         });
     }
     let anti_slop_conf =
@@ -112,6 +117,7 @@ pub(crate) async fn deliver_slice_pr(
             ),
             review_artifacts: Some(review.artifacts),
             slop_findings: review.slop_findings,
+            auto_merge_action: None,
         });
     }
     let slop_findings = review.slop_findings.clone();
@@ -134,12 +140,28 @@ pub(crate) async fn deliver_slice_pr(
             reason: format!("slice branch merge check failed: {e}"),
             review_artifacts: Some(review.artifacts),
             slop_findings,
+            auto_merge_action: None,
         });
     }
 
     commit::push_slice_branch(worktree_path, &slice.branch_name).await?;
 
     let outcome = open_slice_pr(slice, goal_state, &commit_sha, &options).await?;
+
+    let auto_merge_action = if options.policy == GoalDeliveryPolicy::AutoPr {
+        let verdict = crate::runtime::goal::review::dispatcher::aggregate_verdict(&review);
+        let ctx = AutoMergeContext {
+            slice_id: &slice.slice_id,
+            goal_id: &goal_state.goal_id,
+            pr_url: outcome.pr_url.as_deref().unwrap_or(""),
+        };
+        let mut client = GoalGithubPrCommandClient::default();
+        Some(
+            attempt_auto_merge(&mut client, &verdict, ctx).await,
+        )
+    } else {
+        None
+    };
 
     Ok(SlicePrDeliveryOutcome {
         commit_sha: Some(commit_sha),
@@ -148,6 +170,7 @@ pub(crate) async fn deliver_slice_pr(
         reason: outcome.reason,
         review_artifacts: outcome.review_artifacts,
         slop_findings,
+        auto_merge_action,
     })
 }
 
@@ -200,6 +223,7 @@ async fn open_slice_pr(
         reason: format!("GitHub PR {} completed", mutation.operation.as_str()),
         review_artifacts: None,
         slop_findings: Vec::new(),
+        auto_merge_action: None,
     })
 }
 
@@ -231,6 +255,7 @@ mod tests {
             reason: "local delivery policy does not permit GitHub mutation".to_string(),
             review_artifacts: None,
             slop_findings: Vec::new(),
+            auto_merge_action: None,
         };
         assert!(!outcome.mutated);
         assert!(outcome.commit_sha.is_none());
