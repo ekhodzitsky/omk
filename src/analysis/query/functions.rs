@@ -29,7 +29,7 @@ fn collect_rust_functions(source: &str, node: tree_sitter::Node, results: &mut V
         }
     }
     for i in 0..node.child_count() {
-        if let Some(child) = node.child(i) {
+        if let Some(child) = node.child(i as u32) {
             collect_rust_functions(source, child, results);
         }
     }
@@ -54,7 +54,7 @@ fn collect_js_functions(source: &str, node: tree_sitter::Node, results: &mut Vec
         _ => {}
     }
     for i in 0..node.child_count() {
-        if let Some(child) = node.child(i) {
+        if let Some(child) = node.child(i as u32) {
             collect_js_functions(source, child, results);
         }
     }
@@ -73,7 +73,7 @@ fn collect_python_functions(source: &str, node: tree_sitter::Node, results: &mut
         }
     }
     for i in 0..node.child_count() {
-        if let Some(child) = node.child(i) {
+        if let Some(child) = node.child(i as u32) {
             collect_python_functions(source, child, results);
         }
     }
@@ -92,7 +92,7 @@ fn collect_go_functions(source: &str, node: tree_sitter::Node, results: &mut Vec
         }
     }
     for i in 0..node.child_count() {
-        if let Some(child) = node.child(i) {
+        if let Some(child) = node.child(i as u32) {
             collect_go_functions(source, child, results);
         }
     }

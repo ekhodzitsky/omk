@@ -91,7 +91,7 @@ pub(super) fn extract_matching_kinds(
         return;
     }
     for i in 0..node.child_count() {
-        if let Some(child) = node.child(i) {
+        if let Some(child) = node.child(i as u32) {
             extract_matching_kinds(source, child, kinds, results);
         }
     }
