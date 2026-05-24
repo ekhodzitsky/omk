@@ -35,7 +35,7 @@ fn collect_rust_calls(
         }
     }
     for i in 0..node.child_count() {
-        if let Some(child) = node.child(i) {
+        if let Some(child) = node.child(i as u32) {
             collect_rust_calls(source, child, target, results);
         }
     }
@@ -59,7 +59,7 @@ fn collect_js_calls(
         }
     }
     for i in 0..node.child_count() {
-        if let Some(child) = node.child(i) {
+        if let Some(child) = node.child(i as u32) {
             collect_js_calls(source, child, target, results);
         }
     }
@@ -83,7 +83,7 @@ fn collect_python_calls(
         }
     }
     for i in 0..node.child_count() {
-        if let Some(child) = node.child(i) {
+        if let Some(child) = node.child(i as u32) {
             collect_python_calls(source, child, target, results);
         }
     }
@@ -107,7 +107,7 @@ fn collect_go_calls(
         }
     }
     for i in 0..node.child_count() {
-        if let Some(child) = node.child(i) {
+        if let Some(child) = node.child(i as u32) {
             collect_go_calls(source, child, target, results);
         }
     }
