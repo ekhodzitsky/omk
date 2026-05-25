@@ -3,27 +3,24 @@ class Omk < Formula
   homepage "https://github.com/ekhodzitsky/oh-my-kimi"
   # NOTE: version and sha256 fields are auto-synced on tag push by
   # .github/workflows/release.yml::update-packaging (scripts/sync-packaging-versions.sh).
-  # Until the first release after that automation lands, the sha256
-  # placeholders below are intentionally NOT real digests — `brew install`
-  # will fail by design so nobody installs an unverified binary.
   version "0.5.0"
   license "MIT"
 
   on_macos do
     on_arm do
       url "https://github.com/ekhodzitsky/oh-my-kimi/releases/download/v#{version}/omk-#{version}-aarch64-apple-darwin.tar.gz"
-      sha256 "PLACEHOLDER_SHA256_AARCH64_MACOS"
+      sha256 "9941d27c86cc9ee166d8ff20415ae0d0a4ff432837df282dbb2e36baafe2bf9e"
     end
     on_intel do
       url "https://github.com/ekhodzitsky/oh-my-kimi/releases/download/v#{version}/omk-#{version}-x86_64-apple-darwin.tar.gz"
-      sha256 "PLACEHOLDER_SHA256_X86_64_MACOS"
+      sha256 "8db70218460a8353e15cd52bf2e2d857167493ff4eb3765e592a9c68a1ac6aca"
     end
   end
 
   on_linux do
     on_intel do
       url "https://github.com/ekhodzitsky/oh-my-kimi/releases/download/v#{version}/omk-#{version}-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "PLACEHOLDER_SHA256_X86_64_LINUX"
+      sha256 "9c7639294b85f20a3d7507ce696c20fded2cec6c8c149df129b1dc02b09148a5"
     end
   end
 
