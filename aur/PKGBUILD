@@ -1,7 +1,7 @@
 # Maintainer: ekhodzitsky <ekhodzitsky@gmail.com>
 pkgname=omk
 # pkgver is auto-synced on tag push by release.yml::update-packaging.
-pkgver=0.4.0
+pkgver=0.5.0
 pkgrel=1
 pkgdesc="Multi-agent orchestration for Kimi CLI"
 arch=('x86_64' 'aarch64')
