@@ -75,6 +75,7 @@ omk goal replay latest
 | Command | What it does |
 |---|---|
 | `omk` | Open the unified chat REPL (default) |
+| `omk chat` | Open the unified chat REPL (alias `c`) |
 | `omk goal run "..."` | Create a goal scaffold; add `--until-ready` to drive to completion |
 | `omk goal plan "..."` | Create a plan scaffold without execution |
 | `omk goal list` | List recorded goals |
@@ -82,14 +83,41 @@ omk goal replay latest
 | `omk goal show latest` | Full goal state (add `--json` for machine output) |
 | `omk goal proof latest` | Inspect the current proof artifact |
 | `omk goal replay latest` | Replay the persisted goal timeline |
+| `omk goal budget latest` | Show persisted budget checkpoints |
+| `omk goal budget-add latest` | Extend an existing goal's budget |
 | `omk goal verify latest` | Run local verification gates |
 | `omk goal review latest` | Attach controller review evidence |
-| `omk goal open-pr latest --dry-run` | Render a PR draft from proof evidence |
+| `omk goal open-pr latest --dry-run --draft` | Render a PR draft from proof evidence |
 | `omk goal accept latest --summary "..."` | Accept a proof-backed goal locally |
 | `omk goal reject latest --reason "..."` | Reject a goal with a reason |
 | `omk goal pause / resume / cancel latest` | Lifecycle controls |
+| `omk goal merge latest` | Merge the GitHub PR for a ready goal |
+| `omk mcp list` | List configured MCP servers |
+| `omk mcp doctor` | Diagnose configured MCP servers |
+| `omk mcp call <server> <tool>` | Call an MCP tool |
 | `omk doctor` | Diagnose environment and dependencies |
 | `omk setup` | Install hooks, skills, and config |
+| `omk config show` | Show current config paths and values |
+| `omk config validate` | Validate config.toml and environment |
+| `omk config set` | Set a configuration value |
+
+## Goal execution flags
+
+`omk goal run` accepts flags that control budgets, agents, and delivery:
+
+| Flag | Description |
+|---|---|
+| `--until-ready` | Drive plan, verify, execute, and review until ready or blocked |
+| `--budget-time <DURATION>` | Wall-clock budget (for example `8h`, `7d`) |
+| `--budget-tokens <N>` | Maximum estimated tokens |
+| `--budget-usd <N>` | Maximum estimated USD cost |
+| `--max-agents <N>` | Maximum number of agents |
+| `--policy <POLICY>` | Delivery policy: `local`, `draft-pr`, `auto-pr` |
+| `--merge-policy <POLICY>` | Merge policy: `disabled`, `manual`, `gated` |
+| `--slice-execution` | Run agents in per-slice git worktrees |
+| `--enforce-protection` | Enforce branch protection on main/master before integrator PR |
+| `--no-llm-planner` | Disable the LLM planner; fall back to heuristic stub |
+| `--planner-token-budget <N>` | Token budget per planner call (default: 8000) |
 
 ## Positioning
 

@@ -196,6 +196,46 @@ Aggregated runtime counters.
 
 `total_spawns` is a legacy compatibility alias for `total_team_runs`.
 
+## Chat API
+
+`omk chat` (alias `omk c`) opens a terminal-native REPL. Session state is persisted under the OMK state directory.
+
+### Session files
+
+| File | Purpose |
+|------|---------|
+| `~/.local/state/omk/sessions/<session-id>/meta.json` | Session metadata (id, start time, project root, theme) |
+| `~/.local/state/omk/sessions/<session-id>/conversation.jsonl` | Append-only conversation log |
+| `~/.local/state/omk/sessions/<session-id>/session-history.jsonl` | Input history for the current session |
+| `~/.local/state/omk/sessions/<session-id>/engine-events.jsonl` | Engine pane event stream |
+
+### `conversation.jsonl` schema
+
+Each line is a JSON object:
+
+```json
+{"ts":"2026-05-21T10:00:00Z","role":"user","text":"hello"}
+```
+
+- `ts` — ISO 8601 UTC timestamp
+- `role` — `user` or `assistant`
+- `text` — message content
+
+### CLI options
+
+- `omk chat --session <id>` — resume a specific session
+- `omk chat --new` — start a fresh session
+
+## MCP Client API
+
+`omk mcp` provides a client surface for configured MCP servers.
+
+| Command | Output | Notes |
+|---|---|---|
+| `omk mcp list` | Text list of configured servers and their config path | Reads `~/.config/omk/mcp.json` or `.omk/mcp.json` |
+| `omk mcp doctor` | Text diagnostics (healthy/unhealthy counts) | Checks reachability of configured transports |
+| `omk mcp call <server> <tool> [args]` | Tool-specific output | `args` defaults to `{}` |
+
 ## Goal API
 
 > **Current status:** Goal is CLI-only. There are no goal-specific MCP tools or REST endpoints yet. The web dashboard does not expose goal state over HTTP. Machine-readable access is available through the `omk goal` CLI with `--json` or `--format json|md`.
@@ -204,14 +244,14 @@ Aggregated runtime counters.
 
 The following commands support structured output for scripting and integration:
 
-| Command | `--json` | `--format json` | `--format md` | Notes |
-| --- | --- | --- | --- | --- |
-| `omk goal show` | ✓ | ✓ | ✓ | Full `GoalState` |
-| `omk goal proof` | ✓ | ✓ | ✓ | `GoalProof` artifact |
-| `omk goal replay` | ✓ | ✓ | ✓ | `GoalReplay` timeline |
-| `omk goal budget` | ✓ | ✓ | ✓ | `GoalBudgetReport` |
-| `omk goal status` | — | — | — | Text only |
-| `omk goal list` | — | — | — | Text only |
+| Command | `--json` | `--format text` | `--format json` | `--format md` | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `omk goal show` | ✓ | ✓ | ✓ | ✓ | Full `GoalState` |
+| `omk goal proof` | ✓ | ✓ | ✓ | ✓ | `GoalProof` artifact |
+| `omk goal replay` | ✓ | ✓ | ✓ | ✓ | `GoalReplay` timeline |
+| `omk goal budget` | ✓ | ✓ | ✓ | ✓ | `GoalBudgetReport` |
+| `omk goal status` | — | — | — | — | Text only |
+| `omk goal list` | — | — | — | — | Text only |
 
 #### `omk goal show --json`
 
