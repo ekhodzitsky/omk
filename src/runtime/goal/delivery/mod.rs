@@ -4,6 +4,7 @@ use std::pin::Pin;
 
 mod auto_merge;
 mod github_api;
+mod merge_gate;
 mod pr_client;
 mod pr_draft;
 mod slice_pr;
@@ -107,6 +108,17 @@ pub trait GoalGithubPrClient {
     fn update_pr<'a>(&'a mut self, request: GoalGithubPrRequest) -> GoalGithubPrFuture<'a>;
 
     fn merge_pr<'a>(&'a mut self, pr_url: &'a str) -> GoalGithubPrFuture<'a>;
+
+    /// Validate that a PR is ready to merge (CI green, no conflicts,
+    /// review approved, branch protection configured).
+    ///
+    /// Default implementation shells out to `gh` CLI.
+    fn validate_merge_gate<'a>(
+        &'a mut self,
+        pr_url: &'a str,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>> {
+        Box::pin(async move { merge_gate::run_merge_pre_flight(pr_url).await })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
