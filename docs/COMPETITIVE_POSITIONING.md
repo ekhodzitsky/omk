@@ -100,6 +100,11 @@ suffix) is required before the next public release.
 | Claude Squad | Direct terminal competitor | Go-based TUI for managing multiple agents in tmux workspaces; 7.6k stars, isolated git workspaces, profiles. | OMK has proof semantics and goal decomposition; Claude Squad is agent workspace manager without proof or planning. |
 | GitHub Copilot CLI | Direct platform competitor | Official GitHub terminal agent; 10.6k stars; Copilot subscription required; MCP extensibility; autopilot mode. | OMK is free, local, engine-adaptable, and proof-first; Copilot CLI has enormous distribution via GitHub subscriptions. |
 | VoltAgent | Adjacent platform competitor | TypeScript AI Agent Engineering Platform; 9.1k stars; framework + cloud console; supervisor/sub-agent, guardrails, evals. | OMK is Rust CLI focused on repo delivery; VoltAgent is general-purpose TS platform with SaaS console. |
+| Gemini CLI | Direct CLI competitor | Google's official terminal agent; 104.6k stars, TS, 100+ commits/mo; free tier, 1M context, multimodal, MCP. | OMK is proof-driven multi-agent runtime; Gemini CLI is single-agent Google-integrated chat loop. |
+| Qwen Code | Direct CLI competitor | Alibaba's terminal agent; 24.7k stars, TS, 100+ commits/mo; multi-provider, subagents, skills, IDE integration. | OMK has worktree isolation and proof artifacts; Qwen Code is single-agent with subagent skills. |
+| Aider | Direct CLI competitor | AI pair programming; 45.3k stars, Python, 6.8M installs; repo map, auto lint/test/fix, git-native. | OMK is goal-first multi-agent controller; Aider is interactive pair-programming loop. Aider sets the bar for terminal UX. |
+| AutoGen | Adjacent framework competitor | Microsoft's multi-agent framework; 58.3k stars, Python; maintenance mode, succeeded by MAF. | Legacy threat; monitor Microsoft Agent Framework for enterprise competition. |
+| Plandex | Direct planning competitor | Terminal agent for large tasks; 15.4k stars, Go; plan-and-execute, diff sandbox, tree-sitter maps. | OMK has multi-agent orchestration; Plandex is single-agent planning. Diff sandbox and plan VC are market-informed. |
 | hcom | Direct local-first competitor | Rust CLI for inter-agent messaging, observation, spawn/fork/resume/kill across terminals; SQLite persistence; 299 stars, very active. | OMK's proof-first goal controller vs. hcom's message-bus coordination; OMK has durable task graph and verification wall, hcom has real-time inter-agent comms. |
 | ORCH | Direct multi-agent competitor | TypeScript CLI/TUI for parallel agent teams in isolated git worktrees; mandatory review gate; pre-built team templates; 67 stars, active. | OMK is engine-adaptable with proof semantics; ORCH is Claude Code-centric state machine. |
 | Ralph | Adjacent loop-pattern competitor | Bash-based PRD-driven autonomous loop (19.5k stars); fresh instance per iteration; append-only progress log. | OMK has structured runtime, worktrees, and proof artifacts; Ralph is a shell script pattern, not a production runtime. |
@@ -136,6 +141,14 @@ suffix) is required before the next public release.
 | Claude Squad normalizes TUI workspace management. | High | 7.6k stars, Go, tmux-based. OMK should evaluate TUI for multi-agent goal visibility. |
 | VoltAgent captures TypeScript agent platform market. | Medium | 9.1k stars, framework + console, supervisor pattern. Adjacent rather than direct; monitor for feature creep into repo delivery. |
 | MetaGPT's MGX product competes in natural-language programming. | Medium | Commercial product from 68k-star research project. Monitor for repo-delivery features. |
+| Gemini CLI captures terminal users via Google's distribution. | Critical | 104.6k stars, free tier, multimodal, 100+ commits/mo. Largest terminal agent. OMK must differentiate on proof and multi-agent. |
+| Qwen Code captures Chinese/international terminal market. | High | 24.7k stars, Alibaba-backed, multi-provider, rapid iteration. Strong international competitor. |
+| Aider sets the bar for terminal pair-programming UX. | High | 45.3k stars, 6.8M installs, 15B tokens/week. OMK must match or exceed repo map, auto-lint/test, and git ergonomics. |
+| Plandex's plan-and-execute model gains traction. | Medium | 15.4k stars, diff sandbox, tree-sitter maps. Monitor if revived; plan version control is a strong differentiator. |
+| AutoGPT normalizes continuous agent platforms. | High | 184.5k stars, marketplace, workflow blocks. OMK must differentiate on bounded goal semantics vs. continuous automation. |
+| Dify captures LLM app development mindshare. | High | 142.6k stars, Linux Foundation, visual workflow builder. Adjacent surface but competing for workflow/orchestration mindshare. |
+| ChatDev's zero-code platform attracts non-technical users. | Medium | 33.2k stars, NeurIPS 2025, RL orchestrator. Different surface (web GUI), but strong research credibility. |
+| PR Agent sets bar for automated code review. | Medium | 11.3k stars, community-owned, multi-platform. OMK proof review must match PR compression and customization. |
 
 ## Strategic Boundary
 
@@ -222,6 +235,18 @@ Re-check these before major `omk goal` releases:
 - Claude Squad (multi-agent TUI): https://github.com/smtg-ai/claude-squad
 - GitHub Copilot CLI (terminal agent): https://github.com/github/copilot-cli
 - VoltAgent (AI Agent Engineering Platform): https://github.com/VoltAgent/voltagent
+- Gemini CLI (Google terminal agent): https://github.com/google-gemini/gemini-cli
+- Qwen Code (Alibaba terminal agent): https://github.com/QwenLM/qwen-code
+- Aider (AI pair programming): https://github.com/Aider-AI/aider
+- AutoGen (Microsoft multi-agent framework): https://github.com/microsoft/autogen
+- Plandex (terminal agent for large tasks): https://github.com/plandex-ai/plandex
+- Shortest (AI E2E testing): https://github.com/antiwork/shortest
+- AutoGPT (continuous AI agent platform): https://github.com/Significant-Gravitas/AutoGPT
+- Dify (LLM app development platform): https://github.com/langgenius/dify
+- ChatDev (zero-code multi-agent platform): https://github.com/OpenBMB/ChatDev
+- PR Agent (AI PR review): https://github.com/The-PR-Agent/pr-agent
+- Qodo Cover (AI test generation): https://github.com/qodo-ai/qodo-cover
+- Bolt.new (in-browser full-stack dev): https://github.com/stackblitz/bolt.new
 - Devin docs: https://docs.devin.ai/
 - OpenHands: https://github.com/OpenHands/OpenHands
 - Claude Code docs: https://code.claude.com/docs/en/overview
