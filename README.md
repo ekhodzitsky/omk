@@ -29,20 +29,34 @@ OMK is a terminal-native autonomous agent that turns one high-level goal into pl
 
 ## Install
 
+**Fastest for Rust developers:**
+
+```bash
+cargo install omk
+```
+
+**macOS (Homebrew):**
+
+```bash
+brew install ekhodzitsky/oh-my-kimi/omk
+```
+
+**Universal installer:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
 ```
 
-Or build from source (Rust 1.78+):
+**Build from source (Rust 1.78+):**
 
 ```bash
 git clone https://github.com/ekhodzitsky/oh-my-kimi.git && cd oh-my-kimi
 cargo build --release
 ```
 
-Also available via [Homebrew](homebrew/) and [AUR](aur/).
+Also available via [AUR](aur/).
 
-macOS (arm64 / x86_64) and Linux x86_64. Windows is not supported yet.
+Supported platforms: macOS (arm64 / x86_64) and Linux x86_64. Windows is not supported yet.
 
 ## Quick Start
 

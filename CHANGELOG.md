@@ -14,7 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Final merge gate with e2e GitHub validation**: `merge_policy` (gated/manual/disabled) fully enforced with CI polling and pre-flight checks
 - **Comprehensive recovery documentation**: `docs/GOAL_RECOVERY.md` covering all failure modes
 
-[Unreleased]
+## [Unreleased]
+
+### Changed
+
+- Prioritized `cargo install omk` as the first installation method in README,
+  followed by Homebrew and the universal curl installer.
 
 ### Added
 
