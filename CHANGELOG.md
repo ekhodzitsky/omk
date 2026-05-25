@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-05-25
+
+### Added
+
+- **Full 6-review wall per slice delivery**: all six review passes (architect, code, test, security, performance, anti-slop) now run for each slice before PR creation
+- **Auto-rebase with conflict recovery for goal slices**: `attempt_auto_rebase` classifies merge conflicts as safe or unsafe with automatic resolution
+- **Final merge gate with e2e GitHub validation**: `merge_policy` (gated/manual/disabled) fully enforced with CI polling and pre-flight checks
+- **Comprehensive recovery documentation**: `docs/GOAL_RECOVERY.md` covering all failure modes
+
+[Unreleased]
 
 ### Added
 
