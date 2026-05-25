@@ -147,7 +147,14 @@ pub(crate) async fn deliver_slice_pr(
 
     commit::push_slice_branch(worktree_path, &slice.branch_name).await?;
 
-    let outcome = open_slice_pr(slice, goal_state, &commit_sha, &options, Some(&review.artifacts)).await?;
+    let outcome = open_slice_pr(
+        slice,
+        goal_state,
+        &commit_sha,
+        &options,
+        Some(&review.artifacts),
+    )
+    .await?;
 
     let auto_merge_action = if options.policy == GoalDeliveryPolicy::AutoPr {
         let verdict = crate::runtime::goal::review::dispatcher::aggregate_verdict(&review);

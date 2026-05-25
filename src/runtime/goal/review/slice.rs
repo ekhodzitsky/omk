@@ -228,7 +228,14 @@ pub(crate) async fn review_slice(
 
 /// Compute whether all required review passes passed.
 fn compute_slice_review_passed(artifacts: &[SliceReviewArtifact]) -> bool {
-    let required_kinds = ["architect", "code", "test", "security", "performance", "anti-slop"];
+    let required_kinds = [
+        "architect",
+        "code",
+        "test",
+        "security",
+        "performance",
+        "anti-slop",
+    ];
     required_kinds
         .iter()
         .all(|kind| artifacts.iter().any(|a| a.kind == **kind && a.passed))
@@ -421,7 +428,14 @@ mod tests {
 
     #[test]
     fn compute_passed_false_when_any_required_fails() {
-        for kind in ["architect", "code", "test", "security", "performance", "anti-slop"] {
+        for kind in [
+            "architect",
+            "code",
+            "test",
+            "security",
+            "performance",
+            "anti-slop",
+        ] {
             let artifacts = vec![
                 artifact("architect", kind != "architect"),
                 artifact("code", kind != "code"),
