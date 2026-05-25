@@ -58,7 +58,7 @@ copied into OMK.
 ## Namesake Conflict
 
 As of 2026-05-18, at least three other public projects ship under the
-`oh-my-kimi` name and overlap with OMK's category:
+Namesake `oh-my-kimi` projects and OMK category overlap:
 
 | Project | Origin | Overlap |
 | --- | --- | --- |
@@ -66,12 +66,12 @@ As of 2026-05-18, at least three other public projects ship under the
 | `wang-h/oh-my-kimi` | GitHub | "Kimi-first multi-agent orchestration layer." |
 | `Goblin1024/oh-my-kimi` | GitHub | "Workflow orchestration layer for Kimi Code CLI — inspired by oh-my-codex." |
 
-This collision is materially closer to OMK's positioning than Devin, OpenHands,
-or Claude Code, and is unresolved. The repository's wedge against these
-namesakes is: Rust runtime, durable goal state, explicit verification gates,
+This collision was materially closer to OMK's positioning than Devin, OpenHands,
+or Claude Code. The rebrand to `omk` on crates.io and across the codebase
+resolves the direct naming conflict. OMK's wedge against the remaining
+namesakes remains: Rust runtime, durable goal state, explicit verification gates,
 `proof.json` semantics, and end-to-end repo delivery with worktrees and
-integrator PRs. A naming/priority decision (defend the name vs. rebrand vs.
-suffix) is required before the next public release.
+integrator PRs.
 
 ## Competitor Map
 
@@ -111,7 +111,7 @@ suffix) is required before the next public release.
 
 | Threat | Level | What it means for OMK |
 | --- | --- | --- |
-| Namesake `oh-my-kimi` projects already exist on PyPI and GitHub. | High | Brand collision blocks adoption; resolve naming/priority before next release. |
+| ~~Namesake `oh-my-kimi` projects already exist on PyPI and GitHub.~~ | ~~High~~ | ~~Brand collision blocks adoption; resolve naming/priority before next release.~~ **Resolved in v0.5.0 rebrand to `omk`.** |
 | Bernstein ships parallel-worktree orchestration with gates and audit log. | High | Most overlapping wedge. OMK must differentiate on durable goal state, slice-execution with integrator PRs, and proof terminal semantics — not just "many CLIs in worktrees." |
 | CAO (awslabs) becomes the default multi-CLI supervisor. | High | OMK must own *trustable completion semantics*, not just process orchestration. AWS-backed distribution is a real moat risk. |
 | Kimi Agent SDK gives upstream programmatic access. | High | The "Kimi-wrapper" layer is now first-party. OMK has to justify itself above the SDK with task graph, gates, and delivery. |
@@ -238,11 +238,11 @@ assistant-surface parity; the defensible MVP remains local durable state,
 task-scoped branches/worktrees, explicit verification/review/integration gates,
 and proof-backed terminal statuses.
 
-May 25, 2026 review note: competitive intelligence scan (batch 4) added six new tracked competitors. hcom (299★, Rust, 58 commits/mo) is the most credible direct local-first threat; ORCH (67★, active) occupies a nearly identical wedge; Ralph (19.5k★) owns the PRD-loop mindshare; Asynkor (49★, production) defines file-leasing coordination; ARC Protocol (66★) formalizes contract discipline; Claudiomiro (412★) demonstrates legacy-aware multi-repo pipelines. OMK's differentiation remains: durable goal state, proof-first verification wall, engine-adaptable runtime, and slice-execution with integrator PRs. The namesake collision and Bernstein/CAO threats from May 18 remain unresolved.
+May 25, 2026 review note: competitive intelligence scan (batch 4) added six new tracked competitors. hcom (299★, Rust, 58 commits/mo) is the most credible direct local-first threat; ORCH (67★, active) occupies a nearly identical wedge; Ralph (19.5k★) owns the PRD-loop mindshare; Asynkor (49★, production) defines file-leasing coordination; ARC Protocol (66★) formalizes contract discipline; Claudiomiro (412★) demonstrates legacy-aware multi-repo pipelines. OMK's differentiation remains: durable goal state, proof-first verification wall, engine-adaptable runtime, and slice-execution with integrator PRs. The namesake collision from May 18 is resolved in the v0.5.0 rebrand to `omk`. The Bernstein/CAO threats remain active.
 
 May 18, 2026 review note: a broader scan surfaced four new high-threat items
 not previously tracked. (1) Three public `oh-my-kimi` namesakes — name collision
-must be resolved before next release. (2) Bernstein occupies almost exactly the
+must be resolved before next release. **Resolved 2026-05-25 in v0.5.0 rebrand to `omk`.** (2) Bernstein occupies almost exactly the
 same wedge (parallel worktrees + quality gates + audit log); OMK's
 differentiation is durable goal state, oracle-aware planning, slice-execution
 with integrator PRs, and proof terminal status, not feature breadth. (3) AWS's

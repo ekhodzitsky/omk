@@ -186,8 +186,8 @@ const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
         </div>
 
         <footer>
-            <p>oh-my-kimi — Multi-agent orchestration for Kimi CLI</p>
-            <p><a href="https://github.com/ekhodzitsky/oh-my-kimi" style="color:#2563eb;">GitHub</a></p>
+            <p>OMK — Multi-agent orchestration for Kimi CLI</p>
+            <p><a href="https://github.com/ekhodzitsky/omk" style="color:#2563eb;">GitHub</a></p>
         </footer>
     </div>
 

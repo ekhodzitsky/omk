@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: 📖 Documentation
-    url: https://github.com/ekhodzitsky/oh-my-kimi/tree/master/docs
+    url: https://github.com/ekhodzitsky/omk/tree/master/docs
     about: Check the docs before opening an issue
   - name: 💬 Discussions
-    url: https://github.com/ekhodzitsky/oh-my-kimi/discussions
+    url: https://github.com/ekhodzitsky/omk/discussions
     about: Ask questions and share ideas
   - name: 🛡️ Security
-    url: https://github.com/ekhodzitsky/oh-my-kimi/blob/master/SECURITY.md
+    url: https://github.com/ekhodzitsky/omk/blob/master/SECURITY.md
     about: Report security vulnerabilities privately

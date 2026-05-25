@@ -1,6 +1,6 @@
 {
   "name": "Example OMK Registry",
-  "url": "https://github.com/ekhodzitsky/oh-my-kimi/blob/master/examples/registry.json",
+  "url": "https://github.com/ekhodzitsky/omk/blob/master/examples/registry.json",
   "skills": [
     {
       "name": "example-skill",

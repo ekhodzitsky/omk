@@ -1,5 +1,5 @@
 ---
-name: oh-my-kimi
+name: omk
 description: Orchestration layer for Kimi CLI — Wire teams, event logs, proof generation, and planned goal-driven execution
 agents:
   - role: architect
@@ -19,7 +19,7 @@ agents:
     tier: ops
 ---
 
-# oh-my-kimi Agent Context
+# OMK Agent Context
 
 ## Behavioral Guidelines
 

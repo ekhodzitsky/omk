@@ -3,14 +3,14 @@
 ## Quick Install
 
 ```bash
-brew tap ekhodzitsky/oh-my-kimi
+brew tap ekhodzitsky/omk
 brew install omk
 ```
 
 ## Build from Source
 
 ```bash
-brew install --build-from-source ekhodzitsky/oh-my-kimi/omk
+brew install --build-from-source ekhodzitsky/omk/omk
 ```
 
 ## Update

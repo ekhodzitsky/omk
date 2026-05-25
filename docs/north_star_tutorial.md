@@ -1,6 +1,6 @@
 # North Star Tutorial
 
-This tutorial walks through the **North Star Demo** — the target oh-my-kimi workflow that shows Kimi agents fixing code, producing a proof, and reporting status.
+This tutorial walks through the **North Star Demo** — the target OMK workflow that shows Kimi agents fixing code, producing a proof, and reporting status.
 
 > **Maturity note:** `omk kimi sync`, `omk team run`, `omk hud`, `omk run show`, `omk proof show`, and `omk chat` are in the CLI today. The remaining work is proof/HUD polish and hardening, not command invention. For the tutorial covering only today's CLI surface, see [TUTORIAL.md](TUTORIAL.md).
 
@@ -32,8 +32,8 @@ The demo is successful when you can see Kimi workers progressing in parallel, wa
 ### 1. Build and install `omk`
 
 ```bash
-git clone https://github.com/ekhodzitsky/oh-my-kimi
-cd oh-my-kimi
+git clone https://github.com/ekhodzitsky/omk
+cd omk
 cargo build --release
 # Optional: copy to a location on your PATH
 cp target/release/omk ~/.local/bin/

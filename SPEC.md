@@ -1,6 +1,6 @@
 # OMK Goal Product Spec
 
-`omk goal` is the north-star feature for oh-my-kimi.
+`omk goal` is the north-star feature for OMK.
 
 It turns OMK from a set of useful orchestration commands into a long-running,
 proof-driven engineering runtime. The command accepts a high-level outcome,

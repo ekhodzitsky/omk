@@ -12,7 +12,7 @@ is the supported version; older tags are not back-ported.
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in oh-my-kimi, please report it
+If you discover a security vulnerability in OMK, please report it
 responsibly:
 
 1. **Do not open a public issue.**

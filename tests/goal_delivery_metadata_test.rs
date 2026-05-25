@@ -54,9 +54,9 @@ fn delivery_metadata() -> Value {
         "slice_id": "goal-agent-execute",
         "owner": "codex",
         "branch": "codex/goal-agent-execute-delivery-metadata",
-        "worktree_path": "../oh-my-kimi-goal-delivery",
-        "pr_url": "https://github.com/ekhodzitsky/oh-my-kimi/pull/123",
-        "pr_link": "https://github.com/ekhodzitsky/oh-my-kimi/pull/123",
+        "worktree_path": "../omk-goal-delivery",
+        "pr_url": "https://github.com/ekhodzitsky/omk/pull/123",
+        "pr_link": "https://github.com/ekhodzitsky/omk/pull/123",
         "commit_sha": "abc1234",
         "write_scope": [
             "src/runtime/goal/task_graph.rs",
@@ -138,13 +138,13 @@ fn assert_delivery_metadata(delivery: &Value) {
     );
     assert_eq!(
         delivery["pr_link"],
-        "https://github.com/ekhodzitsky/oh-my-kimi/pull/123"
+        "https://github.com/ekhodzitsky/omk/pull/123"
     );
     assert_eq!(
         delivery["pr_url"],
-        "https://github.com/ekhodzitsky/oh-my-kimi/pull/123"
+        "https://github.com/ekhodzitsky/omk/pull/123"
     );
-    assert_eq!(delivery["worktree_path"], "../oh-my-kimi-goal-delivery");
+    assert_eq!(delivery["worktree_path"], "../omk-goal-delivery");
     assert_eq!(delivery["commit_sha"], "abc1234");
     assert_eq!(
         delivery["write_scope"]

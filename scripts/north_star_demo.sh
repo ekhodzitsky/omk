@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# North Star Demo Script for oh-my-kimi
+# North Star Demo Script for OMK
 #
 # Demonstrates the first lazy `omk goal` user path:
 #   omk setup
