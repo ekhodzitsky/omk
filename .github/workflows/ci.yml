@@ -65,6 +65,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Clone kimi-wire dependency
+        run: git clone --depth=1 https://github.com/ekhodzitsky/kimi-wire.git ../kimi-wire
+
       - name: Skip docs-only PR
         if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
         run: echo "No Rust paths changed."
@@ -113,6 +120,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Clone kimi-wire dependency
+        run: git clone --depth=1 https://github.com/ekhodzitsky/kimi-wire.git ../kimi-wire
+
       - name: Skip unchanged dependency graph
         if: github.event_name == 'pull_request' && needs.changes.outputs.deps != 'true'
         run: echo "Cargo dependency inputs did not change; dependency audit is a cheap no-op."
@@ -133,6 +143,9 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+
+      - name: Clone kimi-wire dependency
+        run: git clone --depth=1 https://github.com/ekhodzitsky/kimi-wire.git ../kimi-wire
 
       - name: Skip docs-only PR
         if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
@@ -168,6 +181,9 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+
+      - name: Clone kimi-wire dependency
+        run: git clone --depth=1 https://github.com/ekhodzitsky/kimi-wire.git ../kimi-wire
 
       - name: Skip docs-only PR
         if: github.event_name == 'pull_request' && needs.changes.outputs.rust != 'true'
