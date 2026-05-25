@@ -44,7 +44,7 @@ serde_yaml = "0.9"
 toml = "1.1"
 
 # Wire protocol client library
-kimi-wire = { path = "../kimi-wire", default-features = true }
+kimi-wire = "0.3.0"
 
 # Error handling & utilities
 anyhow = "1.0"
