@@ -49,9 +49,10 @@ pub async fn attempt_auto_rebase(
                 let repo = GitRepo::open(repo_dir)
                     .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
 
-                let conflict_files = repo.conflicted_files().await.map_err(|e| {
-                    anyhow::anyhow!("failed to list conflicted files: {e}")
-                })?;
+                let conflict_files = repo
+                    .conflicted_files()
+                    .await
+                    .map_err(|e| anyhow::anyhow!("failed to list conflicted files: {e}"))?;
 
                 for file in &conflict_files {
                     resolve_safe_conflict(repo_dir, file)
@@ -87,8 +88,8 @@ pub async fn attempt_auto_rebase(
 }
 
 async fn classify_conflicts(repo_dir: &Path) -> Result<ConflictClassification> {
-    let repo = GitRepo::open(repo_dir)
-        .map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
+    let repo =
+        GitRepo::open(repo_dir).map_err(|e| anyhow::anyhow!("failed to open git repo: {e}"))?;
 
     // Check for delete conflicts which are always unsafe.
     let porcelain = repo
@@ -112,9 +113,10 @@ async fn classify_conflicts(repo_dir: &Path) -> Result<ConflictClassification> {
         }
     }
 
-    let conflict_files = repo.conflicted_files().await.map_err(|e| {
-        anyhow::anyhow!("failed to list conflicted files: {e}")
-    })?;
+    let conflict_files = repo
+        .conflicted_files()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to list conflicted files: {e}"))?;
 
     if conflict_files.is_empty() {
         return Ok(ConflictClassification::Unsafe {
@@ -292,7 +294,8 @@ mod tests {
 
     #[test]
     fn extract_conflict_regions_multiple_regions() {
-        let content = "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> b1\n<<<<<<< HEAD\nc\n=======\nd\n>>>>>>> b2";
+        let content =
+            "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> b1\n<<<<<<< HEAD\nc\n=======\nd\n>>>>>>> b2";
         let regions = extract_conflict_regions(content);
         assert_eq!(regions.len(), 2);
         assert_eq!(regions[0].0, "a");

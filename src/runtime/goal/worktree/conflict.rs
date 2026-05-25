@@ -53,12 +53,7 @@ pub async fn detect_goal_merge_conflicts(
     let mut conflict_classification = None;
 
     if !clean_merge {
-        match attempt_auto_rebase(
-            &request.repo_dir,
-            &request.source_ref,
-            &request.target_ref,
-        )
-        .await
+        match attempt_auto_rebase(&request.repo_dir, &request.source_ref, &request.target_ref).await
         {
             Ok((RebaseOutcome::Clean, classification)) => {
                 conflict_classification = classification;
@@ -191,10 +186,7 @@ async fn record_conflict_delivery_metadata(
         json!(evidence.clean_merge),
     );
     if let Some(ref classification) = evidence.conflict_classification {
-        extra.insert(
-            "conflict_classification".to_string(),
-            json!(classification),
-        );
+        extra.insert("conflict_classification".to_string(), json!(classification));
     }
 
     update_goal_task_delivery_metadata(

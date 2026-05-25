@@ -188,7 +188,10 @@ async fn auto_rebase_skips_unsafe_substantive_conflict() {
     ))
     .await
     .expect("conflict detection should complete");
-    assert!(!evidence.clean_merge, "unsafe substantive conflict should not be auto-resolved");
+    assert!(
+        !evidence.clean_merge,
+        "unsafe substantive conflict should not be auto-resolved"
+    );
     assert!(evidence.conflicting_files.iter().any(|f| f == "code.rs"));
     assert!(
         matches!(

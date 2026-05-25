@@ -415,7 +415,6 @@ async fn test_rollback_handles_binary_evidence_via_lossy_utf8() {
     assert!(content.contains("hello"));
 }
 
-
 #[tokio::test]
 async fn test_rollback_preserves_rebase_conflict_evidence() {
     let tmp = tempfile::tempdir().unwrap();
@@ -447,9 +446,12 @@ async fn test_rollback_preserves_rebase_conflict_evidence() {
             }
         }
     });
-    tokio::fs::write(&evidence_path, serde_json::to_vec_pretty(&evidence).unwrap())
-        .await
-        .unwrap();
+    tokio::fs::write(
+        &evidence_path,
+        serde_json::to_vec_pretty(&evidence).unwrap(),
+    )
+    .await
+    .unwrap();
 
     write_task_graph(
         &state_dir,

@@ -89,7 +89,10 @@ impl GitRepo {
 
     /// List files with unresolved merge/rebase conflicts.
     pub async fn conflicted_files(&self) -> Result<Vec<String>, GitError> {
-        let out = self.cmd.run(&["diff", "--name-only", "--diff-filter=U"]).await?;
+        let out = self
+            .cmd
+            .run(&["diff", "--name-only", "--diff-filter=U"])
+            .await?;
         let files: Vec<String> = out.stdout.lines().map(|s| s.to_string()).collect();
         Ok(files)
     }
@@ -332,10 +335,7 @@ impl GitRepo {
     /// Stage a specific path.
     pub async fn add(&self, path: impl AsRef<Path>) -> Result<(), GitError> {
         self.cmd
-            .run(&[
-                std::ffi::OsStr::new("add"),
-                path.as_ref().as_os_str(),
-            ])
+            .run(&[std::ffi::OsStr::new("add"), path.as_ref().as_os_str()])
             .await?;
         Ok(())
     }
