@@ -16,6 +16,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to `.github/pull_request_template.md` with checkboxes for CHANGELOG entries,
   version impact, and documentation updates.
 
+- **Chat-first CLI surface**: running `omk` with no arguments opens a
+  terminal-native chat REPL with a conversation log, engine pane, and
+  autonomous escalation. The `omk chat` alias is also available.
+- **Intent classifier**: routes user requests by size and complexity using a
+  heuristic layer backed by Kimi for escalation decisions.
+- **Conversation router and escalation bridge**: connects chat sessions to
+  small-edit dispatch, medium plans, and full `omk goal` runs with observable
+  autonomous-escalation events.
+- **TUI pane rendering engine**: snapshot-tested terminal output for the engine
+  pane with collapsed, compact, and expanded states.
+- **Chat control surface**: slash commands, hotkeys, preflight keys, and theme
+  switching between dark and light modes.
+- **Autonomous-mode default**: the router no longer blocks on preflight prompts
+  unless explicitly opted in; escalation decisions proceed with observable log
+  markers instead of user input.
+- **Session escalation log and TUI visibility marker**: autonomous decisions
+  and large escalations are surfaced in the chat UI without blocking.
+
+- **MCP client commands**: `omk mcp list`, `omk mcp doctor`, and
+  `omk mcp call` with stdio and HTTP/SSE transport support and an LRU-cached
+  client via `moka`.
+- **ApprovalProxy**: configurable approval policy engine (`Never`, `Safe`,
+  `Yolo`, `Pattern`) for autonomous gate and tool execution.
+- **Wire hook integration**: native scripts placed in `.kimi/hooks/` execute
+  automatically on hook requests with timeout enforcement and event emission.
+
+- **LLM planner in goal CLI**: goal planning now uses an LLM planner by default
+  with graceful fallback to a heuristic planner when the LLM is unreachable.
+- **Slice PR delivery hardening**: auto-rebase, proof validation, and conflict
+  detection before recording delivery evidence.
+- **Six-review wall**: architect, code, test, security, performance, and
+  anti-slop review passes now run before a slice PR can be opened.
+- **Anti-slop heuristics**: real rough-edge detection in changed files; the
+  controller can auto-spawn follow-up refactor tasks from review findings.
+- **Aggregate review verdict + auto-merge**: slice PRs automatically merge when
+  all six review passes are green and required CI checks succeed.
+- **Auto-rebase on merge-tree conflict**: rebases slice branches before
+  recording evidence when merge-tree detects conflicts.
+- **Concurrent slice ownership leases**: per-slice conflict detection with
+  lease metadata and stale-worker cleanup.
+
+- **Security redaction at all boundaries**: secrets are scrubbed from gate
+  stdout/stderr, proof artifacts, event streams, and CLI JSON output.
+- **Logging path hardening**: centralized redaction prevents secret leakage
+  through tracing spans and log files.
+- **Security cleanup tasks**: verifier findings can auto-spawn dedicated
+  security cleanup tasks.
+
+- **Tree-sitter code analysis**: AST-based structural understanding for Rust,
+  JavaScript/TypeScript, Python, and Go.
+- **Exact token counting**: `tiktoken-rs` integration for accurate BPE token
+  counts and USD cost estimation.
+
+- **SQLite storage module**: durable goals, tasks, events, proofs, budget
+  checkpoints, and artifacts stored in SQLite with WAL mode and migration
+  versioning.
+- **Goal event persistence in SQLite**: full roundtrip integration tests for
+  event storage and retrieval.
+- **Typed GitRepo abstraction**: replaces raw git command strings with a
+  structured API.
+
+- **Performance/scale hardening**: Criterion benchmarks and cycle detection
+  optimization for goal runtime operations.
+- **Parallel post-processing**: structured concurrency and parallel processing
+  for goal runtime operations.
+- **tokio-console feature flag**: enables async runtime observability via the
+  Tokio console subscriber.
+
+### Changed
+
+- **README rewritten** for autonomous-agent positioning; chat-first surface is
+  now the documented default entry point.
+- **Cargo.toml metadata trimmed** for crates.io readiness.
+- **Direct dependencies trimmed** to reduce compile times and supply-chain
+  surface.
+
+### Fixed
+
+- Eliminated `kill_on_drop` race condition causing `exit_code=None` on Linux
+  during gate execution.
+- Preserved hook results when scripts close stdin early.
+- Fixed MCP process leak, transport demux, and server-scoped call routing.
+
 ### Wire Protocol
 
 - Added `ContentPart` variant to the `Event` enum so it matches the documented
@@ -33,6 +116,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | 1.9 | 0.4.0 | Current version; observed from Kimi Code CLI 1.41.0. |
 | 1.7 | 0.2.0 | Added `set_plan_mode` / `steer` control methods. |
 | 1.0 | 0.1.0 | Initial wire protocol support. |
+
+### Dependencies
+
+- SQLite stack: `rusqlite` upgraded 0.30→0.37, `tokio-rusqlite` 0.5→0.7.
+- `tiktoken-rs` upgraded 0.6→0.11.
+- Tree-sitter parent upgraded 0.25→0.26; grammars updated: `tree-sitter-rust` 0.23→0.24, `tree-sitter-go` 0.23→0.25, `tree-sitter-python` 0.23→0.25, `tree-sitter-javascript` 0.23→0.25.
+- `shlex` upgraded 1.3.0→2.0.1.
+- `console-subscriber` upgraded 0.4→0.5.
+- GitHub Actions bumps: `actions/checkout` 4.2.2→6.0.2, `actions/upload-artifact` 4.6.2→7.0.1, `actions/download-artifact` 4.2.1→8.0.1, `actions/attest-build-provenance` 2.2.3→4.1.0, `actions/stale` 9.1.0→10.3.0, `Swatinem/rust-cache`, `taiki-e/install-action` 2.50.0→2.79.4, `EmbarkStudios/cargo-deny-action` 2.0.18→2.0.19, `codecov/codecov-action`.
+
+### Documentation
+
+- Restructured `AGENTS.md` with architecture, testing, security, and
+  observability sections.
+- Added manual recovery guide for failed PR, CI, review blockers, merge
+  conflicts, and partial acceptance.
+- Added recovery docs and CLI recovery hints.
+- Restructured `TODO.md` and updated `ROADMAP.md` Stage 5.
+- Completed audit follow-up for `API.md`, `AGENTS.md`, `CONTRIBUTING.md`, and
+  `KIMI_UPSTREAM.md`.
+- Refreshed `README.md` for conciseness and accuracy.
 
 ## [0.4.0] - 2026-05-13
 
