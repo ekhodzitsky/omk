@@ -18,6 +18,7 @@ struct RecordedCall {
 #[derive(Debug, Default)]
 struct MockGithubClient {
     calls: Vec<RecordedCall>,
+    gate_fail_next: Option<String>,
 }
 
 impl MockGithubClient {
@@ -80,6 +81,17 @@ impl GoalGithubPrClient for MockGithubClient {
                 url: Some(pr_url.to_string()),
             })
         })
+    }
+
+    fn validate_merge_gate<'a>(
+        &'a mut self,
+        _pr_url: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+        if let Some(ref err) = self.gate_fail_next {
+            let err = err.clone();
+            return Box::pin(async move { anyhow::bail!("{err}") });
+        }
+        Box::pin(async move { Ok(()) })
     }
 }
 
@@ -257,4 +269,27 @@ async fn merge_pr_calls_gh_merge() {
     assert_eq!(call.operation, GoalGithubPrOperation::Create);
     assert_eq!(call.request.body, url);
     assert_eq!(call.request.existing_pr_url, Some(url.to_string()));
+}
+
+#[tokio::test]
+async fn validate_merge_gate_succeeds_by_default() {
+    let mut client = MockGithubClient::default();
+    let result = client
+        .validate_merge_gate("https://github.com/example/omk/pull/7")
+        .await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn validate_merge_gate_propagates_mock_error() {
+    let mut client = MockGithubClient {
+        gate_fail_next: Some("CI check 'tests' failed".to_string()),
+        ..Default::default()
+    };
+    let err = client
+        .validate_merge_gate("https://github.com/example/omk/pull/7")
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("CI check 'tests' failed"));
 }
