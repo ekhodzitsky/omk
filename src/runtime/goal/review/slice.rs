@@ -88,31 +88,6 @@ pub(crate) async fn review_slice(
     let gates_ok = !gates.is_empty() && gates_passed(&gates);
     let security_ok = security_findings.is_empty();
 
-    let passed = gates_ok && security_ok;
-
-    let feedback = if passed {
-        None
-    } else {
-        let mut parts = Vec::new();
-        if !gates_ok {
-            let failed = gates
-                .iter()
-                .filter(|g| !g.passed)
-                .map(|g| g.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            parts.push(format!("Gates failed: {failed}"));
-        }
-        if !security_ok {
-            parts.push(format!(
-                "Security findings ({}): {}",
-                security_findings.len(),
-                security_findings.join("; ")
-            ));
-        }
-        Some(parts.join(". "))
-    };
-
     let performance_ok = gates
         .iter()
         .filter(|gate| is_performance_gate(&gate.name))
@@ -238,6 +213,9 @@ pub(crate) async fn review_slice(
         },
     ];
 
+    let passed = compute_slice_review_passed(&artifacts);
+    let feedback = compute_slice_review_feedback(&artifacts, passed);
+
     Ok(SliceReviewOutcome {
         passed,
         review_path: None,
@@ -248,6 +226,34 @@ pub(crate) async fn review_slice(
     })
 }
 
+/// Compute whether all required review passes passed.
+fn compute_slice_review_passed(artifacts: &[SliceReviewArtifact]) -> bool {
+    let required_kinds = ["architect", "code", "test", "security", "performance", "anti-slop"];
+    required_kinds
+        .iter()
+        .all(|kind| artifacts.iter().any(|a| a.kind == **kind && a.passed))
+}
+
+/// Compute human-readable feedback from review artifacts.
+fn compute_slice_review_feedback(
+    artifacts: &[SliceReviewArtifact],
+    passed: bool,
+) -> Option<String> {
+    if passed {
+        return None;
+    }
+    let failed = artifacts
+        .iter()
+        .filter(|a| !a.passed)
+        .map(|a| format!("{}: {}", a.kind, a.feedback))
+        .collect::<Vec<_>>();
+    if failed.is_empty() {
+        Some("Review wall blocked: required artifacts missing".to_string())
+    } else {
+        Some(format!("Review wall blocked: {}", failed.join("; ")))
+    }
+}
+
 fn is_performance_gate(name: &str) -> bool {
     let normalized = name.to_ascii_lowercase();
     normalized.contains("perf") || normalized.contains("bench")
@@ -256,6 +262,15 @@ fn is_performance_gate(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn artifact(kind: &str, passed: bool) -> SliceReviewArtifact {
+        SliceReviewArtifact {
+            kind: kind.to_string(),
+            passed,
+            feedback: "feedback".to_string(),
+            severity: "low".to_string(),
+        }
+    }
 
     #[test]
     fn slice_review_outcome_passed_no_feedback() {
@@ -277,12 +292,15 @@ mod tests {
             passed: false,
             review_path: None,
             security_review_path: None,
-            feedback: Some("Gates failed: test".to_string()),
+            feedback: Some("Review wall blocked: test: gate failed".to_string()),
             artifacts: Vec::new(),
             slop_findings: Vec::new(),
         };
         assert!(!outcome.passed);
-        assert_eq!(outcome.feedback, Some("Gates failed: test".to_string()));
+        assert_eq!(
+            outcome.feedback,
+            Some("Review wall blocked: test: gate failed".to_string())
+        );
     }
 
     #[test]
@@ -386,5 +404,85 @@ mod tests {
         assert!(is_performance_gate("perf-check"));
         assert!(is_performance_gate("benchmark"));
         assert!(!is_performance_gate("unit-test"));
+    }
+
+    #[test]
+    fn compute_passed_true_when_all_six_pass() {
+        let artifacts = vec![
+            artifact("architect", true),
+            artifact("code", true),
+            artifact("test", true),
+            artifact("security", true),
+            artifact("performance", true),
+            artifact("anti-slop", true),
+        ];
+        assert!(compute_slice_review_passed(&artifacts));
+    }
+
+    #[test]
+    fn compute_passed_false_when_any_required_fails() {
+        for kind in ["architect", "code", "test", "security", "performance", "anti-slop"] {
+            let artifacts = vec![
+                artifact("architect", kind != "architect"),
+                artifact("code", kind != "code"),
+                artifact("test", kind != "test"),
+                artifact("security", kind != "security"),
+                artifact("performance", kind != "performance"),
+                artifact("anti-slop", kind != "anti-slop"),
+            ];
+            assert!(
+                !compute_slice_review_passed(&artifacts),
+                "expected failure when {kind} fails"
+            );
+        }
+    }
+
+    #[test]
+    fn compute_passed_false_when_required_artifact_missing() {
+        let artifacts = vec![
+            artifact("architect", true),
+            artifact("code", true),
+            artifact("test", true),
+            artifact("security", true),
+            artifact("performance", true),
+            // anti-slop missing
+        ];
+        assert!(!compute_slice_review_passed(&artifacts));
+    }
+
+    #[test]
+    fn compute_feedback_none_when_all_pass() {
+        let artifacts = vec![
+            artifact("architect", true),
+            artifact("code", true),
+            artifact("test", true),
+            artifact("security", true),
+            artifact("performance", true),
+            artifact("anti-slop", true),
+        ];
+        assert!(compute_slice_review_feedback(&artifacts, true).is_none());
+    }
+
+    #[test]
+    fn compute_feedback_lists_failed_passes() {
+        let artifacts = vec![
+            artifact("architect", true),
+            artifact("code", false),
+            artifact("test", true),
+            artifact("security", true),
+            artifact("performance", false),
+            artifact("anti-slop", true),
+        ];
+        let fb = compute_slice_review_feedback(&artifacts, false).expect("feedback");
+        assert!(fb.contains("code"), "feedback: {fb}");
+        assert!(fb.contains("performance"), "feedback: {fb}");
+        assert!(!fb.contains("architect"), "feedback: {fb}");
+    }
+
+    #[test]
+    fn compute_feedback_shows_missing_when_no_failed_artifacts() {
+        let artifacts = vec![];
+        let fb = compute_slice_review_feedback(&artifacts, false).expect("feedback");
+        assert!(fb.contains("missing"), "feedback: {fb}");
     }
 }

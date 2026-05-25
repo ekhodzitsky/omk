@@ -7,7 +7,8 @@ use super::{
 };
 use crate::runtime::goal::control::resolve_base_branch;
 use crate::runtime::goal::review::{
-    anti_slop_confidence_with_findings, review_slice, ANTI_SLOP_ACTIONABLE_THRESHOLD,
+    anti_slop_confidence_with_findings, review_slice, SliceReviewArtifact,
+    ANTI_SLOP_ACTIONABLE_THRESHOLD,
 };
 use crate::runtime::goal::state::GoalState;
 use crate::runtime::goal::task_graph::{GoalDeliverySlice, GoalTaskGraph};
@@ -146,7 +147,7 @@ pub(crate) async fn deliver_slice_pr(
 
     commit::push_slice_branch(worktree_path, &slice.branch_name).await?;
 
-    let outcome = open_slice_pr(slice, goal_state, &commit_sha, &options).await?;
+    let outcome = open_slice_pr(slice, goal_state, &commit_sha, &options, Some(&review.artifacts)).await?;
 
     let auto_merge_action = if options.policy == GoalDeliveryPolicy::AutoPr {
         let verdict = crate::runtime::goal::review::dispatcher::aggregate_verdict(&review);
@@ -178,21 +179,14 @@ async fn open_slice_pr(
     goal_state: &GoalState,
     commit_sha: &str,
     options: &SlicePrDeliveryOptions,
+    review_artifacts: Option<&[SliceReviewArtifact]>,
 ) -> Result<SlicePrDeliveryOutcome> {
     let head_branch = slice.branch_name.clone();
     let title = format!(
         "[slice] {} — {}",
         slice.slice_id, goal_state.normalized_goal
     );
-    let body = format!(
-        "Slice `{}` for goal `{}`.\n\n- Owner: `{}`\n- Write scope: `{}`\n- Commit: `{}`\n- Slice dependencies: `{}`\n",
-        slice.slice_id,
-        goal_state.goal_id,
-        slice.owner_role,
-        slice.write_scope.join(", "),
-        commit_sha,
-        slice.dependencies.join(", "),
-    );
+    let body = render_slice_pr_body(slice, goal_state, commit_sha, review_artifacts);
 
     let request = GoalGithubPrRequest {
         title,
@@ -219,10 +213,44 @@ async fn open_slice_pr(
         pr_url: mutation.url.clone(),
         mutated: true,
         reason: format!("GitHub PR {} completed", mutation.operation.as_str()),
-        review_artifacts: None,
+        review_artifacts: review_artifacts.map(|a| a.to_vec()),
         slop_findings: Vec::new(),
         auto_merge_action: None,
     })
+}
+
+/// Render the PR body for a slice, including review artifact evidence.
+fn render_slice_pr_body(
+    slice: &GoalDeliverySlice,
+    goal_state: &GoalState,
+    commit_sha: &str,
+    review_artifacts: Option<&[SliceReviewArtifact]>,
+) -> String {
+    let mut body = format!(
+        "Slice `{}` for goal `{}`.\n\n- Owner: `{}`\n- Write scope: `{}`\n- Commit: `{}`\n- Slice dependencies: `{}`\n",
+        slice.slice_id,
+        goal_state.goal_id,
+        slice.owner_role,
+        slice.write_scope.join(", "),
+        commit_sha,
+        slice.dependencies.join(", "),
+    );
+
+    if let Some(artifacts) = review_artifacts {
+        body.push_str("\n## Review Wall\n\n");
+        body.push_str("| Pass | Status | Severity | Feedback |\n");
+        body.push_str("|---|---|---|---|\n");
+        for artifact in artifacts {
+            let status = if artifact.passed { "passed" } else { "failed" };
+            body.push_str(&format!(
+                "| {} | {} | {} | {} |\n",
+                artifact.kind, status, artifact.severity, artifact.feedback
+            ));
+        }
+        body.push('\n');
+    }
+
+    body
 }
 
 #[cfg(test)]
@@ -257,5 +285,112 @@ mod tests {
         };
         assert!(!outcome.mutated);
         assert!(outcome.commit_sha.is_none());
+    }
+
+    #[test]
+    fn render_slice_pr_body_includes_review_artifacts() {
+        let slice = GoalDeliverySlice {
+            slice_id: "slice-1".to_string(),
+            task_id: "t1".to_string(),
+            owner_role: "executor".to_string(),
+            read_scope: vec![],
+            write_scope: vec!["src".to_string()],
+            dependencies: vec![],
+            branch_name: "branch".to_string(),
+            worktree_name: "wt".to_string(),
+            worktree_path: std::path::PathBuf::new(),
+            gates: vec![],
+            review_needs: vec![],
+            pr_url: None,
+        };
+        let goal_state = GoalState {
+            version: 1,
+            goal_id: "goal-1".to_string(),
+            original_goal: "Test goal".to_string(),
+            normalized_goal: "Test goal".to_string(),
+            status: crate::runtime::goal::state::GoalStatus::Running,
+            phase: crate::runtime::goal::state::GoalPhase::Intake,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            completed_at: None,
+            until_ready: false,
+            budget_time: None,
+            budget_tokens: None,
+            budget_usd: None,
+            max_agents: None,
+            cost_tracker_path: None,
+            terminal_criteria: crate::runtime::goal::state::GoalTerminalCriteria::default(),
+            delivery_policy: GoalDeliveryPolicy::Local,
+            merge_policy: crate::runtime::goal::GoalMergePolicy::Disabled,
+            slice_execution: false,
+            artifacts: vec![],
+            failure: None,
+            state_dir: std::path::PathBuf::new(),
+        };
+        let artifacts = vec![
+            SliceReviewArtifact {
+                kind: "architect".to_string(),
+                passed: true,
+                feedback: "Architecture review passed".to_string(),
+                severity: "low".to_string(),
+            },
+            SliceReviewArtifact {
+                kind: "code".to_string(),
+                passed: false,
+                feedback: "Code review blocked".to_string(),
+                severity: "high".to_string(),
+            },
+        ];
+        let body = render_slice_pr_body(&slice, &goal_state, "abc123", Some(&artifacts));
+        assert!(body.contains("## Review Wall"));
+        assert!(body.contains("| architect | passed | low | Architecture review passed |"));
+        assert!(body.contains("| code | failed | high | Code review blocked |"));
+        assert!(body.contains("Slice `slice-1` for goal `goal-1`"));
+        assert!(body.contains("Commit: `abc123`"));
+    }
+
+    #[test]
+    fn render_slice_pr_body_omits_review_section_when_no_artifacts() {
+        let slice = GoalDeliverySlice {
+            slice_id: "slice-2".to_string(),
+            task_id: "t2".to_string(),
+            owner_role: "writer".to_string(),
+            read_scope: vec![],
+            write_scope: vec!["docs".to_string()],
+            dependencies: vec![],
+            branch_name: "branch".to_string(),
+            worktree_name: "wt".to_string(),
+            worktree_path: std::path::PathBuf::new(),
+            gates: vec![],
+            review_needs: vec![],
+            pr_url: None,
+        };
+        let goal_state = GoalState {
+            version: 1,
+            goal_id: "goal-2".to_string(),
+            original_goal: "Docs goal".to_string(),
+            normalized_goal: "Docs goal".to_string(),
+            status: crate::runtime::goal::state::GoalStatus::Running,
+            phase: crate::runtime::goal::state::GoalPhase::Intake,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            completed_at: None,
+            until_ready: false,
+            budget_time: None,
+            budget_tokens: None,
+            budget_usd: None,
+            max_agents: None,
+            cost_tracker_path: None,
+            terminal_criteria: crate::runtime::goal::state::GoalTerminalCriteria::default(),
+            delivery_policy: GoalDeliveryPolicy::Local,
+            merge_policy: crate::runtime::goal::GoalMergePolicy::Disabled,
+            slice_execution: false,
+            artifacts: vec![],
+            failure: None,
+            state_dir: std::path::PathBuf::new(),
+        };
+        let body = render_slice_pr_body(&slice, &goal_state, "def456", None);
+        assert!(!body.contains("## Review Wall"));
+        assert!(body.contains("Slice `slice-2` for goal `goal-2`"));
     }
 }
