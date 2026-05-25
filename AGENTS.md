@@ -11,6 +11,7 @@ For market positioning and competitor boundaries, read
 - [Meta Principle](#meta-principle)
 - [Behavioral Guidelines](#behavioral-guidelines)
 - [Project Contract Rules](#project-contract-rules-hard-constraints)
+- [Release Discipline](#release-discipline-hard-constraints)
 - [Multi-Agent Development Protocol](#multi-agent-development-protocol-hard-constraints)
 - [Agent Module Architecture](#agent-module-architecture-hard-constraints)
 - [Rust Safety Rules](#rust-safety-rules-hard-constraints)
@@ -54,6 +55,105 @@ recursive agent launcher.
 4. **Events, metrics, and proof fields are public API.** Renames/removals need a compatibility alias, migration note, or explicit changelog entry explaining the break. See also Observability Standards §4 for metric naming.
 5. **Dependencies are architecture changes.** No new crate without a rationale: why std/local code is not enough, transitive impact, MSRV, license, and feature-flag consequences. See also Security §8 for supply-chain requirements. Small helper crates are rejected by default.
 6. **Refactors isolate mechanics from behavior.** File moves, splits, renames, and formatting-only changes must be separate from semantic changes whenever practical.
+
+## Release Discipline (Hard Constraints)
+
+Releases are not a separate batch task. They are the cumulative
+result of every PR following the same rules. CHANGELOG drift,
+README staleness, and missing version bumps are the leading cause
+of "publish-day debt" that blocks crates.io cuts. Discipline is
+enforced per-PR.
+
+> Cross-references: [Project Contract Rules](#project-contract-rules-hard-constraints)
+> §3 (protocol facts staleness), §4 (events/metrics/proof public API);
+> [Multi-Agent Protocol](#multi-agent-development-protocol-hard-constraints)
+> §6 (PR evidence).
+
+### 1. CHANGELOG-per-PR
+
+Every PR that ships a user-visible change must add an entry to
+`CHANGELOG.md` under the `## [Unreleased]` heading **in the same
+PR** as the change itself. Acceptable:
+
+- `### Added` / `### Changed` / `### Fixed` / `### Removed`
+- `### Wire Protocol` (for protocol-specific changes)
+- `### Dependencies` (for dep bumps)
+
+"User-visible" means: CLI surface change (new command/flag/
+output/exit code), public Rust API change, file format change,
+event/metric/proof field change, security policy change,
+behavior change observable from outside the binary.
+
+Internal-only changes (refactor without API change, test-only,
+CI hygiene, doc-only) do NOT require a `[Unreleased]` entry. The
+PR template box marks the choice.
+
+**Why:** retroactive CHANGELOG reconstruction at release time
+misses ~30 % of user-visible changes (historical observation).
+Per-PR entries are the only reliable record.
+
+### 2. Documentation Sync
+
+When a PR changes user-facing surface, associated docs must
+change in the same PR:
+
+- `README.md` — if entry point / install / Quick Start affected.
+- `docs/<topic>.md` — if a topic doc covers the surface.
+- `src/<module>/README.md` and/or `src/<module>/AGENTS.md` — if
+  module-level public API changes (per §Agent Module Architecture).
+- `SPEC.md` / `ROADMAP.md` — if north-star / staging shifts.
+
+Reviewer must check the PR template Documentation checkboxes;
+unchecked N/A boxes with no explanation are grounds for review
+rejection.
+
+### 3. Version Bump Policy (pre-1.0)
+
+OMK is `0.x.y`. While pre-1.0:
+
+- **Patch bump** (`0.x.y → 0.x.y+1`): bug fix, internal refactor,
+  no surface change. Multiple patch-level PRs may accumulate
+  between releases.
+- **Minor bump** (`0.x.y → 0.(x+1).0`): new feature, possibly
+  breaking. Wire protocol bumps qualify (protocol version
+  history kept in CHANGELOG).
+- **Major bump** (`0.x.y → 1.0.0`): commits to API stability.
+  Requires explicit owner decision and a clean migration plan
+  from 0.x.
+
+The version field in `Cargo.toml` and `VERSION` file are bumped
+by the release PR, not per feature PR. Per-feature PRs only add
+to `## [Unreleased]`.
+
+### 4. Release Cut Procedure
+
+A release is a dedicated PR that:
+
+1. Bumps `VERSION` and `Cargo.toml` `[package].version`.
+2. Replaces `## [Unreleased]` with `## [X.Y.Z] - YYYY-MM-DD` in
+   `CHANGELOG.md`, then opens a fresh empty `## [Unreleased]`
+   block.
+3. Runs `cargo publish --dry-run --allow-dirty` and pastes the
+   result in the PR body.
+4. After merge, the orchestrator tags `vX.Y.Z` and (if applicable)
+   runs `cargo publish`.
+
+Release PRs do NOT introduce new features or fixes. If the
+[Unreleased] section needs editing for clarity, that is OK; if
+it needs adding new bullets, those bullets belong in separate
+feature PRs that merge before the release PR.
+
+### 5. Backward-Compat Horizon
+
+See [Data Layer §1](#data-layer--state-management-hard-constraints) for
+on-disk format compatibility. See §Project Contract #4 for
+events/metrics/proof. Both rules apply per-PR, not per-release.
+
+### Migration Path
+
+PRs already in flight at the time this section is introduced are
+exempt from the per-PR CHANGELOG requirement only until they
+merge. New PRs opened after this section lands must comply.
 
 ## Multi-Agent Development Protocol (Hard Constraints)
 
