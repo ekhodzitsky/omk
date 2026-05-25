@@ -4,7 +4,9 @@ use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 
 use crate::git::GitRepo;
-use crate::runtime::goal::git_ops::auto_rebase::{attempt_auto_rebase, RebaseOutcome};
+use crate::runtime::goal::git_ops::auto_rebase::{
+    attempt_auto_rebase, ConflictClassification, RebaseOutcome,
+};
 use crate::runtime::goal::state::GOAL_ARTIFACTS_DIR;
 use crate::runtime::goal::task_graph::{
     update_goal_task_delivery_metadata, GoalTaskDeliveryMetadataUpdate, GoalTaskDeliveryStatus,
@@ -32,6 +34,7 @@ pub struct GoalMergeConflictEvidence {
     pub stdout_summary: String,
     pub stderr_summary: String,
     pub artifact_path: PathBuf,
+    pub conflict_classification: Option<ConflictClassification>,
 }
 
 pub async fn detect_goal_merge_conflicts(
@@ -47,11 +50,13 @@ pub async fn detect_goal_merge_conflicts(
     let mut clean_merge = !result.has_conflicts;
     let mut conflicting_files = result.conflict_files.clone();
     let mut rebase_error = None;
+    let mut conflict_classification = None;
 
     if !clean_merge {
         match attempt_auto_rebase(&request.repo_dir, &request.source_ref, &request.target_ref).await
         {
-            Ok(RebaseOutcome::Clean) => {
+            Ok((RebaseOutcome::Clean, classification)) => {
+                conflict_classification = classification;
                 match repo
                     .merge_tree(&request.target_ref, &request.source_ref)
                     .await
@@ -65,7 +70,17 @@ pub async fn detect_goal_merge_conflicts(
                     }
                 }
             }
-            Ok(RebaseOutcome::ConflictUnresolvable) => {
+            Ok((RebaseOutcome::ConflictUnresolvable, Some(classification))) => {
+                conflict_classification = Some(classification.clone());
+                rebase_error = Some(format!(
+                    "auto-rebase could not resolve conflicts: {}",
+                    match classification {
+                        ConflictClassification::Safe { reason } => reason,
+                        ConflictClassification::Unsafe { reason } => reason,
+                    }
+                ));
+            }
+            Ok((RebaseOutcome::ConflictUnresolvable, None)) => {
                 rebase_error = Some("auto-rebase could not resolve conflicts".to_string());
             }
             Err(e) => {
@@ -97,6 +112,7 @@ pub async fn detect_goal_merge_conflicts(
         stdout_summary,
         stderr_summary: String::new(),
         artifact_path,
+        conflict_classification,
     };
 
     write_conflict_artifact(&request.goal_dir, &evidence).await?;
@@ -169,6 +185,9 @@ async fn record_conflict_delivery_metadata(
         "merge_conflict_clean".to_string(),
         json!(evidence.clean_merge),
     );
+    if let Some(ref classification) = evidence.conflict_classification {
+        extra.insert("conflict_classification".to_string(), json!(classification));
+    }
 
     update_goal_task_delivery_metadata(
         goal_dir,

@@ -1,6 +1,6 @@
 use omk::runtime::goal::{
-    detect_goal_merge_conflicts, read_goal_task_delivery_metadata, GoalMergeConflictCheckRequest,
-    GoalTaskDeliveryStatus, GOAL_TASK_GRAPH_FILE,
+    detect_goal_merge_conflicts, read_goal_task_delivery_metadata, ConflictClassification,
+    GoalMergeConflictCheckRequest, GoalTaskDeliveryStatus, GOAL_TASK_GRAPH_FILE,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -111,6 +111,102 @@ async fn auto_rebase_fails_and_records_conflict_evidence() {
         .conflict_blocking_reason
         .as_deref()
         .is_some_and(|r| r.contains("auto-rebase") || r.contains("auto_rebase")));
+    assert!(
+        matches!(
+            evidence.conflict_classification,
+            Some(ConflictClassification::Unsafe { .. })
+        ),
+        "expected unsafe classification, got {:?}",
+        evidence.conflict_classification
+    );
+}
+
+#[tokio::test]
+async fn auto_rebase_resolves_safe_comment_conflict() {
+    let repo = temp_git_repo();
+    let goal_dir = temp_goal_dir();
+    run_git(repo.path(), &["checkout", "-b", "feature"]);
+    // Feature adds a comment.
+    fs::write(repo.path().join("file.rs"), "// comment A\nfn foo() {}\n").expect("feature edit");
+    run_git(repo.path(), &["add", "file.rs"]);
+    run_git(repo.path(), &["commit", "-m", "feature: comment A"]);
+    run_git(repo.path(), &["checkout", "master"]);
+    // Master adds a different comment on the same line.
+    fs::write(repo.path().join("file.rs"), "// comment B\nfn foo() {}\n").expect("master edit");
+    run_git(repo.path(), &["add", "file.rs"]);
+    run_git(repo.path(), &["commit", "-m", "master: comment B"]);
+    let evidence = detect_goal_merge_conflicts(conflict_request(
+        repo.path(),
+        goal_dir.path(),
+        "task-safe",
+        "feature",
+        "master",
+    ))
+    .await
+    .expect("conflict detection should complete");
+    assert!(
+        evidence.clean_merge,
+        "safe comment-only conflict should be auto-resolved"
+    );
+    assert!(evidence.conflicting_files.is_empty());
+    assert!(
+        matches!(
+            evidence.conflict_classification,
+            Some(ConflictClassification::Safe { .. })
+        ),
+        "expected safe classification, got {:?}",
+        evidence.conflict_classification
+    );
+    let metadata = read_goal_task_delivery_metadata(goal_dir.path(), "task-safe")
+        .await
+        .expect("read metadata")
+        .expect("metadata exists");
+    assert_eq!(
+        metadata.status,
+        Some(GoalTaskDeliveryStatus::ReadyForReview)
+    );
+}
+
+#[tokio::test]
+async fn auto_rebase_skips_unsafe_substantive_conflict() {
+    let repo = temp_git_repo();
+    let goal_dir = temp_goal_dir();
+    run_git(repo.path(), &["checkout", "-b", "feature"]);
+    fs::write(repo.path().join("code.rs"), "fn foo() { 42 }\n").expect("feature edit");
+    run_git(repo.path(), &["add", "code.rs"]);
+    run_git(repo.path(), &["commit", "-m", "feature: foo returns 42"]);
+    run_git(repo.path(), &["checkout", "master"]);
+    fs::write(repo.path().join("code.rs"), "fn foo() { 99 }\n").expect("master edit");
+    run_git(repo.path(), &["add", "code.rs"]);
+    run_git(repo.path(), &["commit", "-m", "master: foo returns 99"]);
+    let evidence = detect_goal_merge_conflicts(conflict_request(
+        repo.path(),
+        goal_dir.path(),
+        "task-unsafe",
+        "feature",
+        "master",
+    ))
+    .await
+    .expect("conflict detection should complete");
+    assert!(
+        !evidence.clean_merge,
+        "unsafe substantive conflict should not be auto-resolved"
+    );
+    assert!(evidence.conflicting_files.iter().any(|f| f == "code.rs"));
+    assert!(
+        matches!(
+            evidence.conflict_classification,
+            Some(ConflictClassification::Unsafe { .. })
+        ),
+        "expected unsafe classification, got {:?}",
+        evidence.conflict_classification
+    );
+    let metadata = read_goal_task_delivery_metadata(goal_dir.path(), "task-unsafe")
+        .await
+        .expect("read metadata")
+        .expect("metadata exists");
+    assert_eq!(metadata.status, Some(GoalTaskDeliveryStatus::Blocked));
+    assert!(metadata.conflict_evidence_path.is_some());
 }
 
 fn conflict_request(
@@ -177,7 +273,9 @@ fn task_graph_json() -> Value {
         "tasks": [
             task_json("task-clean"),
             task_json("task-resolved"),
-            task_json("task-conflict")
+            task_json("task-conflict"),
+            task_json("task-safe"),
+            task_json("task-unsafe")
         ]
     })
 }

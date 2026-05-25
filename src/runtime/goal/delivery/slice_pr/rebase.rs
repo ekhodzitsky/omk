@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use crate::runtime::goal::git_ops::auto_rebase::{attempt_auto_rebase, RebaseOutcome};
+use crate::runtime::goal::git_ops::auto_rebase::{
+    attempt_auto_rebase, ConflictClassification, RebaseOutcome,
+};
 
 use super::git::validate_git_ref;
 use super::merge_check::check_slice_branch_merge_clean;
@@ -28,8 +30,17 @@ pub(super) async fn ensure_slice_branch_merge_clean(
 
     // Branch is stale or conflicting — try auto-rebase
     match attempt_auto_rebase(worktree_path, branch, base_branch).await {
-        Ok(RebaseOutcome::Clean) => {}
-        Ok(RebaseOutcome::ConflictUnresolvable) => {
+        Ok((RebaseOutcome::Clean, _)) => {}
+        Ok((RebaseOutcome::ConflictUnresolvable, Some(classification))) => {
+            let detail = match classification {
+                ConflictClassification::Safe { reason } => reason,
+                ConflictClassification::Unsafe { reason } => reason,
+            };
+            anyhow::bail!(
+                "slice branch {branch} cannot merge cleanly into {base_branch} and auto-rebase failed: {detail}"
+            );
+        }
+        Ok((RebaseOutcome::ConflictUnresolvable, None)) => {
             anyhow::bail!(
                 "slice branch {branch} cannot merge cleanly into {base_branch} and auto-rebase failed: rebase conflicts could not be resolved"
             );

@@ -414,3 +414,66 @@ async fn test_rollback_handles_binary_evidence_via_lossy_utf8() {
     assert!(content.contains('\u{FFFD}')); // replacement char
     assert!(content.contains("hello"));
 }
+
+#[tokio::test]
+async fn test_rollback_preserves_rebase_conflict_evidence() {
+    let tmp = tempfile::tempdir().unwrap();
+    let state_dir = tmp.path().to_path_buf();
+    setup_integration_dir(&state_dir).await;
+    let state = test_state(state_dir.clone());
+    let proof = test_proof();
+
+    let evidence_path = state_dir
+        .join("artifacts")
+        .join("integration")
+        .join("rebase-conflict.json");
+    tokio::fs::create_dir_all(evidence_path.parent().unwrap())
+        .await
+        .unwrap();
+    let evidence = serde_json::json!({
+        "task_id": "task-rebase-fail",
+        "source_ref": "feature",
+        "target_ref": "master",
+        "clean_merge": false,
+        "conflicting_files": ["src/main.rs"],
+        "command_line": "git merge-tree master feature",
+        "stdout_summary": "src/main.rs",
+        "stderr_summary": "",
+        "artifact_path": "artifacts/integration/rebase-conflict.json",
+        "conflict_classification": {
+            "Unsafe": {
+                "reason": "file 'src/main.rs' contains substantive conflicts"
+            }
+        }
+    });
+    tokio::fs::write(
+        &evidence_path,
+        serde_json::to_vec_pretty(&evidence).unwrap(),
+    )
+    .await
+    .unwrap();
+
+    write_task_graph(
+        &state_dir,
+        serde_json::json!({
+            "slice_id": "slice-rebase",
+            "conflict_evidence_path": "artifacts/integration/rebase-conflict.json",
+            "conflict_blocking_reason": "auto-rebase could not resolve conflicts: file 'src/main.rs' contains substantive conflicts"
+        }),
+    )
+    .await;
+
+    write_rejection_rollback_plan(&state, &proof, "merge conflict")
+        .await
+        .unwrap();
+
+    let content = tokio::fs::read_to_string(rollback_path(&state_dir))
+        .await
+        .unwrap();
+    assert!(content.contains("## Conflict evidence — slice `slice-rebase`"));
+    assert!(content.contains("**Blocking reason:** auto-rebase could not resolve conflicts"));
+    assert!(content.contains("**Evidence artifact:** `artifacts/integration/rebase-conflict.json`"));
+    assert!(content.contains("src/main.rs"));
+    assert!(content.contains("Unsafe"));
+    assert!(content.contains("substantive conflicts"));
+}
