@@ -143,4 +143,31 @@ mod tests {
         let result = parse_file(Path::new("test.txt"), "hello");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn parser_does_not_panic_on_empty_source() {
+        let _ = parse_file(Path::new("test.rs"), "");
+    }
+
+    #[test]
+    fn parser_does_not_panic_on_malformed_source() {
+        let _ = parse_file(Path::new("test.rs"), "fn {{{{ broken");
+    }
+
+    #[test]
+    fn parser_does_not_panic_on_binary_garbage() {
+        let _ = parse_file(Path::new("test.rs"), "\x00\x01\x02\x03\u{00ff}");
+    }
+
+    #[test]
+    fn parser_does_not_panic_on_very_long_line() {
+        let source = "a".repeat(10_000);
+        let _ = parse_file(Path::new("test.py"), &source);
+    }
+
+    #[test]
+    fn parser_does_not_panic_on_deep_nesting() {
+        let source = "{".repeat(500) + &"}".repeat(500);
+        let _ = parse_file(Path::new("test.js"), &source);
+    }
 }

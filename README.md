@@ -4,7 +4,8 @@
 
 # oh-my-kimi (`omk`)
 
-**A Rust runtime that makes Kimi CLI production-grade.**
+**Local, proof-driven autonomous engineering runtime powered by Kimi.**
+*Beta MVP (0.4.x, pre-1.0).*
 
 [![CI](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml)
 [![Coverage](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/coverage.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/coverage.yml)
@@ -18,40 +19,13 @@
 
 ---
 
-## Why?
+## What is OMK?
 
-Kimi CLI gives you answers. OMK gives you **runs** — tracked, verifiable, and reproducible.
+OMK is a terminal-native autonomous agent that turns one high-level goal into planned, verified, and delivered repository changes. It runs entirely locally, requires no cloud control plane, and produces a `proof.json` artifact for every outcome.
 
-- **Stop guessing what changed.** Every run leaves a `proof.json` you can inspect before merging.
-- **Stop breaking your own code.** Parallel agents run in isolated git worktrees with automatic conflict detection.
-- **Stop when it is not ready.** Verification gates, review walls, and honest `not_ready` / `blocked` terminal states — no silent failures shipped to `master`.
-- **Stay local.** No cloud control plane, no hosted agents, no IDE lock-in. Your code never leaves your machine unless you push it.
-
-## The One Command: `omk goal`
-
-```bash
-omk goal run "Add OAuth and rate-limiting to the API" --until-ready
-```
-
-OMK plans the work, builds a task graph, runs verification gates, dispatches bounded Kimi Wire agents in isolated worktrees, collects proof, and stops with an honest `ready` or `not_ready` verdict.
-
-```bash
-# See what happened
-omk goal proof latest --format md
-omk goal replay latest
-```
-
-**Status:** `omk goal` is a **Beta MVP**. Core flow works — planning, execution, verification, proof, slice isolation, and PR delivery. Budget hard stops, pause/resume, and crash recovery are in place. See [`TODO.md`](TODO.md) for what is next.
-
-## What You Get
-
-| Feature | What it does |
-|---|---|
-| **`omk goal`** | Proof-driven goal runner — plan, verify, execute, review, deliver |
-| **Slice isolation** | Parallel feature work in git worktrees with conflict detection |
-| **Verification gates** | Rust / Node / Python / Go presets + custom config |
-| **Proof & replay** | Durable `proof.json`, `failure.json`, and event timelines |
-| **Asset management** | Install / sync / doctor for Kimi agents, hooks, and skills |
+- **Chat-first surface** — run `omk` to open a REPL. The classifier automatically escalates from quick answers through small edits to full goals. A visible engine pane shows what is happening under the hood.
+- **Headless when you need it** — `omk goal run "..." --until-ready` drives planning, execution, verification, and review without blocking your terminal.
+- **Proof-backed delivery** — every large goal decomposes into slices, passes a review wall, and lands as a PR with evidence. `ready`, `not_ready`, or `blocked` are the only terminal states.
 
 ## Install
 
@@ -66,6 +40,8 @@ git clone https://github.com/ekhodzitsky/oh-my-kimi.git && cd oh-my-kimi
 cargo build --release
 ```
 
+Also available via [Homebrew](homebrew/) and [AUR](aur/).
+
 macOS (arm64 / x86_64) and Linux x86_64. Windows is not supported yet.
 
 ## Quick Start
@@ -74,19 +50,66 @@ macOS (arm64 / x86_64) and Linux x86_64. Windows is not supported yet.
 omk setup                 # create config, state, and data directories
 omk doctor                # verify Kimi CLI and environment
 
-omk goal run "Build a tiny Rust CLI with tests" --until-ready
-omk goal proof latest
+omk                       # open the chat REPL
+# type a request and watch the engine pane (Tab to expand)
 ```
 
-## Docs
+Run a goal headless:
 
+```bash
+omk goal run "Add OAuth and rate-limiting to the API" --until-ready
+omk goal proof latest
+omk goal replay latest
+```
+
+## How it works
+
+**Single command surface.** `omk` with no arguments opens a chat REPL. There is no separate "agent mode" to learn. The same session handles quick questions, file edits, and large goals.
+
+**Autonomous escalation.** A classifier routes every request to the right backend: trivial answers, small edits, medium plans, or large goals. You see progress in the engine pane and can expand it with Tab. The default autonomous mode does not block on confirmation dialogs.
+
+**Proof-backed delivery.** Large goals become durable tasks with planning artifacts, verification gates, and bounded agent waves. The controller runs a review wall (architect, code, test, security, performance, anti-slop), records an honest `ready` or `not_ready` verdict, and writes `proof.json` as the artifact. Slices run in isolated git worktrees with conflict detection.
+
+## What you can do
+
+| Command | What it does |
+|---|---|
+| `omk` | Open the unified chat REPL (default) |
+| `omk goal run "..."` | Create a goal scaffold; add `--until-ready` to drive to completion |
+| `omk goal plan "..."` | Create a plan scaffold without execution |
+| `omk goal list` | List recorded goals |
+| `omk goal status latest` | Compact status of the latest goal |
+| `omk goal show latest` | Full goal state (add `--json` for machine output) |
+| `omk goal proof latest` | Inspect the current proof artifact |
+| `omk goal replay latest` | Replay the persisted goal timeline |
+| `omk goal verify latest` | Run local verification gates |
+| `omk goal review latest` | Attach controller review evidence |
+| `omk goal open-pr latest --dry-run` | Render a PR draft from proof evidence |
+| `omk goal accept latest --summary "..."` | Accept a proof-backed goal locally |
+| `omk goal reject latest --reason "..."` | Reject a goal with a reason |
+| `omk goal pause / resume / cancel latest` | Lifecycle controls |
+| `omk doctor` | Diagnose environment and dependencies |
+| `omk setup` | Install hooks, skills, and config |
+
+## Positioning
+
+OMK is inspired by `oh-my-claudecode` and market-informed by the broader agentic coding landscape, including Devin, OpenHands, Claude Code, Aider, Dify, and Cody. It competes on durable goal state, explicit verification gates, and proof artifacts — not on feature breadth. See [`docs/COMPETITIVE_POSITIONING.md`](docs/COMPETITIVE_POSITIONING.md) for the full market map.
+
+## Configuration
+
+- Set `KIMI_API_KEY` in your environment.
+- Config directory: `~/.config/omk/` (or `$XDG_CONFIG_HOME/omk/`).
+- State directory: `~/.local/state/omk/` (or `$XDG_STATE_HOME/omk/`).
+- Manage settings with `omk config show`, `validate`, and `set`.
+
+## Roadmap & docs
+
+- [`ROADMAP.md`](ROADMAP.md) — where we are headed
+- [`SPEC.md`](SPEC.md) — product spec and delivery contract
+- [`AGENTS.md`](AGENTS.md) — multi-agent workflow and contributing rules
 - [`docs/TUTORIAL.md`](docs/TUTORIAL.md) — step-by-step first run
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system design
 - [`docs/API.md`](docs/API.md) — machine-readable CLI outputs
-- [`ROADMAP.md`](ROADMAP.md) — where we are headed
-- [`TODO.md`](TODO.md) — active backlog
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to contribute
-- [`AGENTS.md`](AGENTS.md) — multi-agent workflow rules
 
 ## License
 

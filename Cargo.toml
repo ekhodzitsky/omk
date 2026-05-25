@@ -7,7 +7,7 @@ authors = ["oh-my-kimi contributors"]
 description = "A Rust runtime for Kimi CLI. Turns prompts into proof-backed engineering runs with gates, worktrees, and replay."
 license = "MIT"
 repository = "https://github.com/ekhodzitsky/oh-my-kimi"
-keywords = ["kimi", "ai", "cli", "orchestration", "agent", "runtime", "proof", "worktree"]
+keywords = ["kimi", "ai", "agent", "cli", "runtime"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 rust-version = "1.78"
@@ -98,7 +98,7 @@ moka = { version = "0.12", features = ["future"] }
 lru = "0.18"
 
 # Tree-sitter parsing for language-aware context extraction
-tree-sitter = "0.25"
+tree-sitter = "0.26"
 tree-sitter-rust = "0.24"
 tree-sitter-javascript = "0.25"
 tree-sitter-python = "0.25"

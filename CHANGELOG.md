@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Release Discipline rules**: added `## Release Discipline (Hard Constraints)`
+  section to `AGENTS.md` with per-PR CHANGELOG, documentation sync, version
+  bump policy, release cut procedure, and backward-compat horizon rules.
+- **PR template fields**: added `## Changelog` and `## Documentation` sections
+  to `.github/pull_request_template.md` with checkboxes for CHANGELOG entries,
+  version impact, and documentation updates.
+
 ### Wire Protocol
 
 - Added `ContentPart` variant to the `Event` enum so it matches the documented
