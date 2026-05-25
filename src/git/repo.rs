@@ -87,6 +87,19 @@ impl GitRepo {
         Ok(status.untracked)
     }
 
+    /// List files with unresolved merge/rebase conflicts.
+    pub async fn conflicted_files(&self) -> Result<Vec<String>, GitError> {
+        let out = self.cmd.run(&["diff", "--name-only", "--diff-filter=U"]).await?;
+        let files: Vec<String> = out.stdout.lines().map(|s| s.to_string()).collect();
+        Ok(files)
+    }
+
+    /// Raw `git status --porcelain` output.
+    pub async fn status_porcelain(&self) -> Result<String, GitError> {
+        let out = self.cmd.run(&["status", "--porcelain"]).await?;
+        Ok(out.stdout)
+    }
+
     /// Add a worktree at `path` tracking `branch`.
     pub async fn worktree_add(
         &self,
@@ -316,6 +329,17 @@ impl GitRepo {
         Ok(())
     }
 
+    /// Stage a specific path.
+    pub async fn add(&self, path: impl AsRef<Path>) -> Result<(), GitError> {
+        self.cmd
+            .run(&[
+                std::ffi::OsStr::new("add"),
+                path.as_ref().as_os_str(),
+            ])
+            .await?;
+        Ok(())
+    }
+
     /// Stash changes with an optional message.
     pub async fn stash(&self, message: Option<&str>) -> Result<(), GitError> {
         let mut args = vec!["stash", "push"];
@@ -354,6 +378,14 @@ impl GitRepo {
     /// Abort an in-progress rebase.
     pub async fn rebase_abort(&self) -> Result<(), GitError> {
         self.cmd.run(&["rebase", "--abort"]).await?;
+        Ok(())
+    }
+
+    /// Continue an in-progress rebase after conflicts are resolved.
+    pub async fn rebase_continue(&self) -> Result<(), GitError> {
+        self.cmd
+            .run_with_env(&["rebase", "--continue"], &[("GIT_EDITOR", "true")])
+            .await?;
         Ok(())
     }
 

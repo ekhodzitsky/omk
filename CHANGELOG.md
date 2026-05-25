@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Auto-rebase with conflict recovery for goal slices**: `attempt_auto_rebase`
+  now classifies merge conflicts as safe (whitespace, line-ending, comment-only)
+  or unsafe (substantive code changes, deletions). Safe conflicts are
+  auto-resolved and the rebase continues; unsafe conflicts abort the rebase
+  and preserve detailed conflict evidence for manual resolution.
+- `ConflictClassification` enum (`Safe` / `Unsafe`) added to
+  `GoalMergeConflictEvidence` and exported from `omk::runtime::goal`.
+- `GitRepo` gained `add`, `rebase_continue`, `conflicted_files`, and
+  `status_porcelain` methods to support the new conflict resolution flow.
 - **Release Discipline rules**: added `## Release Discipline (Hard Constraints)`
   section to `AGENTS.md` with per-PR CHANGELOG, documentation sync, version
   bump policy, release cut procedure, and backward-compat horizon rules.
