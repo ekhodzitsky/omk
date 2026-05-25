@@ -4,7 +4,9 @@ use chrono::Utc;
 use crate::runtime::goal::evidence::record_artifact_path_once;
 use crate::runtime::goal::open_pr::render_goal_open_pr;
 use crate::runtime::goal::proof::GoalProof;
-use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalState, GoalStateStore};
+use crate::runtime::goal::state::{
+    FileSystemGoalStateStore, GoalState, GoalStateStore, GOAL_PROOF_FILE,
+};
 use crate::runtime::goal::{
     delivery::{GoalGithubPrClient, GoalMergePolicy},
     resolve_goal,
@@ -52,6 +54,13 @@ pub async fn merge_goal(goal_id: &str, client: &mut impl GoalGithubPrClient) -> 
         )
     })?;
 
+    client.validate_merge_gate(&pr_url).await.with_context(|| {
+        format!(
+            "Merge gate validation failed for PR {pr_url} on goal {}",
+            state.goal_id
+        )
+    })?;
+
     client
         .merge_pr(&pr_url)
         .await
@@ -64,11 +73,31 @@ pub async fn merge_goal(goal_id: &str, client: &mut impl GoalGithubPrClient) -> 
         std::path::PathBuf::from(&pr_url),
         now,
     );
+    record_artifact_path_once(
+        &mut state,
+        "delivery_evidence",
+        std::path::PathBuf::from(&pr_url),
+        now,
+    );
     state.updated_at = now;
     FileSystemGoalStateStore::new()
         .save(&state)
         .await
         .with_context(|| format!("Failed to save goal state for {}", state.goal_id))?;
+
+    // Update proof with merge evidence and ready status
+    let mut proof = GoalProof::load(&state.state_dir)
+        .await
+        .with_context(|| format!("Failed to reload goal proof for {}", state.goal_id))?;
+    proof.status = crate::runtime::goal::state::GoalStatus::Ready;
+    proof.readiness = "ready: PR merged after passing merge gate".to_string();
+    proof.artifacts = state.artifacts.clone();
+    crate::runtime::goal::proof::write_json_artifact(
+        &state.state_dir.join(GOAL_PROOF_FILE),
+        &proof,
+    )
+    .await
+    .with_context(|| format!("Failed to write merged proof for {}", state.goal_id))?;
 
     Ok(state)
 }
@@ -89,6 +118,7 @@ mod tests {
     struct MockMergeClient {
         merge_calls: Vec<String>,
         fail_next: Option<String>,
+        gate_fail_next: Option<String>,
     }
 
     impl GoalGithubPrClient for MockMergeClient {
@@ -121,6 +151,17 @@ mod tests {
                     url: Some(pr_url.to_string()),
                 })
             })
+        }
+
+        fn validate_merge_gate<'a>(
+            &'a mut self,
+            _pr_url: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+            if let Some(ref err) = self.gate_fail_next {
+                let err = err.clone();
+                return Box::pin(async move { anyhow::bail!("{err}") });
+            }
+            Box::pin(async move { Ok(()) })
         }
     }
 
@@ -399,6 +440,126 @@ mod tests {
             err_str.contains("simulated merge failure"),
             "expected client error, got: {err_str}"
         );
+        restore_env(saved);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn merge_goal_fails_when_gate_ci_fails() {
+        let _guard = crate::test_helpers::TEST_MUTEX.lock().await;
+        let saved = save_env();
+        let (_tmp, goal_id, _state_dir) = create_ready_goal_with_pr().await;
+        let mut client = MockMergeClient {
+            gate_fail_next: Some("CI check 'test' failed".to_string()),
+            ..Default::default()
+        };
+
+        let err = merge_goal(&goal_id, &mut client).await.unwrap_err();
+        let err_str = format!("{err:?}");
+        assert!(
+            err_str.contains("Merge gate validation failed"),
+            "expected gate error, got: {err_str}"
+        );
+        assert!(err_str.contains("CI check 'test' failed"), "got: {err_str}");
+        assert!(client.merge_calls.is_empty());
+        restore_env(saved);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn merge_goal_fails_when_gate_merge_conflict() {
+        let _guard = crate::test_helpers::TEST_MUTEX.lock().await;
+        let saved = save_env();
+        let (_tmp, goal_id, _state_dir) = create_ready_goal_with_pr().await;
+        let mut client = MockMergeClient {
+            gate_fail_next: Some("PR has merge conflicts".to_string()),
+            ..Default::default()
+        };
+
+        let err = merge_goal(&goal_id, &mut client).await.unwrap_err();
+        let err_str = format!("{err:?}");
+        assert!(err_str.contains("Merge gate validation failed"));
+        assert!(err_str.contains("merge conflicts"));
+        assert!(client.merge_calls.is_empty());
+        restore_env(saved);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn merge_goal_fails_when_gate_review_blocked() {
+        let _guard = crate::test_helpers::TEST_MUTEX.lock().await;
+        let saved = save_env();
+        let (_tmp, goal_id, _state_dir) = create_ready_goal_with_pr().await;
+        let mut client = MockMergeClient {
+            gate_fail_next: Some("PR requires review approval".to_string()),
+            ..Default::default()
+        };
+
+        let err = merge_goal(&goal_id, &mut client).await.unwrap_err();
+        let err_str = format!("{err:?}");
+        assert!(err_str.contains("Merge gate validation failed"));
+        assert!(err_str.contains("review approval"));
+        assert!(client.merge_calls.is_empty());
+        restore_env(saved);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn merge_goal_fails_when_gate_branch_protection_missing() {
+        let _guard = crate::test_helpers::TEST_MUTEX.lock().await;
+        let saved = save_env();
+        let (_tmp, goal_id, _state_dir) = create_ready_goal_with_pr().await;
+        let mut client = MockMergeClient {
+            gate_fail_next: Some(
+                "branch protection not configured for base branch 'main'".to_string(),
+            ),
+            ..Default::default()
+        };
+
+        let err = merge_goal(&goal_id, &mut client).await.unwrap_err();
+        let err_str = format!("{err:?}");
+        assert!(err_str.contains("Merge gate validation failed"));
+        assert!(err_str.contains("branch protection not configured"));
+        assert!(client.merge_calls.is_empty());
+        restore_env(saved);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn merge_goal_succeeds_for_manual_policy() {
+        let _guard = crate::test_helpers::TEST_MUTEX.lock().await;
+        let saved = save_env();
+        let (_tmp, goal_id, state_dir) = create_ready_goal_with_pr().await;
+
+        // Flip policy to Manual
+        let mut state = FileSystemGoalStateStore::new()
+            .load(std::path::Path::new(&state_dir))
+            .await
+            .expect("load state");
+        state.merge_policy = GoalMergePolicy::Manual;
+        FileSystemGoalStateStore::new()
+            .save(&state)
+            .await
+            .expect("save manual state");
+
+        let mut client = MockMergeClient::default();
+        let state = merge_goal(&goal_id, &mut client).await.expect("merge_goal");
+
+        assert_eq!(client.merge_calls.len(), 1);
+        assert_eq!(
+            client.merge_calls[0],
+            "https://github.com/example/omk/pull/42"
+        );
+        assert_eq!(state.status, GoalStatus::Ready);
+        assert!(state.artifacts.iter().any(|a| a.kind == "pr_merge"));
+        assert!(state
+            .artifacts
+            .iter()
+            .any(|a| a.kind == "delivery_evidence"));
+
+        // Verify proof was updated to Ready
+        let proof = GoalProof::load(std::path::Path::new(&state_dir))
+            .await
+            .expect("load proof");
+        assert_eq!(proof.status, GoalStatus::Ready);
+        assert!(proof
+            .readiness
+            .contains("PR merged after passing merge gate"));
         restore_env(saved);
     }
 }
