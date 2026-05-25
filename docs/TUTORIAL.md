@@ -3,6 +3,12 @@
 This tutorial covers the current OMK MVP surface: Kimi-native assets,
 scheduler-backed `team run`, HUD/run/proof inspection, and cleanup.
 
+## Chat REPL
+
+The default entry point is the chat REPL. Run `omk` with no arguments to start a session, type a request, and press Enter. The classifier routes trivial answers directly, small edits through a fast dispatch path, and large goals into the durable `omk goal` controller. Press `Tab` to expand the engine pane and watch autonomous decisions in real time. Press `Ctrl+C` or `Ctrl+D` to quit.
+
+Resume a previous session with `omk chat --session <id>` or start a fresh one with `omk chat --new`.
+
 ## Prerequisites
 
 - Rust 1.78+ if building from source.

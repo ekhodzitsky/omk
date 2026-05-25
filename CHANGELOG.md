@@ -137,6 +137,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Completed audit follow-up for `API.md`, `AGENTS.md`, `CONTRIBUTING.md`, and
   `KIMI_UPSTREAM.md`.
 - Refreshed `README.md` for conciseness and accuracy.
+- Updated README, API reference, project map, and tutorials to
+  cover chat REPL, MCP client commands, goal budget/merge
+  subcommands, and additional goal execution flags shipped
+  since 0.4.0.
 
 ## [0.4.0] - 2026-05-13
 

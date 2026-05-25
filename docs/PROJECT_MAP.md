@@ -76,13 +76,20 @@ Legacy/no-handshake fallback remains valid when upstream does not support `initi
 | --- | --- | --- | --- |
 | `src/main.rs` | Thin binary wrapper that calls `omk::cli::run()`. | `src/cli/README.md` | `tests/library_api_test.rs` |
 | `src/cli/` | Clap app, command handlers, and user-facing command behavior compiled through the library crate. | `src/cli/README.md` | `tests/*_test.rs` matching the command |
+| `src/cli/chat/` | TUI chat shell and REPL session persistence. | `src/cli/chat/mod.rs` | `tests/chat_smoke.rs` |
 | `src/cli/team/` | Focused helpers for team proof artifacts and Wire run support. | `src/cli/README.md` | `cargo test finalize_team_run_proof`, `tests/team_lifecycle_test.rs` |
+| `src/analysis/` | Tree-sitter analysis subsystem for Rust, JS/TS, Python, and Go. | `src/analysis/mod.rs` | AST structural tests |
+| `src/cost/` | Cost tracking, estimation, and token counting (`tokens.rs` uses tiktoken). | `src/cost/mod.rs` | cost tests when added |
 | `src/runtime/` | State, process control, scheduler, events, proof, watchdogs. | `src/runtime/README.md` | `tests/team_lifecycle_test.rs`, `tests/gates_test.rs`, `tests/proof_*` |
+| `src/runtime/classifier/` | Intent classifier for chat escalation decisions. | `src/runtime/classifier/mod.rs` | classifier unit tests |
+| `src/runtime/escalation/router/` | Escalation router connecting chat to goal dispatch. | `src/runtime/escalation/router/mod.rs` | router unit tests |
 | `src/wire/` | Kimi Wire JSON-RPC protocol types and client adapter. | `src/wire/README.md` | `tests/wire_protocol_test.rs`, `scripts/kimi-wire-smoke.sh` |
 | `src/kimi_native/` | Kimi-native assets, role packs, manifests, sync/doctor support. | `src/kimi_native/README.md` | `tests/kimi_native_test.rs`, `tests/role_pack_test.rs` |
 | `src/vis/` | HUD, TUI, event stream, web dashboard scaffold. | `src/vis/mod.rs` | `tests/hud_test.rs` |
+| `src/vis/shell/` | TUI shell layout and pane rendering engine. | `src/vis/shell/mod.rs` | snapshot tests for pane states |
 | `src/skills/` | OMK skill parser/discovery/injection. | `src/skills/mod.rs` | `tests/skill_test.rs` |
 | `src/mcp/` | MCP server scaffold and tools. | `src/mcp/mod.rs` | CLI smoke until deeper MCP tests exist |
+| `src/mcp/client/` | MCP client with stdio/HTTP/SSE transport and LRU caching. | `src/mcp/client/mod.rs` | MCP client tests |
 | `tests/fixtures/` | Shared mocks and fixture runners. | `tests/fixture_runner.rs` | Used by integration tests |
 | `.kimi/` | Project-level Kimi assets for agents/skills/hooks. | `.kimi/skills/omk-navigation/SKILL.md` | `omk kimi doctor` |
 | `SPEC.md`, `ROADMAP.md`, `TODO.md` | Product direction, staged delivery path, and `omk goal` backlog. | `SPEC.md` | docs diff review |
