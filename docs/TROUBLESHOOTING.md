@@ -4,7 +4,7 @@
 
 ## Installation Issues
 
-### `cargo install --git https://github.com/ekhodzitsky/oh-my-kimi.git` fails
+### `cargo install --git https://github.com/ekhodzitsky/omk.git` fails
 
 Ensure Rust 1.78+ is installed:
 

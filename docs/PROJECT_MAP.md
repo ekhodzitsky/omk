@@ -1,6 +1,6 @@
 # OMK Project Map
 
-This file is the first stop for AI agents working on oh-my-kimi. It keeps the project cheap to navigate as the codebase grows.
+This file is the first stop for AI agents working on OMK. It keeps the project cheap to navigate as the codebase grows.
 
 ## Start Here
 

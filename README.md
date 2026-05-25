@@ -1,15 +1,15 @@
 <div align="center">
 
-<img src="assets/omk-kimi-hero.png" alt="oh-my-kimi banner" width="920">
+<img src="assets/omk-kimi-hero.png" alt="OMK banner" width="920">
 
-# oh-my-kimi (`omk`)
+# OMK
 
 **Local, proof-driven autonomous engineering runtime powered by Kimi.**
 *Beta MVP (0.4.x, pre-1.0).*
 
-[![CI](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/ci.yml)
-[![Coverage](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/coverage.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/oh-my-kimi/actions/workflows/coverage.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/ekhodzitsky/oh-my-kimi?label=release&sort=semver)](https://github.com/ekhodzitsky/oh-my-kimi/releases)
+[![CI](https://github.com/ekhodzitsky/omk/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/omk/actions/workflows/ci.yml)
+[![Coverage](https://github.com/ekhodzitsky/omk/actions/workflows/coverage.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/omk/actions/workflows/coverage.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/ekhodzitsky/omk?label=release&sort=semver)](https://github.com/ekhodzitsky/omk/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
 
@@ -30,13 +30,13 @@ OMK is a terminal-native autonomous agent that turns one high-level goal into pl
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/omk/master/install.sh | bash
 ```
 
 Or build from source (Rust 1.78+):
 
 ```bash
-git clone https://github.com/ekhodzitsky/oh-my-kimi.git && cd oh-my-kimi
+git clone https://github.com/ekhodzitsky/omk.git && cd omk
 cargo build --release
 ```
 
@@ -141,4 +141,4 @@ OMK is inspired by `oh-my-claudecode` and market-informed by the broader agentic
 
 ## License
 
-MIT © oh-my-kimi contributors
+MIT © omk contributors

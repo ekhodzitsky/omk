@@ -28,7 +28,7 @@ pub(super) async fn run_update(args: UpdateArgs) -> Result<()> {
                 "-fsSL",
                 "-H",
                 "Accept: application/vnd.github+json",
-                "https://api.github.com/repos/ekhodzitsky/oh-my-kimi/releases/latest",
+                "https://api.github.com/repos/ekhodzitsky/omk/releases/latest",
             ])
             .output(),
     )
@@ -62,7 +62,7 @@ pub(super) async fn run_update(args: UpdateArgs) -> Result<()> {
     }
 
     let asset = format!("omk-{latest_version}-{target}.tar.gz");
-    let base_url = format!("https://github.com/ekhodzitsky/oh-my-kimi/releases/download/{latest}");
+    let base_url = format!("https://github.com/ekhodzitsky/omk/releases/download/{latest}");
     let url = format!("{base_url}/{asset}");
     let sha_url = format!("{base_url}/{asset}.sha256");
 
@@ -103,7 +103,7 @@ pub(super) async fn run_update(args: UpdateArgs) -> Result<()> {
         anyhow::bail!(
             "Checksum file not found at {sha_url}. \
              Refusing to install an unverified binary. \
-             Re-run with cargo: cargo install --git https://github.com/ekhodzitsky/oh-my-kimi.git"
+             Re-run with cargo: cargo install --git https://github.com/ekhodzitsky/omk.git"
         );
     }
 

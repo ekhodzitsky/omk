@@ -22,14 +22,14 @@ OMK is GitHub-only for now. It is not published to crates.io yet.
 From GitHub:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/oh-my-kimi/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/omk/master/install.sh | bash
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/ekhodzitsky/oh-my-kimi.git
-cd oh-my-kimi
+git clone https://github.com/ekhodzitsky/omk.git
+cd omk
 cargo build --release
 ./target/release/omk --help
 ```

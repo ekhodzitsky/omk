@@ -1,4 +1,4 @@
-# oh-my-kimi Agent Guide
+# OMK Agent Guide
 
 This file contains agent-level conventions for the entire project tree.
 For OMK-specific context (wire protocol, agent roles, roadmap), see `.omk/AGENTS.md`.
@@ -900,7 +900,7 @@ Not all modules emit structured spans yet. When editing a module:
 
 ## SOTA Testing
 
-SOTA (State of the Art) testing is not "100 % line coverage". It is a **system of guarantees** where every semantic change that breaks a contract is caught automatically within a single PR iteration. For oh-my-kimi — an async runtime with a Wire protocol, proof system, and CLI surface — this means seven ordered tiers, each catching bugs that lower tiers cannot.
+SOTA (State of the Art) testing is not "100 % line coverage". It is a **system of guarantees** where every semantic change that breaks a contract is caught automatically within a single PR iteration. For OMK — an async runtime with a Wire protocol, proof system, and CLI surface — this means seven ordered tiers, each catching bugs that lower tiers cannot.
 
 ### Meta Principle
 

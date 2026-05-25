@@ -1,6 +1,6 @@
 ---
 name: omk-navigation
-description: Use before editing oh-my-kimi when a task touches Rust modules, Kimi Wire integration, Kimi-native assets, team runtime, proof, HUD, or multiple files.
+description: Use before editing OMK when a task touches Rust modules, Kimi Wire integration, Kimi-native assets, team runtime, proof, HUD, or multiple files.
 ---
 
 # OMK Navigation

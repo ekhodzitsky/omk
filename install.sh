@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="ekhodzitsky/oh-my-kimi"
+REPO="ekhodzitsky/omk"
 BINARY="omk"
 
 # Detect OS and architecture

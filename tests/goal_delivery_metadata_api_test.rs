@@ -55,7 +55,7 @@ async fn typed_api_creates_updates_and_merges_delivery_metadata() {
                 "tests/goal_delivery_metadata_api_test.rs".to_string(),
             ]),
             branch: Some("codex/goal-delivery-metadata-api".to_string()),
-            worktree_path: Some(PathBuf::from("../oh-my-kimi-goal-delivery")),
+            worktree_path: Some(PathBuf::from("../omk-goal-delivery")),
             status: Some(omk::runtime::goal::GoalTaskDeliveryStatus::InProgress),
             ..Default::default()
         },
@@ -75,7 +75,7 @@ async fn typed_api_creates_updates_and_merges_delivery_metadata() {
     );
 
     let update = omk::runtime::goal::GoalTaskDeliveryMetadataUpdate {
-        pr_url: Some("https://github.com/ekhodzitsky/oh-my-kimi/pull/123".to_string()),
+        pr_url: Some("https://github.com/ekhodzitsky/omk/pull/123".to_string()),
         commit_sha: Some("abc1234".to_string()),
         verification_summary: Some(
             "cargo test --test goal_delivery_metadata_api_test passed".to_string(),
@@ -98,7 +98,7 @@ async fn typed_api_creates_updates_and_merges_delivery_metadata() {
     );
     assert_eq!(
         merged.pr_url.as_deref(),
-        Some("https://github.com/ekhodzitsky/oh-my-kimi/pull/123")
+        Some("https://github.com/ekhodzitsky/omk/pull/123")
     );
     assert_eq!(merged.commit_sha.as_deref(), Some("abc1234"));
     assert_eq!(
@@ -137,7 +137,7 @@ async fn typed_api_preserves_unknown_and_legacy_delivery_fields() {
         "task_id": "legacy-shadow",
         "write_scope": "legacy-string-shape",
         "legacy_ticket": "OMK-123",
-        "pr_link": "https://github.com/ekhodzitsky/oh-my-kimi/pull/99"
+        "pr_link": "https://github.com/ekhodzitsky/omk/pull/99"
     });
     let (tmp, task_graph_path) = write_task_graph(Some(legacy_delivery));
 
@@ -158,7 +158,7 @@ async fn typed_api_preserves_unknown_and_legacy_delivery_fields() {
     assert_eq!(metadata.extra["legacy_ticket"], "OMK-123");
     assert_eq!(
         metadata.extra["pr_link"],
-        "https://github.com/ekhodzitsky/oh-my-kimi/pull/99"
+        "https://github.com/ekhodzitsky/omk/pull/99"
     );
 
     let task_graph = read_task_graph(&task_graph_path);
@@ -168,7 +168,7 @@ async fn typed_api_preserves_unknown_and_legacy_delivery_fields() {
     assert_eq!(delivery["write_scope"], "legacy-string-shape");
     assert_eq!(
         delivery["pr_link"],
-        "https://github.com/ekhodzitsky/oh-my-kimi/pull/99"
+        "https://github.com/ekhodzitsky/omk/pull/99"
     );
     assert_eq!(delivery["commit_sha"], "def5678");
 

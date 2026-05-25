@@ -121,8 +121,8 @@ fn inject_delivery_metadata(task_graph_path: &Path) {
         "slice_id": "goal-agent-execute",
         "owner": "codex",
         "branch": "codex/goal-open-pr-fixture",
-        "worktree_path": "../oh-my-kimi-goal-open-pr",
-        "pr_url": "https://github.com/ekhodzitsky/oh-my-kimi/pull/456",
+        "worktree_path": "../omk-goal-open-pr",
+        "pr_url": "https://github.com/ekhodzitsky/omk/pull/456",
         "write_scope": [
             "src/cli/goal/mod.rs",
             "src/cli/goal/commands/mod.rs",
@@ -185,8 +185,8 @@ fn goal_open_pr_markdown_dry_run_renders_goal_proof_and_delivery_metadata() {
     assert!(stdout.contains("slice: goal-agent-execute"));
     assert!(stdout.contains("owner: codex"));
     assert!(stdout.contains("branch: codex/goal-open-pr-fixture"));
-    assert!(stdout.contains("worktree: ../oh-my-kimi-goal-open-pr"));
-    assert!(stdout.contains("pr: https://github.com/ekhodzitsky/oh-my-kimi/pull/456"));
+    assert!(stdout.contains("worktree: ../omk-goal-open-pr"));
+    assert!(stdout.contains("pr: https://github.com/ekhodzitsky/omk/pull/456"));
     assert!(stdout.contains("src/runtime/goal/open_pr.rs"));
     assert!(stdout.contains("## Proof Summary"));
     assert!(stdout.contains("Proof path:"));

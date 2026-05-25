@@ -13,7 +13,7 @@ pub(super) async fn run_setup() -> Result<()> {
     let config_path = config_dir.join("config.toml");
     if !config_path.exists() {
         let default_config = r#"# OMK Configuration
-# See https://github.com/ekhodzitsky/oh-my-kimi for docs
+# See https://github.com/ekhodzitsky/omk for docs
 
 # Default number of workers for team mode
 default_team_size = 2

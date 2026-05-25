@@ -1,4 +1,4 @@
-# Contributing to oh-my-kimi
+# Contributing to OMK
 
 Thank you for your interest in contributing! We follow spec-driven development and test-driven development (TDD).
 
