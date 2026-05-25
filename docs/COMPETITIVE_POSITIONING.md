@@ -1,6 +1,6 @@
 # Competitive Positioning
 
-Last reviewed: 2026-05-18
+Last reviewed: 2026-05-25
 
 This document is the canonical market map for `omk goal`.
 
@@ -93,6 +93,19 @@ suffix) is required before the next public release.
 | Agenttrace | Adjacent observability competitor | Local-first observability for agent sessions: tokens, cost, latency, tool failures, CI health gates. | Observability is a side-effect of proof artifacts in OMK; should evaluate whether to interop or absorb. |
 | Dify | Adjacent workflow competitor | Mature LLM app/workflow builder with agents, RAG, observability, and deployment surfaces. | Software engineering runtime for changing and proving a repository, not building LLM apps. |
 | Cody | Adjacent code-context competitor | Enterprise codebase context, search, IDE chat, and code assistant UX. | Execution and verification runtime, not only context and editing help. |
+| Codex CLI (OpenAI) | Direct CLI competitor | Official OpenAI terminal coding agent; 85.5k stars, Rust, 100+ commits/mo. | OMK is engine-adaptable and proof-first; Codex is single-agent ChatGPT-integrated chat loop. |
+| goose (AAIF) | Direct general-agent competitor | Linux Foundation general-purpose AI agent; desktop + CLI + API; 45.8k stars, Rust, 100+ commits/mo; 15+ providers, 70+ MCP extensions. | OMK is proof-driven engineering runtime; goose is general-purpose agent platform. goose has distribution and governance moat via Linux Foundation. |
+| crewAI | Adjacent framework competitor | Enterprise multi-agent automation framework; 52.1k stars, Python, 100+ commits/mo; event-driven flows, cloud control plane. | OMK is local-first CLI runtime; crewAI is cloud-native Python framework. Different surfaces, but competing for multi-agent mindshare. |
+| MetaGPT | Adjacent research competitor | Multi-agent software company simulation; 68.3k stars, Python; ICLR 2025 oral; commercial MGX product. | OMK delivers code via worktrees and proof; MetaGPT simulates full SDLC. Different wedge, but high research credibility. |
+| Claude Squad | Direct terminal competitor | Go-based TUI for managing multiple agents in tmux workspaces; 7.6k stars, isolated git workspaces, profiles. | OMK has proof semantics and goal decomposition; Claude Squad is agent workspace manager without proof or planning. |
+| GitHub Copilot CLI | Direct platform competitor | Official GitHub terminal agent; 10.6k stars; Copilot subscription required; MCP extensibility; autopilot mode. | OMK is free, local, engine-adaptable, and proof-first; Copilot CLI has enormous distribution via GitHub subscriptions. |
+| VoltAgent | Adjacent platform competitor | TypeScript AI Agent Engineering Platform; 9.1k stars; framework + cloud console; supervisor/sub-agent, guardrails, evals. | OMK is Rust CLI focused on repo delivery; VoltAgent is general-purpose TS platform with SaaS console. |
+| hcom | Direct local-first competitor | Rust CLI for inter-agent messaging, observation, spawn/fork/resume/kill across terminals; SQLite persistence; 299 stars, very active. | OMK's proof-first goal controller vs. hcom's message-bus coordination; OMK has durable task graph and verification wall, hcom has real-time inter-agent comms. |
+| ORCH | Direct multi-agent competitor | TypeScript CLI/TUI for parallel agent teams in isolated git worktrees; mandatory review gate; pre-built team templates; 67 stars, active. | OMK is engine-adaptable with proof semantics; ORCH is Claude Code-centric state machine. |
+| Ralph | Adjacent loop-pattern competitor | Bash-based PRD-driven autonomous loop (19.5k stars); fresh instance per iteration; append-only progress log. | OMK has structured runtime, worktrees, and proof artifacts; Ralph is a shell script pattern, not a production runtime. |
+| Asynkor | Adjacent coordination competitor | Go-based MCP server for file leasing and cross-machine snapshot sync; prevents edit conflicts at edit time. | OMK uses worktree isolation; Asynkor uses Redis leases. Complementary rather than direct; evaluate interop. |
+| ARC Protocol | Adjacent discipline competitor | Python workflow with CONTRACTS.md enforcement and CODEBASE_MAP.md generation; slash-command driven. | OMK has AGENTS.md rules; ARC formalizes contracts and cartography. Market-informed by its discipline-first approach. |
+| Claudiomiro | Adjacent pipeline competitor | JavaScript CLI for full pipeline automation (decompose→code→review→test→commit); multi-repo and legacy support. | OMK focuses on proof-driven goal completion; Claudiomiro focuses on parallel full-pipeline execution. |
 
 ## Threat Model
 
@@ -111,6 +124,18 @@ suffix) is required before the next public release.
 | Aider sets the bar for terminal editing ergonomics. | Medium | OMK should learn from its fast feedback loop and git-native UX. |
 | Dify owns visual workflow/app-builder language. | Medium | OMK should avoid the visual app-builder category. |
 | Cody owns enterprise context/search expectations. | Medium | OMK needs strong repo navigation, indexing, and context discipline. |
+| hcom becomes the default local agent coordination bus. | High | Direct local-first Rust competitor with messaging, lifecycle, and terminal integration. OMK must differentiate on goal controller semantics, not just agent plumbing. |
+| ORCH ships stable multi-agent state machine with mandatory review. | High | Very similar wedge (worktrees, roles, review gate). OMK must own proof artifacts and engine adaptability. |
+| Ralph pattern normalizes PRD-driven bash loops. | Medium | High mindshare (19.5k stars). OMK must show that structured runtime beats shell scripts for production work. |
+| Asynkor normalizes file leasing for agent teams. | Medium | If file-level coordination becomes expected, OMK may need leases inside worktrees or interop. |
+| ARC Protocol normalizes contract-enforced commits. | Medium | OMK's AGENTS.md could evolve into formal contracts; monitor whether this becomes table stakes. |
+| Codex CLI becomes the default terminal coding agent. | Critical | 85.5k stars, first-party OpenAI, ChatGPT integration. OMK must differentiate on proof artifacts, multi-agent orchestration, and engine adaptability. |
+| goose (AAIF) becomes the default open-source AI agent. | Critical | 45.8k stars, Linux Foundation, multi-provider, MCP-native. OMK must own proof-driven engineering semantics, not general-agent features. |
+| GitHub Copilot CLI captures terminal users via subscription. | Critical | 10.6k stars, first-party GitHub, Copilot bundling. OMK competes on being free, local, and proof-first. |
+| crewAI captures enterprise multi-agent mindshare. | High | 52.1k stars, enterprise flows, cloud control plane. OMK must own local-first repo-native delivery, not cloud automation. |
+| Claude Squad normalizes TUI workspace management. | High | 7.6k stars, Go, tmux-based. OMK should evaluate TUI for multi-agent goal visibility. |
+| VoltAgent captures TypeScript agent platform market. | Medium | 9.1k stars, framework + console, supervisor pattern. Adjacent rather than direct; monitor for feature creep into repo delivery. |
+| MetaGPT's MGX product competes in natural-language programming. | Medium | Commercial product from 68k-star research project. Monitor for repo-delivery features. |
 
 ## Strategic Boundary
 
@@ -183,6 +208,20 @@ Re-check these before major `omk goal` releases:
 - Bernstein (parallel-worktree CLI orchestrator): track via "Bernstein Python orchestrator git worktrees quality gates"
 - GNAP (Git-Native Agent Protocol): track via "GNAP git-native agent protocol"
 - Agenttrace (local-first agent observability): track via "Agenttrace local agent observability"
+- hcom (inter-agent message bus and lifecycle): https://github.com/aannoo/hcom
+- ORCH (multi-agent orchestration with worktrees): https://github.com/oxgeneral/ORCH
+- Ralph (PRD-driven autonomous loop): https://github.com/snarktank/ralph
+- Asynkor (file leasing and cross-machine sync): https://github.com/asynkor/asynkor
+- ARC Protocol (contract-enforced workflow): https://github.com/AshishOP/arc-protocol
+- Claudiomiro (full pipeline automation): https://github.com/samuelfaj/claudiomiro
+- orchestr8 (JIT progressive loading via MCP): https://github.com/seth-schultz/orchestr8
+- Codex CLI (OpenAI terminal agent): https://github.com/openai/codex
+- goose (AAIF general-purpose agent): https://github.com/aaif-goose/goose
+- crewAI (multi-agent framework): https://github.com/crewAIInc/crewAI
+- MetaGPT (multi-agent software company): https://github.com/FoundationAgents/MetaGPT
+- Claude Squad (multi-agent TUI): https://github.com/smtg-ai/claude-squad
+- GitHub Copilot CLI (terminal agent): https://github.com/github/copilot-cli
+- VoltAgent (AI Agent Engineering Platform): https://github.com/VoltAgent/voltagent
 - Devin docs: https://docs.devin.ai/
 - OpenHands: https://github.com/OpenHands/OpenHands
 - Claude Code docs: https://code.claude.com/docs/en/overview
@@ -198,6 +237,8 @@ reinforce the same boundary. OMK should not chase broad hosted-agent or
 assistant-surface parity; the defensible MVP remains local durable state,
 task-scoped branches/worktrees, explicit verification/review/integration gates,
 and proof-backed terminal statuses.
+
+May 25, 2026 review note: competitive intelligence scan (batch 4) added six new tracked competitors. hcom (299★, Rust, 58 commits/mo) is the most credible direct local-first threat; ORCH (67★, active) occupies a nearly identical wedge; Ralph (19.5k★) owns the PRD-loop mindshare; Asynkor (49★, production) defines file-leasing coordination; ARC Protocol (66★) formalizes contract discipline; Claudiomiro (412★) demonstrates legacy-aware multi-repo pipelines. OMK's differentiation remains: durable goal state, proof-first verification wall, engine-adaptable runtime, and slice-execution with integrator PRs. The namesake collision and Bernstein/CAO threats from May 18 remain unresolved.
 
 May 18, 2026 review note: a broader scan surfaced four new high-threat items
 not previously tracked. (1) Three public `oh-my-kimi` namesakes — name collision
