@@ -198,8 +198,17 @@ impl StagnationDetector {
             // No coverage data available — do not count as stagnant.
             return false;
         }
-        let total_delta: f64 = deltas.iter().sum();
-        total_delta.abs() < self.thresholds.coverage_epsilon
+        let min = deltas
+            .iter()
+            .copied()
+            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(0.0);
+        let max = deltas
+            .iter()
+            .copied()
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(0.0);
+        (max - min) < self.thresholds.coverage_epsilon
     }
 
     fn is_token_efficiency_stagnant(&self, window: &[IterationMetrics]) -> bool {

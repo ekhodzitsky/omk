@@ -26,6 +26,10 @@ pub struct IterationMetrics {
 pub enum StagnationCollectorError {
     #[error("invalid metrics: {0}")]
     InvalidMetrics(String),
+    #[error("io failed")]
+    Io(#[source] std::io::Error),
+    #[error("serialization failed")]
+    Serialization(#[source] serde_json::Error),
 }
 
 /// Collects and stores iteration metrics for stagnation analysis.
@@ -116,20 +120,19 @@ impl StagnationCollector {
     pub async fn save(&self, path: &Path) -> Result<(), StagnationCollectorError> {
         let mut lines = Vec::new();
         for metric in &self.history {
-            let json = serde_json::to_string(metric).map_err(|e| {
-                StagnationCollectorError::InvalidMetrics(format!("serialization failed: {e}"))
-            })?;
+            let json =
+                serde_json::to_string(metric).map_err(StagnationCollectorError::Serialization)?;
             lines.push(json);
         }
         let content = lines.join("\n");
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| StagnationCollectorError::InvalidMetrics(format!("io: {e}")))?;
+                .map_err(StagnationCollectorError::Io)?;
         }
         tokio::fs::write(path, content)
             .await
-            .map_err(|e| StagnationCollectorError::InvalidMetrics(format!("io: {e}")))?;
+            .map_err(StagnationCollectorError::Io)?;
         Ok(())
     }
 
@@ -140,15 +143,14 @@ impl StagnationCollector {
         }
         let content = tokio::fs::read_to_string(path)
             .await
-            .map_err(|e| StagnationCollectorError::InvalidMetrics(format!("io: {e}")))?;
+            .map_err(StagnationCollectorError::Io)?;
         let mut metrics = Vec::new();
         for line in content.lines() {
             if line.trim().is_empty() {
                 continue;
             }
-            let m: IterationMetrics = serde_json::from_str(line).map_err(|e| {
-                StagnationCollectorError::InvalidMetrics(format!("deserialization failed: {e}"))
-            })?;
+            let m: IterationMetrics =
+                serde_json::from_str(line).map_err(StagnationCollectorError::Serialization)?;
             metrics.push(m);
         }
         Ok(metrics)

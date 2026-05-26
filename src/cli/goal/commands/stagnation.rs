@@ -34,9 +34,11 @@ pub(crate) async fn cmd_diagnose(goal_id: &str) -> Result<()> {
     let task_graph = GoalTaskGraph::load(&state.state_dir).await?;
 
     let mut history = load_history(&state.state_dir).await;
+    let history_loaded = !history.is_empty();
 
     // If no persisted history, build a single-iteration snapshot from current state.
     if history.is_empty() {
+        let budget_report = crate::runtime::goal::goal_budget(goal_id).await?;
         let budget = GoalBudgetCheckpoint {
             version: 1,
             goal_id: state.goal_id.clone(),
@@ -49,10 +51,10 @@ pub(crate) async fn cmd_diagnose(goal_id: &str) -> Result<()> {
             elapsed_since_created_secs: 0,
             remaining_budget_secs: None,
             budget_tokens: state.budget_tokens,
-            used_tokens: state.budget_tokens.unwrap_or(0),
+            used_tokens: budget_report.used_tokens,
             remaining_budget_tokens: None,
             budget_usd: state.budget_usd,
-            estimated_cost_usd: 0.0,
+            estimated_cost_usd: budget_report.estimated_cost_usd,
             remaining_budget_usd: None,
         };
 
@@ -99,13 +101,18 @@ pub(crate) async fn cmd_diagnose(goal_id: &str) -> Result<()> {
             println!("  - {metric} is stagnant");
         }
 
-        // Build parallel slice stubs for diagnosis (current iteration only if history is short).
-        let gates_history: Vec<_> = std::iter::repeat_with(|| proof.gates.clone())
-            .take(history.len())
-            .collect();
-        let changed_history: Vec<_> = std::iter::repeat_with(|| proof.changed_files.clone())
-            .take(history.len())
-            .collect();
+        // Diagnosis heuristics that require temporal gate/file data are skipped
+        // when we only have a single-iteration snapshot or loaded history without
+        // parallel gate/file artifacts.
+        let (gates_history, changed_history): (Vec<Vec<_>>, Vec<Vec<_>>) = if history_loaded {
+            tracing::info!(
+                goal_id = %state.goal_id,
+                "diagnosis running with metrics-only heuristics (no historical gate/file data)"
+            );
+            (Vec::new(), Vec::new())
+        } else {
+            (vec![proof.gates.clone()], vec![proof.changed_files.clone()])
+        };
 
         let diagnosis = diagnosis_engine.diagnose(&history, &gates_history, &changed_history);
         println!();
