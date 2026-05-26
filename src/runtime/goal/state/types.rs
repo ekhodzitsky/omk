@@ -128,6 +128,8 @@ pub struct GoalState {
     pub failure: Option<GoalFailure>,
     #[serde(default)]
     pub state_dir: PathBuf,
+    #[serde(default)]
+    pub recovery_attempts: u32,
 }
 
 fn default_goal_version() -> u32 {

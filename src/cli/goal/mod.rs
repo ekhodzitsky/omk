@@ -264,6 +264,33 @@ pub(crate) enum GoalCommands {
         #[arg(default_value = "latest", value_name = "GOAL_ID")]
         goal_id: String,
     },
+    /// Diagnose stagnation for a goal
+    #[command(after_help = help::GOAL_DIAGNOSE_AFTER_HELP)]
+    Diagnose {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest", value_name = "GOAL_ID")]
+        goal_id: String,
+    },
+    /// Propose or approve recovery for a stagnant goal
+    #[command(after_help = help::GOAL_RECOVER_AFTER_HELP)]
+    Recover {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest", value_name = "GOAL_ID")]
+        goal_id: String,
+        /// Approve and execute the recovery plan
+        #[arg(long)]
+        approve: bool,
+    },
+    /// Rollback a goal to a previous recovery checkpoint
+    #[command(after_help = help::GOAL_ROLLBACK_AFTER_HELP)]
+    Rollback {
+        /// Goal ID or "latest"
+        #[arg(default_value = "latest", value_name = "GOAL_ID")]
+        goal_id: String,
+        /// Checkpoint ID to restore
+        #[arg(long, value_name = "ID")]
+        to_checkpoint: u32,
+    },
 }
 
 pub(crate) async fn run(args: Args) -> Result<()> {
@@ -419,6 +446,21 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         GoalCommands::Merge { goal_id } => {
             let goal_id = validate_goal_id(&goal_id)?;
             commands::cmd_merge(goal_id).await
+        }
+        GoalCommands::Diagnose { goal_id } => {
+            let goal_id = validate_goal_id(&goal_id)?;
+            commands::cmd_diagnose(goal_id).await
+        }
+        GoalCommands::Recover { goal_id, approve } => {
+            let goal_id = validate_goal_id(&goal_id)?;
+            commands::cmd_recover(goal_id, approve).await
+        }
+        GoalCommands::Rollback {
+            goal_id,
+            to_checkpoint,
+        } => {
+            let goal_id = validate_goal_id(&goal_id)?;
+            commands::cmd_rollback(goal_id, to_checkpoint).await
         }
     }
 }

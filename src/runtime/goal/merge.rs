@@ -227,6 +227,7 @@ mod tests {
             delivery_policy: crate::runtime::goal::GoalDeliveryPolicy::Local,
             merge_policy: GoalMergePolicy::Gated,
             slice_execution: false,
+            recovery_attempts: 0,
         };
 
         let proof = GoalProof {
