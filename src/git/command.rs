@@ -185,7 +185,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_command_timeout() {
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::Builder::new().tempdir_in(".").unwrap();
         let script = tmp.path().join("slow-git");
         write_script(&script, "#!/bin/sh\nsleep 2\n");
         let cmd = GitCommand::new_with_git_bin(tmp.path().to_path_buf(), script)
@@ -196,7 +196,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_on_network_error() {
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::Builder::new().tempdir_in(".").unwrap();
         let script = tmp.path().join("flaky-git");
         // Write a counter file to track invocations
         let counter = tmp.path().join("counter");

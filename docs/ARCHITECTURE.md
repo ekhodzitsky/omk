@@ -32,11 +32,12 @@ omk CLI (Rust)
   |
   +-- Kimi asset sync/install/doctor/rollback
   |
-  +-- goal controller (early scaffold)
+  +-- goal controller (mature — 13+ phases, delivery-ready)
   |     |
-  |     +-- PRD, technical plan, test spec
-  |     +-- task graph, budgets, decisions
-  |     +-- bounded scheduler/Wire execution waves
+  |     +-- PRD, technical plan, test spec, oracle classifier
+  |     +-- task graph, budgets, decisions, stagnation recovery
+  |     +-- bounded scheduler/Wire execution waves with pool admission
+  |     +-- per-slice worktrees, PR delivery, review wall, integrator merge
   |     +-- goal proof or failure
   |
   +-- team run scheduler
@@ -69,6 +70,9 @@ omk CLI (Rust)
 | `runtime/scheduler/` | Task decomposition, claims, leases, retries, and ownership checks. |
 | `runtime/events.rs` | Append-only JSONL event envelope and readers. |
 | `runtime/gates.rs` | Verification gate config, execution, and evidence capture. |
+| `runtime/gates/circuit_breaker.rs` | Production-grade circuit breaker for gates: Closed/Open/HalfOpen state machine with SQLite persistence and zero-overhead fast path. |
+| `runtime/scheduler/pool.rs` | Agent pool admission controller with `max_workers`/`max_disk_gb` limits, priority queue, and SQLite-backed queue persistence. |
+| `runtime/goal/stagnation/` | Adaptive stagnation detection and recovery: metric collection, deterministic diagnosis, recovery planning, and checkpoint rollback. |
 | `runtime/proof.rs` | Proof/failure report generation from events and gates. |
 | `runtime/watchdog.rs` | State-file health checks for workers and stale heartbeats. |
 | `runtime/goal/` | Goal controller: durable state, validated task graph with retry/lease metadata, bounded Wire-backed execution waves with per-task budgets and optional per-slice worktree isolation, pause/resume/cancel with worker interruption, budget enforcement and recovery, per-slice PR delivery and review/fix loop, integrator branch/PR creation, controller narrative emission, post-mutation gate reruns, deterministic event replay, and proof state. |
@@ -194,7 +198,9 @@ added, but dry-run rendering remains the default safe path.
 | `omk proof show` | Inspect cached or regenerated readiness evidence. |
 | `omk hud` | Render text, JSON, TUI, or web status views. |
 | `omk autopilot`, `omk ralph`, `omk ultrawork` | Power-user execution modes built on the same local runtime expectations. |
-| `omk goal ...` | Durable goal controller: planning artifacts, validated task graph with retry/lease metadata, bounded Wire-backed execution waves with optional per-slice worktree isolation, verification gates with post-mutation reruns, per-slice PR delivery and review/fix loop, integrator PR merging, controller narrative emission, budget enforcement, and honest proof artifacts. Local, repo-native, proof-backed runtime—not a hosted coding-agent clone. |
+| `omk goal ...` | Durable goal controller: planning artifacts, validated task graph with retry/lease metadata, bounded Wire-backed execution waves with optional per-slice worktree isolation, verification gates with circuit breaker and post-mutation reruns, per-slice PR delivery and review/fix loop, integrator PR merging, stagnation detection/recovery, controller narrative emission, budget enforcement, and honest proof artifacts. Local, repo-native, proof-backed runtime—not a hosted coding-agent clone. |
+| `omk gates status/reset` | Inspect and reset circuit breaker state for verification gates. |
+| `omk pools status/cleanup` | Inspect agent pool utilization and clear stale queue entries. |
 
 ## MCP Integration
 

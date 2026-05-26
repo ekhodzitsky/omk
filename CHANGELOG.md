@@ -10,7 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Full 6-review wall per slice delivery**: all six review passes (architect, code, test, security, performance, anti-slop) now run for each slice before PR creation
-- **Auto-rebase with conflict recovery for goal slices**: `attempt_auto_rebase` classifies merge conflicts as safe or unsafe with automatic resolution
+- **Auto-rebase with conflict recovery for goal slices**: `attempt_auto_rebase`
+  classifies merge conflicts as safe (whitespace, line-ending, comment-only)
+  or unsafe (substantive code changes, deletions). Safe conflicts are
+  auto-resolved and the rebase continues; unsafe conflicts abort the rebase
+  and preserve detailed conflict evidence for manual resolution.
 - **Final merge gate with e2e GitHub validation**: `merge_policy` (gated/manual/disabled) fully enforced with CI polling and pre-flight checks
 - **Comprehensive recovery documentation**: `docs/GOAL_RECOVERY.md` covering all failure modes
 
@@ -23,11 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Auto-rebase with conflict recovery for goal slices**: `attempt_auto_rebase`
-  now classifies merge conflicts as safe (whitespace, line-ending, comment-only)
-  or unsafe (substantive code changes, deletions). Safe conflicts are
-  auto-resolved and the rebase continues; unsafe conflicts abort the rebase
-  and preserve detailed conflict evidence for manual resolution.
+- **Adaptive Stagnation Recovery for goal execution**: detects when a goal
+  agent is stuck in a broken loop before budget exhaustion. Analyzes iteration
+  metrics over a sliding window, diagnoses root cause via deterministic
+  heuristics (TestFlakiness, ScopeTooLarge, ExternalDependencyBroken,
+  CircularFix, InefficientExploration), and proposes operator-approved recovery
+  plans with checkpoint save/load/rollback. Includes `omk goal diagnose`,
+  `omk goal recover`, and `omk goal rollback` CLI commands.
 - `ConflictClassification` enum (`Safe` / `Unsafe`) added to
   `GoalMergeConflictEvidence` and exported from `omk::runtime::goal`.
 - `GitRepo` gained `add`, `rebase_continue`, `conflicted_files`, and

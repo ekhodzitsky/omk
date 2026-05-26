@@ -100,11 +100,13 @@ run_cmd proof   ultrawork  kimi_native
 | `config_cmd.rs` | `omk config` command. |
 | `cost_cmd.rs` | `omk cost` command. |
 | `doctor.rs` | `omk doctor` command. |
-| `goal/` | `omk goal` subcommands (run, budget, integration, help, validate). |
+| `gates.rs` | `omk gates status` and `omk gates reset` commands. |
+| `goal/` | `omk goal` subcommands (run, budget, integration, help, validate, stagnation). |
 | `hud.rs` | `omk hud` command. |
 | `kimi_native_cmd/` | `omk kimi` subcommands (sync, install, doctor, agents, skills, hooks, rollback). |
 | `logs.rs` | `omk logs` command. |
 | `marketplace.rs` | `omk marketplace` command. |
+| `pools.rs` | `omk pools status` and `omk pools cleanup` commands. |
 | `proof_cmd.rs` | `omk proof` command. |
 | `ralph.rs` | `omk ralph` command. |
 | `run_cmd.rs` | `omk run` command. |
