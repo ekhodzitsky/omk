@@ -82,4 +82,3 @@ fn cmd_cleanup(pool_filter: Option<String>, force: bool) -> Result<()> {
     }
     Ok(())
 }
-
