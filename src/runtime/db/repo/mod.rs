@@ -1,5 +1,6 @@
 pub mod artifact;
 pub mod budget;
+pub mod circuit_breaker;
 pub mod decision;
 pub mod event;
 pub mod goal;

@@ -18,6 +18,7 @@ pub use types::{
 pub use repo::{
     artifact::ArtifactRepo,
     budget::BudgetRepo,
+    circuit_breaker::{CircuitBreakerRepo, CircuitBreakerRepoImpl},
     decision::DecisionRepo,
     event::EventRepo,
     goal::GoalRepo,
@@ -100,6 +101,13 @@ impl DbHandle {
     /// Access the slice lease repository directly (auto-commit mode).
     pub fn slice_lease_repo(&self) -> SliceLeaseRepoImpl {
         SliceLeaseRepoImpl {
+            conn: self.conn.clone(),
+        }
+    }
+
+    /// Access the circuit breaker repository directly (auto-commit mode).
+    pub fn circuit_breaker_repo(&self) -> CircuitBreakerRepoImpl {
+        CircuitBreakerRepoImpl {
             conn: self.conn.clone(),
         }
     }

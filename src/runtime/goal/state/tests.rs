@@ -472,6 +472,7 @@ async fn db_full_goal_persistence_roundtrip() {
             stderr_summary: None,
             output_path: None,
             timeout_secs: 0,
+            circuit_breaker_open: false,
         }],
         post_mutation_gates_ran: false,
         known_gaps: vec![],

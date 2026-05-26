@@ -2,6 +2,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+use crate::runtime::gates::circuit_breaker::CircuitBreakerConfig;
+
 pub(super) const SKIPPED_GATE_COMMAND: &str = "__omk_internal_skipped_gate__";
 
 fn default_required() -> bool {
@@ -18,6 +20,8 @@ pub struct GateDef {
     pub required: bool,
     #[serde(default)]
     pub timeout_secs: u64,
+    #[serde(default)]
+    pub circuit_breaker: Option<CircuitBreakerConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +38,8 @@ struct GateDefConfig {
     allow_fail: bool,
     #[serde(default, alias = "skip", alias = "skipped")]
     skip: bool,
+    #[serde(default)]
+    circuit_breaker: Option<CircuitBreakerConfig>,
 }
 
 impl<'de> Deserialize<'de> for GateDef {
@@ -58,6 +64,7 @@ impl<'de> Deserialize<'de> for GateDef {
             args: config.args,
             required,
             timeout_secs: config.timeout_secs,
+            circuit_breaker: config.circuit_breaker,
         })
     }
 }
@@ -70,6 +77,7 @@ impl GateDef {
             args: args.iter().map(|s| s.to_string()).collect(),
             required: true,
             timeout_secs: 0,
+            circuit_breaker: None,
         }
     }
 }
@@ -97,6 +105,8 @@ pub struct GateResult {
     pub output_path: Option<String>,
     #[serde(default)]
     pub timeout_secs: u64,
+    #[serde(default)]
+    pub circuit_breaker_open: bool,
 }
 
 /// Full verification configuration for a project.

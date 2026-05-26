@@ -2,8 +2,8 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 use super::kimi_native_cmd;
 use super::{
-    ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, goal, hud, logs, marketplace,
-    proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
+    ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, gates, goal, hud, logs,
+    marketplace, proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
 };
 
 mod mcp_cmd;
@@ -90,6 +90,8 @@ pub enum Commands {
     Run(run_cmd::Args),
     /// Generate and view proof reports
     Proof(proof_cmd::Args),
+    /// Circuit breaker management for verification gates
+    Gates(gates::Args),
     /// Show version information
     Version,
 }

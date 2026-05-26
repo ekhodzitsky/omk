@@ -25,6 +25,7 @@ fn gate(name: &str, passed: bool) -> GateResult {
         stderr_summary: None,
         output_path: None,
         timeout_secs: 0,
+        circuit_breaker_open: false,
     }
 }
 
