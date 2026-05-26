@@ -672,8 +672,8 @@ static GLOBAL_REGISTRY: OnceLock<CircuitBreakerRegistry> = OnceLock::new();
 /// Initialize the global circuit breaker registry with a specific instance.
 pub fn init_global_registry(
     registry: CircuitBreakerRegistry,
-) -> Result<(), CircuitBreakerRegistry> {
-    GLOBAL_REGISTRY.set(registry)
+) -> Result<(), Box<CircuitBreakerRegistry>> {
+    GLOBAL_REGISTRY.set(registry).map_err(Box::new)
 }
 
 /// Access the global registry, lazily initializing an in-memory one if needed.
