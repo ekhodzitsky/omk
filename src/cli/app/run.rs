@@ -8,7 +8,7 @@ use super::{mcp_cmd, setup, update, Commands, Omk, ShellArg};
 use crate::cli::kimi_native_cmd;
 use crate::cli::{
     ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, gates, goal, hud, logs,
-    marketplace, proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
+    marketplace, pools, proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
 };
 
 pub async fn run() -> Result<()> {
@@ -131,6 +131,7 @@ async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
         Some(Commands::Skill(args)) => skill::run(args).await,
         Some(Commands::Marketplace(args)) => marketplace::run(args).await,
         Some(Commands::Ultrawork(args)) => ultrawork::run(args).await,
+        Some(Commands::Pools(args)) => pools::run(args).await,
         Some(Commands::KimiNative(args)) => kimi_native_cmd::run(args).await,
         Some(Commands::Run(args)) => run_cmd::run(args).await,
         Some(Commands::Proof(args)) => proof_cmd::run(args).await,

@@ -6,6 +6,7 @@ use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, RunId}
 use crate::runtime::scheduler::claim::ClaimStore;
 use crate::runtime::scheduler::manifest::RunManifest;
 use crate::runtime::scheduler::ownership::OwnershipMap;
+use crate::runtime::scheduler::pool::{PoolAction, PoolManager};
 use crate::runtime::scheduler::runner::{RunSummary, TeamRunner};
 use crate::runtime::scheduler::task::{Task, TaskState};
 use crate::runtime::worker::WorkerSpec;
@@ -26,6 +27,11 @@ impl TeamRunner {
         let manifest = RunManifest::new(run_id, "team", project_dir).with_description(task_desc);
         manifest.init().await?;
 
+        let config = crate::runtime::config::load_config()
+            .await
+            .unwrap_or_default();
+        let pool_manager = PoolManager::new(config.pools);
+
         Ok(Self {
             manifest,
             claim_store: ClaimStore::new(),
@@ -37,6 +43,8 @@ impl TeamRunner {
             last_heartbeat_ts: HashMap::new(),
             stale_task_owners: HashMap::new(),
             dead_workers: Default::default(),
+            pool_manager,
+            pending_pool_actions: Vec::new(),
         })
     }
 
@@ -56,6 +64,11 @@ impl TeamRunner {
             claim_store.insert(task.clone());
         }
 
+        let config = crate::runtime::config::load_config()
+            .await
+            .unwrap_or_default();
+        let pool_manager = PoolManager::new(config.pools);
+
         Ok(Self {
             manifest,
             claim_store,
@@ -67,11 +80,40 @@ impl TeamRunner {
             last_heartbeat_ts: HashMap::new(),
             stale_task_owners: HashMap::new(),
             dead_workers: Default::default(),
+            pool_manager,
+            pending_pool_actions: Vec::new(),
         })
     }
 
     pub(crate) fn set_lease_seconds(&mut self, secs: i64) {
         self.claim_store.set_lease_seconds(secs);
+    }
+
+    /// Drain any pending pool release actions and promote queued tasks.
+    pub(crate) async fn drain_pool_actions(&mut self) -> Result<()> {
+        for action in self.pending_pool_actions.drain(..) {
+            match action {
+                PoolAction::Release {
+                    pool,
+                    task_id,
+                    disk_delta,
+                } => {
+                    if disk_delta != 0 {
+                        self.pool_manager.update_disk_usage(&pool, disk_delta).await;
+                    }
+                    if let Some(promoted) = self.pool_manager.release_slot(&pool, &task_id).await? {
+                        // The promoted task remains Pending in the claim store,
+                        // so the next dispatch loop will see it as claimable.
+                        tracing::info!(
+                            pool = %pool,
+                            promoted_task = %promoted.task_id,
+                            "Queued task promoted to pending after slot release"
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Run the main loop until all tasks are done.
@@ -98,20 +140,24 @@ impl TeamRunner {
         loop {
             if cancel.is_cancelled() {
                 self.cancel_unfinished_tasks(cancel_reason).await?;
+                self.drain_pool_actions().await?;
                 self.snapshot().await?;
                 break;
             }
 
             self.dispatch_to_workers(worker_specs).await?;
+            self.drain_pool_actions().await?;
             self.poll_workers().await?;
 
             if cancel.is_cancelled() {
                 self.cancel_unfinished_tasks(cancel_reason).await?;
+                self.drain_pool_actions().await?;
                 self.snapshot().await?;
                 break;
             }
 
             self.recover_stale_leases().await?;
+            self.drain_pool_actions().await?;
             self.fail_unfinished_tasks_if_no_live_workers(worker_specs)
                 .await?;
 
@@ -168,6 +214,13 @@ impl TeamRunner {
             if self.claim_store.cancel(&task_id)? {
                 if let Some(task) = self.claim_store.get(&task_id) {
                     self.ownership.release_task(task);
+                    self.pending_pool_actions.push(
+                        crate::runtime::scheduler::pool::PoolAction::Release {
+                            pool: task.pool.clone(),
+                            task_id: task_id.clone(),
+                            disk_delta: 0,
+                        },
+                    );
                 }
                 let event = Event::new(self.run_id.clone(), EventKind::TaskFailed)
                     .with_actor("scheduler")
@@ -197,6 +250,13 @@ impl TeamRunner {
         for recovery in &recovered {
             if let Some(task) = self.claim_store.get(&recovery.task_id) {
                 self.ownership.release_task(task);
+                self.pending_pool_actions.push(
+                    crate::runtime::scheduler::pool::PoolAction::Release {
+                        pool: task.pool.clone(),
+                        task_id: recovery.task_id.clone(),
+                        disk_delta: 0,
+                    },
+                );
             }
             if let Some(stale_owner) = recovery.stale_owner.as_deref() {
                 self.stale_task_owners
@@ -281,6 +341,13 @@ impl TeamRunner {
 
             if let Some(task) = self.claim_store.get(&task_id) {
                 self.ownership.release_task(task);
+                self.pending_pool_actions.push(
+                    crate::runtime::scheduler::pool::PoolAction::Release {
+                        pool: task.pool.clone(),
+                        task_id: task_id.clone(),
+                        disk_delta: 0,
+                    },
+                );
             }
 
             let Some(task) = self.claim_store.tasks_mut().get_mut(&task_id) else {

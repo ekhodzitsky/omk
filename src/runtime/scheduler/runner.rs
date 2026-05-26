@@ -7,6 +7,7 @@ use crate::runtime::events::{EventWriter, RunId};
 use crate::runtime::scheduler::claim::ClaimStore;
 use crate::runtime::scheduler::manifest::RunManifest;
 use crate::runtime::scheduler::ownership::OwnershipMap;
+use crate::runtime::scheduler::pool::{PoolAction, PoolManager};
 
 mod dispatch;
 mod poll;
@@ -33,6 +34,8 @@ pub struct TeamRunner {
     last_heartbeat_ts: HashMap<String, DateTime<Utc>>,
     stale_task_owners: HashMap<String, String>,
     dead_workers: HashSet<String>,
+    pool_manager: PoolManager,
+    pending_pool_actions: Vec<PoolAction>,
 }
 
 #[cfg(test)]

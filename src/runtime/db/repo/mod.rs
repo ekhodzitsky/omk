@@ -4,6 +4,7 @@ pub mod circuit_breaker;
 pub mod decision;
 pub mod event;
 pub mod goal;
+pub mod pool;
 pub mod proof;
 pub mod slice_lease;
 pub mod task;

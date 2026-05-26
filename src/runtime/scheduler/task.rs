@@ -22,6 +22,10 @@ fn default_terminal() -> bool {
     true
 }
 
+fn default_pool() -> String {
+    "default".to_string()
+}
+
 /// Unique identifier for a task within a run.
 pub type TaskId = String;
 
@@ -127,6 +131,9 @@ pub struct Task {
     pub read_set: Vec<String>,
     /// File paths this task is expected to write (for conflict detection).
     pub write_set: Vec<String>,
+    /// Pool this task belongs to for admission control.
+    #[serde(default = "default_pool")]
+    pub pool: String,
     /// Arbitrary metadata for the task (e.g., command, mode, role).
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
@@ -152,6 +159,7 @@ impl Task {
             completed_at: None,
             read_set: Vec::new(),
             write_set: Vec::new(),
+            pool: default_pool(),
             extra: HashMap::new(),
         }
     }
@@ -189,6 +197,11 @@ impl Task {
 
     pub fn with_read_set(mut self, paths: Vec<String>) -> Self {
         self.read_set = paths;
+        self
+    }
+
+    pub fn with_pool(mut self, pool: impl Into<String>) -> Self {
+        self.pool = pool.into();
         self
     }
 

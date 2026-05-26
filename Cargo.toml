@@ -64,6 +64,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 uuid = { version = "1.16", features = ["v4", "serde"] }
 
 # System interfaces
+num_cpus = "1.16"
 libc = "0.2"
 
 # Filesystem & paths

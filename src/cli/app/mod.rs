@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use super::kimi_native_cmd;
 use super::{
     ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, gates, goal, hud, logs,
-    marketplace, proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
+    marketplace, pools, proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
 };
 
 mod mcp_cmd;
@@ -83,6 +83,8 @@ pub enum Commands {
     /// Parallel burst execution without a team
     #[command(visible_alias = "uw")]
     Ultrawork(ultrawork::Args),
+    /// Manage agent pools and resource limits
+    Pools(pools::Args),
     /// Kimi asset commands (sync/install/doctor + listing/rollback surfaces)
     #[command(name = "kimi", visible_alias = "k")]
     KimiNative(kimi_native_cmd::KimiNativeArgs),

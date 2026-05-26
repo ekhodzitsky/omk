@@ -29,7 +29,7 @@ pub use repo::{
 
 use repo::{
     artifact::ArtifactRepoImpl, budget::BudgetRepoImpl, decision::DecisionRepoImpl,
-    event::EventRepoImpl, goal::GoalRepoImpl, proof::ProofRepoImpl,
+    event::EventRepoImpl, goal::GoalRepoImpl, pool::PoolRepoImpl, proof::ProofRepoImpl,
     slice_lease::SliceLeaseRepoImpl, task::TaskRepoImpl,
 };
 
@@ -101,6 +101,13 @@ impl DbHandle {
     /// Access the slice lease repository directly (auto-commit mode).
     pub fn slice_lease_repo(&self) -> SliceLeaseRepoImpl {
         SliceLeaseRepoImpl {
+            conn: self.conn.clone(),
+        }
+    }
+
+    /// Access the pool repository directly (auto-commit mode).
+    pub fn pool_repo(&self) -> PoolRepoImpl {
+        PoolRepoImpl {
             conn: self.conn.clone(),
         }
     }

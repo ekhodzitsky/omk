@@ -39,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to `.github/pull_request_template.md` with checkboxes for CHANGELOG entries,
   version impact, and documentation updates.
 
+- **Agent Pools with concurrency limits**: admission controller (`PoolManager`)
+  sits in front of the scheduler and enforces `max_workers` and optional
+  `max_disk_gb` per named pool. Tasks that exceed limits are queued (FIFO with
+  priority override) and automatically promoted when slots free. Includes
+  `PoolRepo` trait with SQLite persistence for queue state across graceful
+  shutdown, `omk pools status` / `omk pools cleanup` CLI commands, and
+  observability via structured tracing.
 - **Circuit Breaker for verification gates**: production-grade distributed
   state machine with durable SQLite persistence, observability, and zero-overhead
   fast path. Gates that fail repeatedly are automatically skipped, preventing
