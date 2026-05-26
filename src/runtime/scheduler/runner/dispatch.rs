@@ -102,7 +102,32 @@ impl TeamRunner {
             };
             let worker = available_workers.remove(idx);
 
+            // Admission control: atomically claim a pool slot before
+            // taking ownership in the claim store.  This prevents the
+            // TOCTOU race where two workers see can_admit==true for the
+            // last slot and both proceed.
+            if !self.pool_manager.try_admit(&task.pool, &task.id).await {
+                if let Err(e) = self.pool_manager.enqueue(&task.pool, &task).await {
+                    warn!(
+                        task = %task.id,
+                        pool = %task.pool,
+                        error = %e,
+                        "Task enqueue failed for pool"
+                    );
+                }
+                continue;
+            }
+
             if !self.claim_store.claim(&task_id, &worker.name) {
+                // Rollback the pool admission since the claim store
+                // rejected the claim (e.g. lease changed).
+                self.pending_pool_actions.push(
+                    crate::runtime::scheduler::pool::PoolAction::Release {
+                        pool: task.pool.clone(),
+                        task_id: task.id.clone(),
+                        disk_delta: 0,
+                    },
+                );
                 continue;
             }
             self.stale_task_owners.remove(&task_id);

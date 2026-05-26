@@ -120,6 +120,13 @@ impl TeamRunner {
                 if self.claim_store.complete(&parsed.task_id, worker_name) {
                     if let Some(task) = self.claim_store.get(&parsed.task_id) {
                         self.ownership.release_task(task);
+                        self.pending_pool_actions.push(
+                            crate::runtime::scheduler::pool::PoolAction::Release {
+                                pool: task.pool.clone(),
+                                task_id: parsed.task_id.clone(),
+                                disk_delta: 0,
+                            },
+                        );
                     }
                     let event = EventBuilder::new(self.run_id.clone()).task_completed(
                         TaskId(parsed.task_id.clone()),
@@ -134,6 +141,13 @@ impl TeamRunner {
                 if self.claim_store.fail(&parsed.task_id, worker_name) {
                     if let Some(task) = self.claim_store.get(&parsed.task_id) {
                         self.ownership.release_task(task);
+                        self.pending_pool_actions.push(
+                            crate::runtime::scheduler::pool::PoolAction::Release {
+                                pool: task.pool.clone(),
+                                task_id: parsed.task_id.clone(),
+                                disk_delta: 0,
+                            },
+                        );
                     }
                     let event = Event::new(self.run_id.clone(), EventKind::TaskFailed)
                         .with_actor(worker_name)

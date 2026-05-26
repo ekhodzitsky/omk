@@ -10,10 +10,12 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
 use crate::runtime::gates::circuit_breaker::CircuitBreakerConfig;
+use crate::runtime::scheduler::pool::AgentPool;
 use crate::runtime::wire_worker::ApprovalPolicy;
 
 /// Directory name for team state.
@@ -69,6 +71,10 @@ pub struct OmkConfig {
     #[serde(default = "default_approval_timeout_secs")]
     pub approval_timeout_secs: u64,
 
+    /// Agent pool configurations keyed by pool name.
+    #[serde(default)]
+    pub pools: HashMap<String, AgentPool>,
+
     /// Global circuit breaker defaults for verification gates.
     #[serde(default)]
     pub circuit_breaker: Option<CircuitBreakerConfig>,
@@ -90,6 +96,7 @@ impl Default for OmkConfig {
             webhooks: None,
             approval_policy: ApprovalPolicy::default(),
             approval_timeout_secs: default_approval_timeout_secs(),
+            pools: HashMap::new(),
             circuit_breaker: None,
         }
     }

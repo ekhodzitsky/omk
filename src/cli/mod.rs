@@ -12,6 +12,7 @@ pub(crate) mod hud;
 pub(crate) mod kimi_native_cmd;
 pub(crate) mod logs;
 pub(crate) mod marketplace;
+pub(crate) mod pools;
 pub(crate) mod proof_cmd;
 pub(crate) mod ralph;
 pub(crate) mod run_cmd;

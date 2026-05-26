@@ -2,6 +2,8 @@ pub mod claim;
 pub mod decompose;
 pub mod manifest;
 pub mod ownership;
+pub mod pool;
+pub mod pool_repo;
 pub mod runner;
 pub mod task;
 pub mod worker_state;
