@@ -287,6 +287,7 @@ pub async fn run_ralph(
                         stderr_summary: Some("No gates configured and tests failed".to_string()),
                         output_path: None,
                         timeout_secs: 0,
+                        circuit_breaker_open: false,
                     }]
                 }
             }

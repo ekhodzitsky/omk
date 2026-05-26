@@ -3,6 +3,7 @@ use std::time::Duration;
 use tokio::process::Command;
 use tracing::{debug, info, warn};
 
+use crate::runtime::gates::circuit_breaker::{global_registry, CircuitCheck};
 use crate::runtime::gates::types::{GateDef, GateResult, VerificationConfig, SKIPPED_GATE_COMMAND};
 use crate::wire::protocol::scrub_secret_patterns;
 
@@ -19,10 +20,53 @@ pub async fn run_gates_with_evidence(
 ) -> Vec<GateResult> {
     let mut results = Vec::with_capacity(config.gates.len());
 
+    let registry = global_registry();
+
     for (index, gate) in config.gates.iter().enumerate() {
         let start = std::time::Instant::now();
         info!(gate = %gate.name, command = %gate.command, "Running gate");
         debug!(gate = %gate.name, args = %scrub_secret_patterns(&gate.args.join(" ")), "Running gate args");
+
+        // Circuit breaker check.
+        match registry
+            .check(&gate.name, dir, gate.circuit_breaker.as_ref())
+            .await
+        {
+            CircuitCheck::Allow => {}
+            CircuitCheck::Deny {
+                reason,
+                consecutive_failures,
+                last_failure,
+                recovery_in_secs,
+            } => {
+                let last_failure_str = last_failure
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let stderr = format!(
+                    "Circuit breaker OPEN for gate '{}' after {} consecutive failures. Last failure: {}. Recovery in {}s.",
+                    gate.name, consecutive_failures, last_failure_str, recovery_in_secs
+                );
+                warn!(gate = %gate.name, reason = %reason, "Gate skipped by circuit breaker");
+                results.push(GateResult {
+                    name: gate.name.clone(),
+                    passed: false,
+                    stdout: String::new(),
+                    stderr: stderr.clone(),
+                    duration_ms: 0,
+                    required: gate.required,
+                    command_line: format!("<circuit-breaker-open: {}>", gate.name),
+                    exit_code: None,
+                    timed_out: false,
+                    stdout_summary: None,
+                    stderr_summary: Some("Circuit breaker open".to_string()),
+                    output_path: None,
+                    timeout_secs: 0,
+                    circuit_breaker_open: true,
+                });
+                continue;
+            }
+        }
+
         if gate.command == SKIPPED_GATE_COMMAND {
             let skipped_message = "Skipped by gate config".to_string();
             results.push(GateResult {
@@ -39,6 +83,7 @@ pub async fn run_gates_with_evidence(
                 stderr_summary: Some(skipped_message),
                 output_path: None,
                 timeout_secs: gate.timeout_secs,
+                circuit_breaker_open: false,
             });
             continue;
         }
@@ -167,7 +212,7 @@ pub async fn run_gates_with_evidence(
             "Gate complete"
         );
 
-        results.push(GateResult {
+        let result = GateResult {
             name: gate.name.clone(),
             passed,
             stdout,
@@ -181,7 +226,20 @@ pub async fn run_gates_with_evidence(
             stderr_summary,
             output_path,
             timeout_secs: gate.timeout_secs,
-        });
+            circuit_breaker_open: false,
+        };
+
+        // Record outcome in circuit breaker.
+        if result.passed {
+            registry.record_success(&gate.name, dir).await;
+        } else {
+            let rate_limited = crate::runtime::retry::is_rate_limited(&result.stderr);
+            registry
+                .record_failure(&gate.name, dir, result.timed_out, rate_limited)
+                .await;
+        }
+
+        results.push(result);
     }
 
     results
@@ -207,6 +265,7 @@ fn make_gate_error(
         stderr_summary: Some(message.to_string()),
         output_path: None,
         timeout_secs: gate.timeout_secs,
+        circuit_breaker_open: false,
     }
 }
 
@@ -230,6 +289,7 @@ fn make_gate_timeout(
         stderr_summary: Some(message),
         output_path: None,
         timeout_secs: gate.timeout_secs,
+        circuit_breaker_open: false,
     }
 }
 

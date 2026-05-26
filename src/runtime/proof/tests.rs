@@ -19,6 +19,7 @@ fn proof_from_gate_results() {
             stderr_summary: Some(String::new()),
             output_path: Some("/tmp/gates/fmt.log".to_string()),
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
         GateResult {
             name: "test".to_string(),
@@ -34,6 +35,7 @@ fn proof_from_gate_results() {
             stderr_summary: Some(String::new()),
             output_path: Some("/tmp/gates/test.log".to_string()),
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
     ];
 

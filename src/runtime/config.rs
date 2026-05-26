@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
+use crate::runtime::gates::circuit_breaker::CircuitBreakerConfig;
 use crate::runtime::wire_worker::ApprovalPolicy;
 
 /// Directory name for team state.
@@ -67,6 +68,10 @@ pub struct OmkConfig {
     /// Default approval timeout in seconds
     #[serde(default = "default_approval_timeout_secs")]
     pub approval_timeout_secs: u64,
+
+    /// Global circuit breaker defaults for verification gates.
+    #[serde(default)]
+    pub circuit_breaker: Option<CircuitBreakerConfig>,
 }
 
 fn default_approval_timeout_secs() -> u64 {
@@ -85,6 +90,7 @@ impl Default for OmkConfig {
             webhooks: None,
             approval_policy: ApprovalPolicy::default(),
             approval_timeout_secs: default_approval_timeout_secs(),
+            circuit_breaker: None,
         }
     }
 }

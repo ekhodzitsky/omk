@@ -122,6 +122,7 @@ async fn test_proof_from_gate_results_direct() {
             stderr_summary: Some(String::new()),
             output_path: Some("/tmp/gates/fmt.log".to_string()),
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
         GateResult {
             name: "clippy".to_string(),
@@ -137,6 +138,7 @@ async fn test_proof_from_gate_results_direct() {
             stderr_summary: Some(String::new()),
             output_path: Some("/tmp/gates/clippy.log".to_string()),
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
         GateResult {
             name: "test".to_string(),
@@ -152,6 +154,7 @@ async fn test_proof_from_gate_results_direct() {
             stderr_summary: Some("1 test failed".to_string()),
             output_path: Some("/tmp/gates/test.log".to_string()),
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
     ];
 

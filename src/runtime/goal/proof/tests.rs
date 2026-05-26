@@ -93,6 +93,7 @@ fn ready_proof() -> GoalProof {
             stderr_summary: None,
             output_path: None,
             timeout_secs: 0,
+            circuit_breaker_open: false,
         }],
         post_mutation_gates_ran: true,
         known_gaps: vec![],
@@ -129,6 +130,7 @@ fn validate_for_merge_blocks_when_gates_fail() {
         stderr_summary: None,
         output_path: None,
         timeout_secs: 0,
+        circuit_breaker_open: false,
     }];
     let err = proof.validate_for_merge().unwrap_err().to_string();
     assert!(err.contains("gates"), "expected gates error, got: {err}");

@@ -15,6 +15,7 @@ fn single_gate_config(
             args,
             required,
             timeout_secs,
+            circuit_breaker: None,
         }],
     }
 }
@@ -106,6 +107,7 @@ async fn test_gates_passed_all_required() {
             stderr_summary: None,
             output_path: None,
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
         omk::runtime::gates::GateResult {
             name: "clippy".to_string(),
@@ -121,6 +123,7 @@ async fn test_gates_passed_all_required() {
             stderr_summary: None,
             output_path: None,
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
     ];
     assert!(omk::runtime::gates::gates_passed(&results));
@@ -143,6 +146,7 @@ async fn test_gates_passed_optional_failure_ok() {
             stderr_summary: None,
             output_path: None,
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
         omk::runtime::gates::GateResult {
             name: "coverage".to_string(),
@@ -158,6 +162,7 @@ async fn test_gates_passed_optional_failure_ok() {
             stderr_summary: None,
             output_path: None,
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
     ];
     assert!(omk::runtime::gates::gates_passed(&results));
@@ -180,6 +185,7 @@ async fn test_gates_passed_required_failure_fails() {
             stderr_summary: None,
             output_path: None,
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
         omk::runtime::gates::GateResult {
             name: "clippy".to_string(),
@@ -195,6 +201,7 @@ async fn test_gates_passed_required_failure_fails() {
             stderr_summary: None,
             output_path: None,
             timeout_secs: 120,
+            circuit_breaker_open: false,
         },
     ];
     assert!(!omk::runtime::gates::gates_passed(&results));
@@ -843,7 +850,8 @@ async fn test_gate_result_json_uses_stable_field_names() {
         "stdout_summary": "out-line-1",
         "stderr_summary": "err-line-1",
         "output_path": "/tmp/log",
-        "timeout_secs": 30
+        "timeout_secs": 30,
+        "circuit_breaker_open": false
     }"#;
     let parsed: omk::runtime::gates::GateResult =
         serde_json::from_str(canonical).expect("canonical JSON must deserialize");
@@ -877,6 +885,7 @@ async fn test_gate_result_json_uses_stable_field_names() {
         .map(String::as_str)
         .collect();
     let expected_keys: std::collections::BTreeSet<&str> = [
+        "circuit_breaker_open",
         "command_line",
         "duration_ms",
         "exit_code",

@@ -24,6 +24,11 @@ impl MigrationRunner {
                     name: "slice_leases",
                     sql: include_str!("002_slice_leases.sql"),
                 },
+                Migration {
+                    version: 3,
+                    name: "circuit_breakers",
+                    sql: include_str!("003_circuit_breakers.sql"),
+                },
             ],
         }
     }

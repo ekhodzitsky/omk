@@ -2,13 +2,13 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use clap_complete::{generate, Shell};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use super::{mcp_cmd, setup, update, Commands, Omk, ShellArg};
 use crate::cli::kimi_native_cmd;
 use crate::cli::{
-    ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, goal, hud, logs, marketplace,
-    proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
+    ask, autopilot, backup, cleanup, config_cmd, cost_cmd, doctor, gates, goal, hud, logs,
+    marketplace, proof_cmd, ralph, run_cmd, skill, state, team, ultrawork,
 };
 
 pub async fn run() -> Result<()> {
@@ -27,6 +27,10 @@ pub async fn run() -> Result<()> {
                 std::time::Duration::from_secs(10),
                 &mut run_fut,
             ).await;
+            // Flush circuit breaker state before exit.
+            if let Err(e) = flush_circuit_breakers().await {
+                warn!(error = %e, "Failed to flush circuit breakers on shutdown");
+            }
             Ok(())
         }
     }
@@ -79,6 +83,11 @@ async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
 
     info!("omk starting");
 
+    // Initialize circuit breaker registry with the central database.
+    if let Err(e) = init_circuit_breaker_registry().await {
+        warn!(error = %e, "Failed to initialize circuit breaker registry with DB; running in-memory only");
+    }
+
     match omk.command {
         Some(Commands::Chat(args)) => crate::cli::chat::run::run_chat_async(args).await,
         None => {
@@ -125,6 +134,7 @@ async fn run_with_cancel(cancel: CancellationToken) -> Result<()> {
         Some(Commands::KimiNative(args)) => kimi_native_cmd::run(args).await,
         Some(Commands::Run(args)) => run_cmd::run(args).await,
         Some(Commands::Proof(args)) => proof_cmd::run(args).await,
+        Some(Commands::Gates(args)) => gates::run(args).await,
         Some(Commands::Version) => {
             println!("omk {}", env!("CARGO_PKG_VERSION"));
             println!("  Repository: {}", env!("CARGO_PKG_REPOSITORY"));
@@ -148,4 +158,22 @@ async fn wait_for_signal() -> std::io::Result<()> {
 #[cfg(not(unix))]
 async fn wait_for_signal() -> std::io::Result<()> {
     tokio::signal::ctrl_c().await
+}
+
+async fn init_circuit_breaker_registry() -> anyhow::Result<()> {
+    let db_path = crate::runtime::config::omk_state_dir().join("omk.db");
+    let db = crate::runtime::db::handle::DbHandle::open(&db_path).await?;
+    let repo = db.circuit_breaker_repo();
+    let registry = crate::runtime::gates::circuit_breaker::CircuitBreakerRegistry::with_repo(repo);
+    registry.load_from_db().await?;
+    if crate::runtime::gates::circuit_breaker::init_global_registry(registry).is_err() {
+        anyhow::bail!("Global circuit breaker registry already initialized");
+    }
+    Ok(())
+}
+
+async fn flush_circuit_breakers() -> anyhow::Result<()> {
+    let registry = crate::runtime::gates::circuit_breaker::global_registry();
+    registry.flush().await?;
+    Ok(())
 }

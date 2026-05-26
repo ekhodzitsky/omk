@@ -260,6 +260,7 @@ mod tests {
                 stderr_summary: None,
                 output_path: None,
                 timeout_secs: 0,
+                circuit_breaker_open: false,
             }],
             post_mutation_gates_ran: true,
             known_gaps: Vec::new(),

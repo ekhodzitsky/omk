@@ -73,7 +73,8 @@
       "timed_out": false,
       "stdout_summary": "smoke-ok",
       "output_path": "<gate-output-path>",
-      "timeout_secs": 0
+      "timeout_secs": 0,
+      "circuit_breaker_open": false
     }
   ],
   "post_mutation_gates_ran": false,

@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to `.github/pull_request_template.md` with checkboxes for CHANGELOG entries,
   version impact, and documentation updates.
 
+- **Circuit Breaker for verification gates**: production-grade distributed
+  state machine with durable SQLite persistence, observability, and zero-overhead
+  fast path. Gates that fail repeatedly are automatically skipped, preventing
+  infinite retry loops that waste tokens and time. Includes `omk gates status`
+  and `omk gates reset` CLI commands.
 - **Chat-first CLI surface**: running `omk` with no arguments opens a
   terminal-native chat REPL with a conversation log, engine pane, and
   autonomous escalation. The `omk chat` alias is also available.

@@ -222,6 +222,7 @@ pub(crate) async fn run_verification_gates(
             args: vec!["fmt".to_string(), "--check".to_string()],
             required: true,
             timeout_secs: 120,
+            circuit_breaker: None,
         },
         GateDef {
             name: "check".to_string(),
@@ -229,6 +230,7 @@ pub(crate) async fn run_verification_gates(
             args: vec!["check".to_string(), "--all-targets".to_string()],
             required: true,
             timeout_secs: 120,
+            circuit_breaker: None,
         },
         GateDef {
             name: "clippy".to_string(),
@@ -243,6 +245,7 @@ pub(crate) async fn run_verification_gates(
             ],
             required: true,
             timeout_secs: 120,
+            circuit_breaker: None,
         },
         GateDef {
             name: "test".to_string(),
@@ -250,6 +253,7 @@ pub(crate) async fn run_verification_gates(
             args: vec!["test".to_string()],
             required: true,
             timeout_secs: 120,
+            circuit_breaker: None,
         },
     ];
 
