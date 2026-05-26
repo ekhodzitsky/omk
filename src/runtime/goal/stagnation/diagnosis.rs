@@ -413,7 +413,7 @@ fn detect_inefficient_exploration(
     }
 }
 
-fn normalized_levenshtein(a: &str, b: &str) -> f64 {
+pub(crate) fn normalized_levenshtein(a: &str, b: &str) -> f64 {
     if a == b {
         return 1.0;
     }
@@ -425,7 +425,7 @@ fn normalized_levenshtein(a: &str, b: &str) -> f64 {
     1.0 - (distance as f64 / max_len)
 }
 
-fn levenshtein(a: &str, b: &str) -> usize {
+pub(crate) fn levenshtein(a: &str, b: &str) -> usize {
     let a_len = a.chars().count();
     let b_len = b.chars().count();
     if a_len == 0 {

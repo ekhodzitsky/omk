@@ -52,6 +52,7 @@ fn make_gate(name: &str, passed: bool, stderr: &str) -> GateResult {
         stderr_summary: None,
         output_path: None,
         timeout_secs: 0,
+        circuit_breaker_open: false,
     }
 }
 
@@ -211,6 +212,23 @@ fn diagnosis_detects_test_flakiness() {
 }
 
 #[test]
+fn diagnosis_no_flakiness_when_gates_stable() {
+    let engine = DiagnosisEngine::new(0.3);
+    let history: Vec<_> = (1..=5).map(make_flat_metrics).collect();
+    let gates_history: Vec<Vec<GateResult>> =
+        (0..5).map(|_| vec![make_gate("test", true, "")]).collect();
+    let changed_files_history: Vec<Vec<String>> =
+        (0..5).map(|_| vec!["src/lib.rs".to_string()]).collect();
+
+    let report = engine.diagnose(&history, &gates_history, &changed_files_history);
+    assert_ne!(
+        report.cause,
+        StagnationCause::TestFlakiness,
+        "stable gates should not trigger test flakiness"
+    );
+}
+
+#[test]
 fn diagnosis_detects_scope_too_large() {
     let engine = DiagnosisEngine::new(0.3);
     let mut history: Vec<_> = (1..=5).map(make_flat_metrics).collect();
@@ -253,6 +271,28 @@ fn diagnosis_detects_external_dependency_broken() {
 }
 
 #[test]
+fn diagnosis_no_external_dependency_when_stderr_differs() {
+    let engine = DiagnosisEngine::new(0.3);
+    let history: Vec<_> = (1..=5).map(make_flat_metrics).collect();
+    let gates_history: Vec<Vec<GateResult>> = vec![
+        vec![make_gate("test", false, "error A")],
+        vec![make_gate("test", false, "error B")],
+        vec![make_gate("test", false, "error C")],
+        vec![make_gate("test", false, "error D")],
+        vec![make_gate("test", false, "error E")],
+    ];
+    let changed_files_history: Vec<Vec<String>> =
+        (0..5).map(|_| vec!["src/lib.rs".to_string()]).collect();
+
+    let report = engine.diagnose(&history, &gates_history, &changed_files_history);
+    assert_ne!(
+        report.cause,
+        StagnationCause::ExternalDependencyBroken,
+        "diverse stderr should not trigger external dependency"
+    );
+}
+
+#[test]
 fn diagnosis_detects_circular_fix() {
     let engine = DiagnosisEngine::new(0.3);
     let history: Vec<_> = (1..=5).map(make_flat_metrics).collect();
@@ -271,6 +311,41 @@ fn diagnosis_detects_circular_fix() {
     assert_eq!(report.cause, StagnationCause::CircularFix);
     assert!(report.confidence > 0.0);
     assert!(!report.affected_files.is_empty());
+}
+
+#[test]
+fn diagnosis_no_circular_fix_when_files_stable() {
+    let engine = DiagnosisEngine::new(0.3);
+    let history: Vec<_> = (1..=5).map(make_flat_metrics).collect();
+    let gates_history: Vec<Vec<GateResult>> =
+        (0..5).map(|_| vec![make_gate("test", true, "")]).collect();
+    let changed_files_history: Vec<Vec<String>> =
+        (0..5).map(|_| vec!["src/lib.rs".to_string()]).collect();
+
+    let report = engine.diagnose(&history, &gates_history, &changed_files_history);
+    assert_ne!(
+        report.cause,
+        StagnationCause::CircularFix,
+        "stable files should not trigger circular fix"
+    );
+}
+
+#[test]
+fn diagnosis_detects_inefficient_exploration() {
+    let engine = DiagnosisEngine::new(0.3);
+    let mut history: Vec<_> = (1..=5).map(make_flat_metrics).collect();
+    for m in &mut history {
+        m.tokens_spent = 50000;
+        m.proof_score = 0.3;
+    }
+    let gates_history: Vec<Vec<GateResult>> =
+        (0..5).map(|_| vec![make_gate("test", true, "")]).collect();
+    let changed_files_history: Vec<Vec<String>> =
+        (0..5).map(|_| vec!["src/lib.rs".to_string()]).collect();
+
+    let report = engine.diagnose(&history, &gates_history, &changed_files_history);
+    assert_eq!(report.cause, StagnationCause::InefficientExploration);
+    assert!(report.confidence > 0.0);
 }
 
 #[test]
@@ -364,6 +439,32 @@ fn recovery_plan_for_circular_fix() {
     let plan = planner.plan(&diagnosis);
     assert_eq!(plan.cause, StagnationCause::CircularFix);
     assert_eq!(plan.strategy, RecoveryStrategy::RefactorApproach);
+}
+
+#[test]
+fn recovery_plan_for_inefficient_exploration() {
+    let planner = RecoveryPlanner::new();
+    let mut history: Vec<_> = (1..=5).map(make_flat_metrics).collect();
+    for m in &mut history {
+        m.tokens_spent = 50000;
+        m.proof_score = 0.3;
+    }
+    let diagnosis = DiagnosisEngine::new(0.3).diagnose(
+        &history,
+        &[
+            vec![make_gate("test", true, "")],
+            vec![make_gate("test", true, "")],
+            vec![make_gate("test", true, "")],
+        ],
+        &[
+            vec!["src/lib.rs".to_string()],
+            vec!["src/lib.rs".to_string()],
+            vec!["src/lib.rs".to_string()],
+        ],
+    );
+    let plan = planner.plan(&diagnosis);
+    assert_eq!(plan.cause, StagnationCause::InefficientExploration);
+    assert_eq!(plan.strategy, RecoveryStrategy::ReduceScope);
 }
 
 #[test]
@@ -489,6 +590,116 @@ async fn checkpoint_save_and_load_roundtrip() {
     assert_eq!(ids, vec![1]);
 }
 
+#[tokio::test]
+async fn collector_save_and_load_roundtrip() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let path = tmp.path().join("history.jsonl");
+
+    let mut collector = StagnationCollector::new(5);
+    for i in 1..=3 {
+        collector.record(make_flat_metrics(i)).unwrap();
+    }
+
+    collector.save(&path).await.expect("save history");
+    let loaded = StagnationCollector::load(&path)
+        .await
+        .expect("load history");
+
+    assert_eq!(loaded.len(), 3);
+    assert_eq!(loaded[0].iteration, 1);
+    assert_eq!(loaded[2].iteration, 3);
+}
+
+#[test]
+fn collector_eviction_at_capacity() {
+    let mut collector = StagnationCollector::new(3);
+    collector.record(make_flat_metrics(1)).unwrap();
+    collector.record(make_flat_metrics(2)).unwrap();
+    collector.record(make_flat_metrics(3)).unwrap();
+    collector.record(make_flat_metrics(4)).unwrap();
+
+    let history = collector.history();
+    assert_eq!(history.len(), 3);
+    assert_eq!(history[0].iteration, 2);
+    assert_eq!(history[2].iteration, 4);
+}
+
+#[test]
+fn collector_build_metrics_with_previous() {
+    let collector = StagnationCollector::default();
+    let proof = make_proof(0.5);
+    let prev_proof = make_proof(0.5);
+    let budget = make_budget(2000);
+    let prev_budget = make_budget(1000);
+    let gates = vec![make_gate("test", true, "")];
+    let changed = vec!["src/lib.rs".to_string()];
+
+    let metrics = collector
+        .build_metrics(
+            2,
+            &proof,
+            &budget,
+            &gates,
+            &changed,
+            Some(&prev_proof),
+            Some(&prev_budget),
+        )
+        .expect("build metrics");
+
+    assert_eq!(metrics.iteration, 2);
+    assert_eq!(metrics.tokens_spent, 1000);
+}
+
+#[test]
+fn detector_empty_history() {
+    let detector = StagnationDetector::default();
+    let report = detector.detect(&[], GoalStatus::Running, GoalPhase::Execution);
+    assert!(
+        report.is_none(),
+        "empty history should not trigger detection"
+    );
+}
+
+#[test]
+fn detector_ready_status() {
+    let detector = StagnationDetector::default();
+    let history: Vec<_> = (1..=8).map(make_flat_metrics).collect();
+    let report = detector.detect(&history, GoalStatus::Ready, GoalPhase::Execution);
+    assert!(
+        report.is_none(),
+        "ready status should not trigger detection"
+    );
+}
+
+#[test]
+fn levenshtein_identical_strings() {
+    use crate::runtime::goal::stagnation::diagnosis::normalized_levenshtein;
+    assert_eq!(normalized_levenshtein("abc", "abc"), 1.0);
+}
+
+#[test]
+fn levenshtein_empty_string() {
+    use crate::runtime::goal::stagnation::diagnosis::normalized_levenshtein;
+    assert_eq!(normalized_levenshtein("", "abc"), 0.0);
+    assert_eq!(normalized_levenshtein("abc", ""), 0.0);
+}
+
+#[test]
+fn levenshtein_completely_different() {
+    use crate::runtime::goal::stagnation::diagnosis::normalized_levenshtein;
+    let sim = normalized_levenshtein("abc", "xyz");
+    assert!((0.0..0.5).contains(&sim));
+}
+
+#[test]
+fn collector_validates_metric_bounds() {
+    let mut collector = StagnationCollector::default();
+    let mut metrics = make_flat_metrics(1);
+    metrics.proof_score = 1.5;
+    let result = collector.record(metrics);
+    assert!(result.is_err());
+}
+
 #[test]
 fn collector_builds_metrics() {
     let collector = StagnationCollector::default();
@@ -506,15 +717,6 @@ fn collector_builds_metrics() {
     assert_eq!(metrics.gate_pass_rate, 1.0);
     assert_eq!(metrics.tokens_spent, 1000);
     assert_eq!(metrics.files_touched, 1);
-}
-
-#[test]
-fn collector_validates_metric_bounds() {
-    let mut collector = StagnationCollector::default();
-    let mut metrics = make_flat_metrics(1);
-    metrics.proof_score = 1.5;
-    let result = collector.record(metrics);
-    assert!(result.is_err());
 }
 
 #[test]
