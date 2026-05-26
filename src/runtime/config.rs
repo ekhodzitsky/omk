@@ -67,6 +67,10 @@ pub struct OmkConfig {
     /// Default approval timeout in seconds
     #[serde(default = "default_approval_timeout_secs")]
     pub approval_timeout_secs: u64,
+
+    /// Stagnation recovery configuration
+    #[serde(default)]
+    pub stagnation: StagnationConfig,
 }
 
 fn default_approval_timeout_secs() -> u64 {
@@ -85,6 +89,7 @@ impl Default for OmkConfig {
             webhooks: None,
             approval_policy: ApprovalPolicy::default(),
             approval_timeout_secs: default_approval_timeout_secs(),
+            stagnation: StagnationConfig::default(),
         }
     }
 }
@@ -95,6 +100,109 @@ fn default_team_size() -> usize {
 
 fn default_true() -> bool {
     true
+}
+
+/// Configuration for adaptive stagnation recovery.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StagnationConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_window_size")]
+    pub window_size: usize,
+    #[serde(default = "default_min_stagnant_metrics")]
+    pub min_stagnant_metrics: usize,
+    #[serde(default = "default_warmup_iterations")]
+    pub warmup_iterations: usize,
+    #[serde(default)]
+    pub auto_recover: bool,
+    #[serde(default = "default_max_recoveries_per_goal")]
+    pub max_recoveries_per_goal: u32,
+    #[serde(default)]
+    pub thresholds: StagnationThresholdsConfig,
+}
+
+impl Default for StagnationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            window_size: 5,
+            min_stagnant_metrics: 3,
+            warmup_iterations: 3,
+            auto_recover: false,
+            max_recoveries_per_goal: 3,
+            thresholds: StagnationThresholdsConfig::default(),
+        }
+    }
+}
+
+fn default_window_size() -> usize {
+    5
+}
+
+fn default_min_stagnant_metrics() -> usize {
+    3
+}
+
+fn default_warmup_iterations() -> usize {
+    3
+}
+
+fn default_max_recoveries_per_goal() -> u32 {
+    3
+}
+
+/// Threshold configuration for stagnation detection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StagnationThresholdsConfig {
+    #[serde(default = "default_proof_score_epsilon")]
+    pub proof_score_epsilon: f64,
+    #[serde(default = "default_commit_velocity_min")]
+    pub commit_velocity_min: u32,
+    #[serde(default = "default_gate_pass_rate_epsilon")]
+    pub gate_pass_rate_epsilon: f64,
+    #[serde(default = "default_coverage_epsilon")]
+    pub coverage_epsilon: f64,
+    #[serde(default = "default_token_efficiency_max")]
+    pub token_efficiency_max: f64,
+    #[serde(default = "default_file_churn_max")]
+    pub file_churn_max: u32,
+}
+
+impl Default for StagnationThresholdsConfig {
+    fn default() -> Self {
+        Self {
+            proof_score_epsilon: 0.01,
+            commit_velocity_min: 1,
+            gate_pass_rate_epsilon: 0.05,
+            coverage_epsilon: 0.01,
+            token_efficiency_max: 1000.0,
+            file_churn_max: 10,
+        }
+    }
+}
+
+fn default_proof_score_epsilon() -> f64 {
+    0.01
+}
+
+fn default_commit_velocity_min() -> u32 {
+    1
+}
+
+fn default_gate_pass_rate_epsilon() -> f64 {
+    0.05
+}
+
+fn default_coverage_epsilon() -> f64 {
+    0.01
+}
+
+fn default_token_efficiency_max() -> f64 {
+    1000.0
+}
+
+fn default_file_churn_max() -> u32 {
+    10
 }
 
 fn home_dir() -> anyhow::Result<PathBuf> {

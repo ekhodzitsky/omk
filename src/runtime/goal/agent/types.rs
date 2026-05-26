@@ -169,6 +169,7 @@ mod tests {
             delivery_policy: Default::default(),
             merge_policy: Default::default(),
             slice_execution: false,
+            recovery_attempts: 0,
         };
         let tasks = propose_goal_agent_tasks(&state);
         assert_eq!(tasks.len(), 3);

@@ -153,6 +153,27 @@ Examples:
 Merges the GitHub PR associated with the goal using `gh pr merge --squash --delete-branch`.
 Requires a pr_url or pr_link in the goal delivery metadata.";
 
+pub(super) const GOAL_DIAGNOSE_AFTER_HELP: &str = "\
+Examples:
+  omk goal diagnose
+  omk goal diagnose latest
+
+Analyzes the goal's recent iterations for stagnation patterns and prints a diagnosis.";
+
+pub(super) const GOAL_RECOVER_AFTER_HELP: &str = "\
+Examples:
+  omk goal recover
+  omk goal recover latest --approve
+
+Proposes a recovery plan for a stagnant goal. Use --approve to create a checkpoint and increment recovery_attempts.";
+
+pub(super) const GOAL_ROLLBACK_AFTER_HELP: &str = "\
+Examples:
+  omk goal rollback --to-checkpoint 2
+  omk goal rollback latest --to-checkpoint 3
+
+Restores the goal state from a previously saved recovery checkpoint.";
+
 pub(super) const GOAL_PLAN_AFTER_HELP: &str = "\
 Examples:
   omk goal plan \"Investigate flaky verifier tests\"";

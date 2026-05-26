@@ -127,6 +127,9 @@ pub struct Task {
     pub read_set: Vec<String>,
     /// File paths this task is expected to write (for conflict detection).
     pub write_set: Vec<String>,
+    /// Parent task ID if this task was created as part of recovery.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_parent: Option<TaskId>,
     /// Arbitrary metadata for the task (e.g., command, mode, role).
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
@@ -152,6 +155,7 @@ impl Task {
             completed_at: None,
             read_set: Vec::new(),
             write_set: Vec::new(),
+            recovery_parent: None,
             extra: HashMap::new(),
         }
     }

@@ -29,6 +29,7 @@ fn test_state(state_dir: PathBuf) -> GoalState {
         artifacts: Vec::new(),
         failure: None,
         state_dir,
+        recovery_attempts: 0,
     }
 }
 

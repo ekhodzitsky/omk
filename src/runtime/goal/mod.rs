@@ -18,6 +18,7 @@ mod proof;
 mod queries;
 mod replay;
 mod review;
+pub mod stagnation;
 mod state;
 mod supervisor;
 mod task_graph;
@@ -60,6 +61,11 @@ pub use review::dispatcher::{aggregate_verdict, AggregateReviewVerdict};
 pub use review::test_slice_review_outcome;
 #[doc(hidden)]
 pub use review::SliceReviewArtifact;
+pub use stagnation::{
+    DiagnosisEngine, DiagnosisReport, RecoveryCheckpoint, RecoveryPlan, RecoveryPlanner,
+    RecoveryTask, StagnationCause, StagnationCollector, StagnationDetector, StagnationReport,
+    StagnationThresholds,
+};
 pub use state::{
     CreateGoalOptions, FileSystemGoalStateStore, GoalArtifact, GoalFailure, GoalPhase, GoalState,
     GoalStateError, GoalStateStore, GoalStatus, GoalTerminalCriteria, GOALS_DIR,

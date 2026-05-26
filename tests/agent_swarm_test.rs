@@ -64,6 +64,7 @@ async fn write_goal_state(
         artifacts: vec![],
         failure: None,
         state_dir: state_dir.to_path_buf(),
+        recovery_attempts: 0,
     };
     let json = serde_json::to_vec_pretty(&state).unwrap();
     tokio::fs::write(state_dir.join("goal.json"), json)

@@ -134,6 +134,7 @@ mod tests {
             delivery_policy: Default::default(),
             merge_policy: Default::default(),
             slice_execution: Default::default(),
+            recovery_attempts: 0,
         }
     }
 

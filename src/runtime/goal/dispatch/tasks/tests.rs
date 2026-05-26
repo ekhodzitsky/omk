@@ -91,6 +91,7 @@ async fn setup_goal_state(budget_time: Option<String>) -> (GoalState, GoalTaskGr
         delivery_policy: Default::default(),
         merge_policy: Default::default(),
         slice_execution: Default::default(),
+        recovery_attempts: 0,
     };
     FileSystemGoalStateStore::new().save(&state).await.unwrap();
 
