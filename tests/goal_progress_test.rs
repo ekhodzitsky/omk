@@ -110,6 +110,7 @@ fn progress_snapshot_from_goal_state_keeps_phase_status_and_proof_path() {
         delivery_policy: Default::default(),
         merge_policy: Default::default(),
         slice_execution: Default::default(),
+        recovery_attempts: 0,
     };
 
     let snapshot = GoalProgressSnapshot::from_goal_state(&state);

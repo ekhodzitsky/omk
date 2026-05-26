@@ -205,6 +205,7 @@ fn record_to_goal_state(record: GoalRecord) -> Result<GoalState> {
         artifacts: Vec::new(),
         failure,
         state_dir: PathBuf::from(record.state_dir),
+        recovery_attempts: 0,
     })
 }
 

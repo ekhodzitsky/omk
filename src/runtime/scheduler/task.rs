@@ -134,7 +134,10 @@ pub struct Task {
     /// Pool this task belongs to for admission control.
     #[serde(default = "default_pool")]
     pub pool: String,
-    /// Arbitrary metadata for the task (e.g., command, mode, role).
+
+    /// Parent task ID if this task was created as part of recovery.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_parent: Option<TaskId>,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
 }
@@ -160,6 +163,7 @@ impl Task {
             read_set: Vec::new(),
             write_set: Vec::new(),
             pool: default_pool(),
+            recovery_parent: None,
             extra: HashMap::new(),
         }
     }

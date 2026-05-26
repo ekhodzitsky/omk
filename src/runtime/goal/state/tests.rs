@@ -29,6 +29,7 @@ fn test_goal_state(goal_id: &str) -> super::GoalState {
         artifacts: vec![],
         failure: None,
         state_dir: std::path::PathBuf::from(format!("/tmp/omk/goals/{goal_id}")),
+        recovery_attempts: 0,
     }
 }
 
@@ -286,6 +287,7 @@ async fn db_goal_state_store_save_and_load() {
         artifacts: Vec::new(),
         failure: None,
         state_dir: goal_dir.clone(),
+        recovery_attempts: 0,
     };
 
     store.save(&state).await.unwrap();
@@ -337,6 +339,7 @@ async fn db_goal_state_store_list_returns_goals_newest_first() {
         artifacts: Vec::new(),
         failure: None,
         state_dir: dir.path().join("goal-a"),
+        recovery_attempts: 0,
     };
 
     let goal_b = GoalState {
@@ -362,6 +365,7 @@ async fn db_goal_state_store_list_returns_goals_newest_first() {
         artifacts: Vec::new(),
         failure: None,
         state_dir: dir.path().join("goal-b"),
+        recovery_attempts: 0,
     };
 
     store.save(&goal_a).await.unwrap();
@@ -413,6 +417,7 @@ async fn db_full_goal_persistence_roundtrip() {
         artifacts: Vec::new(),
         failure: None,
         state_dir: goal_dir.clone(),
+        recovery_attempts: 0,
     };
 
     // Save goal state

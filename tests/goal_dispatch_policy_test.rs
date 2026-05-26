@@ -44,6 +44,7 @@ fn test_state(budget_time: Option<String>) -> GoalState {
         delivery_policy: Default::default(),
         merge_policy: Default::default(),
         slice_execution: Default::default(),
+        recovery_attempts: 0,
     }
 }
 

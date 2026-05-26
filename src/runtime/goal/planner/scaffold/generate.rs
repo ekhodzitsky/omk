@@ -73,6 +73,7 @@ pub(crate) async fn create_goal_with_scaffold(
         delivery_policy,
         merge_policy,
         slice_execution,
+        recovery_attempts: 0,
     };
     FileSystemGoalStateStore::new().save(&state).await?;
 
