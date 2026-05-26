@@ -31,14 +31,23 @@ subsystem is an active MVP scaffold with end-to-end delivery in progress.
 | `GateDef` | `gates` | Definition of a verification gate (command, timeout, required). |
 | `GateResult` | `gates` | Outcome of a single gate execution. |
 | `VerificationConfig` | `gates` | Aggregate gate configuration for a run. |
+| `CircuitBreakerConfig` | `gates/circuit_breaker` | Per-gate circuit breaker thresholds and timeouts. |
+| `CircuitBreakerState` | `gates/circuit_breaker` | Enum: `Closed`, `Open`, `HalfOpen`. |
+| `CircuitBreakerRegistry` | `gates/circuit_breaker` | Thread-safe global registry with zero-overhead fast path. |
 | `TeamState` | `state` | In-memory aggregate of team run status. |
 | `TaskStatus` | `state` | Enum for scheduler task lifecycle. |
+| `PoolManager` | `scheduler/pool` | Admission controller enforcing `max_workers` and `max_disk_gb`. |
+| `PoolRecord` | `scheduler/pool` | SQLite-persisted queue entry for a pooled task. |
 | `Watchdog` | `watchdog` | Detects stuck or dead workers via heartbeat timeouts. |
 | `WorkerHealth` | `watchdog` | Per-worker health record. |
 | `HealthStatus` | `watchdog` | Enum: `healthy`, `stalled`, `dead`. |
 | `OmkConfig` | `config` | XDG-compliant configuration struct. |
 | `ApprovalPolicy` | `wire_worker` | Policy for Wire tool-use approvals (auto, manual, never). |
 | `WireWorkerAdapter` | `wire_worker` | Bridges a Kimi Wire worker into the scheduler. |
+| `StagnationDetector` | `goal/stagnation` | Analyzes iteration metric history for stagnation patterns. |
+| `DiagnosisEngine` | `goal/stagnation` | Runs deterministic heuristics to identify root cause. |
+| `RecoveryPlanner` | `goal/stagnation` | Generates a `RecoveryPlan` from diagnosis. |
+| `RecoveryCheckpoint` | `goal/stagnation` | Snapshot of goal state for rollback. |
 
 ### Functions
 
@@ -49,6 +58,9 @@ subsystem is an active MVP scaffold with end-to-end delivery in progress.
 | `sanitize_name` | `sanitize` | Sanitizes an identifier for filesystem use. |
 | `retry` | `retry` | Retry a fallible async operation with exponential backoff. |
 | `run_gates_with_evidence` | `gates` | Execute all configured gates and emit evidence events. |
+| `CircuitBreakerRegistry::check_gate` | `gates/circuit_breaker` | Fast-fail check before gate execution. |
+| `PoolManager::try_admit` | `scheduler/pool` | Attempt to admit a task into a pool. |
+| `StagnationDetector::detect` | `goal/stagnation` | Run stagnation heuristics over metric history. |
 
 ## Dependencies
 

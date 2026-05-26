@@ -6,12 +6,179 @@ This guide covers manual recovery procedures for common `omk goal` delivery and 
 
 ## Table of Contents
 
-1. [Failed PR Creation](#failed-pr-creation)
-2. [Failed CI Checks](#failed-ci-checks)
-3. [Review Blockers](#review-blockers)
-4. [Merge Conflicts](#merge-conflicts)
-5. [Partial Acceptance](#partial-acceptance)
-6. [Budget Exhaustion](#budget-exhaustion)
+1. [Stuck Goal / Stagnation](#stuck-goal--stagnation)
+2. [Circuit Breaker Tripped](#circuit-breaker-tripped)
+3. [Pool Exhaustion](#pool-exhaustion)
+4. [Failed PR Creation](#failed-pr-creation)
+5. [Failed CI Checks](#failed-ci-checks)
+6. [Review Blockers](#review-blockers)
+7. [Merge Conflicts](#merge-conflicts)
+8. [Partial Acceptance](#partial-acceptance)
+9. [Budget Exhaustion](#budget-exhaustion)
+
+---
+
+## Stuck Goal / Stagnation
+
+### Symptom
+
+The goal appears to be running but makes no meaningful progress. Iterations repeat the same fixes, proof score does not improve, or the agent cycles between failed gates:
+
+```
+stagnation detected: CircularFix (confidence 0.91)
+controller blocked: agent stuck in retry loop
+```
+
+### Diagnostic
+
+Run the stagnation detector explicitly:
+
+```bash
+omk goal diagnose latest
+omk goal diagnose latest --json | jq '.diagnosis.primary, .confidence'
+```
+
+Inspect the metric history and checkpoint state:
+
+```bash
+omk goal show latest --format json | jq '.recovery_attempts, .phase'
+omk goal proof latest --format md
+```
+
+### Recovery
+
+**Generate a recovery plan** and review it before applying:
+
+```bash
+omk goal recover latest
+```
+
+If the plan looks correct, create a checkpoint and let the controller resume with the recovery strategy:
+
+```bash
+omk goal resume latest
+```
+
+**If recovery made things worse**, roll back to the last checkpoint:
+
+```bash
+omk goal rollback latest
+omk goal resume latest
+```
+
+**If the goal is genuinely blocked by an external dependency**, reject it with a reason and start a new goal when the dependency is resolved:
+
+```bash
+omk goal reject latest --reason "blocked on upstream API change"
+```
+
+---
+
+## Circuit Breaker Tripped
+
+### Symptom
+
+A verification gate fails repeatedly and the circuit breaker opens, causing the gate to be skipped entirely:
+
+```
+circuit breaker OPEN for gate "cargo test": skipping (5 failures)
+proof remains not_ready because required gate was skipped
+```
+
+### Diagnostic
+
+Check circuit breaker state:
+
+```bash
+omk gates status
+omk gates status --json | jq '.breakers[] | select(.state == "Open")'
+```
+
+Inspect the gate failure evidence:
+
+```bash
+omk goal proof latest --format json | jq '.gates[] | select(.name == "cargo test")'
+```
+
+### Recovery
+
+**Fix the underlying issue**, then reset the breaker:
+
+```bash
+# Fix the code locally on the slice branch
+git checkout <slice-branch>
+# edit, commit, push
+git add -A && git commit -m "fix: address gate failure"
+git push
+
+# Reset the breaker after the fix
+omk gates reset --gate "cargo test"
+omk goal verify latest
+omk goal resume latest
+```
+
+**If the gate is flaky and the code is correct**, reset the breaker and increase the threshold in `.gates.toml`:
+
+```bash
+omk gates reset --gate "cargo test"
+```
+
+Then edit `.gates.toml` to raise `failure_threshold` or `recovery_timeout_secs` for that gate.
+
+**Reset all tripped breakers** (use with caution):
+
+```bash
+omk gates reset --all
+```
+
+---
+
+## Pool Exhaustion
+
+### Symptom
+
+The scheduler cannot admit new tasks because all pool slots are occupied:
+
+```
+pool "default" full: 8/8 active tasks, 3 queued
+controller blocked: max_workers exceeded
+```
+
+### Diagnostic
+
+Check pool utilization:
+
+```bash
+omk pools status
+omk pools status --json | jq '.pools[] | {name, active_tasks, queued_tasks, max_workers}'
+```
+
+List active goal tasks:
+
+```bash
+omk goal show latest --format json | jq '.task_graph.tasks[] | select(.status == "running")'
+```
+
+### Recovery
+
+**Wait for running tasks to complete.** The queue is FIFO with priority override; tasks are automatically promoted when slots free.
+
+**If a task is stuck or dead**, cancel it to free a slot:
+
+```bash
+omk goal pause latest
+omk goal cancel latest   # frees all goal slots
+# or resume after the stuck worker is cleaned up
+omk goal resume latest
+```
+
+**Clean up stale queue entries** after a crash or abrupt termination:
+
+```bash
+omk pools cleanup
+```
+
+**If the pool limit is too low** for the current workload, raise `max_workers` in `~/.config/omk/config.toml` under the `[pools.default]` section and restart the goal.
 
 ---
 

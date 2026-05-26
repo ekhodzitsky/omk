@@ -236,6 +236,99 @@ Each line is a JSON object:
 | `omk mcp doctor` | Text diagnostics (healthy/unhealthy counts) | Checks reachability of configured transports |
 | `omk mcp call <server> <tool> [args]` | Tool-specific output | `args` defaults to `{}` |
 
+## Gates API
+
+`omk gates` provides circuit breaker observability and control for verification gates.
+
+| Command | Output | Notes |
+|---|---|---|
+| `omk gates status` | Text table of breaker state per gate | Shows Closed / Open / HalfOpen, failure count, last failure time |
+| `omk gates reset --gate <name>` | Confirmation or error | Transitions a single gate from Open/HalfOpen to Closed |
+| `omk gates reset --all` | Summary of reset gates | Resets all breakers that are not already Closed |
+
+### `omk gates status --json`
+
+```json
+{
+  "breakers": [
+    {
+      "gate_name": "cargo test",
+      "state": "Closed",
+      "failure_count": 0,
+      "last_failure_at": null,
+      "recovery_timeout_secs": 60,
+      "half_open_calls_remaining": 3
+    },
+    {
+      "gate_name": "clippy",
+      "state": "Open",
+      "failure_count": 5,
+      "last_failure_at": "2026-05-26T10:00:00Z",
+      "recovery_timeout_secs": 60,
+      "half_open_calls_remaining": 0
+    }
+  ]
+}
+```
+
+## Pools API
+
+`omk pools` provides agent pool admission control observability.
+
+| Command | Output | Notes |
+|---|---|---|
+| `omk pools status` | Text table of pool utilization | Shows active slots, queued tasks, limits per pool |
+| `omk pools cleanup` | Summary of cleared entries | Removes stale queue entries and orphaned slot records |
+
+### `omk pools status --json`
+
+```json
+{
+  "pools": [
+    {
+      "name": "default",
+      "max_workers": 8,
+      "max_disk_gb": null,
+      "active_tasks": 5,
+      "queued_tasks": 2,
+      "total_admitted": 42,
+      "total_rejected": 0
+    }
+  ]
+}
+```
+
+## Stagnation API
+
+`omk goal diagnose`, `recover`, and `rollback` expose stagnation detection and recovery.
+
+| Command | Output | Notes |
+|---|---|---|
+| `omk goal diagnose <goal>` | Text report or `--json` | Detects stagnation patterns from iteration metrics |
+| `omk goal recover <goal>` | Proposed recovery plan | Prints a `RecoveryPlan` with risk level and estimated cost |
+| `omk goal rollback <goal>` | Checkpoint restore result | Rolls goal state back to the last `RecoveryCheckpoint` |
+
+### `omk goal diagnose --json`
+
+```json
+{
+  "goal_id": "goal-20260519-abc123",
+  "stagnant": true,
+  "confidence": 0.87,
+  "diagnosis": {
+    "primary": "CircularFix",
+    "secondary": null,
+    "affected_metrics": ["proof_score", "changed_files_count"]
+  },
+  "recommended_action": "recover",
+  "metrics_window": {
+    "window_size": 10,
+    "warmup_iterations": 3,
+    "evaluated_at": "2026-05-26T12:00:00Z"
+  }
+}
+```
+
 ## Goal API
 
 > **Current status:** Goal is CLI-only. There are no goal-specific MCP tools or REST endpoints yet. The web dashboard does not expose goal state over HTTP. Machine-readable access is available through the `omk goal` CLI with `--json` or `--format json|md`.
@@ -250,6 +343,7 @@ The following commands support structured output for scripting and integration:
 | `omk goal proof` | ✓ | ✓ | ✓ | ✓ | `GoalProof` artifact |
 | `omk goal replay` | ✓ | ✓ | ✓ | ✓ | `GoalReplay` timeline |
 | `omk goal budget` | ✓ | ✓ | ✓ | ✓ | `GoalBudgetReport` |
+| `omk goal diagnose` | ✓ | ✓ | ✓ | ✓ | `StagnationReport` |
 | `omk goal status` | — | — | — | — | Text only |
 | `omk goal list` | — | — | — | — | Text only |
 

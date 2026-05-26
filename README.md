@@ -5,7 +5,7 @@
 # OMK
 
 **Local, proof-driven autonomous engineering runtime powered by Kimi.**
-*Beta MVP (0.4.x, pre-1.0).*
+*Beta MVP (0.5.x, pre-1.0).*
 
 [![CI](https://github.com/ekhodzitsky/omk/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/omk/actions/workflows/ci.yml)
 [![Coverage](https://github.com/ekhodzitsky/omk/actions/workflows/coverage.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/omk/actions/workflows/coverage.yml)
@@ -82,7 +82,7 @@ omk goal replay latest
 
 **Autonomous escalation.** A classifier routes every request to the right backend: trivial answers, small edits, medium plans, or large goals. You see progress in the engine pane and can expand it with Tab. The default autonomous mode does not block on confirmation dialogs.
 
-**Proof-backed delivery.** Large goals become durable tasks with planning artifacts, verification gates, and bounded agent waves. The controller runs a review wall (architect, code, test, security, performance, anti-slop), records an honest `ready` or `not_ready` verdict, and writes `proof.json` as the artifact. Slices run in isolated git worktrees with conflict detection.
+**Proof-backed delivery.** Large goals become durable tasks with planning artifacts, verification gates, and bounded agent waves. The controller runs a review wall (architect, code, test, security, performance, anti-slop), records an honest `ready` or `not_ready` verdict, and writes `proof.json` as the artifact. Slices run in isolated git worktrees with conflict detection. Circuit breakers prevent infinite gate retry loops; agent pools enforce concurrency limits; stagnation recovery detects stuck loops before budget exhaustion.
 
 ## What you can do
 
@@ -106,6 +106,13 @@ omk goal replay latest
 | `omk goal reject latest --reason "..."` | Reject a goal with a reason |
 | `omk goal pause / resume / cancel latest` | Lifecycle controls |
 | `omk goal merge latest` | Merge the GitHub PR for a ready goal |
+| `omk goal diagnose latest` | Detect stagnation patterns in goal execution |
+| `omk goal recover latest` | Propose a recovery plan for a stuck goal |
+| `omk goal rollback latest` | Roll back to the last recovery checkpoint |
+| `omk gates status` | Inspect circuit breaker state for all gates |
+| `omk gates reset --gate <name>` | Reset a tripped circuit breaker |
+| `omk pools status` | Show agent pool utilization and queue depth |
+| `omk pools cleanup` | Clear stale entries from agent pools |
 | `omk mcp list` | List configured MCP servers |
 | `omk mcp doctor` | Diagnose configured MCP servers |
 | `omk mcp call <server> <tool>` | Call an MCP tool |
