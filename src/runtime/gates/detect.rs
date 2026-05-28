@@ -109,7 +109,7 @@ pub fn format_gate_summary(results: &[GateResult]) -> String {
 pub async fn detect_changed_files(dir: &Path) -> Vec<String> {
     let mut cmd = Command::new("git");
     cmd.args(["status", "--porcelain"]).current_dir(dir);
-    crate::runtime::shell::configure_command(&mut cmd);
+    cmd.kill_on_drop(true);
     let output = tokio::time::timeout(Duration::from_secs(10), cmd.output())
         .await;
 

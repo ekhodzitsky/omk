@@ -88,6 +88,37 @@ impl<S: CostSink> CostTracker<S> {
     }
 }
 
+impl CostTracker<JsonFileCostSink> {
+    /// Create a tracker for a goal's cost file.
+    pub fn for_goal(
+        state_dir: &std::path::Path,
+        cost_tracker_path: Option<&std::path::Path>,
+    ) -> Self {
+        let path = cost_tracker_path
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| state_dir.join("cost.jsonl"));
+        Self::new(JsonFileCostSink::new(path))
+    }
+
+    /// Record a budget-check cost session.
+    pub async fn record_budget_check(
+        &self,
+        action: &str,
+        estimate: crate::cost::estimator::CostEstimate,
+    ) -> Result<()> {
+        let now = chrono::Utc::now();
+        self.record(SessionCost {
+            session_type: "budget_check".to_string(),
+            name: action.to_string(),
+            started_at: now,
+            ended_at: Some(now),
+            estimate,
+            actual_usd: None,
+        })
+        .await
+    }
+}
+
 #[cfg(test)]
 fn sample_estimate(usd: f64) -> crate::cost::estimator::CostEstimate {
     use crate::cost::estimator::{CostEstimate, PricingTier};
@@ -168,36 +199,3 @@ mod tests {
         assert!((total).abs() < f64::EPSILON);
     }
 }
-
-impl CostTracker<JsonFileCostSink> {
-    /// Create a tracker for a goal's cost file.
-    pub fn for_goal(
-        state_dir: &std::path::Path,
-        cost_tracker_path: Option<&std::path::Path>,
-    ) -> Self {
-        let path = cost_tracker_path
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| state_dir.join("cost.jsonl"));
-        Self::new(JsonFileCostSink::new(path))
-    }
-
-    /// Record a budget-check cost session.
-    pub async fn record_budget_check(
-        &self,
-        action: &str,
-        estimate: crate::cost::estimator::CostEstimate,
-    ) -> Result<()> {
-        let now = chrono::Utc::now();
-        self.record(SessionCost {
-            session_type: "budget_check".to_string(),
-            name: action.to_string(),
-            started_at: now,
-            ended_at: Some(now),
-            estimate,
-            actual_usd: None,
-        })
-        .await
-    }
-}
-
-
