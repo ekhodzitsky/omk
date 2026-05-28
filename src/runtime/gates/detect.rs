@@ -110,8 +110,7 @@ pub async fn detect_changed_files(dir: &Path) -> Vec<String> {
     let mut cmd = Command::new("git");
     cmd.args(["status", "--porcelain"]).current_dir(dir);
     cmd.kill_on_drop(true);
-    let output = tokio::time::timeout(Duration::from_secs(10), cmd.output())
-        .await;
+    let output = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await;
 
     let mut files = match output {
         Ok(Ok(o)) if o.status.success() => String::from_utf8_lossy(&o.stdout)

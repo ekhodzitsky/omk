@@ -31,9 +31,9 @@ mod parser;
 mod prompt;
 mod retry;
 
-pub use client::{LlmClient, LlmClientConfig, WireLlmClient};
 #[cfg(test)]
 pub use client::MockLlmClient;
+pub use client::{LlmClient, LlmClientConfig, WireLlmClient};
 pub use cost::CostEstimator;
 pub use error::LlmError;
 pub use planner::{LlmPlanner, MockPlanner, Planner};

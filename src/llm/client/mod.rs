@@ -210,13 +210,10 @@ where
         let mut status_tokens: Option<u64> = None;
 
         loop {
-            let msg = match tokio::time::timeout(
-                self.config.timeout,
-                async {
-                    let mut wire = self.wire.lock().await;
-                    wire.read_message().await
-                },
-            )
+            let msg = match tokio::time::timeout(self.config.timeout, async {
+                let mut wire = self.wire.lock().await;
+                wire.read_message().await
+            })
             .await
             {
                 Ok(Ok(m)) => m,
@@ -230,11 +227,9 @@ where
                 WireMessage::SuccessResponse(resp) if resp.id == id => {
                     let raw = serde_json::to_string(&resp.result).unwrap_or_default();
                     let result: PromptResult =
-                        serde_json::from_value(resp.result).map_err(|e| {
-                            LlmError::ParseError {
-                                raw,
-                                reason: e.to_string(),
-                            }
+                        serde_json::from_value(resp.result).map_err(|e| LlmError::ParseError {
+                            raw,
+                            reason: e.to_string(),
                         })?;
                     debug!(status = %result.status, "wire prompt completed");
                     break;

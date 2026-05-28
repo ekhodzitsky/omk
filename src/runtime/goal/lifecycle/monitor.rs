@@ -73,25 +73,28 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> anyhow::Result<Go
     budget::append_budget_checkpoint(&state, "review_completed").await?;
 
     let phase_duration = tokio::time::Instant::now() - phase_start;
-    let tracker = crate::cost::tracker::CostTracker::for_goal(&state.state_dir, state.cost_tracker_path.as_deref());
-        let cost = crate::cost::types::SessionCost {
-            session_type: "review".to_string(),
-            name: "goal review".to_string(),
-            started_at: chrono::Utc::now(),
-            ended_at: Some(chrono::Utc::now()),
-            estimate: crate::cost::estimator::CostEstimate {
-                input_tokens: 0,
-                output_tokens: 0,
-                duration_secs: phase_duration.as_secs(),
-                worker_count: 1,
-                estimated_usd: 0.0,
-                tier: crate::cost::estimator::PricingTier::Standard,
-            },
-            actual_usd: None,
-        };
-        if let Err(e) = tracker.record(cost).await {
-            warn!(error = %e, "Failed to record monitor cost");
-        }
+    let tracker = crate::cost::tracker::CostTracker::for_goal(
+        &state.state_dir,
+        state.cost_tracker_path.as_deref(),
+    );
+    let cost = crate::cost::types::SessionCost {
+        session_type: "review".to_string(),
+        name: "goal review".to_string(),
+        started_at: chrono::Utc::now(),
+        ended_at: Some(chrono::Utc::now()),
+        estimate: crate::cost::estimator::CostEstimate {
+            input_tokens: 0,
+            output_tokens: 0,
+            duration_secs: phase_duration.as_secs(),
+            worker_count: 1,
+            estimated_usd: 0.0,
+            tier: crate::cost::estimator::PricingTier::Standard,
+        },
+        actual_usd: None,
+    };
+    if let Err(e) = tracker.record(cost).await {
+        warn!(error = %e, "Failed to record monitor cost");
+    }
 
     Ok(proof)
 }

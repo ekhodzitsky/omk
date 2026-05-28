@@ -43,17 +43,17 @@ pub(crate) async fn cmd_run(
 
     let planner_ref = planner_holder.as_deref();
     let goals_dir = crate::runtime::config::omk_state_dir().join(crate::runtime::goal::GOALS_DIR);
-    let existing_entries: std::collections::HashSet<_> =
-        match tokio::fs::read_dir(&goals_dir).await {
-            Ok(mut rd) => {
-                let mut set = std::collections::HashSet::new();
-                while let Ok(Some(entry)) = rd.next_entry().await {
-                    set.insert(entry.path());
-                }
-                set
+    let existing_entries: std::collections::HashSet<_> = match tokio::fs::read_dir(&goals_dir).await
+    {
+        Ok(mut rd) => {
+            let mut set = std::collections::HashSet::new();
+            while let Ok(Some(entry)) = rd.next_entry().await {
+                set.insert(entry.path());
             }
-            Err(_) => std::collections::HashSet::new(),
-        };
+            set
+        }
+        Err(_) => std::collections::HashSet::new(),
+    };
 
     let state = match crate::runtime::goal::create_goal(goal, options.clone(), planner_ref).await {
         Ok(s) => s,

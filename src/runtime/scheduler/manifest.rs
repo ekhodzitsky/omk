@@ -255,7 +255,9 @@ mod tests {
         assert_eq!(loaded.mode, "autopilot");
 
         // Clean up global state_dir to avoid cross-test pollution.
-        let run_dir = crate::runtime::config::state_dir().join("runs").join(&run_id);
+        let run_dir = crate::runtime::config::state_dir()
+            .join("runs")
+            .join(&run_id);
         let _ = tokio::fs::remove_dir_all(&run_dir).await;
     }
 }

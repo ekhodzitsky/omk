@@ -349,25 +349,28 @@ pub async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 
 
     let phase_duration = tokio::time::Instant::now() - phase_start;
     if let Ok(state) = crate::runtime::goal::resolve_goal(&state.goal_id).await {
-        let tracker = crate::cost::tracker::CostTracker::for_goal(&state.state_dir, state.cost_tracker_path.as_deref());
-            let cost = crate::cost::types::SessionCost {
-                session_type: "execute".to_string(),
-                name: "goal execute".to_string(),
-                started_at: chrono::Utc::now(),
-                ended_at: Some(chrono::Utc::now()),
-                estimate: crate::cost::estimator::CostEstimate {
-                    input_tokens: 0,
-                    output_tokens: 0,
-                    duration_secs: phase_duration.as_secs(),
-                    worker_count: actual_worker_count as usize,
-                    estimated_usd: 0.0,
-                    tier: crate::cost::estimator::PricingTier::Standard,
-                },
-                actual_usd: None,
-            };
-            if let Err(e) = tracker.record(cost).await {
-                warn!(error = %e, "Failed to record start cost");
-            }
+        let tracker = crate::cost::tracker::CostTracker::for_goal(
+            &state.state_dir,
+            state.cost_tracker_path.as_deref(),
+        );
+        let cost = crate::cost::types::SessionCost {
+            session_type: "execute".to_string(),
+            name: "goal execute".to_string(),
+            started_at: chrono::Utc::now(),
+            ended_at: Some(chrono::Utc::now()),
+            estimate: crate::cost::estimator::CostEstimate {
+                input_tokens: 0,
+                output_tokens: 0,
+                duration_secs: phase_duration.as_secs(),
+                worker_count: actual_worker_count as usize,
+                estimated_usd: 0.0,
+                tier: crate::cost::estimator::PricingTier::Standard,
+            },
+            actual_usd: None,
+        };
+        if let Err(e) = tracker.record(cost).await {
+            warn!(error = %e, "Failed to record start cost");
+        }
     }
 
     result

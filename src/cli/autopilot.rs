@@ -38,10 +38,9 @@ pub(crate) async fn run(args: Args, _cancel: CancellationToken) -> Result<()> {
         let name = args
             .name
             .ok_or_else(|| anyhow::anyhow!("--name is required for --resume"))?;
-        let summary = crate::runtime::autopilot::resume_autopilot(
-            &name, &args.dir, args.ralph, args.yolo,
-        )
-        .await?;
+        let summary =
+            crate::runtime::autopilot::resume_autopilot(&name, &args.dir, args.ralph, args.yolo)
+                .await?;
         let cost = crate::cost::estimator::estimate_autopilot_cost(
             summary.duration_secs,
             summary.phases_completed.unwrap_or(0),
@@ -51,7 +50,8 @@ pub(crate) async fn run(args: Args, _cancel: CancellationToken) -> Result<()> {
             duration_secs: summary.duration_secs,
             phases_completed: summary.phases_completed.unwrap_or(0),
         };
-        if let Err(e) = crate::cli::session::record_session_end(&summary, cost, notification).await {
+        if let Err(e) = crate::cli::session::record_session_end(&summary, cost, notification).await
+        {
             tracing::warn!(error = %e, "Failed to record autopilot session end");
         }
         return Ok(());
@@ -66,7 +66,9 @@ pub(crate) async fn run(args: Args, _cancel: CancellationToken) -> Result<()> {
         format!("ap-{}", &suffix[..8])
     });
 
-    let summary = crate::runtime::autopilot::run_autopilot(&name, &task, &args.dir, args.ralph, args.yolo).await?;
+    let summary =
+        crate::runtime::autopilot::run_autopilot(&name, &task, &args.dir, args.ralph, args.yolo)
+            .await?;
 
     let cost = crate::cost::estimator::estimate_autopilot_cost(
         summary.duration_secs,

@@ -29,8 +29,10 @@ pub(crate) fn detect_project_type(dir: &Path) -> ProjectType {
 }
 
 pub(crate) async fn run_kimi_prompt(prompt: &str) -> Result<String> {
-    let output = crate::runtime::shell::run_kimi(prompt, None, true, std::time::Duration::from_secs(120)).await
-        .context("kimi prompt timed out")?;
+    let output =
+        crate::runtime::shell::run_kimi(prompt, None, true, std::time::Duration::from_secs(120))
+            .await
+            .context("kimi prompt timed out")?;
     if !output.status.success() {
         anyhow::bail!("kimi exited with non-zero status");
     }

@@ -39,7 +39,8 @@ pub async fn run_chat_async(args: ChatArgs) -> Result<()> {
 
     let state_dir = default_state_dir(&session_id);
     // The adapter task exits automatically when the EventBus sender is dropped.
-    let _adapter = crate::runtime::conversation::events_adapter::start(state_dir, backend.event_bus());
+    let _adapter =
+        crate::runtime::conversation::events_adapter::start(state_dir, backend.event_bus());
 
     // run_chat is sync/blocking (crossterm event loop). It terminates when the
     // user quits or on terminal error, at which point spawn_blocking returns.

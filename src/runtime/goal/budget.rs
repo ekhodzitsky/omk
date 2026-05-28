@@ -23,8 +23,6 @@ use super::state::{
     GoalState, GoalStateStore, GoalStatus,
 };
 
-
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoalBudgetCheckpoint {
     pub version: u32,
@@ -103,7 +101,10 @@ pub async fn goal_budget(goal_id: &str) -> Result<GoalBudgetReport> {
     let checkpoints = read_budget_checkpoints(&state).await?;
     let usage = collect_goal_budget_usage(&state).await;
 
-    let tracker = crate::cost::tracker::CostTracker::for_goal(&state.state_dir, state.cost_tracker_path.as_deref());
+    let tracker = crate::cost::tracker::CostTracker::for_goal(
+        &state.state_dir,
+        state.cost_tracker_path.as_deref(),
+    );
     let (spent_usd, spent_tokens, spent_seconds) = match tracker.load().await {
         Ok(costs) => {
             let spent_usd = costs.iter().map(|c| c.estimate.estimated_usd).sum();
@@ -254,8 +255,6 @@ pub async fn add_goal_budget_limits(goal_id: &str, add: GoalBudgetAdd) -> Result
     Ok(state)
 }
 
-
-
 pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str) -> Result<()> {
     let now = Utc::now();
     let total_budget_secs = state
@@ -267,7 +266,10 @@ pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str)
 
     let usage = collect_goal_budget_usage(state).await;
 
-    let tracker = crate::cost::tracker::CostTracker::for_goal(&state.state_dir, state.cost_tracker_path.as_deref());
+    let tracker = crate::cost::tracker::CostTracker::for_goal(
+        &state.state_dir,
+        state.cost_tracker_path.as_deref(),
+    );
     let estimate = crate::cost::estimator::CostEstimate::from_budget(
         usage.used_tokens,
         elapsed_since_created_secs,

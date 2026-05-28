@@ -58,11 +58,10 @@ pub(crate) async fn scan_goal_security_findings_structured(
     project_dir: &Path,
     changed_files: &[String],
 ) -> Result<Vec<SecurityFinding>> {
-    let private_key = tokio::task::spawn_blocking(|| {
-        Regex::new(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
-    })
-    .await
-    .map_err(|e| anyhow::anyhow!("regex compilation panicked: {e}"))??;
+    let private_key =
+        tokio::task::spawn_blocking(|| Regex::new(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"))
+            .await
+            .map_err(|e| anyhow::anyhow!("regex compilation panicked: {e}"))??;
     let secret_assignment = tokio::task::spawn_blocking(|| {
         Regex::new(r#"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*["'][^"']{16,}["']"#)
     })

@@ -123,11 +123,8 @@ impl Autopilot {
             cmd.args(["team", "run", "2:executor", &self.task])
                 .current_dir(&self.dir);
             crate::runtime::shell::configure_command(&mut cmd);
-            let output = tokio::time::timeout(
-                std::time::Duration::from_secs(60),
-                cmd.output(),
-            )
-            .await;
+            let output =
+                tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await;
 
             match output {
                 Ok(Ok(out)) => {

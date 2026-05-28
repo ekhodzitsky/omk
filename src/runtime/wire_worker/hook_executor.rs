@@ -214,8 +214,7 @@ impl HookExecutor {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
         crate::runtime::shell::configure_command(&mut cmd);
-        let mut child = match cmd.spawn()
-        {
+        let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
                 return Ok(HookResult {

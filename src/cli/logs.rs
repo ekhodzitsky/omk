@@ -28,13 +28,10 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             .args(["-f", "-n", &args.lines.to_string()])
             .arg(&log_file);
         crate::runtime::shell::configure_command(&mut tail_cmd);
-        let status = tokio::time::timeout(
-            std::time::Duration::from_secs(300),
-            tail_cmd.status(),
-        )
-        .await
-        .context("tail command timed out")?
-        .context("Failed to run tail command")?;
+        let status = tokio::time::timeout(std::time::Duration::from_secs(300), tail_cmd.status())
+            .await
+            .context("tail command timed out")?
+            .context("Failed to run tail command")?;
 
         if !status.success() {
             anyhow::bail!("tail command failed");

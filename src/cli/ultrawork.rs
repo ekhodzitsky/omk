@@ -99,9 +99,9 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         std::io::stdin().read_line(&mut buf)?;
     }
 
-    let (jobs, summary) = crate::runtime::ultrawork::run_ultrawork(
-        tasks, &args.dir, args.concurrency, args.output
-    ).await?;
+    let (jobs, summary) =
+        crate::runtime::ultrawork::run_ultrawork(tasks, &args.dir, args.concurrency, args.output)
+            .await?;
 
     let cost = crate::cost::estimator::estimate_cost(
         summary.duration_secs,

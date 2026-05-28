@@ -44,7 +44,11 @@ pub async fn run_ultrawork(
     let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency));
     let mut join_set = tokio::task::JoinSet::new();
 
-    info!("⚡ Ultrawork: {} jobs, concurrency {}", tasks.len(), concurrency);
+    info!(
+        "⚡ Ultrawork: {} jobs, concurrency {}",
+        tasks.len(),
+        concurrency
+    );
 
     for (i, task) in tasks.iter().enumerate() {
         let permit = semaphore
@@ -145,7 +149,8 @@ pub async fn run_ultrawork(
 }
 
 async fn run_kimi(prompt: &str, dir: &Path) -> Result<String> {
-    let output = crate::runtime::shell::run_kimi(prompt, Some(dir), false, Duration::from_secs(120)).await?;
+    let output =
+        crate::runtime::shell::run_kimi(prompt, Some(dir), false, Duration::from_secs(120)).await?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !output.status.success() {

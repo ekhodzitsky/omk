@@ -84,7 +84,12 @@ pub async fn run_gates_with_evidence(
             Some(s) => s,
             None => {
                 warn!(gate = %gate.name, "Gate child stdout not piped");
-                results.push(make_gate_error(gate, &command_line, start, "gate child stdout not piped"));
+                results.push(make_gate_error(
+                    gate,
+                    &command_line,
+                    start,
+                    "gate child stdout not piped",
+                ));
                 continue;
             }
         };
@@ -92,7 +97,12 @@ pub async fn run_gates_with_evidence(
             Some(s) => s,
             None => {
                 warn!(gate = %gate.name, "Gate child stderr not piped");
-                results.push(make_gate_error(gate, &command_line, start, "gate child stderr not piped"));
+                results.push(make_gate_error(
+                    gate,
+                    &command_line,
+                    start,
+                    "gate child stderr not piped",
+                ));
                 continue;
             }
         };
