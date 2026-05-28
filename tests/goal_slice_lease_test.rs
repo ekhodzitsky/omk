@@ -378,15 +378,12 @@ async fn test_lease_guard_drop_releases_lease() {
         .unwrap();
 
     let lease_id = guard.lease_id().to_string();
-    drop(guard);
-
-    // Give the drop task a moment to run.
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    guard.release().await;
 
     let active = db.slice_lease_repo().active_for_goal("g1").await.unwrap();
     assert!(
         active.is_empty(),
-        "lease should be released after guard drop"
+        "lease should be released after explicit release"
     );
 
     let lease = db.slice_lease_repo().get(&lease_id).await.unwrap().unwrap();

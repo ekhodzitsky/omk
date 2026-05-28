@@ -50,8 +50,7 @@ pub(crate) async fn run_rewrite_oracle_command(
     timeout_duration: Duration,
 ) -> Result<RewriteOracleObservation> {
     let mut child = Command::new(command);
-    child.current_dir(project_dir).args(args);
-    crate::runtime::shell::configure_command(&mut child);
+    child.current_dir(project_dir).args(args).kill_on_drop(true);
     let output = timeout(timeout_duration, child.output())
         .await
         .with_context(|| format!("Timed out while running rewrite oracle command: {command}"))?

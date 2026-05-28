@@ -18,7 +18,7 @@ pub mod mcp;
 pub(crate) mod notifications;
 pub mod runtime;
 pub(crate) mod skills;
-#[cfg(test)]
+#[doc(hidden)]
 pub mod test_helpers;
 pub mod vis;
 pub mod wire;
