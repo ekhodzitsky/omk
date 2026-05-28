@@ -43,10 +43,17 @@ pub(crate) async fn cmd_run(
 
     let planner_ref = planner_holder.as_deref();
     let goals_dir = crate::runtime::config::omk_state_dir().join(crate::runtime::goal::GOALS_DIR);
-    let existing_entries: std::collections::HashSet<_> = std::fs::read_dir(&goals_dir)
-        .ok()
-        .map(|rd| rd.filter_map(|e| e.ok().map(|e| e.path())).collect())
-        .unwrap_or_default();
+    let existing_entries: std::collections::HashSet<_> = match tokio::fs::read_dir(&goals_dir).await
+    {
+        Ok(mut rd) => {
+            let mut set = std::collections::HashSet::new();
+            while let Ok(Some(entry)) = rd.next_entry().await {
+                set.insert(entry.path());
+            }
+            set
+        }
+        Err(_) => std::collections::HashSet::new(),
+    };
 
     let state = match crate::runtime::goal::create_goal(goal, options.clone(), planner_ref).await {
         Ok(s) => s,
@@ -54,11 +61,13 @@ pub(crate) async fn cmd_run(
             // Remove any empty goal directories left behind by the failed
             // LLM attempt so that retrying with the stub does not create
             // phantom goals.
-            if let Ok(new_dirs) = std::fs::read_dir(&goals_dir) {
-                for entry in new_dirs.filter_map(|e| e.ok()) {
+            if let Ok(mut new_dirs) = tokio::fs::read_dir(&goals_dir).await {
+                while let Ok(Some(entry)) = new_dirs.next_entry().await {
                     let path = entry.path();
-                    if !existing_entries.contains(&path) && is_empty_goal_dir(&path) {
-                        let _ = std::fs::remove_dir_all(&path);
+                    if !existing_entries.contains(&path) && is_empty_goal_dir(&path).await {
+                        if let Err(e) = tokio::fs::remove_dir_all(&path).await {
+                            tracing::warn!(path = %path.display(), error = %e, "Failed to remove phantom goal directory");
+                        }
                     }
                 }
             }
@@ -98,14 +107,19 @@ pub(crate) fn format_planner_disclosure(state: PlannerState) -> String {
 /// Returns true if the directory exists and has no entries.  Used to clean
 /// up goal directories left behind by a failed planner attempt before any
 /// files were written.
-fn is_empty_goal_dir(path: &std::path::Path) -> bool {
-    if !path.is_dir() {
-        return false;
+async fn is_empty_goal_dir(path: &std::path::Path) -> bool {
+    match tokio::fs::try_exists(path).await {
+        Ok(true) => {}
+        _ => return false,
     }
-    std::fs::read_dir(path)
-        .ok()
-        .map(|mut rd| rd.next().is_none())
-        .unwrap_or(false)
+    match tokio::fs::metadata(path).await {
+        Ok(meta) if meta.is_dir() => {}
+        _ => return false,
+    }
+    match tokio::fs::read_dir(path).await {
+        Ok(mut rd) => matches!(rd.next_entry().await, Ok(None)),
+        Err(_) => false,
+    }
 }
 
 async fn build_llm_planner(

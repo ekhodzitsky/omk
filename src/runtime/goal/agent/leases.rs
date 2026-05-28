@@ -190,7 +190,9 @@ impl LeaseGuard {
     pub async fn release(mut self) {
         self.cancel.cancel();
         if let Some(handle) = self.heartbeat_handle.take() {
-            let _ = handle.await;
+            if let Err(e) = handle.await {
+                warn!(lease_id = %self.lease_id, error = %e, "Heartbeat task panicked or was cancelled during release");
+            }
         }
         let now = chrono::Utc::now().timestamp();
         if let Err(e) = self
@@ -215,14 +217,10 @@ impl Drop for LeaseGuard {
         if let Some(handle) = self.heartbeat_handle.take() {
             handle.abort();
         }
-        let lease_id = self.lease_id.clone();
-        let db = self.manager.db.clone();
-        tokio::spawn(async move {
-            let now = chrono::Utc::now().timestamp();
-            if let Err(e) = db.slice_lease_repo().release(&lease_id, now).await {
-                warn!(lease_id, error = %e, "Best-effort slice lease release on drop failed");
-            }
-        });
+        // Lease release is intentionally synchronous here.
+        // Async spawn inside Drop is unreliable (runtime may be shutting down).
+        // Callers should use LeaseGuard::release().await for guaranteed cleanup.
+        warn!(lease_id = %self.lease_id, "LeaseGuard dropped without explicit release; lease may linger until stale timeout");
     }
 }
 

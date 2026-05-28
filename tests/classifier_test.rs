@@ -108,7 +108,7 @@ async fn test_dataset_agreement_at_least_85_percent() {
         );
     }
     let backend: Arc<dyn LlmClassifierBackend> = Arc::new(mock);
-    let mut cache = new_session_cache();
+    let cache = tokio::sync::Mutex::new(new_session_cache());
     let mut correct = 0usize;
     for (prompt, expected) in PROMPTS_LABELED {
         let input = ClassifierInput {
@@ -116,7 +116,7 @@ async fn test_dataset_agreement_at_least_85_percent() {
             recent_conversation: vec![],
             project_root: PathBuf::from("."),
         };
-        let output = classify(input, backend.as_ref(), &mut cache).await;
+        let output = classify(input, backend.as_ref(), &cache).await;
         if output.intent == *expected {
             correct += 1;
         }
@@ -133,13 +133,13 @@ async fn test_heuristic_catches_trivial_prefix() {
     let _guard = TEST_LOCK.lock().await;
     let mock = MockLlmClassifier::new();
     let backend: Arc<dyn LlmClassifierBackend> = Arc::new(mock);
-    let mut cache = new_session_cache();
+    let cache = tokio::sync::Mutex::new(new_session_cache());
     let input = ClassifierInput {
         prompt: "what is X?".to_string(),
         recent_conversation: vec![],
         project_root: PathBuf::from("."),
     };
-    let output = classify(input, backend.as_ref(), &mut cache).await;
+    let output = classify(input, backend.as_ref(), &cache).await;
     assert_eq!(output.intent, Intent::Trivial);
     assert_eq!(output.source, ClassificationSource::Heuristic);
     assert!(output.latency_ms < 5);
@@ -186,15 +186,15 @@ async fn test_cache_hit_returns_cached_result_under_5ms() {
         },
     );
     let backend: Arc<dyn LlmClassifierBackend> = Arc::new(mock);
-    let mut cache = new_session_cache();
+    let cache = tokio::sync::Mutex::new(new_session_cache());
     let input = ClassifierInput {
         prompt: "repeat me".to_string(),
         recent_conversation: vec![],
         project_root: PathBuf::from("."),
     };
-    let first = classify(input.clone(), backend.as_ref(), &mut cache).await;
+    let first = classify(input.clone(), backend.as_ref(), &cache).await;
     assert_eq!(first.source, ClassificationSource::Llm);
-    let second = classify(input, backend.as_ref(), &mut cache).await;
+    let second = classify(input, backend.as_ref(), &cache).await;
     assert_eq!(second.source, ClassificationSource::Cache);
     assert!(second.latency_ms <= 5);
 }
@@ -217,13 +217,13 @@ async fn test_llm_fallback_on_malformed_json_returns_heuristic_not_large() {
         },
     );
     let backend: Arc<dyn LlmClassifierBackend> = Arc::new(mock);
-    let mut cache = new_session_cache();
+    let cache = tokio::sync::Mutex::new(new_session_cache());
     let input = ClassifierInput {
         prompt: "fix the auth flow rewrite security module".to_string(),
         recent_conversation: vec![],
         project_root: PathBuf::from("."),
     };
-    let output = classify(input, backend.as_ref(), &mut cache).await;
+    let output = classify(input, backend.as_ref(), &cache).await;
     assert_ne!(output.intent, Intent::Large);
     assert!(output.fallback);
 }
@@ -236,13 +236,13 @@ async fn test_llm_fallback_on_transport_failure_returns_heuristic_not_large() {
     let _guard = TEST_LOCK.lock().await;
     let mock = MockLlmClassifier::new();
     let backend: Arc<dyn LlmClassifierBackend> = Arc::new(mock);
-    let mut cache = new_session_cache();
+    let cache = tokio::sync::Mutex::new(new_session_cache());
     let input = ClassifierInput {
         prompt: "add new endpoint with tests".to_string(),
         recent_conversation: vec![],
         project_root: PathBuf::from("."),
     };
-    let output = classify(input, backend.as_ref(), &mut cache).await;
+    let output = classify(input, backend.as_ref(), &cache).await;
     assert_ne!(output.intent, Intent::Large);
     assert!(output.fallback);
 }
@@ -268,13 +268,13 @@ async fn test_telemetry_record_does_not_contain_raw_prompt() {
         },
     );
     let backend: Arc<dyn LlmClassifierBackend> = Arc::new(mock);
-    let mut cache = new_session_cache();
+    let cache = tokio::sync::Mutex::new(new_session_cache());
     let input = ClassifierInput {
         prompt: "private API key abc123".to_string(),
         recent_conversation: vec![],
         project_root: PathBuf::from("."),
     };
-    let _ = classify(input, backend.as_ref(), &mut cache).await;
+    let _ = classify(input, backend.as_ref(), &cache).await;
 
     let telemetry_path = tmp.path().join("omk").join("telemetry.jsonl");
     let contents = tokio::fs::read_to_string(&telemetry_path).await.unwrap();
@@ -348,13 +348,13 @@ async fn test_concurrent_classify_does_not_corrupt_telemetry() {
     for i in 0..10 {
         let backend = Arc::clone(&backend);
         handles.push(tokio::spawn(async move {
-            let mut cache = new_session_cache();
+            let cache = tokio::sync::Mutex::new(new_session_cache());
             let input = ClassifierInput {
                 prompt: format!("prompt number {}", i),
                 recent_conversation: vec![],
                 project_root: PathBuf::from("."),
             };
-            classify(input, backend.as_ref(), &mut cache).await
+            classify(input, backend.as_ref(), &cache).await
         }));
     }
     let mut results = Vec::new();

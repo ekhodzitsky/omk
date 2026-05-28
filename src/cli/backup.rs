@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 use tokio::process::Command;
 use tracing::info;
 
@@ -125,11 +124,8 @@ async fn list_backups() -> Result<()> {
 async fn restore_backup(name: &str) -> Result<()> {
     let backup_dir = crate::runtime::config::data_dir().join("backups");
 
-    let backup_path = if name.contains('/') || name.ends_with(".tar.gz") {
-        PathBuf::from(name)
-    } else {
-        backup_dir.join(format!("omk-backup-{}.tar.gz", name))
-    };
+    let sanitized = crate::runtime::sanitize::sanitize_name(name)?;
+    let backup_path = backup_dir.join(format!("omk-backup-{}.tar.gz", sanitized));
 
     if !backup_path.exists() {
         anyhow::bail!("Backup not found: {}", backup_path.display());

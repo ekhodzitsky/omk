@@ -28,12 +28,13 @@ pub async fn run_advisor_direct(provider: &str, prompt: &str, timeout_secs: u64)
         "Running advisor directly via argv (no shell)"
     );
 
-    let mut child = tokio::process::Command::new(provider)
-        .arg("-p")
+    let mut cmd = tokio::process::Command::new(provider);
+    cmd.arg("-p")
         .arg(prompt)
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true)
+        .stderr(std::process::Stdio::piped());
+    crate::runtime::shell::configure_command(&mut cmd);
+    let mut child = cmd
         .spawn()
         .with_context(|| format!("Failed to spawn {}", provider))?;
 

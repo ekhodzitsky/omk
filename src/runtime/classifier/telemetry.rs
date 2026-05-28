@@ -30,18 +30,19 @@ pub struct TelemetryRecord {
 }
 
 pub async fn append(record: TelemetryRecord) -> Result<()> {
-    let _guard = TELEMETRY_LOCK.lock().await;
     let path = telemetry_path();
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
+    let mut line = serde_json::to_vec(&record)?;
+    line.push(b'\n');
+    // Serialize writers so concurrent appends are not interleaved.
+    let _guard = TELEMETRY_LOCK.lock().await;
     let mut file = tokio::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&path)
         .await?;
-    let mut line = serde_json::to_vec(&record)?;
-    line.push(b'\n');
     file.write_all(&line).await?;
     file.flush().await?;
     Ok(())
@@ -55,9 +56,8 @@ pub fn prompt_hash_hex(prompt: &str) -> String {
 }
 
 pub async fn compact_if_stale(retain_days: i64) -> Result<()> {
-    let _guard = TELEMETRY_LOCK.lock().await;
     let path = telemetry_path();
-    if !path.exists() {
+    if !tokio::fs::try_exists(&path).await.unwrap_or(false) {
         return Ok(());
     }
     let meta = tokio::fs::metadata(&path).await?;
@@ -88,6 +88,8 @@ pub async fn compact_if_stale(retain_days: i64) -> Result<()> {
     if !dropped_any {
         return Ok(());
     }
+    // Take lock while rewriting so appenders wait rather than interleave.
+    let _guard = TELEMETRY_LOCK.lock().await;
     let temp_path = path.with_extension("jsonl.tmp");
     let mut temp = tokio::fs::OpenOptions::new()
         .create(true)

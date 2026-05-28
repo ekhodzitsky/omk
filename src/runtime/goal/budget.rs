@@ -1,6 +1,7 @@
 use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 mod checkpoint;
 mod events;
@@ -21,11 +22,6 @@ use super::state::{
     format_goal_duration_secs, parse_goal_duration_secs, FileSystemGoalStateStore, GoalPhase,
     GoalState, GoalStateStore, GoalStatus,
 };
-
-use crate::cost::estimator::{CostEstimate, PricingTier};
-use crate::cost::file_sink::JsonFileCostSink;
-use crate::cost::tracker::CostTracker;
-use crate::cost::types::SessionCost;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoalBudgetCheckpoint {
@@ -105,23 +101,22 @@ pub async fn goal_budget(goal_id: &str) -> Result<GoalBudgetReport> {
     let checkpoints = read_budget_checkpoints(&state).await?;
     let usage = collect_goal_budget_usage(&state).await;
 
-    let (spent_usd, spent_tokens, spent_seconds) =
-        if let Ok(tracker) = init_goal_cost_tracker(&state) {
-            match tracker.load().await {
-                Ok(costs) => {
-                    let spent_usd = costs.iter().map(|c| c.estimate.estimated_usd).sum();
-                    let spent_tokens = costs
-                        .iter()
-                        .map(|c| c.estimate.input_tokens + c.estimate.output_tokens)
-                        .sum();
-                    let spent_seconds = costs.iter().map(|c| c.estimate.duration_secs).sum();
-                    (spent_usd, spent_tokens, spent_seconds)
-                }
-                Err(_) => (0.0, 0, 0),
-            }
-        } else {
-            (0.0, 0, 0)
-        };
+    let tracker = crate::cost::tracker::CostTracker::for_goal(
+        &state.state_dir,
+        state.cost_tracker_path.as_deref(),
+    );
+    let (spent_usd, spent_tokens, spent_seconds) = match tracker.load().await {
+        Ok(costs) => {
+            let spent_usd = costs.iter().map(|c| c.estimate.estimated_usd).sum();
+            let spent_tokens = costs
+                .iter()
+                .map(|c| c.estimate.input_tokens + c.estimate.output_tokens)
+                .sum();
+            let spent_seconds = costs.iter().map(|c| c.estimate.duration_secs).sum();
+            (spent_usd, spent_tokens, spent_seconds)
+        }
+        Err(_) => (0.0, 0, 0),
+    };
 
     Ok(GoalBudgetReport {
         version: 1,
@@ -260,14 +255,6 @@ pub async fn add_goal_budget_limits(goal_id: &str, add: GoalBudgetAdd) -> Result
     Ok(state)
 }
 
-pub(crate) fn init_goal_cost_tracker(state: &GoalState) -> Result<CostTracker<JsonFileCostSink>> {
-    let path = state
-        .cost_tracker_path
-        .clone()
-        .unwrap_or_else(|| state.state_dir.join("cost.jsonl"));
-    Ok(CostTracker::new(JsonFileCostSink::new(path)))
-}
-
 pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str) -> Result<()> {
     let now = Utc::now();
     let total_budget_secs = state
@@ -279,23 +266,17 @@ pub(crate) async fn ensure_budget_available(state: &mut GoalState, action: &str)
 
     let usage = collect_goal_budget_usage(state).await;
 
-    if let Ok(tracker) = init_goal_cost_tracker(state) {
-        let cost = SessionCost {
-            session_type: "budget_check".to_string(),
-            name: action.to_string(),
-            started_at: now,
-            ended_at: Some(now),
-            estimate: CostEstimate {
-                input_tokens: usage.used_tokens,
-                output_tokens: 0,
-                duration_secs: elapsed_since_created_secs,
-                worker_count: 1,
-                estimated_usd: usage.estimated_cost_usd,
-                tier: PricingTier::Standard,
-            },
-            actual_usd: None,
-        };
-        let _ = tracker.record(cost).await;
+    let tracker = crate::cost::tracker::CostTracker::for_goal(
+        &state.state_dir,
+        state.cost_tracker_path.as_deref(),
+    );
+    let estimate = crate::cost::estimator::CostEstimate::from_budget(
+        usage.used_tokens,
+        elapsed_since_created_secs,
+        usage.estimated_cost_usd,
+    );
+    if let Err(e) = tracker.record_budget_check(action, estimate).await {
+        warn!(error = %e, "Failed to record budget cost");
     }
 
     let Some(exhaustion) =

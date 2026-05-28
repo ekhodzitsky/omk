@@ -1,4 +1,16 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use std::path::Path;
+use std::time::Duration;
+
+/// Configure a [`tokio::process::Command`] for safe async execution.
+///
+/// Sets `kill_on_drop(true)` and, on Unix, `process_group(0)` so that
+/// the child and any grandchildren are terminated together.
+pub fn configure_command(cmd: &mut tokio::process::Command) {
+    cmd.kill_on_drop(true);
+    #[cfg(unix)]
+    cmd.process_group(0);
+}
 
 /// Escape a string for safe inclusion in a POSIX shell command.
 ///
@@ -45,6 +57,36 @@ pub fn validate_safe(s: &str) -> Result<(), &'static str> {
 #[allow(dead_code)]
 pub async fn run_command_with_retry(cmd: &mut tokio::process::Command) -> anyhow::Result<String> {
     crate::runtime::retry::retry_command(crate::runtime::retry::RetryConfig::default(), cmd).await
+}
+
+/// Locate the `kimi` binary in PATH, returning an error if not found.
+pub fn kimi_bin() -> Result<std::path::PathBuf> {
+    which::which("kimi").context("kimi binary not found in PATH")
+}
+
+/// Run `kimi -p <prompt>` with optional `--print`, working directory, and timeout.
+///
+/// Returns the raw [`std::process::Output`] so the caller can decide error
+/// policy (warn vs bail, stdout-only vs stdout+stderr).
+pub async fn run_kimi(
+    prompt: &str,
+    dir: Option<&Path>,
+    print: bool,
+    timeout: Duration,
+) -> Result<std::process::Output> {
+    let mut cmd = tokio::process::Command::new("kimi");
+    if print {
+        cmd.arg("--print");
+    }
+    cmd.arg("-p").arg(prompt);
+    if let Some(d) = dir {
+        cmd.current_dir(d);
+    }
+    configure_command(&mut cmd);
+    tokio::time::timeout(timeout, cmd.output())
+        .await
+        .context("kimi prompt timed out")?
+        .context("failed to spawn kimi")
 }
 
 #[cfg(test)]

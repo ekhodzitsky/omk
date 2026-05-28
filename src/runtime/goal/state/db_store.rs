@@ -13,7 +13,6 @@ use super::types::GoalState;
 /// per-goal JSON files. The `state_dir` field is still materialised on
 /// load so that downstream code can locate artifact directories.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct DbGoalStateStore {
     db: DbHandle,
 }
@@ -23,7 +22,6 @@ pub fn goals_db_path() -> std::path::PathBuf {
     crate::runtime::config::omk_state_dir().join("omk.db")
 }
 
-#[allow(dead_code)]
 impl DbGoalStateStore {
     pub fn new(db: DbHandle) -> Self {
         Self { db }
@@ -117,7 +115,6 @@ fn map_db_err(e: DbError) -> anyhow::Error {
     anyhow::anyhow!("db error: {e}")
 }
 
-#[allow(dead_code)]
 fn goal_state_to_record(state: &GoalState) -> Result<GoalRecord> {
     Ok(GoalRecord {
         goal_id: state.goal_id.clone(),
@@ -156,7 +153,6 @@ fn goal_state_to_record(state: &GoalState) -> Result<GoalRecord> {
     })
 }
 
-#[allow(dead_code)]
 fn record_to_goal_state(record: GoalRecord) -> Result<GoalState> {
     let status = parse_goal_status(&record.status)?;
     let phase = parse_goal_phase(&record.phase)?;
@@ -224,7 +220,6 @@ fn parse_goal_status(s: &str) -> Result<super::types::GoalStatus> {
     }
 }
 
-#[allow(dead_code)]
 fn parse_goal_phase(s: &str) -> Result<super::types::GoalPhase> {
     match s {
         "intake" => Ok(super::types::GoalPhase::Intake),
@@ -237,7 +232,6 @@ fn parse_goal_phase(s: &str) -> Result<super::types::GoalPhase> {
     }
 }
 
-#[allow(dead_code)]
 fn parse_delivery_policy(s: &str) -> Result<super::super::GoalDeliveryPolicy> {
     match s {
         "local" => Ok(super::super::GoalDeliveryPolicy::Local),
@@ -247,7 +241,6 @@ fn parse_delivery_policy(s: &str) -> Result<super::super::GoalDeliveryPolicy> {
     }
 }
 
-#[allow(dead_code)]
 fn parse_merge_policy(s: &str) -> Result<super::super::GoalMergePolicy> {
     match s {
         "disabled" => Ok(super::super::GoalMergePolicy::Disabled),

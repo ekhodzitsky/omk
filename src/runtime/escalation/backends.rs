@@ -63,8 +63,7 @@ impl std::fmt::Debug for ProductionClassifierBackend {
 #[async_trait]
 impl ClassifierBackend for ProductionClassifierBackend {
     async fn classify(&self, input: ClassifierInput) -> ClassifierOutput {
-        let mut cache = self.cache.lock().await;
-        crate::runtime::classifier::classify(input, self.inner.as_ref(), &mut cache).await
+        crate::runtime::classifier::classify(input, self.inner.as_ref(), &self.cache).await
     }
 }
 
@@ -87,7 +86,11 @@ impl<W: crate::llm::LlmClient + Send + Sync> LlmDirectBackend for ProductionLlmD
         _context: &[crate::runtime::classifier::ConversationTurn],
     ) -> anyhow::Result<u32> {
         let budget = crate::llm::types::TokenBudget::new(usize::MAX);
-        let _resp = self.inner.lock().await.complete(prompt, &budget).await?;
+        let resp = {
+            let client = self.inner.lock().await;
+            client.complete(prompt, &budget).await
+        }?;
+        drop(resp);
         Ok(0)
     }
 }

@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use crate::runtime::goal::review::pass::ReviewPass;
 use crate::runtime::goal::review::slice::{
@@ -210,44 +209,13 @@ impl ReviewPass for ArchitectReviewPass {
 /// worktree.  Any failure (missing git, not a repo, etc.) returns an
 /// empty list — a soft-fail so the caller never panics.
 fn detect_changed_files(worktree: &Path) -> Vec<String> {
-    let output = Command::new("git")
-        .args(["status", "--porcelain", "--untracked-files=all"])
-        .current_dir(worktree)
-        .output();
-
-    match output {
-        Ok(o) if o.status.success() => {
-            let mut files: Vec<String> = String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .filter_map(parse_porcelain_path)
-                .collect();
-            files.sort();
-            files.dedup();
-            files
-        }
-        _ => Vec::new(),
-    }
-}
-
-fn parse_porcelain_path(line: &str) -> Option<String> {
-    if line.len() < 4 {
-        return None;
-    }
-    let path = line.get(3..)?.trim();
-    if path.is_empty() {
-        return None;
-    }
-    let path = path.split(" -> ").last().unwrap_or(path).trim_matches('"');
-    if path.is_empty() {
-        None
-    } else {
-        Some(path.to_string())
-    }
+    crate::runtime::gates::detect_changed_files_sync(worktree)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     #[test]
     fn architect_pass_name_is_stable() {

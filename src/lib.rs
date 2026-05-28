@@ -5,19 +5,19 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used))]
 #![warn(missing_debug_implementations)]
 
-pub mod agents;
-pub mod analysis;
+pub(crate) mod agents;
+pub(crate) mod analysis;
 pub mod cli;
 pub mod cost;
 pub mod error;
 pub mod git;
 pub mod kimi_native;
 pub mod llm;
-pub mod marketplace;
+pub(crate) mod marketplace;
 pub mod mcp;
-pub mod notifications;
+pub(crate) mod notifications;
 pub mod runtime;
-pub mod skills;
+pub(crate) mod skills;
 #[doc(hidden)]
 pub mod test_helpers;
 pub mod vis;

@@ -172,7 +172,9 @@ impl Watchdog {
 
                 if let Some(event) = event_to_emit {
                     if let Some(ew) = event_writer {
-                        let _ = ew.append(&event).await;
+                        if let Err(e) = ew.append(&event).await {
+                            warn!(error = %e, "Failed to append watchdog event");
+                        }
                     }
                 }
 

@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tracing::warn;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -264,7 +265,9 @@ pub(crate) async fn run_goal_agent_task_wave(
                 "pid": std::process::id(),
                 "role": GOAL_AGENT_WORKER_ROLE,
             }))?;
-        let _ = event_writer.append(&event).await;
+        if let Err(e) = event_writer.append(&event).await {
+            warn!(error = %e, "Failed to append slice lease released event");
+        }
         guard.release().await;
     }
 
@@ -318,7 +321,9 @@ async fn try_claim_slice_lease(
                         "expired_at_unix": chrono::Utc::now().timestamp(),
                     }))
                     .map_err(|e| LeaseError::Db(anyhow::anyhow!("{e}")))?;
-                let _ = event_writer.append(&event).await;
+                if let Err(e) = event_writer.append(&event).await {
+                    warn!(error = %e, "Failed to append slice lease expired event");
+                }
             }
 
             let event = Event::new(RunId(run_id.to_string()), EventKind::SliceLeaseClaimed)

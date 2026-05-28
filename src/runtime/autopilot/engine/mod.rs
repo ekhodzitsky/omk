@@ -216,10 +216,7 @@ impl Autopilot {
             AutopilotPhase::Failed => 6,
         };
 
-        println!();
-        println!("🤖 Autopilot: {}", self.name);
-        println!("   Task: {}", self.task);
-        println!();
+        info!("🤖 Autopilot: {} — Task: {}", self.name, self.task);
         for (i, phase) in phases.iter().enumerate() {
             let icon = if i < current {
                 "✓"
@@ -233,9 +230,8 @@ impl Autopilot {
             } else {
                 "○"
             };
-            println!("   {} {}", icon, phase);
+            info!("   {} {}", icon, phase);
         }
-        println!();
     }
 
     async fn save_done_contract(&self) -> Result<()> {

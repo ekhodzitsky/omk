@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
 use crate::runtime::goal::proof::GoalProof;
 use crate::runtime::goal::state::{
@@ -100,16 +101,16 @@ pub async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 
                 match res {
                     Ok(Ok(result)) => slice_results.push(result),
                     Ok(Err(e)) => {
-                        tracing::warn!("slice wave failed: {e}");
+                        tracing::warn!(error = %e, "slice wave failed");
                         cancel.cancel();
                     }
                     Err(e) => {
-                        tracing::warn!("slice wave panicked: {e}");
+                        tracing::warn!(error = %e, "slice wave panicked");
                         cancel.cancel();
                     }
                 }
             }
-            eprintln!("DEBUG slice_results.len()={}", slice_results.len());
+            tracing::debug!(count = slice_results.len(), "slice results received");
 
             // 2. Parallel post-processing per slice with isolated task_graph clones
             struct SlicePostResult {
@@ -187,18 +188,18 @@ pub async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 
                 match res {
                     Ok(Ok(result)) => post_results.push(result),
                     Ok(Err(e)) => {
-                        tracing::warn!("slice post-processing failed: {e}");
+                        tracing::warn!(error = %e, "slice post-processing failed");
                     }
                     Err(e) => {
-                        tracing::warn!("slice post-processing panicked: {e}");
+                        tracing::warn!(error = %e, "slice post-processing panicked");
                     }
                 }
             }
-            eprintln!("DEBUG post_results.len()={}", post_results.len());
-            for (i, r) in post_results.iter().enumerate() {
+            tracing::debug!(count = post_results.len(), "post results received");
+            for r in post_results.iter() {
                 for t in &r.task_graph.tasks {
                     if t.id.starts_with("goal-agent-implement-") {
-                        eprintln!("DEBUG post_result[{i}] task {} status={:?}", t.id, t.status);
+                        tracing::debug!(task_id = %t.id, status = ?t.status, "post result");
                     }
                 }
             }
@@ -348,23 +349,27 @@ pub async fn execute_goal_with_dispatcher<D: dispatch::GoalDispatcher + Clone + 
 
     let phase_duration = tokio::time::Instant::now() - phase_start;
     if let Ok(state) = crate::runtime::goal::resolve_goal(&state.goal_id).await {
-        if let Ok(tracker) = budget::init_goal_cost_tracker(&state) {
-            let cost = crate::cost::types::SessionCost {
-                session_type: "execute".to_string(),
-                name: "goal execute".to_string(),
-                started_at: chrono::Utc::now(),
-                ended_at: Some(chrono::Utc::now()),
-                estimate: crate::cost::estimator::CostEstimate {
-                    input_tokens: 0,
-                    output_tokens: 0,
-                    duration_secs: phase_duration.as_secs(),
-                    worker_count: actual_worker_count as usize,
-                    estimated_usd: 0.0,
-                    tier: crate::cost::estimator::PricingTier::Standard,
-                },
-                actual_usd: None,
-            };
-            let _ = tracker.record(cost).await;
+        let tracker = crate::cost::tracker::CostTracker::for_goal(
+            &state.state_dir,
+            state.cost_tracker_path.as_deref(),
+        );
+        let cost = crate::cost::types::SessionCost {
+            session_type: "execute".to_string(),
+            name: "goal execute".to_string(),
+            started_at: chrono::Utc::now(),
+            ended_at: Some(chrono::Utc::now()),
+            estimate: crate::cost::estimator::CostEstimate {
+                input_tokens: 0,
+                output_tokens: 0,
+                duration_secs: phase_duration.as_secs(),
+                worker_count: actual_worker_count as usize,
+                estimated_usd: 0.0,
+                tier: crate::cost::estimator::PricingTier::Standard,
+            },
+            actual_usd: None,
+        };
+        if let Err(e) = tracker.record(cost).await {
+            warn!(error = %e, "Failed to record start cost");
         }
     }
 

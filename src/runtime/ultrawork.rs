@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::process::Command;
 use tracing::{info, warn};
 
 /// A single completed ultrawork job.
@@ -22,7 +21,7 @@ pub async fn run_ultrawork(
     dir: &Path,
     concurrency: usize,
     output: Option<PathBuf>,
-) -> Result<Vec<UltraworkJob>> {
+) -> Result<(Vec<UltraworkJob>, crate::runtime::session::SessionSummary)> {
     if tasks.is_empty() {
         anyhow::bail!("No tasks provided. Pass tasks as arguments or use --file.");
     }
@@ -37,7 +36,7 @@ pub async fn run_ultrawork(
         1,
         crate::cost::estimator::PricingTier::Standard,
     );
-    println!("  Estimated cost: {}", rough_estimate.formatted());
+    info!("Estimated cost: {}", rough_estimate.formatted());
 
     // Load AGENTS.md if present
     let agents_md = crate::agents::load_project_agents(dir).await.ok().flatten();
@@ -45,13 +44,11 @@ pub async fn run_ultrawork(
     let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency));
     let mut join_set = tokio::task::JoinSet::new();
 
-    println!();
-    println!(
+    info!(
         "⚡ Ultrawork: {} jobs, concurrency {}",
         tasks.len(),
         concurrency
     );
-    println!();
 
     for (i, task) in tasks.iter().enumerate() {
         let permit = semaphore
@@ -93,7 +90,7 @@ pub async fn run_ultrawork(
         match res {
             Ok(job) => {
                 let icon = if job.success { "✓" } else { "✗" };
-                println!(
+                info!(
                     "  {} Job {:2} completed in {:>5}ms  {}",
                     icon,
                     job.id + 1,
@@ -113,8 +110,7 @@ pub async fn run_ultrawork(
     let total_duration_ms: u64 = jobs.iter().map(|j| j.duration_ms).sum();
     let total_duration_secs = total_duration_ms / 1000;
 
-    println!();
-    println!(
+    info!(
         "⚡ Ultrawork complete: {}/{} jobs succeeded in {}s",
         success_count,
         jobs.len(),
@@ -125,28 +121,8 @@ pub async fn run_ultrawork(
     if let Some(path) = output {
         let json = serde_json::to_string_pretty(&jobs)?;
         tokio::fs::write(&path, json).await?;
-        println!("  Results saved to {}", path.display());
+        info!("Results saved to {}", path.display());
     }
-
-    // Record cost
-    let cost = crate::cost::estimator::estimate_cost(
-        total_duration_secs,
-        jobs.len(),
-        1,
-        crate::cost::estimator::PricingTier::Standard,
-    );
-    let _ = crate::runtime::session::record_session_end(
-        "ultrawork",
-        &format!("ultrawork-{}-jobs", jobs.len()),
-        started_at,
-        cost,
-        crate::notifications::NotificationEvent::UltraworkComplete {
-            jobs_total: jobs.len(),
-            jobs_success: success_count,
-            duration_secs: total_duration_secs,
-        },
-    )
-    .await;
 
     info!(
         jobs_total = jobs.len(),
@@ -155,25 +131,30 @@ pub async fn run_ultrawork(
         "Ultrawork session complete"
     );
 
-    Ok(jobs)
+    let summary = crate::runtime::session::SessionSummary {
+        session_type: "ultrawork".to_string(),
+        name: format!("ultrawork-{}-jobs", jobs.len()),
+        started_at,
+        ended_at: chrono::Utc::now(),
+        duration_secs: total_duration_secs,
+        jobs_total: Some(jobs.len()),
+        jobs_success: Some(success_count),
+        phases_completed: None,
+        iterations: None,
+        verified: None,
+        total_stories: None,
+    };
+
+    Ok((jobs, summary))
 }
 
 async fn run_kimi(prompt: &str, dir: &Path) -> Result<String> {
-    let output = tokio::time::timeout(
-        Duration::from_secs(120),
-        Command::new("kimi")
-            .args(["-p", prompt])
-            .current_dir(dir)
-            .output(),
-    )
-    .await??;
-
+    let output =
+        crate::runtime::shell::run_kimi(prompt, Some(dir), false, Duration::from_secs(120)).await?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-
     if !output.status.success() {
         anyhow::bail!("kimi exited with error: {stderr}");
     }
-
     Ok(format!("{stdout}{stderr}"))
 }

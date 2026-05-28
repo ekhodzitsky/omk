@@ -31,7 +31,7 @@ use telemetry::{append, prompt_hash_hex, TelemetryRecord};
 pub async fn classify(
     input: ClassifierInput,
     backend: &dyn LlmClassifierBackend,
-    cache: &mut LruCache<u64, ClassifierOutput>,
+    cache: &tokio::sync::Mutex<LruCache<u64, ClassifierOutput>>,
 ) -> ClassifierOutput {
     // a) telemetry compact if stale
     let _ = telemetry::compact_if_stale(30).await;
@@ -112,21 +112,25 @@ pub async fn classify(
 
     // c) cache lookup
     let key = cache::cache_key(&input.prompt);
-    if let Some(cached) = cache.get(&key) {
-        let mut cached = cached.clone();
-        cached.source = ClassificationSource::Cache;
-        cached.latency_ms = 0;
-        let _ = append(TelemetryRecord {
-            ts: chrono::Utc::now(),
-            intent: cached.intent,
-            confidence: cached.confidence,
-            source: cached.source,
-            latency_ms: cached.latency_ms,
-            prompt_hash: prompt_hash_hex(&input.prompt),
-            fallback: cached.fallback,
-        })
-        .await;
-        return cached;
+    {
+        let mut cache_guard = cache.lock().await;
+        if let Some(cached) = cache_guard.get(&key) {
+            let mut cached = cached.clone();
+            cached.source = ClassificationSource::Cache;
+            cached.latency_ms = 0;
+            drop(cache_guard);
+            let _ = append(TelemetryRecord {
+                ts: chrono::Utc::now(),
+                intent: cached.intent,
+                confidence: cached.confidence,
+                source: cached.source,
+                latency_ms: cached.latency_ms,
+                prompt_hash: prompt_hash_hex(&input.prompt),
+                fallback: cached.fallback,
+            })
+            .await;
+            return cached;
+        }
     }
 
     // d) LLM call
@@ -141,7 +145,10 @@ pub async fn classify(
                     output.latency_ms = latency_ms;
                     output.source = ClassificationSource::Llm;
                     // f) write cache
-                    cache.put(key, output.clone());
+                    {
+                        let mut cache_guard = cache.lock().await;
+                        cache_guard.put(key, output.clone());
+                    }
                     // g) telemetry
                     let _ = append(TelemetryRecord {
                         ts: chrono::Utc::now(),

@@ -1,3 +1,4 @@
+#[cfg(test)]
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
@@ -77,12 +78,14 @@ pub trait LlmClient: Send + Sync {
 ///
 /// Pre-configured responses are returned in FIFO order.  All prompts sent
 /// through the client can be inspected later via [`MockLlmClient::take_calls`].
+#[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct MockLlmClient {
     responses: Arc<Mutex<VecDeque<String>>>,
     calls: Arc<Mutex<Vec<String>>>,
 }
 
+#[cfg(test)]
 impl MockLlmClient {
     /// Create a mock with a queue of canned responses.
     pub fn new(responses: Vec<String>) -> Self {
@@ -108,6 +111,7 @@ impl MockLlmClient {
     }
 }
 
+#[cfg(test)]
 #[allow(async_fn_in_trait)]
 impl LlmClient for MockLlmClient {
     async fn complete(&self, prompt: &str, _budget: &TokenBudget) -> Result<LlmResponse, LlmError> {
@@ -194,80 +198,79 @@ where
     ) -> Result<LlmResponse, LlmError> {
         let prompt_tokens = self.check_budget(prompt, budget)?;
 
-        let (content, status_tokens) = {
+        let id = {
             let mut wire = self.wire.lock().await;
-            let id = wire
-                .start_prompt(prompt)
+            wire.start_prompt(prompt)
                 .await
-                .map_err(|e| LlmError::TransientNetwork(e.to_string()))?;
-            tracing::trace!(request_id = %id, "wire prompt started");
+                .map_err(|e| LlmError::TransientNetwork(e.to_string()))?
+        };
+        tracing::trace!(request_id = %id, "wire prompt started");
 
-            let mut content = String::new();
-            let mut status_tokens: Option<u64> = None;
+        let mut content = String::new();
+        let mut status_tokens: Option<u64> = None;
 
-            loop {
-                let msg = match tokio::time::timeout(self.config.timeout, wire.read_message()).await
-                {
-                    Ok(Ok(m)) => m,
-                    Ok(Err(e)) => return Err(LlmError::TransientNetwork(e.to_string())),
-                    Err(_) => {
-                        return Err(LlmError::Timeout(self.config.timeout));
-                    }
-                };
+        loop {
+            let msg = match tokio::time::timeout(self.config.timeout, async {
+                let mut wire = self.wire.lock().await;
+                wire.read_message().await
+            })
+            .await
+            {
+                Ok(Ok(m)) => m,
+                Ok(Err(e)) => return Err(LlmError::TransientNetwork(e.to_string())),
+                Err(_) => {
+                    return Err(LlmError::Timeout(self.config.timeout));
+                }
+            };
 
-                match msg {
-                    WireMessage::SuccessResponse(resp) if resp.id == id => {
-                        let raw = serde_json::to_string(&resp.result).unwrap_or_default();
-                        let result: PromptResult =
-                            serde_json::from_value(resp.result).map_err(|e| {
-                                LlmError::ParseError {
-                                    raw,
-                                    reason: e.to_string(),
+            match msg {
+                WireMessage::SuccessResponse(resp) if resp.id == id => {
+                    let raw = serde_json::to_string(&resp.result).unwrap_or_default();
+                    let result: PromptResult =
+                        serde_json::from_value(resp.result).map_err(|e| LlmError::ParseError {
+                            raw,
+                            reason: e.to_string(),
+                        })?;
+                    debug!(status = %result.status, "wire prompt completed");
+                    break;
+                }
+                WireMessage::ErrorResponse(resp) if resp.id == id => {
+                    return Err(LlmError::TransientNetwork(format!(
+                        "wire error {}: {}",
+                        resp.error.code, resp.error.message
+                    )));
+                }
+                WireMessage::Event(ev) => {
+                    if let Ok(event) = ev.params.to_event() {
+                        match event {
+                            Event::ContentPart { text, chunk } => {
+                                if let Some(t) = text {
+                                    content.push_str(&t);
                                 }
-                            })?;
-                        debug!(status = %result.status, "wire prompt completed");
-                        break;
-                    }
-                    WireMessage::ErrorResponse(resp) if resp.id == id => {
-                        return Err(LlmError::TransientNetwork(format!(
-                            "wire error {}: {}",
-                            resp.error.code, resp.error.message
-                        )));
-                    }
-                    WireMessage::Event(ev) => {
-                        if let Ok(event) = ev.params.to_event() {
-                            match event {
-                                Event::ContentPart { text, chunk } => {
-                                    if let Some(t) = text {
-                                        content.push_str(&t);
-                                    }
-                                    if let Some(c) = chunk {
-                                        content.push_str(&c);
-                                    }
+                                if let Some(c) = chunk {
+                                    content.push_str(&c);
                                 }
-                                Event::StatusUpdate {
-                                    token_usage: Some(tu),
-                                    ..
-                                } => {
-                                    status_tokens = Some(tu);
-                                }
-                                Event::TurnEnd => {
-                                    tracing::trace!("wire turn end");
-                                }
-                                _ => {}
                             }
-                        } else {
-                            tracing::trace!(params = ?ev.params, "ignoring malformed wire event");
+                            Event::StatusUpdate {
+                                token_usage: Some(tu),
+                                ..
+                            } => {
+                                status_tokens = Some(tu);
+                            }
+                            Event::TurnEnd => {
+                                tracing::trace!("wire turn end");
+                            }
+                            _ => {}
                         }
-                    }
-                    other => {
-                        tracing::trace!(?other, "ignoring unrelated wire message");
+                    } else {
+                        tracing::trace!(params = ?ev.params, "ignoring malformed wire event");
                     }
                 }
+                other => {
+                    tracing::trace!(?other, "ignoring unrelated wire message");
+                }
             }
-
-            (content, status_tokens)
-        };
+        }
 
         let completion_tokens = if let Some(tu) = status_tokens {
             tu as usize

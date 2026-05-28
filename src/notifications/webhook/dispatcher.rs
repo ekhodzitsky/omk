@@ -55,7 +55,7 @@ pub async fn send_notification_with_transport(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::notifications::webhook::MockWebhookTransport;
+    use crate::notifications::webhook::transport::MockWebhookTransport;
 
     #[tokio::test]
     async fn send_notification_with_empty_config_does_nothing() {
@@ -70,7 +70,7 @@ mod tests {
         };
         let transport = MockWebhookTransport::default();
         send_notification_with_transport(&config, &event, &transport).await;
-        assert!(transport.calls.lock().unwrap().is_empty());
+        assert!(transport.calls.lock().await.is_empty());
     }
 
     #[tokio::test]
@@ -90,7 +90,7 @@ mod tests {
             &transport,
         )
         .await;
-        let calls = transport.calls.lock().unwrap();
+        let calls = transport.calls.lock().await;
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "https://discord.webhook/test");
     }

@@ -170,6 +170,12 @@ async fn read_file_artifacts(
     let mut artifacts = Vec::new();
     for relative in artifact_paths {
         let path = project_dir.join(relative);
+        if !path.starts_with(project_dir) {
+            anyhow::bail!(
+                "artifact path escapes project directory: {}",
+                path.display()
+            );
+        }
         let contents = tokio::fs::read_to_string(&path).await.with_context(|| {
             format!("Failed to read rewrite oracle artifact: {}", path.display())
         })?;

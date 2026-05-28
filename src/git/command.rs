@@ -84,8 +84,8 @@ impl GitCommand {
                 .env("GIT_TERMINAL_PROMPT", "0")
                 .env("GIT_ASKPASS", "echo")
                 .env("GIT_SSH_COMMAND", "ssh -oBatchMode=yes")
-                .env("LC_ALL", "C")
-                .kill_on_drop(true);
+                .env("LC_ALL", "C");
+            crate::runtime::shell::configure_command(&mut cmd);
 
             for (k, v) in extra_env {
                 cmd.env(k, v);

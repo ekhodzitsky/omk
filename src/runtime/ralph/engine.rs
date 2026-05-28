@@ -35,7 +35,7 @@ pub async fn run_ralph(
     max_iterations: usize,
     resume: bool,
     yolo: bool,
-) -> Result<()> {
+) -> Result<crate::runtime::session::SessionSummary> {
     info!(task = %task, dir = %dir.display(), max_iterations, resume, yolo, "Starting Ralph persistent loop");
 
     let started_at = chrono::Utc::now();
@@ -95,10 +95,10 @@ pub async fn run_ralph(
     tokio::fs::write(&prd_path, serde_json::to_string_pretty(&state.prd)?).await?;
     info!(path = %prd_path.display(), "Saved PRD");
 
-    println!("Ralph: starting persistence loop for '{}'", task);
-    println!("  Stories: {}", state.prd.user_stories.len());
-    println!("  Max iterations: {}", max_iterations);
-    println!("  State dir: {}", state_dir.display());
+    info!("Ralph: starting persistence loop for '{}'", task);
+    info!("  Stories: {}", state.prd.user_stories.len());
+    info!("  Max iterations: {}", max_iterations);
+    info!("  State dir: {}", state_dir.display());
 
     // Show rough cost estimate
     let rough_estimate = crate::cost::estimator::estimate_ralph_cost(
@@ -106,7 +106,7 @@ pub async fn run_ralph(
         max_iterations,
         state.prd.user_stories.len(),
     );
-    println!("  Estimated cost: {}", rough_estimate.formatted());
+    info!("  Estimated cost: {}", rough_estimate.formatted());
 
     let mut consecutive_failures: HashMap<String, usize> = HashMap::new();
 
@@ -125,10 +125,9 @@ pub async fn run_ralph(
             Some(idx) => idx,
             None => {
                 info!("All stories verified — Ralph loop complete");
-                println!("✓ All user stories verified. Ralph complete.");
+                info!("✓ All user stories verified. Ralph complete.");
                 state.save().await?;
 
-                // Record cost
                 let duration = u64::try_from(
                     chrono::Utc::now()
                         .signed_duration_since(started_at)
@@ -141,25 +140,6 @@ pub async fn run_ralph(
                     .iter()
                     .filter(|s| matches!(s.status, StoryStatus::Verified))
                     .count();
-                let cost = crate::cost::estimator::estimate_ralph_cost(
-                    duration,
-                    state.iteration,
-                    state.prd.user_stories.len(),
-                );
-                let _ = crate::runtime::session::record_session_end(
-                    "ralph",
-                    task,
-                    started_at,
-                    cost,
-                    crate::notifications::NotificationEvent::RalphComplete {
-                        name: task.to_string(),
-                        duration_secs: duration,
-                        iterations: state.iteration,
-                        verified,
-                        total: state.prd.user_stories.len(),
-                    },
-                )
-                .await;
 
                 // Save done contract
                 let mut contract = DoneContract::new(
@@ -172,7 +152,19 @@ pub async fn run_ralph(
                 contract.changed_files = detect_changed_files(dir).await;
                 contract.save(&state_dir.join("done-contract.json")).await?;
 
-                return Ok(());
+                return Ok(crate::runtime::session::SessionSummary {
+                    session_type: "ralph".to_string(),
+                    name: task.to_string(),
+                    started_at,
+                    ended_at: chrono::Utc::now(),
+                    duration_secs: duration,
+                    jobs_total: None,
+                    jobs_success: None,
+                    phases_completed: None,
+                    iterations: Some(state.iteration),
+                    verified: Some(verified),
+                    total_stories: Some(state.prd.user_stories.len()),
+                });
             }
         };
 
@@ -180,14 +172,14 @@ pub async fn run_ralph(
         let story_desc = state.prd.user_stories[story_idx].description.clone();
         let failures = consecutive_failures.get(&story_id).copied().unwrap_or(0);
 
-        println!(
+        info!(
             "[{}/{}] Story {}: {}",
             state.iteration, max_iterations, story_id, story_desc
         );
 
         if failures >= 3 {
             warn!(story_id = %story_id, "Escalating to architect after 3 failures");
-            println!(
+            info!(
                 "  ⚠ Escalating {} to architect (3 failed attempts)",
                 story_id
             );
@@ -214,11 +206,11 @@ pub async fn run_ralph(
                         output_len = output.len(),
                         "Architect escalation response received"
                     );
-                    println!("  Architect provided guidance ({} bytes)", output.len());
+                    info!("  Architect provided guidance ({} bytes)", output.len());
                 }
                 Err(e) => {
                     error!(error = %e, "Architect escalation failed");
-                    println!("  ⚠ Architect escalation failed: {}", e);
+                    warn!("  ⚠ Architect escalation failed: {}", e);
                 }
             }
 
@@ -266,7 +258,7 @@ pub async fn run_ralph(
         state.prd.user_stories[story_idx].status = StoryStatus::Implemented;
         state.save().await?;
 
-        println!("  Verifying {}...", story_id);
+        info!("  Verifying {}...", story_id);
 
         let gate_results = if gate_config.gates.is_empty() {
             // No gates configured — fall back to old behavior (just tests)
@@ -294,7 +286,7 @@ pub async fn run_ralph(
         } else {
             let results = run_gates(&gate_config, dir).await;
             state.gate_results = results.clone();
-            println!("{}", format_gate_summary(&results));
+            info!("{}", format_gate_summary(&results));
             results
         };
 
@@ -307,14 +299,14 @@ pub async fn run_ralph(
         if passed {
             state.prd.user_stories[story_idx].status = StoryStatus::Verified;
             consecutive_failures.insert(story_id.clone(), 0);
-            println!("  ✓ {} verified", story_id);
+            info!("  ✓ {} verified", story_id);
         } else {
             state.prd.user_stories[story_idx].status = StoryStatus::Failed;
             let new_failures = failures + 1;
             consecutive_failures.insert(story_id.clone(), new_failures);
-            println!("  ✗ {} failed (attempt {}/3)", story_id, new_failures);
+            warn!("  ✗ {} failed (attempt {}/3)", story_id, new_failures);
             if !yolo && new_failures >= 3 {
-                println!("  ⚠ Max failures reached. Use --yolo to continue.");
+                warn!("  ⚠ Max failures reached. Use --yolo to continue.");
                 state.save().await?;
                 // Save done contract before bail
                 let mut contract = DoneContract::new(
@@ -340,7 +332,7 @@ pub async fn run_ralph(
         );
     }
 
-    println!("Ralph: reached max iterations ({})", max_iterations);
+    info!("Ralph: reached max iterations ({})", max_iterations);
     info!("Ralph reached max iterations");
     state.save().await?;
 
@@ -368,26 +360,17 @@ pub async fn run_ralph(
     contract.changed_files = detect_changed_files(dir).await;
     contract.save(&state_dir.join("done-contract.json")).await?;
 
-    // Record cost
-    let cost = crate::cost::estimator::estimate_ralph_cost(
-        duration,
-        state.iteration,
-        state.prd.user_stories.len(),
-    );
-    let _ = crate::runtime::session::record_session_end(
-        "ralph",
-        task,
+    Ok(crate::runtime::session::SessionSummary {
+        session_type: "ralph".to_string(),
+        name: task.to_string(),
         started_at,
-        cost,
-        crate::notifications::NotificationEvent::RalphComplete {
-            name: task.to_string(),
-            duration_secs: duration,
-            iterations: state.iteration,
-            verified,
-            total: state.prd.user_stories.len(),
-        },
-    )
-    .await;
-
-    Ok(())
+        ended_at: chrono::Utc::now(),
+        duration_secs: duration,
+        jobs_total: None,
+        jobs_success: None,
+        phases_completed: None,
+        iterations: Some(state.iteration),
+        verified: Some(verified),
+        total_stories: Some(state.prd.user_stories.len()),
+    })
 }

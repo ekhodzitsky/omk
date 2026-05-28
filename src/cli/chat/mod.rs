@@ -1,7 +1,6 @@
 pub mod app;
 pub mod commands;
 pub mod composed_backend;
-pub mod events_adapter;
 pub mod input;
 pub mod persistence;
 pub mod run;

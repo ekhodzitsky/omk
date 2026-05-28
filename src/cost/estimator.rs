@@ -50,6 +50,18 @@ pub struct CostEstimate {
 }
 
 impl CostEstimate {
+    /// Build a [`CostEstimate`] from budget-check usage data.
+    pub fn from_budget(used_tokens: u64, duration_secs: u64, estimated_usd: f64) -> Self {
+        Self {
+            input_tokens: used_tokens,
+            output_tokens: 0,
+            duration_secs,
+            worker_count: 1,
+            estimated_usd,
+            tier: PricingTier::Standard,
+        }
+    }
+
     pub fn formatted(&self) -> String {
         format!(
             "~${:.4} ({} workers, ~{}s, ~{}K tokens)",

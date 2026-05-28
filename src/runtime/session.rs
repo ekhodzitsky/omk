@@ -1,34 +1,21 @@
-use anyhow::Result;
 use chrono::{DateTime, Utc};
 
-/// Record session cost and send a notification webhook.
-pub async fn record_session_end(
-    session_type: &str,
-    name: &str,
-    started_at: DateTime<Utc>,
-    estimate: crate::cost::estimator::CostEstimate,
-    notification: crate::notifications::NotificationEvent,
-) -> Result<()> {
-    let state_dir = crate::runtime::config::state_dir();
-    let sink = crate::cost::file_sink::JsonFileCostSink::new(state_dir.join("costs.json"));
-    let tracker = crate::cost::tracker::CostTracker::new(sink);
-    let _ = tracker
-        .record(crate::cost::types::SessionCost {
-            session_type: session_type.to_string(),
-            name: name.to_string(),
-            started_at,
-            ended_at: Some(Utc::now()),
-            estimate,
-            actual_usd: None,
-        })
-        .await;
-
-    let config = crate::runtime::config::load_config()
-        .await
-        .unwrap_or_default();
-    if let Some(webhooks) = config.webhooks {
-        crate::notifications::send_notification(&webhooks, &notification).await;
-    }
-
-    Ok(())
+/// Summary data for a completed session, produced by runtime modules and
+/// consumed by the CLI layer for cost tracking and notifications.
+///
+/// This type intentionally carries no `cost` or `notification` dependencies so
+/// that `runtime/` can remain decoupled from `cost/` and `notifications/`.
+#[derive(Debug, Clone)]
+pub struct SessionSummary {
+    pub session_type: String,
+    pub name: String,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: DateTime<Utc>,
+    pub duration_secs: u64,
+    pub jobs_total: Option<usize>,
+    pub jobs_success: Option<usize>,
+    pub phases_completed: Option<usize>,
+    pub iterations: Option<usize>,
+    pub verified: Option<usize>,
+    pub total_stories: Option<usize>,
 }

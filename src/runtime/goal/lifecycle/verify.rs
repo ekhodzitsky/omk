@@ -1,4 +1,5 @@
 use std::path::Path;
+use tracing::warn;
 
 use crate::runtime::goal::proof::GoalProof;
 use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
@@ -53,7 +54,7 @@ pub async fn verify_goal_with_slices(
                     changed_files.extend(slice_changed);
                 }
                 Err(e) => {
-                    tracing::warn!("slice gate task failed: {e}");
+                    tracing::warn!(error = %e, "slice gate task failed");
                 }
             }
         }
@@ -84,24 +85,28 @@ pub async fn verify_goal_with_slices(
     budget::append_budget_checkpoint(&state, "verify_completed").await?;
 
     let phase_duration = tokio::time::Instant::now() - phase_start;
-    if let Ok(tracker) = budget::init_goal_cost_tracker(&state) {
-        let worker_count = slices.map(|s| s.len()).unwrap_or(1);
-        let cost = crate::cost::types::SessionCost {
-            session_type: "verify".to_string(),
-            name: "goal verify".to_string(),
-            started_at: chrono::Utc::now(),
-            ended_at: Some(chrono::Utc::now()),
-            estimate: crate::cost::estimator::CostEstimate {
-                input_tokens: 0,
-                output_tokens: 0,
-                duration_secs: phase_duration.as_secs(),
-                worker_count,
-                estimated_usd: 0.0,
-                tier: crate::cost::estimator::PricingTier::Standard,
-            },
-            actual_usd: None,
-        };
-        let _ = tracker.record(cost).await;
+    let tracker = crate::cost::tracker::CostTracker::for_goal(
+        &state.state_dir,
+        state.cost_tracker_path.as_deref(),
+    );
+    let worker_count = slices.map(|s| s.len()).unwrap_or(1);
+    let cost = crate::cost::types::SessionCost {
+        session_type: "verify".to_string(),
+        name: "goal verify".to_string(),
+        started_at: chrono::Utc::now(),
+        ended_at: Some(chrono::Utc::now()),
+        estimate: crate::cost::estimator::CostEstimate {
+            input_tokens: 0,
+            output_tokens: 0,
+            duration_secs: phase_duration.as_secs(),
+            worker_count,
+            estimated_usd: 0.0,
+            tier: crate::cost::estimator::PricingTier::Standard,
+        },
+        actual_usd: None,
+    };
+    if let Err(e) = tracker.record(cost).await {
+        warn!(error = %e, "Failed to record verify cost");
     }
 
     Ok(proof)

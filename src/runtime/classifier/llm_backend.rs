@@ -26,14 +26,14 @@ pub trait LlmClassifierBackend: Send + Sync {
 
 #[derive(Debug)]
 pub struct WireLlmClassifierBackend<C> {
-    client: Arc<tokio::sync::Mutex<C>>,
+    client: Arc<C>,
 }
 
 impl<C> WireLlmClassifierBackend<C>
 where
     C: LlmClient + Send + 'static,
 {
-    pub fn new(client: Arc<tokio::sync::Mutex<C>>) -> Self {
+    pub fn new(client: Arc<C>) -> Self {
         Self { client }
     }
 }
@@ -50,8 +50,8 @@ where
         let system = super::system_prompt::CLASSIFIER_SYSTEM_PROMPT;
         let budget = TokenBudget::new(4096);
         let user_prompt = build_user_prompt(input);
-        let client = self.client.lock().await;
-        let response = client
+        let response = self
+            .client
             .complete_with_system(system, &user_prompt, &budget)
             .await
             .map_err(|e| anyhow::anyhow!(e))?;

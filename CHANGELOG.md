@@ -182,6 +182,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cover chat REPL, MCP client commands, goal budget/merge
   subcommands, and additional goal execution flags shipped
   since 0.4.0.
+- **Simplicity Doctrine**: added to `AGENTS.md` — hard constraints on solving
+  hard problems with simple code.
+
+### Changed
+
+- **Refactored `events_adapter`**: moved from `src/cli/chat/` to
+  `src/runtime/conversation/` to break the `cli ↔ vis` circular dependency.
+- **Unified session cost tracking**: new `src/cli/session.rs` module records
+  session costs and sends webhook notifications on session end.
+- **Removed unused `tower` dependency** from `Cargo.toml` and `server` feature.
+
+### Fixed
+
+- **MutexGuard scope in `llm/client/mod.rs`**: guard now taken per async
+  operation instead of held across the entire message loop.
+- **Child process safety**: all `Command` spawns now set `kill_on_drop(true)`.
+- **Flaky `manifest_init_and_load` test**: uses random UUID and cleans up
+  global state directory instead of a fixed `run_id`.
+- **Prometheus metrics completeness**: vis server now exports all 11 metrics
+  (`tasks_completed`, `tasks_failed`, `ask_errors`, `autopilot_runs`,
+  `ralph_runs` were missing).
 
 ## [0.4.0] - 2026-05-13
 

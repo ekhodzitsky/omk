@@ -67,7 +67,17 @@ async fn discover_active_hooks(project_dir: Option<&Path>) -> Vec<ActiveHook> {
 
     let mut active = Vec::new();
     for hook in hooks {
+        // Reject absolute paths and parent-directory traversals to keep hooks
+        // confined to the project directory.
+        if Path::new(&hook.command).is_absolute() || hook.command.contains("..") {
+            warn!(command = %hook.command, "Hook command rejected: absolute or parent-dir traversal");
+            continue;
+        }
         let script_path = project_dir.join(&hook.command);
+        if !script_path.starts_with(project_dir) {
+            warn!(path = %script_path.display(), "Hook script path escapes project directory");
+            continue;
+        }
         if !is_executable(&script_path).await {
             continue;
         }
@@ -85,15 +95,26 @@ async fn discover_active_hooks(project_dir: Option<&Path>) -> Vec<ActiveHook> {
 
         let timeout = hook.timeout.map(|t| t.clamp(1, 300) as u32).unwrap_or(30);
 
-        let regex = hook.matcher.as_ref().and_then(|pattern| {
-            match regex::Regex::new(pattern) {
-                Ok(re) => Some(re),
-                Err(e) => {
+        let regex = if let Some(ref pattern) = hook.matcher {
+            match tokio::task::spawn_blocking({
+                let pattern = pattern.clone();
+                move || regex::Regex::new(&pattern)
+            })
+            .await
+            {
+                Ok(Ok(re)) => Some(re),
+                Ok(Err(e)) => {
                     warn!(pattern = %pattern, error = %e, "Invalid hook matcher regex; matcher will be ignored");
                     None
                 }
+                Err(e) => {
+                    warn!(pattern = %pattern, error = %e, "Regex compilation panicked");
+                    None
+                }
             }
-        });
+        } else {
+            None
+        };
 
         active.push(ActiveHook {
             subscription: WireHookSubscription {
@@ -187,14 +208,13 @@ impl HookExecutor {
         let input_json = serde_json::to_string(&redacted_input)
             .context("Failed to serialize hook input data")?;
 
-        let mut child = match tokio::process::Command::new(&matched.script_path)
-            .current_dir(&self.project_dir)
+        let mut cmd = tokio::process::Command::new(&matched.script_path);
+        cmd.current_dir(&self.project_dir)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-        {
+            .stderr(std::process::Stdio::piped());
+        crate::runtime::shell::configure_command(&mut cmd);
+        let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
                 return Ok(HookResult {

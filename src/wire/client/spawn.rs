@@ -34,7 +34,8 @@ impl ProcessWireClient {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
 
-            match cmd.kill_on_drop(true).spawn() {
+            crate::runtime::shell::configure_command(&mut cmd);
+            match cmd.spawn() {
                 Ok(spawned) => {
                     child = Some(spawned);
                     break;

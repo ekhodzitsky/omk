@@ -99,8 +99,24 @@ pub(crate) async fn run(args: Args) -> Result<()> {
         std::io::stdin().read_line(&mut buf)?;
     }
 
-    crate::runtime::ultrawork::run_ultrawork(tasks, &args.dir, args.concurrency, args.output)
-        .await?;
+    let (jobs, summary) =
+        crate::runtime::ultrawork::run_ultrawork(tasks, &args.dir, args.concurrency, args.output)
+            .await?;
+
+    let cost = crate::cost::estimator::estimate_cost(
+        summary.duration_secs,
+        jobs.len(),
+        1,
+        crate::cost::estimator::PricingTier::Standard,
+    );
+    let notification = crate::notifications::NotificationEvent::UltraworkComplete {
+        jobs_total: jobs.len(),
+        jobs_success: jobs.iter().filter(|j| j.success).count(),
+        duration_secs: summary.duration_secs,
+    };
+    if let Err(e) = crate::cli::session::record_session_end(&summary, cost, notification).await {
+        tracing::warn!(error = %e, "Failed to record ultrawork session end");
+    }
 
     Ok(())
 }

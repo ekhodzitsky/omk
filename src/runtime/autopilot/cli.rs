@@ -11,16 +11,11 @@ pub async fn run_autopilot(
     dir: &Path,
     enable_ralph: bool,
     yolo: bool,
-) -> Result<()> {
+) -> Result<crate::runtime::session::SessionSummary> {
     let mut autopilot = Autopilot::new(name, task, dir, enable_ralph, yolo);
 
-    // Show rough cost estimate
-    let rough_estimate = crate::cost::estimator::estimate_autopilot_cost(300, 6);
-    println!("  Estimated cost: {}", rough_estimate.formatted());
+    autopilot.run().await?;
 
-    let result = autopilot.run().await;
-
-    // Record actual cost
     let duration = u64::try_from(
         chrono::Utc::now()
             .signed_duration_since(autopilot.state.created_at)
@@ -33,30 +28,20 @@ pub async fn run_autopilot(
         .iter()
         .filter(|l| l.success)
         .count();
-    let cost = crate::cost::estimator::estimate_autopilot_cost(duration, phases);
 
-    let notification = match &result {
-        Ok(_) => crate::notifications::NotificationEvent::AutopilotComplete {
-            name: name.to_string(),
-            duration_secs: duration,
-            phases_completed: phases,
-        },
-        Err(e) => crate::notifications::NotificationEvent::AutopilotFailed {
-            name: name.to_string(),
-            phase: format!("{:?}", autopilot.state.phase),
-            error: e.to_string(),
-        },
-    };
-    let _ = crate::runtime::session::record_session_end(
-        "autopilot",
-        name,
-        autopilot.state.created_at,
-        cost,
-        notification,
-    )
-    .await;
-
-    result
+    Ok(crate::runtime::session::SessionSummary {
+        session_type: "autopilot".to_string(),
+        name: name.to_string(),
+        started_at: autopilot.state.created_at,
+        ended_at: chrono::Utc::now(),
+        duration_secs: duration,
+        jobs_total: None,
+        jobs_success: None,
+        phases_completed: Some(phases),
+        iterations: None,
+        verified: None,
+        total_stories: None,
+    })
 }
 
 /// Resume an existing autopilot run.
@@ -65,7 +50,7 @@ pub async fn resume_autopilot(
     _dir: &Path,
     enable_ralph: bool,
     yolo: bool,
-) -> Result<()> {
+) -> Result<crate::runtime::session::SessionSummary> {
     let state_dir = crate::runtime::config::state_dir()
         .join("autopilot")
         .join(name);
@@ -80,9 +65,8 @@ pub async fn resume_autopilot(
     let mut autopilot = Autopilot::from_state(&state_dir, enable_ralph, yolo).await?;
     info!(name = %name, phase = ?autopilot.state.phase, "Resuming autopilot");
 
-    let result = autopilot.run().await;
+    autopilot.run().await?;
 
-    // Record actual cost
     let duration = u64::try_from(
         chrono::Utc::now()
             .signed_duration_since(autopilot.state.created_at)
@@ -95,28 +79,18 @@ pub async fn resume_autopilot(
         .iter()
         .filter(|l| l.success)
         .count();
-    let cost = crate::cost::estimator::estimate_autopilot_cost(duration, phases);
 
-    let notification = match &result {
-        Ok(_) => crate::notifications::NotificationEvent::AutopilotComplete {
-            name: name.to_string(),
-            duration_secs: duration,
-            phases_completed: phases,
-        },
-        Err(e) => crate::notifications::NotificationEvent::AutopilotFailed {
-            name: name.to_string(),
-            phase: format!("{:?}", autopilot.state.phase),
-            error: e.to_string(),
-        },
-    };
-    let _ = crate::runtime::session::record_session_end(
-        "autopilot",
-        name,
-        autopilot.state.created_at,
-        cost,
-        notification,
-    )
-    .await;
-
-    result
+    Ok(crate::runtime::session::SessionSummary {
+        session_type: "autopilot".to_string(),
+        name: name.to_string(),
+        started_at: autopilot.state.created_at,
+        ended_at: chrono::Utc::now(),
+        duration_secs: duration,
+        jobs_total: None,
+        jobs_success: None,
+        phases_completed: Some(phases),
+        iterations: None,
+        verified: None,
+        total_stories: None,
+    })
 }

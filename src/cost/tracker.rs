@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+use super::file_sink::JsonFileCostSink;
 use super::sink::CostSink;
 use super::types::SessionCost;
 
@@ -87,35 +88,67 @@ impl<S: CostSink> CostTracker<S> {
     }
 }
 
+impl CostTracker<JsonFileCostSink> {
+    /// Create a tracker for a goal's cost file.
+    pub fn for_goal(
+        state_dir: &std::path::Path,
+        cost_tracker_path: Option<&std::path::Path>,
+    ) -> Self {
+        let path = cost_tracker_path
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| state_dir.join("cost.jsonl"));
+        Self::new(JsonFileCostSink::new(path))
+    }
+
+    /// Record a budget-check cost session.
+    pub async fn record_budget_check(
+        &self,
+        action: &str,
+        estimate: crate::cost::estimator::CostEstimate,
+    ) -> Result<()> {
+        let now = chrono::Utc::now();
+        self.record(SessionCost {
+            session_type: "budget_check".to_string(),
+            name: action.to_string(),
+            started_at: now,
+            ended_at: Some(now),
+            estimate,
+            actual_usd: None,
+        })
+        .await
+    }
+}
+
+#[cfg(test)]
+fn sample_estimate(usd: f64) -> crate::cost::estimator::CostEstimate {
+    use crate::cost::estimator::{CostEstimate, PricingTier};
+    CostEstimate {
+        input_tokens: 1000,
+        output_tokens: 500,
+        duration_secs: 60,
+        worker_count: 1,
+        estimated_usd: usd,
+        tier: PricingTier::Standard,
+    }
+}
+
+#[cfg(test)]
+fn sample_cost(session_type: &str, usd: f64) -> crate::cost::types::SessionCost {
+    use chrono::Utc;
+    crate::cost::types::SessionCost {
+        session_type: session_type.to_string(),
+        name: "test-session".to_string(),
+        started_at: Utc::now(),
+        ended_at: None,
+        estimate: sample_estimate(usd),
+        actual_usd: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cost::estimator::{CostEstimate, PricingTier};
     use crate::cost::sink::InMemoryCostSink;
-    use crate::cost::types::SessionCost;
-    use chrono::Utc;
-
-    fn sample_estimate(usd: f64) -> CostEstimate {
-        CostEstimate {
-            input_tokens: 1000,
-            output_tokens: 500,
-            duration_secs: 60,
-            worker_count: 1,
-            estimated_usd: usd,
-            tier: PricingTier::Standard,
-        }
-    }
-
-    fn sample_cost(session_type: &str, usd: f64) -> SessionCost {
-        SessionCost {
-            session_type: session_type.to_string(),
-            name: "test-session".to_string(),
-            started_at: Utc::now(),
-            ended_at: None,
-            estimate: sample_estimate(usd),
-            actual_usd: None,
-        }
-    }
 
     #[tokio::test]
     async fn test_record_and_total() {

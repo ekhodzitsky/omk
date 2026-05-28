@@ -119,14 +119,12 @@ impl Autopilot {
         if is_complex {
             info!("Task is complex, running omk team 2:executor");
             let omk_exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("omk"));
-            let output = tokio::time::timeout(
-                std::time::Duration::from_secs(60),
-                tokio::process::Command::new(&omk_exe)
-                    .args(["team", "run", "2:executor", &self.task])
-                    .current_dir(&self.dir)
-                    .output(),
-            )
-            .await;
+            let mut cmd = tokio::process::Command::new(&omk_exe);
+            cmd.args(["team", "run", "2:executor", &self.task])
+                .current_dir(&self.dir);
+            crate::runtime::shell::configure_command(&mut cmd);
+            let output =
+                tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await;
 
             match output {
                 Ok(Ok(out)) => {
@@ -209,8 +207,7 @@ impl Autopilot {
             errors: errors.clone(),
         });
 
-        println!();
-        println!("{}", format_gate_summary(&results));
+        info!("\n{}\n", format_gate_summary(&results));
 
         if passed {
             info!("All required gates passed");

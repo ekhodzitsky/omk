@@ -52,14 +52,25 @@ pub(crate) async fn shutdown(args: ShutdownArgs) -> Result<()> {
         &state.worker_role,
     );
 
-    let _ = crate::runtime::session::record_session_end(
-        "team",
-        &team_name,
-        state.created_at,
+    let summary = crate::runtime::session::SessionSummary {
+        session_type: "team".to_string(),
+        name: team_name.clone(),
+        started_at: state.created_at,
+        ended_at: chrono::Utc::now(),
+        duration_secs: u64::try_from(duration.num_seconds()).unwrap_or(0),
+        jobs_total: None,
+        jobs_success: None,
+        phases_completed: None,
+        iterations: None,
+        verified: None,
+        total_stories: None,
+    };
+    let _ = crate::cli::session::record_session_end(
+        &summary,
         cost_estimate.clone(),
         crate::notifications::NotificationEvent::TeamShutdown {
             name: team_name.clone(),
-            duration_secs: 0,
+            duration_secs: summary.duration_secs,
             status: if args.force { "forced" } else { "graceful" }.to_string(),
         },
     )

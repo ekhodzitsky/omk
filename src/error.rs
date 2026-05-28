@@ -35,7 +35,7 @@ pub enum OmkError {
     #[error("input validation failed: {reason}")]
     InvalidInput { reason: String },
 
-    #[error("IO error: {path}: {reason}")]
+    #[error("io error: {path}: {reason}")]
     Io { path: PathBuf, reason: String },
 
     #[error("state serialization failed: {reason}")]
@@ -50,17 +50,17 @@ pub enum OmkError {
     #[error("operation timed out after {secs}s")]
     Timeout { secs: u64 },
 
-    #[error("MCP transport error for server '{server}': {reason}")]
+    #[error("mcp transport error for server '{server}': {reason}")]
     McpTransport { server: String, reason: String },
 
-    #[error("MCP tool call failed on server '{server}' tool '{tool}': {reason}")]
+    #[error("mcp tool call failed on server '{server}' tool '{tool}': {reason}")]
     McpToolCall {
         server: String,
         tool: String,
         reason: String,
     },
 
-    #[error("MCP config error at {path}: {reason}")]
+    #[error("mcp config error at {path}: {reason}")]
     McpConfig { path: PathBuf, reason: String },
 }
 

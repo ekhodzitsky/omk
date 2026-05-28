@@ -129,7 +129,14 @@ pub(crate) fn apply_agent_task_result_by_id(
         .find(|task| task.id == task_id)?;
     let success =
         evidence.summary.completed == evidence.summary.total && evidence.summary.failed == 0;
-    eprintln!("DEBUG apply_agent_task_result_by_id task_id={task_id} completed={} total={} failed={} success={}", evidence.summary.completed, evidence.summary.total, evidence.summary.failed, success);
+    tracing::debug!(
+        task_id,
+        completed = evidence.summary.completed,
+        total = evidence.summary.total,
+        failed = evidence.summary.failed,
+        success,
+        "apply agent task result"
+    );
 
     task.status = if success {
         GoalTaskStatus::Done
