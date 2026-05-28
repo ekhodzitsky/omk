@@ -12,7 +12,7 @@ pub async fn make_runner(tmp: &TempDir) -> TeamRunner {
     tokio::fs::create_dir_all(&state_dir).await.unwrap();
     let event_writer = EventWriter::new(&event_log);
     TeamRunner::init(
-        "run-test",
+        &uuid::Uuid::new_v4().to_string(),
         "test task",
         tmp.path(),
         &state_dir,
@@ -27,7 +27,7 @@ pub async fn make_runner_with_tasks(tmp: &TempDir, tasks: Vec<Task>) -> TeamRunn
     let event_log = state_dir.join(EVENTS_FILE);
     tokio::fs::create_dir_all(&state_dir).await.unwrap();
     TeamRunner::init_with_tasks(
-        "run-test",
+        &uuid::Uuid::new_v4().to_string(),
         tmp.path(),
         &state_dir,
         EventWriter::new(&event_log),
