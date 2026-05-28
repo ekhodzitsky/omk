@@ -488,7 +488,10 @@ fn test_setup_runs_and_is_idempotent() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    assert!(config_dir.join("config.toml").exists(), "config.toml not created");
+    assert!(
+        config_dir.join("config.toml").exists(),
+        "config.toml not created"
+    );
     assert!(data_dir.join("skills").exists(), "skills dir not created");
     assert!(
         project.path().join(".omk/AGENTS.md").exists(),
