@@ -49,7 +49,6 @@ pub async fn run_gates_with_evidence(
             .current_dir(dir)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
-        cmd.kill_on_drop(true);
 
         let timeout = if gate.timeout_secs > 0 {
             Duration::from_secs(gate.timeout_secs)
