@@ -161,6 +161,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   since 0.4.0.
 - **Simplicity Doctrine**: added to `AGENTS.md` — hard constraints on solving
   hard problems with simple code.
+- **E2E test for `omk setup`**: `tests/cli_smoke.rs` now covers `setup`
+  idempotency and artifact creation in an isolated XDG environment.
+- **CLI smoke matrix completion**: added `--help` smoke tests for `chat`,
+  `setup`, `mcp`, `mcp-server`, `cost`, and `proof` to prevent silent
+  subcommand regressions.
 
 ### Changed
 
