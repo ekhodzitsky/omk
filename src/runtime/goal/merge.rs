@@ -96,14 +96,14 @@ mod tests {
             &'a mut self,
             _request: GoalGithubPrRequest,
         ) -> Pin<Box<dyn Future<Output = Result<GoalGithubPrMutation>> + Send + 'a>> {
-            unimplemented!()
+            Box::pin(async move { anyhow::bail!("MockMergeClient::create_pr not implemented") })
         }
 
         fn update_pr<'a>(
             &'a mut self,
             _request: GoalGithubPrRequest,
         ) -> Pin<Box<dyn Future<Output = Result<GoalGithubPrMutation>> + Send + 'a>> {
-            unimplemented!()
+            Box::pin(async move { anyhow::bail!("MockMergeClient::update_pr not implemented") })
         }
 
         fn merge_pr<'a>(

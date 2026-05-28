@@ -9,6 +9,7 @@ For market positioning and competitor boundaries, read
 ## Contents
 
 - [Meta Principle](#meta-principle)
+- [Simplicity Doctrine](#simplicity-doctrine)
 - [Behavioral Guidelines](#behavioral-guidelines)
 - [Project Contract Rules](#project-contract-rules-hard-constraints)
 - [Release Discipline](#release-discipline-hard-constraints)
@@ -31,6 +32,14 @@ Before applying any rule or refactor, ask: **what problem does this solve?**
 A newtype, a refactor, or an abstraction is justified only if it prevents a concrete bug,
 clarifies an invariant, or removes a footgun. If the answer is "it looks better" — revert.
 Decoration is not engineering.
+
+## Simplicity Doctrine
+
+**Solve hard problems with simple code.**
+A difficult concept deserves a clear explanation, not a clever obfuscation.
+Every abstraction must earn its keep by removing complexity, not adding it.
+If the same logic can be expressed in half the lines without losing clarity — rewrite it.
+Decoration is not engineering; simplicity is.
 
 ## Behavioral Guidelines
 

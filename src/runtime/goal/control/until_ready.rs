@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 use crate::runtime::events::{Event, EventBuilder, EventKind, EventWriter, RunId};
 use crate::runtime::goal::delivery::GoalDeliveryPolicy;
@@ -334,7 +335,9 @@ async fn emit_narrative(
         .with_actor("controller")
         .with_message(message)
     {
-        let _ = writer.append(&event).await;
+        if let Err(e) = writer.append(&event).await {
+            warn!(error = %e, "Failed to emit narrative event");
+        }
     }
 }
 

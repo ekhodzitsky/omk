@@ -5,5 +5,5 @@
 pub mod parser;
 pub mod query;
 
-pub use parser::{parse_file, Language, SyntaxTree};
-pub use query::{find_calls_to, find_function_definitions, CallSite, FunctionDef};
+pub use parser::parse_file;
+pub use query::find_function_definitions;

@@ -1,4 +1,5 @@
 use std::path::Path;
+use tracing::warn;
 
 use crate::runtime::goal::proof::GoalProof;
 use crate::runtime::goal::state::{FileSystemGoalStateStore, GoalStateStore};
@@ -53,7 +54,7 @@ pub async fn verify_goal_with_slices(
                     changed_files.extend(slice_changed);
                 }
                 Err(e) => {
-                    tracing::warn!("slice gate task failed: {e}");
+                    tracing::warn!(error = %e, "slice gate task failed");
                 }
             }
         }
@@ -84,7 +85,7 @@ pub async fn verify_goal_with_slices(
     budget::append_budget_checkpoint(&state, "verify_completed").await?;
 
     let phase_duration = tokio::time::Instant::now() - phase_start;
-    if let Ok(tracker) = budget::init_goal_cost_tracker(&state) {
+    let tracker = crate::cost::tracker::CostTracker::for_goal(&state.state_dir, state.cost_tracker_path.as_deref());
         let worker_count = slices.map(|s| s.len()).unwrap_or(1);
         let cost = crate::cost::types::SessionCost {
             session_type: "verify".to_string(),
@@ -101,8 +102,9 @@ pub async fn verify_goal_with_slices(
             },
             actual_usd: None,
         };
-        let _ = tracker.record(cost).await;
-    }
+        if let Err(e) = tracker.record(cost).await {
+            warn!(error = %e, "Failed to record verify cost");
+        }
 
     Ok(proof)
 }

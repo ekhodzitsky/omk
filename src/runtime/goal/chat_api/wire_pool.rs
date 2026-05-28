@@ -2,6 +2,8 @@ use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
+use tracing::warn;
 
 use crate::wire::client::{ProcessWireClient, WireClient};
 
@@ -31,6 +33,7 @@ pub struct WirePool<F: WireClientFactory = ProcessWireClientFactory> {
     in_use: Mutex<HashSet<String>>,
     idle_ttl: Duration,
     factory: F,
+    cancel: CancellationToken,
 }
 
 impl<F: WireClientFactory> std::fmt::Debug for WirePool<F> {
@@ -71,6 +74,7 @@ impl<F: WireClientFactory + 'static> WirePool<F> {
             in_use: Default::default(),
             idle_ttl: Duration::from_secs(5 * 60),
             factory,
+            cancel: CancellationToken::new(),
         }
     }
 
@@ -119,18 +123,21 @@ impl<F: WireClientFactory + 'static> WirePool<F> {
                 acquired_at: Instant::now(),
             });
         } else {
-            // Drop worker — shut it down asynchronously since shutdown is async.
-            let _handle = tokio::spawn(async move {
-                let _ = w.inner.shutdown().await;
-            });
+            if let Err(e) = w.inner.shutdown().await {
+                warn!(worker_id = %w.id, error = %e, "Failed to shutdown wire pool worker");
+            }
         }
     }
 
     pub fn spawn_idle_eviction_task(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
+        let cancel = self.cancel.child_token();
         tokio::spawn(async move {
             let interval = Duration::from_secs(60);
             loop {
-                tokio::time::sleep(interval).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(interval) => {}
+                    _ = cancel.cancelled() => break,
+                }
                 let mut idle = self.idle.lock().await;
                 idle.retain(|w| w.acquired_at.elapsed() < self.idle_ttl);
             }

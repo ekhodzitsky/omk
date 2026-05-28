@@ -1,5 +1,6 @@
 // Ralph progress display.
 use crate::runtime::state::{RalphState, StoryStatus};
+use tracing::info;
 
 pub(crate) fn print_progress(state: &RalphState) {
     let verified = state
@@ -16,8 +17,7 @@ pub(crate) fn print_progress(state: &RalphState) {
         .count();
     let total = state.prd.user_stories.len();
 
-    println!();
-    println!(
+    info!(
         "🔄 Ralph: {}/{} stories verified, {} failed (iteration {}/{})",
         verified, total, failed, state.iteration, state.max_iterations
     );
@@ -29,7 +29,6 @@ pub(crate) fn print_progress(state: &RalphState) {
             StoryStatus::Implemented => "◐",
             StoryStatus::NotStarted => "○",
         };
-        println!("   {} {}", icon, story.id);
+        info!("   {} {}", icon, story.id);
     }
-    println!();
 }

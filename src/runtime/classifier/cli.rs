@@ -2,13 +2,14 @@ use std::path::Path;
 
 use anyhow::Result;
 use lru::LruCache;
+use tokio::sync::Mutex;
 
 use super::{classify, telemetry, types::ClassifierInput, ClassifierOutput, LlmClassifierBackend};
 
 pub async fn handle_classify_command(
     args: &str,
     backend: &dyn LlmClassifierBackend,
-    cache: &mut LruCache<u64, ClassifierOutput>,
+    cache: &Mutex<LruCache<u64, ClassifierOutput>>,
     project_root: &Path,
     session_id: &str,
 ) -> Result<ClassifierOutput> {

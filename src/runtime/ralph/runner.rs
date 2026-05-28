@@ -8,35 +8,22 @@ use tracing::warn;
 
 /// Spawn `kimi -p` and capture its combined output.
 pub async fn run_kimi(prompt: &str, dir: &Path) -> Result<String> {
-    let output = tokio::time::timeout(
-        Duration::from_secs(120),
-        Command::new("kimi")
-            .args(["-p", prompt])
-            .current_dir(dir)
-            .output(),
-    )
-    .await??;
-
+    let output = crate::runtime::shell::run_kimi(prompt, Some(dir), false, Duration::from_secs(120)).await?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-
     if !output.status.success() {
         warn!(status = ?output.status, stderr = %stderr, "kimi command failed");
     }
-
     Ok(format!("{}{}", stdout, stderr))
 }
 
 /// Run `cargo test` in the given directory and return whether it succeeded.
 pub async fn run_tests(dir: &Path) -> Result<bool> {
-    let output = tokio::time::timeout(
-        Duration::from_secs(300),
-        Command::new("cargo")
-            .args(["test", "--quiet"])
-            .current_dir(dir)
-            .output(),
-    )
-    .await??;
+    let mut cmd = Command::new("cargo");
+    cmd.args(["test", "--quiet"]).current_dir(dir);
+    crate::runtime::shell::configure_command(&mut cmd);
+    let output = tokio::time::timeout(Duration::from_secs(300), cmd.output())
+        .await??;
 
     Ok(output.status.success())
 }

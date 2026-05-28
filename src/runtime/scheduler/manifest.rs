@@ -244,13 +244,18 @@ mod tests {
     #[tokio::test]
     async fn manifest_init_and_load() {
         let tmp = TempDir::new().unwrap();
-        let manifest = RunManifest::new("run-test-123", "autopilot", tmp.path());
+        let run_id = format!("run-test-{}", uuid::Uuid::new_v4());
+        let manifest = RunManifest::new(&run_id, "autopilot", tmp.path());
         manifest.init().await.unwrap();
 
-        let loaded = RunManifest::load("run-test-123").await.unwrap();
+        let loaded = RunManifest::load(&run_id).await.unwrap();
         assert!(loaded.is_some());
         let loaded = loaded.unwrap();
-        assert_eq!(loaded.run_id, "run-test-123");
+        assert_eq!(loaded.run_id, run_id);
         assert_eq!(loaded.mode, "autopilot");
+
+        // Clean up global state_dir to avoid cross-test pollution.
+        let run_dir = crate::runtime::config::state_dir().join("runs").join(&run_id);
+        let _ = tokio::fs::remove_dir_all(&run_dir).await;
     }
 }

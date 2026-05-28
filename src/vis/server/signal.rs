@@ -1,10 +1,10 @@
 use tokio::signal;
-use tracing::error;
+use tracing::{error, info};
 
 pub(super) async fn shutdown_signal() {
     let ctrl_c = async {
         if let Err(e) = signal::ctrl_c().await {
-            error!("failed to install Ctrl+C handler: {e}");
+            error!(error = %e, "failed to install Ctrl+C handler");
         }
     };
 
@@ -15,7 +15,7 @@ pub(super) async fn shutdown_signal() {
                 sig.recv().await;
             }
             Err(e) => {
-                error!("failed to install signal handler: {e}");
+                error!(error = %e, "failed to install signal handler");
             }
         }
     };
@@ -28,5 +28,5 @@ pub(super) async fn shutdown_signal() {
         _ = terminate => {},
     }
 
-    println!("\n🛑 Shutting down gracefully...");
+    info!("Shutting down gracefully");
 }

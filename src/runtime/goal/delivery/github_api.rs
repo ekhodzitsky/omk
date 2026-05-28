@@ -47,18 +47,20 @@ pub async fn ensure_branch_protection(
         "allow_deletions": policy.allow_deletions,
     }))?;
 
-    let mut child = Command::new("gh")
-        .args([
-            "api",
-            "-X",
-            "PUT",
-            &format!("repos/{owner}/{repo}/branches/{branch}/protection"),
-        ])
-        .arg("--input")
-        .arg("-")
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+    let mut cmd = Command::new("gh");
+    cmd.args([
+        "api",
+        "-X",
+        "PUT",
+        &format!("repos/{owner}/{repo}/branches/{branch}/protection"),
+    ])
+    .arg("--input")
+    .arg("-")
+    .stdin(std::process::Stdio::piped())
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped());
+    crate::runtime::shell::configure_command(&mut cmd);
+    let mut child = cmd
         .spawn()
         .context("failed to spawn gh api for branch protection")?;
 

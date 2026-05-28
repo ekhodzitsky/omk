@@ -23,13 +23,14 @@ pub(crate) async fn run(args: Args) -> Result<()> {
 
     if args.follow {
         println!("Following {} (Ctrl+C to stop)...", log_file.display());
+        let mut tail_cmd = tokio::process::Command::new("tail");
+        tail_cmd
+            .args(["-f", "-n", &args.lines.to_string()])
+            .arg(&log_file);
+        crate::runtime::shell::configure_command(&mut tail_cmd);
         let status = tokio::time::timeout(
             std::time::Duration::from_secs(300),
-            tokio::process::Command::new("tail")
-                .args(["-f", "-n", &args.lines.to_string()])
-                .arg(&log_file)
-                .kill_on_drop(true)
-                .status(),
+            tail_cmd.status(),
         )
         .await
         .context("tail command timed out")?
@@ -39,9 +40,11 @@ pub(crate) async fn run(args: Args) -> Result<()> {
             anyhow::bail!("tail command failed");
         }
     } else {
+        let mut tail_cmd = tokio::process::Command::new("tail");
+        crate::runtime::shell::configure_command(&mut tail_cmd);
         let output = tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            tokio::process::Command::new("tail")
+            tail_cmd
                 .args(["-n", &args.lines.to_string()])
                 .arg(&log_file)
                 .output(),

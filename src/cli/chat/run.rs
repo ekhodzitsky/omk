@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use clap::Args;
+use tracing::warn;
 
 use super::app::{App, AppAction, PaneState};
 use super::commands::backend::CommandBackend;
@@ -25,8 +26,8 @@ pub struct ChatArgs {
 
 #[cfg(feature = "tui")]
 pub async fn run_chat_async(args: ChatArgs) -> Result<()> {
-    let project_root = resolve_project_root();
-    let session_id = resolve_session_id(&args, &project_root)?;
+    let project_root = resolve_project_root().await;
+    let session_id = resolve_session_id(&args, &project_root).await?;
     let backend = Arc::new(
         super::composed_backend::ProductionBackend::build(
             session_id.clone(),
@@ -38,11 +39,11 @@ pub async fn run_chat_async(args: ChatArgs) -> Result<()> {
 
     let state_dir = default_state_dir(&session_id);
     // The adapter task exits automatically when the EventBus sender is dropped.
-    let _adapter = super::events_adapter::start(state_dir, backend.event_bus());
+    let _adapter = crate::runtime::conversation::events_adapter::start(state_dir, backend.event_bus());
 
     // run_chat is sync/blocking (crossterm event loop). It terminates when the
     // user quits or on terminal error, at which point spawn_blocking returns.
-    tokio::task::spawn_blocking(move || run_chat(args, backend))
+    tokio::task::spawn_blocking(move || run_chat(args, backend, project_root, session_id))
         .await
         .context("chat task panicked")?
 }
@@ -53,7 +54,12 @@ pub async fn run_chat_async(_args: ChatArgs) -> Result<()> {
 }
 
 #[cfg(feature = "tui")]
-pub fn run_chat(args: ChatArgs, backend: Arc<dyn CommandBackend>) -> Result<()> {
+pub fn run_chat(
+    _args: ChatArgs,
+    backend: Arc<dyn CommandBackend>,
+    project_root: String,
+    session_id: String,
+) -> Result<()> {
     use crossterm::{
         event::{
             self, Event as CrosstermEvent, KeyCode as CKeyCode, KeyModifiers as CKeyModifiers,
@@ -69,10 +75,6 @@ pub fn run_chat(args: ChatArgs, backend: Arc<dyn CommandBackend>) -> Result<()> 
     execute!(stdout, EnterAlternateScreen).context("enter alt screen")?;
     let backend_term = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend_term).context("create terminal")?;
-
-    // Resolve session.
-    let project_root = resolve_project_root();
-    let session_id = resolve_session_id(&args, &project_root)?;
 
     let mut app = App::new_with_backend(project_root, session_id, backend).context("build app")?;
 
@@ -210,20 +212,21 @@ fn draw(f: &mut ratatui::Frame<'_>, app: &App) {
     }
 }
 
-fn resolve_project_root() -> String {
-    use std::process::Command;
-    let output = Command::new("git")
+async fn resolve_project_root() -> String {
+    let output = tokio::process::Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
         .output();
-    match output {
-        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+    match tokio::time::timeout(Duration::from_secs(5), output).await {
+        Ok(Ok(out)) if out.status.success() => {
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        }
         _ => std::env::current_dir()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| ".".to_string()),
     }
 }
 
-fn resolve_session_id(args: &ChatArgs, project_root: &str) -> Result<String> {
+async fn resolve_session_id(args: &ChatArgs, project_root: &str) -> Result<String> {
     if args.new {
         return Ok(session_id::new_session_id());
     }
@@ -239,28 +242,38 @@ fn resolve_session_id(args: &ChatArgs, project_root: &str) -> Result<String> {
         .join("omk")
         .join("sessions");
 
-    if !sessions_dir.exists() {
+    if !tokio::fs::try_exists(&sessions_dir).await.unwrap_or(false) {
         return Ok(session_id::new_session_id());
     }
 
-    let mut latest: Option<(std::fs::DirEntry, std::time::SystemTime)> = None;
-    for entry in std::fs::read_dir(&sessions_dir)? {
-        let entry = entry?;
+    let mut latest: Option<(tokio::fs::DirEntry, std::time::SystemTime)> = None;
+    let mut entries = tokio::fs::read_dir(&sessions_dir).await?;
+    while let Some(entry) = entries.next_entry().await? {
         let meta_path = entry.path().join("meta.json");
-        if !meta_path.exists() {
+        if !tokio::fs::try_exists(&meta_path).await.unwrap_or(false) {
             continue;
         }
-        if let Ok(contents) = std::fs::read_to_string(&meta_path) {
-            if let Ok(meta) = serde_json::from_str::<SessionMeta>(&contents) {
-                if meta.project_root == project_root {
-                    if let Ok(m) = entry.metadata() {
-                        if let Ok(modified) = m.modified() {
-                            if latest.as_ref().map_or(true, |l| l.1 < modified) {
-                                latest = Some((entry, modified));
+        match tokio::fs::read_to_string(&meta_path).await {
+            Ok(contents) => {
+                if let Ok(meta) = serde_json::from_str::<SessionMeta>(&contents) {
+                    if meta.project_root == project_root {
+                        match entry.metadata().await {
+                            Ok(m) => {
+                                if let Ok(modified) = m.modified() {
+                                    if latest.as_ref().map_or(true, |l| l.1 < modified) {
+                                        latest = Some((entry, modified));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!(path = %entry.path().display(), error = %e, "Failed to read session entry metadata");
                             }
                         }
                     }
                 }
+            }
+            Err(e) => {
+                warn!(path = %meta_path.display(), error = %e, "Failed to read session meta");
             }
         }
     }

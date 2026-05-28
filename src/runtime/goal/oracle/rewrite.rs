@@ -50,7 +50,8 @@ pub(crate) async fn run_rewrite_oracle_command(
     timeout_duration: Duration,
 ) -> Result<RewriteOracleObservation> {
     let mut child = Command::new(command);
-    child.current_dir(project_dir).args(args).kill_on_drop(true);
+    child.current_dir(project_dir).args(args);
+    crate::runtime::shell::configure_command(&mut child);
     let output = timeout(timeout_duration, child.output())
         .await
         .with_context(|| format!("Timed out while running rewrite oracle command: {command}"))?
@@ -170,6 +171,12 @@ async fn read_file_artifacts(
     let mut artifacts = Vec::new();
     for relative in artifact_paths {
         let path = project_dir.join(relative);
+        if !path.starts_with(project_dir) {
+            anyhow::bail!(
+                "artifact path escapes project directory: {}",
+                path.display()
+            );
+        }
         let contents = tokio::fs::read_to_string(&path).await.with_context(|| {
             format!("Failed to read rewrite oracle artifact: {}", path.display())
         })?;

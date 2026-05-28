@@ -8,7 +8,7 @@ pub enum GitError {
     #[error("not a git repository: {0}")]
     NotARepo(PathBuf),
 
-    #[error("git not found in PATH")]
+    #[error("git not found in path")]
     GitNotFound,
 
     #[error("command failed: {command} - exit {exit_code}, stderr: {stderr}")]

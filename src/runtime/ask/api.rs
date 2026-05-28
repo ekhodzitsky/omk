@@ -58,7 +58,9 @@ pub async fn ask_providers(
                 if save {
                     let content =
                         format!("# {provider} answer\n\nPrompt: {prompt}\n\n---\n\n{output}\n");
-                    let _ = save_artifact(&provider, &content, &ts).await;
+                    if let Err(e) = save_artifact(&provider, &content, &ts).await {
+                        warn!(provider = provider, error = %e, "Failed to save advisor artifact");
+                    }
                 }
                 results.push((provider, output));
             }

@@ -6,9 +6,7 @@ use std::num::NonZeroUsize;
 use super::types::ClassifierOutput;
 
 pub fn new_session_cache() -> LruCache<u64, ClassifierOutput> {
-    // SAFETY: 50 is statically known to be non-zero.
-    #[allow(clippy::unwrap_used)]
-    LruCache::new(NonZeroUsize::new(50).unwrap())
+    LruCache::new(NonZeroUsize::new(50).unwrap_or(NonZeroUsize::MIN))
 }
 
 pub fn cache_key(prompt: &str) -> u64 {

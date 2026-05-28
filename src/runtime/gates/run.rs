@@ -49,6 +49,7 @@ pub async fn run_gates_with_evidence(
             .current_dir(dir)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+        crate::runtime::shell::configure_command(&mut cmd);
 
         let timeout = if gate.timeout_secs > 0 {
             Duration::from_secs(gate.timeout_secs)
@@ -79,17 +80,35 @@ pub async fn run_gates_with_evidence(
             }
         };
 
-        let mut stdout = child.stdout.take().expect("stdout piped by spawn");
-        let mut stderr = child.stderr.take().expect("stderr piped by spawn");
+        let mut stdout = match child.stdout.take() {
+            Some(s) => s,
+            None => {
+                warn!(gate = %gate.name, "Gate child stdout not piped");
+                results.push(make_gate_error(gate, &command_line, start, "gate child stdout not piped"));
+                continue;
+            }
+        };
+        let mut stderr = match child.stderr.take() {
+            Some(s) => s,
+            None => {
+                warn!(gate = %gate.name, "Gate child stderr not piped");
+                results.push(make_gate_error(gate, &command_line, start, "gate child stderr not piped"));
+                continue;
+            }
+        };
 
         let read_stdout = tokio::spawn(async move {
             let mut buf = Vec::new();
-            let _ = tokio::io::AsyncReadExt::read_to_end(&mut stdout, &mut buf).await;
+            if let Err(e) = tokio::io::AsyncReadExt::read_to_end(&mut stdout, &mut buf).await {
+                warn!(error = %e, "Failed to read gate stdout");
+            }
             buf
         });
         let read_stderr = tokio::spawn(async move {
             let mut buf = Vec::new();
-            let _ = tokio::io::AsyncReadExt::read_to_end(&mut stderr, &mut buf).await;
+            if let Err(e) = tokio::io::AsyncReadExt::read_to_end(&mut stderr, &mut buf).await {
+                warn!(error = %e, "Failed to read gate stderr");
+            }
             buf
         });
 
@@ -123,8 +142,12 @@ pub async fn run_gates_with_evidence(
             Err(_) => {
                 read_stdout.abort();
                 read_stderr.abort();
-                let _ = child.start_kill();
-                let _ = child.wait().await;
+                if let Err(e) = child.start_kill() {
+                    warn!(gate = %gate.name, error = %e, "Failed to start_kill timed-out gate child");
+                }
+                if let Err(e) = child.wait().await {
+                    warn!(gate = %gate.name, error = %e, "Failed to wait for timed-out gate child");
+                }
                 let timeout_message = if gate.timeout_secs > 0 {
                     format!("Timed out after {}s", gate.timeout_secs)
                 } else {
@@ -271,7 +294,8 @@ async fn write_full_output_artifact(
     stdout: &str,
     stderr: &str,
 ) -> Option<String> {
-    if tokio::fs::create_dir_all(output_dir).await.is_err() {
+    if let Err(e) = tokio::fs::create_dir_all(output_dir).await {
+        warn!(path = %output_dir.display(), error = %e, "Failed to create gate output directory");
         return None;
     }
     let safe_name = gate_name
@@ -285,9 +309,9 @@ async fn write_full_output_artifact(
         stdout.trim_end(),
         stderr.trim_end()
     );
-    if tokio::fs::write(&path, body).await.is_ok() {
-        Some(path.to_string_lossy().to_string())
-    } else {
-        None
+    if let Err(e) = tokio::fs::write(&path, body).await {
+        warn!(path = %path.display(), error = %e, "Failed to write gate output artifact");
+        return None;
     }
+    Some(path.to_string_lossy().to_string())
 }

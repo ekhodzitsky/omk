@@ -14,6 +14,7 @@ pub(crate) mod marketplace;
 pub(crate) mod proof_cmd;
 pub(crate) mod ralph;
 pub(crate) mod run_cmd;
+pub(crate) mod session;
 pub(crate) mod skill;
 pub(crate) mod state;
 pub(crate) mod team;

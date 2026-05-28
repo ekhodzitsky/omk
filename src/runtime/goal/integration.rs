@@ -300,20 +300,22 @@ fn artifact_path(file_name: &str) -> PathBuf {
 
 const MAX_EVIDENCE_EMBED_BYTES: usize = 64 * 1024;
 
-fn read_evidence_summary(path: &Path, max_bytes: usize) -> std::io::Result<String> {
-    use std::io::Read;
-    let mut file = std::fs::File::open(path)?;
+async fn read_evidence_summary(path: &Path, max_bytes: usize) -> std::io::Result<String> {
+    use tokio::io::AsyncReadExt;
+    let file = tokio::fs::File::open(path).await?;
     let mut buf = Vec::new();
-    file.by_ref().take(max_bytes as u64).read_to_end(&mut buf)?;
+    let mut take = file.take(max_bytes as u64);
+    take.read_to_end(&mut buf).await?;
     let mut summary = String::from_utf8_lossy(&buf).into_owned();
     let mut extra = [0u8; 1];
-    if file.read(&mut extra)? > 0 {
+    let mut file = take.into_inner();
+    if file.read(&mut extra).await? > 0 {
         summary.push_str(&format!("\n...(truncated at {} bytes)", max_bytes));
     }
     Ok(summary)
 }
 
-fn render_conflict_evidence_section(
+async fn render_conflict_evidence_section(
     slice_id: &str,
     metadata: &GoalTaskDeliveryMetadata,
     goal_dir: &Path,
@@ -331,7 +333,7 @@ fn render_conflict_evidence_section(
     if let Some(path) = &metadata.conflict_evidence_path {
         out.push_str(&format!("**Evidence artifact:** `{}`\n\n", path.display()));
         let abs_path = goal_dir.join(path);
-        match read_evidence_summary(&abs_path, MAX_EVIDENCE_EMBED_BYTES) {
+        match read_evidence_summary(&abs_path, MAX_EVIDENCE_EMBED_BYTES).await {
             Ok(summary) => {
                 out.push_str("```\n");
                 out.push_str(&summary);
@@ -389,7 +391,7 @@ pub async fn write_rejection_rollback_plan(
                 .as_deref()
                 .unwrap_or(&record.task_id);
             if let Some(section) =
-                render_conflict_evidence_section(slice_id, &record.metadata, &state.state_dir)
+                render_conflict_evidence_section(slice_id, &record.metadata, &state.state_dir).await
             {
                 body.push_str(&section);
             }

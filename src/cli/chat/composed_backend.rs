@@ -68,7 +68,7 @@ impl ProductionBackend {
 
         let classifier: Arc<dyn ClassifierBackend> = Arc::new(ProductionClassifierBackend {
             inner: Arc::new(crate::runtime::classifier::WireLlmClassifierBackend::new(
-                Arc::new(tokio::sync::Mutex::new(llm_client)),
+                Arc::new(llm_client),
             )),
             cache: Mutex::new(lru::LruCache::new(
                 std::num::NonZeroUsize::new(1024).unwrap_or(std::num::NonZeroUsize::MIN),
@@ -176,9 +176,9 @@ impl CommandBackend for ProductionBackend {
     }
 
     async fn dispatch_show_plan(&self) -> CommandResponse {
-        let guard = self.latest_goal_id.lock().await;
-        match guard.as_ref() {
-            Some(id) => match crate::runtime::goal::chat_api::commands::show_plan(id).await {
+        let id = self.latest_goal_id.lock().await.clone();
+        match id {
+            Some(id) => match crate::runtime::goal::chat_api::commands::show_plan(&id).await {
                 Ok(plan) => CommandResponse::Markdown(plan),
                 Err(e) => CommandResponse::Error(format!("failed to load plan: {}", e)),
             },
@@ -187,9 +187,9 @@ impl CommandBackend for ProductionBackend {
     }
 
     async fn dispatch_show_proof(&self) -> CommandResponse {
-        let guard = self.latest_goal_id.lock().await;
-        match guard.as_ref() {
-            Some(id) => match crate::runtime::goal::chat_api::commands::show_proof(id).await {
+        let id = self.latest_goal_id.lock().await.clone();
+        match id {
+            Some(id) => match crate::runtime::goal::chat_api::commands::show_proof(&id).await {
                 Ok(path) => CommandResponse::Text(format!("proof: {}", path.display())),
                 Err(e) => CommandResponse::Error(format!("failed to load proof: {}", e)),
             },
@@ -222,9 +222,9 @@ impl CommandBackend for ProductionBackend {
     }
 
     async fn dispatch_inject(&self, text: &str) -> CommandResponse {
-        let guard = self.latest_goal_id.lock().await;
-        match guard.as_ref() {
-            Some(id) => match crate::runtime::goal::chat_api::inject_hint(id, text) {
+        let id = self.latest_goal_id.lock().await.clone();
+        match id {
+            Some(id) => match crate::runtime::goal::chat_api::inject_hint(&id, text) {
                 Ok(()) => CommandResponse::Ok,
                 Err(e) => CommandResponse::Error(format!("inject failed: {}", e)),
             },
@@ -233,9 +233,9 @@ impl CommandBackend for ProductionBackend {
     }
 
     async fn dispatch_pause(&self) -> CommandResponse {
-        let guard = self.latest_goal_id.lock().await;
-        match guard.as_ref() {
-            Some(id) => match crate::runtime::goal::chat_api::pause(id).await {
+        let id = self.latest_goal_id.lock().await.clone();
+        match id {
+            Some(id) => match crate::runtime::goal::chat_api::pause(&id).await {
                 Ok(()) => CommandResponse::Ok,
                 Err(e) => CommandResponse::Error(format!("pause failed: {}", e)),
             },
@@ -244,9 +244,9 @@ impl CommandBackend for ProductionBackend {
     }
 
     async fn dispatch_resume(&self) -> CommandResponse {
-        let guard = self.latest_goal_id.lock().await;
-        match guard.as_ref() {
-            Some(id) => match crate::runtime::goal::chat_api::resume(id).await {
+        let id = self.latest_goal_id.lock().await.clone();
+        match id {
+            Some(id) => match crate::runtime::goal::chat_api::resume(&id).await {
                 Ok(()) => CommandResponse::Ok,
                 Err(e) => CommandResponse::Error(format!("resume failed: {}", e)),
             },
@@ -255,11 +255,10 @@ impl CommandBackend for ProductionBackend {
     }
 
     async fn dispatch_cancel(&self) -> CommandResponse {
-        let guard = self.latest_goal_id.lock().await;
-        match guard.as_ref() {
-            Some(id) => match crate::runtime::goal::chat_api::cancel(id).await {
+        let id = self.latest_goal_id.lock().await.clone();
+        match id {
+            Some(id) => match crate::runtime::goal::chat_api::cancel(&id).await {
                 Ok(()) => {
-                    drop(guard);
                     *self.latest_goal_id.lock().await = None;
                     CommandResponse::Ok
                 }
@@ -270,9 +269,9 @@ impl CommandBackend for ProductionBackend {
     }
 
     async fn dispatch_approve(&self) -> CommandResponse {
-        let guard = self.latest_goal_id.lock().await;
-        match guard.as_ref() {
-            Some(id) => match crate::runtime::goal::chat_api::commands::approve_slice(id).await {
+        let id = self.latest_goal_id.lock().await.clone();
+        match id {
+            Some(id) => match crate::runtime::goal::chat_api::commands::approve_slice(&id).await {
                 Ok(()) => CommandResponse::Ok,
                 Err(e) => CommandResponse::Error(format!("approve failed: {}", e)),
             },
@@ -281,10 +280,10 @@ impl CommandBackend for ProductionBackend {
     }
 
     async fn dispatch_reject(&self, reason: Option<&str>) -> CommandResponse {
-        let guard = self.latest_goal_id.lock().await;
-        match guard.as_ref() {
+        let id = self.latest_goal_id.lock().await.clone();
+        match id {
             Some(id) => {
-                match crate::runtime::goal::chat_api::commands::reject_slice(id, reason).await {
+                match crate::runtime::goal::chat_api::commands::reject_slice(&id, reason).await {
                     Ok(()) => CommandResponse::Ok,
                     Err(e) => CommandResponse::Error(format!("reject failed: {}", e)),
                 }
@@ -342,13 +341,17 @@ impl CommandBackend for ProductionBackend {
     }
 
     async fn dispatch_resume_session(&self, session_id: &str) -> CommandResponse {
+        let sanitized = match crate::runtime::sanitize::sanitize_name(session_id) {
+            Ok(s) => s,
+            Err(_) => return CommandResponse::Error("invalid session id".to_string()),
+        };
         let sessions_dir = crate::runtime::config::state_dir()
             .join("sessions")
-            .join(session_id);
+            .join(&sanitized);
         if sessions_dir.exists() {
             CommandResponse::EffectStartNewSession
         } else {
-            CommandResponse::Error(format!("session {} not found", session_id))
+            CommandResponse::Error(format!("session {} not found", sanitized))
         }
     }
 }

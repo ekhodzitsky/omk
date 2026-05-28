@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::ops::Range;
 
 use crate::analysis::parser::{Language, SyntaxTree};

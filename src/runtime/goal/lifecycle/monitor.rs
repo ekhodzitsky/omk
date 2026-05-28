@@ -1,4 +1,5 @@
 use std::path::Path;
+use tracing::warn;
 
 use crate::runtime::goal::proof::{build_verified_proof, GoalProof};
 use crate::runtime::goal::state::{
@@ -72,7 +73,7 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> anyhow::Result<Go
     budget::append_budget_checkpoint(&state, "review_completed").await?;
 
     let phase_duration = tokio::time::Instant::now() - phase_start;
-    if let Ok(tracker) = budget::init_goal_cost_tracker(&state) {
+    let tracker = crate::cost::tracker::CostTracker::for_goal(&state.state_dir, state.cost_tracker_path.as_deref());
         let cost = crate::cost::types::SessionCost {
             session_type: "review".to_string(),
             name: "goal review".to_string(),
@@ -88,8 +89,9 @@ pub async fn review_goal(goal_id: &str, project_dir: &Path) -> anyhow::Result<Go
             },
             actual_usd: None,
         };
-        let _ = tracker.record(cost).await;
-    }
+        if let Err(e) = tracker.record(cost).await {
+            warn!(error = %e, "Failed to record monitor cost");
+        }
 
     Ok(proof)
 }

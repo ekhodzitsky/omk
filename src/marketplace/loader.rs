@@ -8,6 +8,7 @@ use super::registry::MarketplaceRegistry;
 /// Trait boundary for registry I/O.
 ///
 /// The only place `reqwest` and `tokio::fs` are allowed under `src/marketplace/`.
+#[allow(dead_code)]
 pub trait RegistryLoader: Send + Sync {
     /// Fetch a registry from a remote URL.
     fn fetch<'a>(
@@ -24,6 +25,7 @@ pub trait RegistryLoader: Send + Sync {
 
 /// Production loader backed by `reqwest` and `tokio::fs`.
 #[derive(Clone, Copy, Debug, Default)]
+#[allow(dead_code)]
 pub struct ReqwestRegistryLoader;
 
 impl RegistryLoader for ReqwestRegistryLoader {
@@ -72,11 +74,13 @@ impl RegistryLoader for ReqwestRegistryLoader {
 }
 
 /// In-memory loader for unit tests.
+#[cfg(test)]
 #[derive(Default, Debug)]
 pub struct MockRegistryLoader {
-    pub registries: std::sync::Mutex<std::collections::HashMap<String, MarketplaceRegistry>>,
+    pub registries: tokio::sync::Mutex<std::collections::HashMap<String, MarketplaceRegistry>>,
 }
 
+#[cfg(test)]
 impl RegistryLoader for MockRegistryLoader {
     fn fetch<'a>(
         &'a self,
@@ -86,7 +90,7 @@ impl RegistryLoader for MockRegistryLoader {
         Box::pin(async move {
             self.registries
                 .lock()
-                .expect("mock registry lock")
+                .await
                 .get(&url)
                 .cloned()
                 .context(format!("Mock registry not found: {}", url))
@@ -101,7 +105,7 @@ impl RegistryLoader for MockRegistryLoader {
         Box::pin(async move {
             self.registries
                 .lock()
-                .expect("mock registry lock")
+                .await
                 .get(&key)
                 .cloned()
                 .context(format!("Mock registry not found: {}", key))

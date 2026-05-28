@@ -29,32 +29,22 @@ pub(crate) fn detect_project_type(dir: &Path) -> ProjectType {
 }
 
 pub(crate) async fn run_kimi_prompt(prompt: &str) -> Result<String> {
-    let output = tokio::time::timeout(
-        std::time::Duration::from_secs(120),
-        Command::new("kimi")
-            .arg("--print")
-            .arg("-p")
-            .arg(prompt)
-            .output(),
-    )
-    .await
-    .context("kimi prompt timed out")??;
-
+    let output = crate::runtime::shell::run_kimi(prompt, None, true, std::time::Duration::from_secs(120)).await
+        .context("kimi prompt timed out")?;
     if !output.status.success() {
         anyhow::bail!("kimi exited with non-zero status");
     }
-
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 pub(crate) async fn run_command(dir: &Path, cmd: &str, args: &[&str]) -> Result<()> {
-    let output = tokio::time::timeout(
-        std::time::Duration::from_secs(60),
-        Command::new(cmd).args(args).current_dir(dir).output(),
-    )
-    .await
-    .with_context(|| format!("{} {} timed out", cmd, args.join(" ")))?
-    .with_context(|| format!("Failed to run {} {}", cmd, args.join(" ")))?;
+    let mut command = Command::new(cmd);
+    command.args(args).current_dir(dir);
+    crate::runtime::shell::configure_command(&mut command);
+    let output = tokio::time::timeout(std::time::Duration::from_secs(60), command.output())
+        .await
+        .with_context(|| format!("{} {} timed out", cmd, args.join(" ")))?
+        .with_context(|| format!("Failed to run {} {}", cmd, args.join(" ")))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -64,6 +54,4 @@ pub(crate) async fn run_command(dir: &Path, cmd: &str, args: &[&str]) -> Result<
     Ok(())
 }
 
-pub(crate) fn shell_escape(s: &str) -> anyhow::Result<String> {
-    crate::runtime::shell::shell_escape(s)
-}
+// shell_escape: use crate::runtime::shell::shell_escape directly

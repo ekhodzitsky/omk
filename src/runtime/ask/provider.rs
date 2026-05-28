@@ -16,12 +16,10 @@ pub async fn available_providers() -> Vec<&'static str> {
 
 /// Check whether a provider CLI is installed.
 pub async fn is_provider_installed(provider: &str) -> bool {
-    match tokio::time::timeout(
-        Duration::from_secs(5),
-        tokio::process::Command::new("which").arg(provider).output(),
-    )
-    .await
-    {
+    let mut cmd = tokio::process::Command::new("which");
+    cmd.arg(provider);
+    crate::runtime::shell::configure_command(&mut cmd);
+    match tokio::time::timeout(Duration::from_secs(5), cmd.output()).await {
         Ok(Ok(out)) => out.status.success(),
         _ => false,
     }

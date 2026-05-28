@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 use crate::runtime::goal::state::{GoalState, GoalStatus};
 use crate::runtime::goal::task_graph::{
@@ -69,7 +70,9 @@ pub(crate) async fn process_slice_delivery_and_review(
                     proposal_path: PathBuf::new(),
                     total_tasks_after: task_graph.tasks.len(),
                 }) {
-                    let _ = writer.append(&event).await;
+                    if let Err(e) = writer.append(&event).await {
+                        warn!(error = %e, "Failed to append anti-slop task event");
+                    }
                 }
             }
 
@@ -111,7 +114,9 @@ pub(crate) async fn process_slice_delivery_and_review(
                     proposal_path: PathBuf::new(),
                     total_tasks_after: task_graph.tasks.len(),
                 }) {
-                    let _ = writer.append(&event).await;
+                    if let Err(e) = writer.append(&event).await {
+                        warn!(error = %e, "Failed to append security cleanup task event");
+                    }
                 }
             }
 

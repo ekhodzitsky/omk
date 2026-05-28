@@ -33,12 +33,30 @@ pub(crate) async fn run(args: Args, _cancel: CancellationToken) -> Result<()> {
         anyhow::bail!("Task description is required");
     }
 
-    crate::runtime::ralph::run_ralph(
+    let summary = crate::runtime::ralph::run_ralph(
         &task,
         &args.dir,
         args.max_iterations,
         args.resume,
         args.yolo,
     )
-    .await
+    .await?;
+
+    let cost = crate::cost::estimator::estimate_ralph_cost(
+        summary.duration_secs,
+        summary.iterations.unwrap_or(0),
+        summary.total_stories.unwrap_or(0),
+    );
+    let notification = crate::notifications::NotificationEvent::RalphComplete {
+        name: summary.name.clone(),
+        duration_secs: summary.duration_secs,
+        iterations: summary.iterations.unwrap_or(0),
+        verified: summary.verified.unwrap_or(0),
+        total: summary.total_stories.unwrap_or(0),
+    };
+    if let Err(e) = crate::cli::session::record_session_end(&summary, cost, notification).await {
+        tracing::warn!(error = %e, "Failed to record ralph session end");
+    }
+
+    Ok(())
 }

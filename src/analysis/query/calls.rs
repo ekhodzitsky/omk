@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::analysis::parser::Language;
 use crate::analysis::query::{call_target_name, node_range, CallSite};
 

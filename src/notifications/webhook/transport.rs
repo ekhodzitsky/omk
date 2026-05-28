@@ -40,11 +40,13 @@ impl WebhookTransport for ReqwestWebhookTransport {
 }
 
 /// In-memory transport for unit tests.
+#[cfg(test)]
 #[derive(Default, Debug)]
 pub struct MockWebhookTransport {
-    pub calls: std::sync::Mutex<Vec<(String, serde_json::Value)>>,
+    pub calls: tokio::sync::Mutex<Vec<(String, serde_json::Value)>>,
 }
 
+#[cfg(test)]
 impl WebhookTransport for MockWebhookTransport {
     fn post_json<'a>(
         &'a self,
@@ -53,10 +55,7 @@ impl WebhookTransport for MockWebhookTransport {
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         let url = url.to_string();
         Box::pin(async move {
-            self.calls
-                .lock()
-                .expect("mock transport lock")
-                .push((url, body));
+            self.calls.lock().await.push((url, body));
             Ok(())
         })
     }

@@ -11,10 +11,12 @@ use tracing::{debug, info, warn};
 #[derive(Debug)]
 pub struct StdioMcpTransport {
     stdin: ChildStdin,
-    lines_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
+    lines_rx: tokio::sync::mpsc::Receiver<String>,
     child: Child,
     server_name: String,
     cancel_token: CancellationToken,
+    stdout_handle: Option<tokio::task::JoinHandle<()>>,
+    stderr_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl StdioMcpTransport {
@@ -33,9 +35,9 @@ impl StdioMcpTransport {
         cmd.stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+        crate::runtime::shell::configure_command(&mut cmd);
         let cancel_token = CancellationToken::new();
         let mut child = cmd
-            .kill_on_drop(true)
             .spawn()
             .with_context(|| format!("failed to spawn MCP server '{}' ({command})", server_name))?;
         let stdin = child
@@ -46,10 +48,10 @@ impl StdioMcpTransport {
             .stdout
             .take()
             .context("MCP server stdout not available")?;
-        if let Some(stderr) = child.stderr.take() {
+        let stderr_handle = if let Some(stderr) = child.stderr.take() {
             let name = server_name.clone();
             let cancel = cancel_token.child_token();
-            tokio::spawn(async move {
+            Some(tokio::spawn(async move {
                 let reader = BufReader::new(stderr);
                 let mut lines = reader.lines();
                 loop {
@@ -64,43 +66,46 @@ impl StdioMcpTransport {
                         }
                     }
                 }
-            });
-        }
+            }))
+        } else {
+            None
+        };
 
-        let (lines_tx, lines_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (lines_tx, lines_rx) = tokio::sync::mpsc::channel(1024);
         let name = server_name.clone();
         let cancel = cancel_token.child_token();
-        tokio::spawn(async move {
+        let stdout_handle = tokio::spawn(async move {
             let mut reader = BufReader::new(stdout);
             let mut buf = String::new();
             loop {
-                if cancel.is_cancelled() {
-                    break;
-                }
-                buf.clear();
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(60),
-                    reader.read_line(&mut buf),
-                )
-                .await
-                {
-                    Ok(Ok(0)) => break,
-                    Ok(Ok(_)) => {
-                        let line = buf.trim_end().to_string();
-                        if line.is_empty() {
-                            continue;
+                tokio::select! {
+                    biased;
+                    _ = cancel.cancelled() => break,
+                    result = tokio::time::timeout(
+                        std::time::Duration::from_secs(60),
+                        reader.read_line(&mut buf),
+                    ) => {
+                        match result {
+                            Ok(Ok(0)) => break,
+                            Ok(Ok(_)) => {
+                                let line = buf.trim_end().to_string();
+                                buf.clear();
+                                if line.is_empty() {
+                                    continue;
+                                }
+                                if lines_tx.send(line).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Ok(Err(e)) => {
+                                warn!(server = %name, error = %e, "MCP stdout read error");
+                                break;
+                            }
+                            Err(_) => {
+                                warn!(server = %name, "MCP stdout read timeout");
+                                break;
+                            }
                         }
-                        if lines_tx.send(line).is_err() {
-                            break;
-                        }
-                    }
-                    Ok(Err(e)) => {
-                        warn!(server = %name, error = %e, "MCP stdout read error");
-                        break;
-                    }
-                    Err(_) => {
-                        warn!(server = %name, "MCP stdout read timeout");
-                        break;
                     }
                 }
             }
@@ -114,6 +119,8 @@ impl StdioMcpTransport {
             child,
             server_name,
             cancel_token,
+            stdout_handle: Some(stdout_handle),
+            stderr_handle,
         })
     }
 
@@ -149,6 +156,12 @@ impl StdioMcpTransport {
 
     pub async fn close(&mut self) -> Result<()> {
         self.cancel_token.cancel();
+        if let Some(h) = self.stdout_handle.take() {
+            h.abort();
+        }
+        if let Some(h) = self.stderr_handle.take() {
+            h.abort();
+        }
         match self.child.start_kill() {
             Ok(()) => {
                 let _ = tokio::time::timeout(std::time::Duration::from_secs(5), self.child.wait())
@@ -178,6 +191,13 @@ impl Drop for StdioMcpTransport {
     fn drop(&mut self) {
         // Best-effort kill so the child does not outlive the transport.
         // Graceful shutdown should be done via close().await before drop.
+        self.cancel_token.cancel();
+        if let Some(h) = self.stdout_handle.take() {
+            h.abort();
+        }
+        if let Some(h) = self.stderr_handle.take() {
+            h.abort();
+        }
         let _ = self.child.start_kill();
     }
 }

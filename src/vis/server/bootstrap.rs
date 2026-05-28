@@ -15,8 +15,7 @@ pub async fn run_server(port: u16) -> Result<()> {
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     info!("Starting web dashboard on http://{}", addr);
-    println!("🌐 omk vis running on http://{}", addr);
-    println!("Press Ctrl+C to stop");
+    info!("omk vis running on http://{} — Press Ctrl+C to stop", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app)
