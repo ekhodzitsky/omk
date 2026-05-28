@@ -399,6 +399,123 @@ fn test_goal_merge_help() {
         .stdout(predicate::str::contains("Merge the GitHub PR"));
 }
 
+#[test]
+fn test_chat_help() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.args(["chat", "--help"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("unified chat"));
+}
+
+#[test]
+fn test_setup_help() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.args(["setup", "--help"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Setup OMK"));
+}
+
+#[test]
+fn test_mcp_help() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.args(["mcp", "--help"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("MCP integration"));
+}
+
+#[test]
+fn test_mcp_server_help() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.args(["mcp-server", "--help"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("MCP server"));
+}
+
+#[test]
+fn test_cost_help() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.args(["cost", "--help"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Cost tracking"));
+}
+
+#[test]
+fn test_proof_help() {
+    let mut cmd = Command::cargo_bin("omk").unwrap();
+    cmd.args(["proof", "--help"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("proof reports"));
+}
+
+#[test]
+fn test_setup_runs_and_is_idempotent() {
+    let (_tmp, envs) = isolated_env();
+    let project = tempfile::tempdir().unwrap();
+
+    let config_dir = envs
+        .iter()
+        .find_map(|(k, v)| (*k == "XDG_CONFIG_HOME").then(|| v.clone()))
+        .unwrap()
+        .join("omk");
+    let state_dir = envs
+        .iter()
+        .find_map(|(k, v)| (*k == "XDG_STATE_HOME").then(|| v.clone()))
+        .unwrap()
+        .join("omk");
+    let data_dir = envs
+        .iter()
+        .find_map(|(k, v)| (*k == "XDG_DATA_HOME").then(|| v.clone()))
+        .unwrap()
+        .join("omk");
+
+    // First run
+    let output = Command::cargo_bin("omk")
+        .unwrap()
+        .envs(envs.iter().map(|(k, v)| (*k, v.as_os_str())))
+        .current_dir(project.path())
+        .args(["setup"])
+        .output()
+        .expect("omk setup should launch");
+    assert!(
+        output.status.success(),
+        "setup failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert!(
+        config_dir.join("config.toml").exists(),
+        "config.toml not created"
+    );
+    assert!(data_dir.join("skills").exists(), "skills dir not created");
+    assert!(
+        project.path().join(".omk/AGENTS.md").exists(),
+        ".omk/AGENTS.md not created"
+    );
+
+    // Second run must be idempotent
+    let output2 = Command::cargo_bin("omk")
+        .unwrap()
+        .envs(envs.iter().map(|(k, v)| (*k, v.as_os_str())))
+        .current_dir(project.path())
+        .args(["setup"])
+        .output()
+        .expect("omk setup second run should launch");
+    assert!(
+        output2.status.success(),
+        "setup idempotent run failed: {}",
+        String::from_utf8_lossy(&output2.stderr)
+    );
+
+    // State dir should exist
+    assert!(state_dir.exists(), "state dir not created");
+}
+
 #[path = "fixtures/goal_end_to_end_cli_smoke_basic.rs"]
 mod goal_end_to_end_cli_smoke_basic;
 #[path = "fixtures/goal_end_to_end_cli_smoke_recovery.rs"]
