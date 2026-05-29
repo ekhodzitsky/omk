@@ -8,7 +8,7 @@
 # Dependabot's `docker` ecosystem (configured in .github/dependabot.yml)
 # bumps this tag on upstream releases. When we cut a 1.0, pin by digest
 # here AND in the runtime base below.
-FROM rust:1.95-slim-bookworm AS builder
+FROM rust:1.96-slim-bookworm AS builder
 WORKDIR /usr/src/omk
 COPY . .
 RUN cargo build --release --features server
