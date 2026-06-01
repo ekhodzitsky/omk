@@ -69,7 +69,7 @@ dependencies:
 consumers:
   - path: src/cli/app/run.rs
     uses: ["run_mcp_server"]
-  - path: src/wire/client.rs
+  - path: src/wire/mod.rs
     uses: ["server"]
 invariants:
   - id: line-length-cap

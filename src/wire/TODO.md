@@ -1,14 +1,12 @@
 # wire — TODO
 
-## Current (pilot 2)
-- [x] Extract `WireClient` trait.
-- [x] Rename struct to `ProcessWireClient`.
-- [x] Create `InMemoryWireClient` for unit tests.
-- [x] Rewrite `wire/client/tests.rs` to use in-memory mock (6 of 8).
+## Current
+- [x] Migrate all generic wire logic to the external `kimi-wire` crate.
+- [x] Reduce `src/wire/` to a thin re-export + compatibility alias layer.
+- [x] Delete `src/wire/dispatch.rs` (moved to `kimi-wire::dispatch`).
 
 ## Next
-- [ ] Property-based tests for WireMessage serde roundtrip.
-- [ ] Golden tests for new protocol version messages.
-- [ ] Streaming `InMemoryWireClient` with `tokio::sync::mpsc` for async injection.
-- [ ] `WireClientBuilder` for spawn parameter configuration.
-- [ ] Wire Protocol v2 support (when Kimi CLI updates).
+- [ ] Migrate remaining call sites from `redact_wire_secrets` to `kimi_wire::redact_secrets`, then remove the wrapper.
+- [ ] Migrate `ApprovalResponseType` alias call sites to `ApprovalResponseKind`, then remove the alias.
+- [ ] Property-based tests for WireMessage serde roundtrip (in `kimi-wire`).
+- [ ] Golden tests for new protocol version messages (in `kimi-wire`).

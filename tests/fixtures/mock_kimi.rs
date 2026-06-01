@@ -162,7 +162,8 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
                         "id": id,
                         "result": {
                         "protocol_version": "1.9",
-                        "server": {"name": "mock-kimi", "version": "0.1.0"}
+                        "server": {"name": "mock-kimi", "version": "0.1.0"},
+                        "slash_commands": []
                     }
                 });
                 writeln!(stdout, "{}", resp).ok();
@@ -196,7 +197,7 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
                 thread::sleep(event_delay);
                 emit_event(
                     &mut stdout,
-                    "turn_begin",
+                    "TurnBegin",
                     serde_json::json!({"user_input": preview}),
                 );
                 emit_mock_token_usage(&mut stdout);
@@ -227,8 +228,8 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
                 let text = mock_wire_response_text(user_input, &preview);
                 emit_event(
                     &mut stdout,
-                    "content_part",
-                    serde_json::json!({"text": text}),
+                    "ContentPart",
+                    serde_json::json!({"type": "text", "text": text}),
                 );
 
                 thread::sleep(if slow {
@@ -236,7 +237,7 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
                 } else {
                     Duration::from_millis(50)
                 });
-                emit_event(&mut stdout, "turn_end", serde_json::json!({}));
+                emit_event(&mut stdout, "TurnEnd", serde_json::json!({}));
             }
             "cancel" => {
                 let resp = serde_json::json!({
@@ -253,8 +254,8 @@ fn run_wire_mode(stall: bool, slow: bool, malformed: bool, crash_after_turn_begi
                     "id": id,
                     "result": {
                         "status": "finished",
-                        "events": [],
-                        "requests": []
+                        "events": 0,
+                        "requests": 0
                     }
                 });
                 writeln!(stdout, "{}", resp).ok();
@@ -349,9 +350,9 @@ fn emit_mock_token_usage(stdout: &mut io::Stdout) {
     };
     emit_event(
         stdout,
-        "status_update",
+        "StatusUpdate",
         serde_json::json!({
-            "token_usage": tokens,
+            "token_usage": {"input_other": 0, "output": tokens, "input_cache_read": 0, "input_cache_creation": 0},
             "message_id": "mock-kimi-turn"
         }),
     );

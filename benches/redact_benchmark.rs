@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use omk::wire::protocol::redact_wire_secrets;
+use omk::wire::redact_wire_secrets;
 use serde_json::json;
 
 fn make_deep_json(depth: usize) -> serde_json::Value {

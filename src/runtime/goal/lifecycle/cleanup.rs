@@ -484,7 +484,7 @@ pub(crate) fn spawn_security_cleanup_task_from_findings(
 }
 
 fn build_security_cleanup_description(findings: &[&SecurityFinding]) -> String {
-    use crate::wire::protocol::redact_wire_secrets;
+    use crate::wire::redact_wire_secrets;
     let mut lines =
         vec!["Auto-security-cleanup task generated from security verifier findings:".to_string()];
     for finding in findings {

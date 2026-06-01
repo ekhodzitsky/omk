@@ -7,7 +7,7 @@ use omk::runtime::wire_worker::{
     ApprovalChannel, ApprovalDecision, ApprovalPolicy, ApprovalProxy, WireWorkerAdapter,
 };
 use omk::runtime::worker::WorkerSpec;
-use omk::wire::protocol::ApprovalRequest;
+use omk::wire::ApprovalRequest;
 use tokio::sync::mpsc;
 
 fn dummy_approval_request(action: &str) -> ApprovalRequest {
@@ -201,7 +201,7 @@ async fn test_timeout_rejects_when_human_is_slow() {
 
 #[tokio::test]
 async fn test_approval_decision_maps_to_response_type() {
-    use omk::wire::protocol::ApprovalResponseType;
+    use omk::wire::ApprovalResponseType;
 
     assert_eq!(
         ApprovalDecision::Approve.to_response_type(),

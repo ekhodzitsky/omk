@@ -19,7 +19,7 @@ pub(super) async fn detect_kimi_run_metadata(kimi_bin: &str) -> KimiRunMetadata 
     let wire_protocol_version = command_output(kimi_bin, &["info"])
         .await
         .and_then(|info| parse_wire_protocol_version(&info))
-        .unwrap_or_else(|| crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string());
+        .unwrap_or_else(|| crate::wire::WIRE_PROTOCOL_VERSION.to_string());
 
     KimiRunMetadata {
         binary: kimi_bin.to_string(),

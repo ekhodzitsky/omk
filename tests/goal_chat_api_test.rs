@@ -11,7 +11,7 @@ use omk::runtime::goal::chat_api::{
     wire_pool::{WireClientFactory, WirePool},
     ChildGoalConfig, ChildGoalEvent, CreateChildRequest, PlanNodeStatus,
 };
-use omk::wire::client::InMemoryWireClient;
+use omk::wire::InMemoryWireClient;
 
 // ---------------------------------------------------------------------------
 // Adapter unit tests

@@ -56,9 +56,9 @@ impl ProductionBackend {
         let event_bus = Arc::new(EventBus::new());
         let session = SessionCtx::new(session_id.clone(), project_root.clone());
 
-        let wire_client = crate::wire::client::ProcessWireClient::spawn("kimi", None, None, None)
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to spawn wire client: {}", e))?;
+        let wire_client = crate::wire::ProcessWireClient::new(
+            crate::wire::ChildProcessTransport::spawn("kimi", None, None, None).await?,
+        );
 
         let llm_client = crate::llm::client::WireLlmClient::new(
             Arc::new(tokio::sync::Mutex::new(wire_client)),
@@ -77,11 +77,9 @@ impl ProductionBackend {
 
         let llm_direct_client = crate::llm::client::WireLlmClient::new(
             Arc::new(tokio::sync::Mutex::new(
-                crate::wire::client::ProcessWireClient::spawn("kimi", None, None, None)
-                    .await
-                    .map_err(|e| {
-                        anyhow::anyhow!("failed to spawn wire client for llm direct: {}", e)
-                    })?,
+                crate::wire::ProcessWireClient::new(
+                    crate::wire::ChildProcessTransport::spawn("kimi", None, None, None).await?,
+                ),
             )),
             crate::llm::client::LlmClientConfig::default(),
             crate::llm::cost::CostEstimator::default(),

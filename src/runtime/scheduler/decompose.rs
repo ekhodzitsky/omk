@@ -2,8 +2,9 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::wire::client::{ProcessWireClient, WireClient, WireMessage};
-use crate::wire::protocol::{ClientInfo, Event, InitializeParams};
+use crate::wire::ProcessWireClient;
+use crate::wire::{parse_wire_message, RequestExt, WireMessage};
+use crate::wire::{ClientInfo, ContentPart, Event, InitializeParams, WireClient};
 
 /// A subtask produced by lead decomposition.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -44,10 +45,12 @@ impl SynthesisAgent {
 }
 
 async fn run_wire_prompt(prompt: &str, kimi_bin: &str, client_name: &str) -> Result<String> {
-    let mut client = ProcessWireClient::spawn(kimi_bin, None, None, None).await?;
+    let mut client = ProcessWireClient::new(
+        crate::wire::ChildProcessTransport::spawn(kimi_bin, None, None, None).await?,
+    );
 
     let init_params = InitializeParams {
-        protocol_version: crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string(),
+        protocol_version: crate::wire::WIRE_PROTOCOL_VERSION.to_string(),
         client: Some(ClientInfo {
             name: client_name.to_string(),
             version: Some(env!("CARGO_PKG_VERSION").to_string()),
@@ -68,65 +71,31 @@ async fn run_wire_prompt(prompt: &str, kimi_bin: &str, client_name: &str) -> Res
     let mut text_parts: Vec<String> = Vec::new();
 
     loop {
-        match client.read_message().await {
-            Ok(WireMessage::Event(ev)) => {
-                match ev.params.to_event() {
-                    Ok(Event::TurnEnd) => break,
-                    Ok(Event::StepInterrupted) => {
-                        anyhow::bail!("Wire prompt was interrupted");
-                    }
-                    Ok(Event::ContentPart { text, chunk }) => {
-                        if let Some(t) = text {
-                            text_parts.push(t);
-                        } else if let Some(c) = chunk {
-                            text_parts.push(c);
-                        }
-                    }
-                    _ => {}
+        let raw = client.read_raw_message().await?;
+        let msg = parse_wire_message(raw)?;
+        match msg {
+            WireMessage::Event(ev) => match &ev.params {
+                Event::TurnEnd => break,
+                Event::StepInterrupted => {
+                    anyhow::bail!("Wire prompt was interrupted");
                 }
-
-                match ev.params.normalized_event_type().as_str() {
-                    "turn_end" => break,
-                    "step_interrupted" => {
-                        anyhow::bail!("Wire prompt was interrupted");
-                    }
-                    "thinking" | "text" | "content" => {
-                        if let Some(text) = ev.params.payload.get("text").and_then(|v| v.as_str()) {
-                            text_parts.push(text.to_string());
-                        } else if let Some(chunk) =
-                            ev.params.payload.get("chunk").and_then(|v| v.as_str())
-                        {
-                            text_parts.push(chunk.to_string());
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Ok(WireMessage::Request(req)) => match req.params.to_request() {
-                Ok(request) => {
-                    let request_type = request.kind();
-                    client
-                        .send_response(&req.id, request.default_response())
-                        .await?;
-                    info!(
-                        request_id = %req.id,
-                        request_type = request_type,
-                        client = %client_name,
-                        "Handled wire request"
-                    );
-                }
-                Err(_) => {
-                    client
-                        .send_error(&req.id, -32601, "Request not supported")
-                        .await?;
-                }
+                Event::ContentPart(ContentPart::Text(t)) => text_parts.push(t.text.clone()),
+                _ => {}
             },
-            Ok(WireMessage::SuccessResponse(_)) => {}
-            Ok(WireMessage::ErrorResponse(err)) => {
-                anyhow::bail!("Wire error response: {:?}", err.error);
+            WireMessage::Request(req) => {
+                client
+                    .send_response(&req.id, req.params.default_response())
+                    .await?;
+                info!(
+                    request_id = %req.id,
+                    request_type = %req.params.kind(),
+                    client = %client_name,
+                    "Handled wire request"
+                );
             }
-            Err(e) => {
-                anyhow::bail!("Wire read error: {}", e);
+            WireMessage::SuccessResponse(_) => {}
+            WireMessage::ErrorResponse(err) => {
+                anyhow::bail!("Wire error response: {:?}", err.error);
             }
         }
     }

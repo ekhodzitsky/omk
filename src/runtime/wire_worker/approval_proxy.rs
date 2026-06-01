@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, warn};
 
-use crate::wire::protocol::{ApprovalRequest, ApprovalResponseType};
+use crate::wire::{ApprovalRequest, ApprovalResponseType};
 
 /// Policy modes for the approval proxy.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

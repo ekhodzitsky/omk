@@ -4,7 +4,7 @@ use tokio::process::Command;
 use tracing::{debug, info, warn};
 
 use crate::runtime::gates::types::{GateDef, GateResult, VerificationConfig, SKIPPED_GATE_COMMAND};
-use crate::wire::protocol::scrub_secret_patterns;
+use crate::wire::scrub_secret_patterns;
 
 /// Run all configured gates and return results.
 pub async fn run_gates(config: &VerificationConfig, dir: &Path) -> Vec<GateResult> {

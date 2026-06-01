@@ -1,6 +1,6 @@
 use tracing::warn;
 
-use crate::wire::protocol::Request;
+use crate::wire::Request;
 
 /// Warn when a wire message exceeds ~90 % of a typical 128 k context window.
 const CONTEXT_WINDOW_WARNING_THRESHOLD: usize = 115_200;

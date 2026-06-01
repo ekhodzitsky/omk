@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 
-use crate::wire::protocol::Request;
+use crate::wire::Request;
 
 /// Exact token count for a plain text string.
 ///
@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn test_count_message_tokens_approval_request() {
-        let req = Request::ApprovalRequest(crate::wire::protocol::ApprovalRequest {
+        let req = Request::ApprovalRequest(crate::wire::ApprovalRequest {
             id: "a1".to_string(),
             tool_call_id: "tc1".to_string(),
             sender: "agent".to_string(),
@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn test_count_message_tokens_tool_call_request() {
-        let req = Request::ToolCallRequest(crate::wire::protocol::ToolCallRequest {
+        let req = Request::ToolCallRequest(crate::wire::ToolCallRequest {
             id: "t1".to_string(),
             name: "read_file".to_string(),
             arguments: Some("{\"path\":\"/tmp/test\"}".to_string()),

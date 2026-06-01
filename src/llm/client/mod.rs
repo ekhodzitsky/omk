@@ -6,9 +6,10 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::wire::client::WireClient as ExistingWireClient;
-use crate::wire::client::WireMessage;
-use crate::wire::protocol::{Event, PromptResult};
+use crate::wire::WireClient as ExistingWireClient;
+use crate::wire::WireClientExt as _;
+use crate::wire::WireMessage;
+use crate::wire::{ContentPart, Event, PromptResult};
 
 use super::cost::CostEstimator;
 use super::error::is_retryable;
@@ -231,7 +232,7 @@ where
                             raw,
                             reason: e.to_string(),
                         })?;
-                    debug!(status = %result.status, "wire prompt completed");
+                    debug!(status = ?result.status, "wire prompt completed");
                     break;
                 }
                 WireMessage::ErrorResponse(resp) if resp.id == id => {
@@ -240,32 +241,23 @@ where
                         resp.error.code, resp.error.message
                     )));
                 }
-                WireMessage::Event(ev) => {
-                    if let Ok(event) = ev.params.to_event() {
-                        match event {
-                            Event::ContentPart { text, chunk } => {
-                                if let Some(t) = text {
-                                    content.push_str(&t);
-                                }
-                                if let Some(c) = chunk {
-                                    content.push_str(&c);
-                                }
-                            }
-                            Event::StatusUpdate {
-                                token_usage: Some(tu),
-                                ..
-                            } => {
-                                status_tokens = Some(tu);
-                            }
-                            Event::TurnEnd => {
-                                tracing::trace!("wire turn end");
-                            }
-                            _ => {}
-                        }
-                    } else {
-                        tracing::trace!(params = ?ev.params, "ignoring malformed wire event");
+                WireMessage::Event(ev) => match ev.params {
+                    Event::ContentPart(ContentPart::Text(ref part)) => {
+                        content.push_str(&part.text);
                     }
-                }
+                    Event::ContentPart(ContentPart::Think(ref part)) => {
+                        content.push_str(&part.think);
+                    }
+                    Event::StatusUpdate(ref status) => {
+                        if let Some(ref tu) = status.token_usage {
+                            status_tokens = Some(tu.output);
+                        }
+                    }
+                    Event::TurnEnd => {
+                        tracing::trace!("wire turn end");
+                    }
+                    _ => {}
+                },
                 other => {
                     tracing::trace!(?other, "ignoring unrelated wire message");
                 }

@@ -7,8 +7,8 @@ use tracing::{info, warn};
 use crate::runtime::events::{Event, EventBuilder, EventKind, TaskId, WorkerId};
 use crate::runtime::wire_worker::{ApprovalDecision, WireWorkerAdapter};
 use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
-use crate::wire::client::{ProcessWireClient, WireClient};
-use crate::wire::protocol::{redact_wire_secrets, ApprovalRequest, Request, RequestParams};
+use crate::wire::{redact_wire_secrets, ApprovalRequest, Request, RequestExt};
+use crate::wire::{ProcessWireClient, WireClient};
 
 impl WireWorkerAdapter {
     pub(in crate::runtime::wire_worker) async fn record_task_timeout(
@@ -78,11 +78,11 @@ impl WireWorkerAdapter {
         &self,
         task: &WorkerTask,
         request_id: &str,
-        params: &RequestParams,
         request: &Request,
         response: &serde_json::Value,
     ) -> Result<()> {
-        let redacted_request_payload = redact_wire_secrets(&params.payload);
+        let request_value = serde_json::to_value(request)?;
+        let redacted_request_payload = redact_wire_secrets(&request_value);
         let redacted_response = redact_wire_secrets(response);
         let event = Event::new(self.run_id.clone(), EventKind::TaskOutput)
             .with_actor(&self.spec.name)
@@ -92,7 +92,6 @@ impl WireWorkerAdapter {
                 "worker_id": self.spec.name,
                 "request_id": request_id,
                 "request_type": request.kind(),
-                "raw_request_type": params.request_type,
                 "request_payload": redacted_request_payload,
                 "response": redacted_response,
             }))?;
@@ -128,7 +127,7 @@ impl WireWorkerAdapter {
                 warn!(error = %e, "Failed to build approval_requested event; sending rejection");
                 let fallback = serde_json::json!({
                     "request_id": approval_req.id,
-                    "response": crate::wire::protocol::ApprovalResponseType::Reject,
+                    "response": crate::wire::ApprovalResponseType::Reject,
                     "feedback": "OMK internal error building approval event.",
                 });
                 client.send_response(request_id, fallback).await?;
@@ -173,9 +172,10 @@ impl WireWorkerAdapter {
                 "request_id": request_id,
                 "approval_request_id": approval_req.id,
                 "decision": match response_type {
-                    crate::wire::protocol::ApprovalResponseType::Approve => "approve",
-                    crate::wire::protocol::ApprovalResponseType::ApproveForSession => "approve_for_session",
-                    crate::wire::protocol::ApprovalResponseType::Reject => "reject",
+                    crate::wire::ApprovalResponseType::Approve => "approve",
+                    crate::wire::ApprovalResponseType::ApproveForSession => "approve_for_session",
+                    crate::wire::ApprovalResponseType::Reject => "reject",
+                    _ => "reject",
                 },
                 "feedback": feedback,
             }))
@@ -185,25 +185,10 @@ impl WireWorkerAdapter {
             }
         }
 
-        let request_params = match serde_json::to_value(approval_req) {
-            Ok(payload) => RequestParams {
-                request_type: "ApprovalRequest".to_string(),
-                payload,
-            },
-            Err(e) => {
-                warn!(error = %e, "Failed to serialize approval request for logging; skipping record_wire_request");
-                RequestParams {
-                    request_type: "ApprovalRequest".to_string(),
-                    payload: serde_json::json!({"error": "serialization failed"}),
-                }
-            }
-        };
-
         if let Err(e) = self
             .record_wire_request(
                 task,
                 request_id,
-                &request_params,
                 &Request::ApprovalRequest(approval_req.clone()),
                 &response,
             )

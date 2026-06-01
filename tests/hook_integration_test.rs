@@ -2,7 +2,7 @@ use omk::runtime::events::{EventKind, EventWriter, RunId};
 use omk::runtime::wire_worker::hook_executor::{
     discover_hook_subscriptions, HookExecutor, HookResult,
 };
-use omk::wire::protocol::HookRequest;
+use omk::wire::HookRequest;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use tokio::time::Duration;
@@ -185,7 +185,7 @@ async fn test_hook_executor_allow_on_exit_zero() {
     };
 
     let result = executor.run(&request).await.unwrap();
-    assert_eq!(result.action, omk::wire::protocol::HookAction::Allow);
+    assert_eq!(result.action, omk::wire::HookAction::Allow);
     assert_eq!(result.reason, "safe");
 }
 
@@ -212,7 +212,7 @@ async fn test_hook_executor_block_on_exit_one() {
     };
 
     let result = executor.run(&request).await.unwrap();
-    assert_eq!(result.action, omk::wire::protocol::HookAction::Block);
+    assert_eq!(result.action, omk::wire::HookAction::Block);
     assert_eq!(result.reason, "blocked");
 }
 
@@ -239,7 +239,7 @@ async fn test_hook_executor_block_on_nonzero_exit() {
     };
 
     let result = executor.run(&request).await.unwrap();
-    assert_eq!(result.action, omk::wire::protocol::HookAction::Block);
+    assert_eq!(result.action, omk::wire::HookAction::Block);
     assert!(result.reason.contains("42"));
     assert!(result.reason.contains("error"));
 }
@@ -275,7 +275,7 @@ timeout = 1
     let result = executor.run(&request).await.unwrap();
     let elapsed = start.elapsed();
 
-    assert_eq!(result.action, omk::wire::protocol::HookAction::Block);
+    assert_eq!(result.action, omk::wire::HookAction::Block);
     assert!(result.reason.contains("timed out"));
     assert!(
         elapsed < Duration::from_secs(5),
@@ -296,7 +296,7 @@ async fn test_hook_executor_default_allow_when_no_match() {
     };
 
     let result = executor.run(&request).await.unwrap();
-    assert_eq!(result.action, omk::wire::protocol::HookAction::Allow);
+    assert_eq!(result.action, omk::wire::HookAction::Allow);
     assert!(result.reason.contains("No matching hook"));
 }
 
@@ -333,7 +333,7 @@ timeout = 10
     };
 
     let result = executor.run(&request).await.unwrap();
-    assert_eq!(result.action, omk::wire::protocol::HookAction::Allow);
+    assert_eq!(result.action, omk::wire::HookAction::Allow);
     assert_eq!(result.reason, "fast");
 }
 
@@ -370,7 +370,7 @@ timeout = 10
         input_data: serde_json::json!({}),
     };
     let result = executor.run(&req_match).await.unwrap();
-    assert_eq!(result.action, omk::wire::protocol::HookAction::Allow);
+    assert_eq!(result.action, omk::wire::HookAction::Allow);
     assert_eq!(result.reason, "regex-match");
 
     // Negative match — should default allow
@@ -382,7 +382,7 @@ timeout = 10
         input_data: serde_json::json!({}),
     };
     let result = executor.run(&req_no_match).await.unwrap();
-    assert_eq!(result.action, omk::wire::protocol::HookAction::Allow);
+    assert_eq!(result.action, omk::wire::HookAction::Allow);
     assert!(result.reason.contains("No matching hook"));
 }
 
@@ -413,7 +413,7 @@ timeout = 10
     };
 
     let result = executor.run(&request).await.unwrap();
-    assert_eq!(result.action, omk::wire::protocol::HookAction::Allow);
+    assert_eq!(result.action, omk::wire::HookAction::Allow);
     assert!(result.reason.contains("key"));
     assert!(result.reason.contains("value"));
 }
@@ -421,7 +421,7 @@ timeout = 10
 #[test]
 fn test_hook_result_response_value() {
     let result = HookResult {
-        action: omk::wire::protocol::HookAction::Allow,
+        action: omk::wire::HookAction::Allow,
         reason: "all good".to_string(),
     };
     let value = result.to_response_value("req-42");
@@ -430,7 +430,7 @@ fn test_hook_result_response_value() {
     assert_eq!(value["reason"], "all good");
 
     let block = HookResult {
-        action: omk::wire::protocol::HookAction::Block,
+        action: omk::wire::HookAction::Block,
         reason: "nope".to_string(),
     };
     let value = block.to_response_value("req-43");

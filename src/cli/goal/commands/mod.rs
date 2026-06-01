@@ -78,7 +78,7 @@ pub(super) async fn cmd_show(goal_id: &str, format: OutputFormat) -> Result<()> 
     match format {
         OutputFormat::Json => {
             let value = serde_json::to_value(&goal)?;
-            let redacted = crate::wire::protocol::redact_wire_secrets(&value);
+            let redacted = crate::wire::redact_wire_secrets(&value);
             println!("{}", serde_json::to_string_pretty(&redacted)?);
         }
         OutputFormat::Md => {
@@ -146,7 +146,7 @@ pub(super) async fn cmd_proof(goal_id: &str, format: OutputFormat) -> Result<()>
     match format {
         OutputFormat::Json => {
             let value = serde_json::to_value(&proof)?;
-            let redacted = crate::wire::protocol::redact_wire_secrets(&value);
+            let redacted = crate::wire::redact_wire_secrets(&value);
             println!("{}", serde_json::to_string_pretty(&redacted)?);
         }
         OutputFormat::Md => {
@@ -186,7 +186,7 @@ pub(super) async fn cmd_replay(goal_id: &str, format: OutputFormat) -> Result<()
     match format {
         OutputFormat::Json => {
             let value = serde_json::to_value(&replay)?;
-            let redacted = crate::wire::protocol::redact_wire_secrets(&value);
+            let redacted = crate::wire::redact_wire_secrets(&value);
             println!("{}", serde_json::to_string_pretty(&redacted)?);
         }
         OutputFormat::Md => {

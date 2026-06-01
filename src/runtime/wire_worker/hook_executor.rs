@@ -9,7 +9,7 @@ use tokio::io::AsyncWriteExt;
 use tracing::warn;
 
 use crate::kimi_native::hook_spec::{default_project_hooks, HookConfig};
-use crate::wire::protocol::{redact_wire_secrets, HookAction, HookRequest, WireHookSubscription};
+use crate::wire::{redact_wire_secrets, HookAction, HookRequest, WireHookSubscription};
 
 /// Discover active hook subscriptions for the given project directory.
 ///
@@ -308,6 +308,8 @@ impl HookResult {
         let action_str = match self.action {
             HookAction::Allow => "allow",
             HookAction::Block => "block",
+            // HookAction is #[non_exhaustive]; future variants default to block.
+            _ => "block",
         };
         serde_json::json!({
             "request_id": request_id,

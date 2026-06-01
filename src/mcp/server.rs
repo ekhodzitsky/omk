@@ -9,13 +9,13 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::{debug, error, info, warn};
 
 use super::tools::{handle_tool_call, list_tools};
-use crate::wire::protocol::scrub_secret_patterns;
+use crate::wire::scrub_secret_patterns;
 
 /// Maximum length of a single inbound MCP JSON-RPC request, in bytes.
 ///
 /// Bounds memory damage from a misbehaving / hostile MCP client that sends
 /// a multi-GB payload without a newline. Mirrors the wire-side cap in
-/// `crate::wire::client::MAX_WIRE_LINE_LENGTH`.
+/// `crate::wire::MAX_WIRE_LINE_LENGTH`.
 const MAX_MCP_LINE_LENGTH: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]

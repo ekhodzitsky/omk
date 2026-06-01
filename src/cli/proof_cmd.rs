@@ -69,7 +69,7 @@ async fn cmd_show(run_id: &str, format: OutputFormat, regenerate: bool) -> Resul
     match format {
         OutputFormat::Json => {
             let value = serde_json::to_value(&proof)?;
-            let redacted = crate::wire::protocol::redact_wire_secrets(&value);
+            let redacted = crate::wire::redact_wire_secrets(&value);
             println!("{}", serde_json::to_string_pretty(&redacted)?);
         }
         OutputFormat::Md => {

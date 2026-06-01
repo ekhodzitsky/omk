@@ -66,6 +66,7 @@ fn parse_wire_status_usage(line: &str) -> Option<(Option<String>, GoalBudgetUsag
     let event_type = params.get("type")?.as_str()?;
     if !event_type.eq_ignore_ascii_case("status_update")
         && !event_type.eq_ignore_ascii_case("status-update")
+        && !event_type.eq_ignore_ascii_case("StatusUpdate")
     {
         return None;
     }

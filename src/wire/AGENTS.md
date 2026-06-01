@@ -2,16 +2,16 @@
 
 ## Editing Rules
 
-1. **Trait is the contract; struct is the implementation.** `WireClient` is a trait.
-   `ProcessWireClient` is the only production implementation (via child process).
-   `InMemoryWireClient` is for tests only.
-2. **Do not add methods to `ProcessWireClient` without adding them to the trait.**
-   If a consumer needs a new protocol method, it goes into the `WireClient` trait
-   with a default implementation; `ProcessWireClient` implements only low-level
-   primitives (`send_request`, `read_message`, `read_response`).
-3. **process_messages is generic.** Do not bind the dispatch loop to a concrete type.
-   Use `impl WireClient` or `<C: WireClient>`.
-4. **No shell scripts in tests.** Any parsing, buffering, or dispatch logic is tested
-   via `InMemoryWireClient`. `ProcessWireClient::spawn` is tested in one test only (smoke).
-5. **Protocol facts must not go stale.** When changing protocol fields, update
-   `README.md`, `docs/`, and tests in the same PR.
+1. **This module is a thin re-export layer.** All wire protocol logic lives in
+   the external `kimi-wire` crate. Do not add parsing, dispatch, or trait
+   implementations to `src/wire/`.
+2. **Compatibility aliases only.** `ProcessWireClient`, `ApprovalResponseType`,
+   `redact_wire_secrets`, and `KIMI_WIRE_PROTOCOL_VERSION` are preserved so
+   existing OMK call sites keep compiling. Migrate call sites to the upstream
+   names and remove the alias when practical.
+3. **Upstream changes require a `kimi-wire` PR.** If you need to change
+   `WireClient`, `process_messages`, protocol types, or redaction logic, edit
+   the `kimi-wire` crate (path: `../kimi-wire`) and bump its version before
+   updating OMK's dependency.
+4. **Protocol facts must not go stale.** When changing re-exports or aliases,
+   update `README.md`, `docs/`, and consumer tests in the same PR.
