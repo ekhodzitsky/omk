@@ -61,7 +61,7 @@ once_cell = "1.21"
 
 # Time
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
-uuid = { version = "1.16", features = ["v4", "serde"] }
+uuid = { version = "1.23", features = ["v4", "serde"] }
 
 # System interfaces
 num_cpus = "1.16"
