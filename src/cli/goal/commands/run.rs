@@ -5,7 +5,7 @@ use tokio::sync::Mutex;
 use crate::llm::planner::{LlmPlanner, Planner};
 use crate::llm::types::TokenBudget;
 use crate::llm::{LlmClientConfig, WireLlmClient};
-use crate::wire::client::ProcessWireClient;
+use crate::wire::{ChildProcessTransport, ProcessWireClient};
 
 pub(crate) async fn cmd_run(
     goal: &str,
@@ -130,9 +130,8 @@ async fn build_llm_planner(
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| "kimi".to_string());
 
-    let wire = ProcessWireClient::spawn(&kimi_bin, None, None, None)
-        .await
-        .map_err(|e| anyhow::anyhow!("failed to spawn kimi wire client: {e}"))?;
+    let wire =
+        ProcessWireClient::new(ChildProcessTransport::spawn(&kimi_bin, None, None, None).await?);
 
     let wire_arc = Arc::new(Mutex::new(wire));
 

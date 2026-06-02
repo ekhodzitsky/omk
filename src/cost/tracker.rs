@@ -33,7 +33,7 @@ impl<S: CostSink> CostTracker<S> {
     pub async fn record_with_message(
         &self,
         mut cost: SessionCost,
-        message: &crate::wire::protocol::Request,
+        message: &crate::wire::Request,
         model: &str,
     ) -> Result<()> {
         if let Ok(exact) = crate::cost::tokens::count_message_tokens(message, model) {

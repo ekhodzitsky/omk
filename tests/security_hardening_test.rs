@@ -10,7 +10,7 @@
 use omk::runtime::goal::{plan_goal_worktree, plan_goal_worktrees};
 use omk::runtime::sanitize::{resolve_safe_path, sanitize_name};
 use omk::runtime::shell::{shell_escape, validate_safe};
-use omk::wire::protocol::redact_wire_secrets;
+use omk::wire::redact_wire_secrets;
 use serde_json::json;
 use tempfile::tempdir;
 

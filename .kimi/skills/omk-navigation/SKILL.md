@@ -46,7 +46,7 @@ Pick the narrowest useful command first:
 
 ```bash
 cargo fmt --check
-cargo test --test wire_protocol_test
+cargo test --test mock_kimi_test
 cargo test --test kimi_native_test
 cargo test --test team_lifecycle_test
 cargo test --test cli_smoke

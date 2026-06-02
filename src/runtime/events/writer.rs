@@ -130,7 +130,7 @@ async fn writer_task(
 fn redact_event(event: &Event) -> Event {
     let mut event = event.clone();
     if let Some(ref mut payload) = event.payload {
-        *payload = crate::wire::protocol::redact_wire_secrets(payload);
+        *payload = crate::wire::redact_wire_secrets(payload);
     }
     event
 }

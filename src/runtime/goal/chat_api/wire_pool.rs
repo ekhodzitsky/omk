@@ -5,7 +5,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-use crate::wire::client::{ProcessWireClient, WireClient};
+use crate::wire::{ChildProcessTransport, ProcessWireClient, WireClient};
 
 /// Factory for creating wire clients. Production default spawns
 /// `ProcessWireClient` processes; tests can inject mocks.
@@ -23,7 +23,9 @@ impl WireClientFactory for ProcessWireClientFactory {
     type Client = ProcessWireClient;
 
     async fn create(&self) -> anyhow::Result<Self::Client> {
-        ProcessWireClient::spawn("kimi", None, None, None).await
+        Ok(ProcessWireClient::new(
+            ChildProcessTransport::spawn("kimi", None, None, None).await?,
+        ))
     }
 }
 

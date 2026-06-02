@@ -100,7 +100,7 @@
 - **Пустые списки зависимостей** (`internal: []`, `external: []`). Для протокольного/клиентского модуля это явно некорректно — wire зависит от `serde`, `tokio`, `anyhow` и др.
 
 ### 3.3 `src/mcp/README.md` — ⚠️ Неточная ссылка
-- Указывает `src/wire/client.rs` как consumer, использующий `mcp::server`. На самом деле `src/wire/client.rs` содержит только doc-comment упоминание — нет реального импорта или кода-зависимости.
+- Указывает `src/wire/client.rs` (теперь `kimi-wire` crate / `src/wire/mod.rs`) как consumer, использующий `mcp::server`. На самом деле модуль wire содержит только doc-comment упоминание — нет реального импорта или кода-зависимости.
 
 ### 3.4 `src/analysis/README.md` — ⚠️ Неполный
 - **Нет секции dependencies.**
@@ -168,7 +168,7 @@
 | `scripts/sync-packaging-versions.sh` (пример) | `0.3.30` | 🟡 Косметически устарел |
 
 ### 5.3 `.omk/AGENTS.md` — Wire Protocol
-- **Протокол:** Указывает версию 1.9, `kimi` 1.41.0. Соответствует `src/wire/protocol.rs`.
+- **Протокол:** Указывает версию 1.9, `kimi` 1.41.0. Соответствует `src/wire/protocol.rs` (теперь `kimi-wire` crate).
 - **Проблема:** Roadmap внутри `.omk/AGENTS.md` показывает два неотмеченных пункта:
   - `Approval proxy (OMK approves/rejects on behalf of user)` — unchecked
   - `Hook integration (OMK hooks via wire HookRequest)` — unchecked
@@ -199,7 +199,7 @@
 11. **Пометить `plans/2026-05-12-*` как COMPLETED**.
 12. **Обновить `specs/2026-05-15-code-quality-cleanup-design.md`** — пересчитать файлы >400 строк и `unwrap/expect/panic` counts.
 13. **Исправить `src/wire/README.md`** — заполнить списки зависимостей.
-14. **Исправить `src/mcp/README.md`** — убрать или скорректировать ссылку на `src/wire/client.rs` как consumer.
+14. **Исправить `src/mcp/README.md`** — убрать или скорректировать ссылку на `src/wire/client.rs` (теперь `kimi-wire` crate / `src/wire/mod.rs`) как consumer.
 15. **Привести `docs/TROUBLESHOOTING.md` к goal-first стилю** — минимизировать смешение legacy-команд.
 
 ---

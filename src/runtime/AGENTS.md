@@ -13,6 +13,7 @@
    analysis, task ordering) must not depend on `tokio::fs` or `Command`.
 4. **Events are append-only.** `EventSink` is the only way to record runtime
    events. Do not write events through ad-hoc `fs::write` calls.
-5. **Test through mocks.** `MockEventSink`, `MockCostSink`, and `MockWireClient`
-   live in `src/test_helpers.rs`. Unit tests for runtime logic use these mocks;
-   integration tests verify end-to-end behavior with real I/O.
+5. **Test through mocks.** `MockEventSink` and `MockCostSink` live in
+   `src/test_helpers.rs`. Unit tests for runtime logic use these mocks;
+   integration tests verify end-to-end behavior with real I/O. Wire protocol
+   tests use `kimi_wire::InMemoryWireClient`.

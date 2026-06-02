@@ -3,8 +3,7 @@ use std::time::Duration;
 
 use tokio::sync::Mutex;
 
-use crate::wire::client::WireMessage;
-use crate::wire::protocol::{Event, JsonRpcNotification, JsonRpcSuccessResponse, PromptResult};
+use crate::wire::{Event, PromptResult, PromptStatus, RawWireMessage};
 
 use super::*;
 
@@ -61,7 +60,7 @@ async fn test_mock_llm_client_push_response() {
 
 #[tokio::test]
 async fn test_wire_llm_client_budget_exceeded() {
-    let wire = Arc::new(Mutex::new(crate::wire::client::InMemoryWireClient::new()));
+    let wire = Arc::new(Mutex::new(crate::wire::InMemoryWireClient::new()));
     let config = LlmClientConfig {
         model: "gpt-4".to_string(),
         max_tokens: 100,
@@ -80,7 +79,7 @@ async fn test_wire_llm_client_budget_exceeded() {
 
 #[tokio::test]
 async fn test_wire_llm_client_context_length_exceeded() {
-    let wire = Arc::new(Mutex::new(crate::wire::client::InMemoryWireClient::new()));
+    let wire = Arc::new(Mutex::new(crate::wire::InMemoryWireClient::new()));
     let config = LlmClientConfig {
         model: "gpt-4".to_string(),
         max_tokens: 1,
@@ -100,7 +99,7 @@ async fn test_wire_llm_client_context_length_exceeded() {
 
 #[tokio::test]
 async fn test_wire_llm_client_complete_success() {
-    let wire = Arc::new(Mutex::new(crate::wire::client::InMemoryWireClient::new()));
+    let wire = Arc::new(Mutex::new(crate::wire::InMemoryWireClient::new()));
     let config = LlmClientConfig {
         model: "gpt-4".to_string(),
         max_tokens: 1000,
@@ -114,53 +113,63 @@ async fn test_wire_llm_client_complete_success() {
     };
     let client = WireLlmClient::new(wire.clone(), config, CostEstimator::new());
 
-    // Inject events before calling complete.
-    // start_prompt on a fresh InMemoryWireClient uses id "req-1".
-    let content_event = Event::ContentPart {
-        text: Some("hello from wire".to_string()),
-        chunk: None,
-    };
-    let status_event = Event::StatusUpdate {
+    let content_event = Event::ContentPart(crate::wire::ContentPart::Text(crate::wire::TextPart {
+        text: "hello from wire".to_string(),
+    }));
+    let status_event = Event::StatusUpdate(crate::wire::StatusUpdate {
         context_usage: None,
         context_tokens: None,
         max_context_tokens: None,
-        token_usage: Some(5),
+        token_usage: Some(crate::wire::TokenUsage {
+            input_other: 0,
+            output: 5,
+            input_cache_read: 0,
+            input_cache_creation: 0,
+        }),
         message_id: None,
         plan_mode: None,
-    };
+    });
 
-    let ev_params = content_event.to_params().unwrap();
     wire.lock()
         .await
-        .inject(WireMessage::Event(JsonRpcNotification {
-            jsonrpc: "2.0".to_string(),
-            method: "event".to_string(),
-            params: ev_params,
-        }))
-        .await;
-
-    let status_params = status_event.to_params().unwrap();
-    wire.lock()
-        .await
-        .inject(WireMessage::Event(JsonRpcNotification {
-            jsonrpc: "2.0".to_string(),
-            method: "event".to_string(),
-            params: status_params,
-        }))
-        .await;
-
-    let success = JsonRpcSuccessResponse {
-        jsonrpc: "2.0".to_string(),
-        id: "req-1".to_string(),
-        result: serde_json::to_value(PromptResult {
-            status: "ok".to_string(),
-            steps: None,
+        .inject(RawWireMessage {
+            jsonrpc: crate::wire::JsonRpcVersion::V2,
+            id: None,
+            method: Some("event".to_string()),
+            params: Some(serde_json::to_value(&content_event).unwrap()),
+            result: None,
+            error: None,
         })
-        .unwrap(),
-    };
+        .await;
+
     wire.lock()
         .await
-        .inject(WireMessage::SuccessResponse(success))
+        .inject(RawWireMessage {
+            jsonrpc: crate::wire::JsonRpcVersion::V2,
+            id: None,
+            method: Some("event".to_string()),
+            params: Some(serde_json::to_value(&status_event).unwrap()),
+            result: None,
+            error: None,
+        })
+        .await;
+
+    wire.lock()
+        .await
+        .inject(RawWireMessage {
+            jsonrpc: crate::wire::JsonRpcVersion::V2,
+            id: Some("req-1".to_string()),
+            method: None,
+            params: None,
+            result: Some(
+                serde_json::to_value(PromptResult {
+                    status: PromptStatus::Finished,
+                    steps: None,
+                })
+                .unwrap(),
+            ),
+            error: None,
+        })
         .await;
 
     let result = client
@@ -174,7 +183,7 @@ async fn test_wire_llm_client_complete_success() {
 
 #[tokio::test]
 async fn test_wire_llm_client_complete_with_system() {
-    let wire = Arc::new(Mutex::new(crate::wire::client::InMemoryWireClient::new()));
+    let wire = Arc::new(Mutex::new(crate::wire::InMemoryWireClient::new()));
     let config = LlmClientConfig {
         model: "gpt-4".to_string(),
         max_tokens: 1000,
@@ -188,18 +197,22 @@ async fn test_wire_llm_client_complete_with_system() {
     };
     let client = WireLlmClient::new(wire.clone(), config, CostEstimator::new());
 
-    let success = JsonRpcSuccessResponse {
-        jsonrpc: "2.0".to_string(),
-        id: "req-1".to_string(),
-        result: serde_json::to_value(PromptResult {
-            status: "ok".to_string(),
-            steps: None,
-        })
-        .unwrap(),
-    };
     wire.lock()
         .await
-        .inject(WireMessage::SuccessResponse(success))
+        .inject(RawWireMessage {
+            jsonrpc: crate::wire::JsonRpcVersion::V2,
+            id: Some("req-1".to_string()),
+            method: None,
+            params: None,
+            result: Some(
+                serde_json::to_value(PromptResult {
+                    status: PromptStatus::Finished,
+                    steps: None,
+                })
+                .unwrap(),
+            ),
+            error: None,
+        })
         .await;
 
     let result = client

@@ -9,8 +9,10 @@ use crate::runtime::wire_worker::hook_executor::{
 };
 use crate::runtime::wire_worker::WireWorkerAdapter;
 use crate::runtime::worker::{ResultStatus, WorkerResult, WorkerTask};
-use crate::wire::client::{ProcessWireClient, WireClient, WireMessage};
-use crate::wire::protocol::{redact_wire_secrets, Request};
+use crate::wire::{redact_wire_secrets, EventExt, Request, RequestExt};
+use crate::wire::{
+    ChildProcessTransport, ProcessWireClient, WireClient, WireClientExt, WireMessage,
+};
 
 use super::context_guard;
 use super::TaskOutcome;
@@ -34,16 +36,43 @@ impl WireWorkerAdapter {
             }))?;
         self.event_writer.append(&started).await?;
         let project_dir = self.spec.project_dir.as_deref();
-        let mut client = ProcessWireClient::spawn(kimi_bin, project_dir, None, None).await?;
-        let external_tools = if let Some(bridge) = &self.mcp_bridge {
-            Some(bridge.external_tools().await)
-        } else {
-            self.spec.external_tools.clone()
-        };
+        let mut client = ProcessWireClient::new(
+            ChildProcessTransport::spawn(kimi_bin, project_dir, None, None).await?,
+        );
+        let external_tools: Option<Vec<crate::wire::ExternalTool>> =
+            if let Some(bridge) = &self.mcp_bridge {
+                Some(
+                bridge
+                    .external_tools()
+                    .await
+                    .into_iter()
+                    .filter_map(|t| match serde_json::from_value(t) {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            warn!(error = %e, "Skipping malformed external tool from MCP bridge");
+                            None
+                        }
+                    })
+                    .collect(),
+            )
+            } else {
+                self.spec.external_tools.clone().map(|tools| {
+                    tools
+                    .into_iter()
+                    .filter_map(|t| match serde_json::from_value(t) {
+                        Ok(v) => Some(v),
+                        Err(e) => {
+                            warn!(error = %e, "Skipping malformed external tool from worker spec");
+                            None
+                        }
+                    })
+                    .collect()
+                })
+            };
         let hooks = discover_hook_subscriptions(project_dir).await;
-        let init_params = crate::wire::protocol::InitializeParams {
-            protocol_version: crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION.to_string(),
-            client: Some(crate::wire::protocol::ClientInfo {
+        let init_params = crate::wire::InitializeParams {
+            protocol_version: crate::wire::WIRE_PROTOCOL_VERSION.to_string(),
+            client: Some(crate::wire::ClientInfo {
                 name: "omk-wire-worker".to_string(),
                 version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
@@ -59,7 +88,7 @@ impl WireWorkerAdapter {
                 "task_id": task.id,
                 "worker_id": self.spec.name,
                 "kimi_binary": kimi_bin,
-                "expected_wire_protocol_version": crate::wire::protocol::KIMI_WIRE_PROTOCOL_VERSION,
+                "expected_wire_protocol_version": crate::wire::WIRE_PROTOCOL_VERSION,
                 "wire_protocol_version": init_result.protocol_version,
             }))?;
         self.event_writer.append(&init_event).await?;
@@ -84,7 +113,7 @@ impl WireWorkerAdapter {
         }
         prompt.push_str("\n\nWhen complete, summarize what you did in 1-2 sentences.");
         context_guard::warn_if_prompt_exceeds_threshold(&prompt, &self.spec.name, &task.id);
-        client.start_prompt(&prompt).await?;
+        client.start_prompt(prompt.as_str()).await?;
         let mut summary_parts: Vec<String> = Vec::new();
         let mut success = true;
         let mut failure_reason: Option<String> = None;
@@ -126,55 +155,51 @@ impl WireWorkerAdapter {
                                         task.id, self.spec.name
                                     )
                                 })?;
-                            match ev.params.to_event() {
-                                Ok(typed) => match typed {
-                                    crate::wire::protocol::Event::TurnEnd => break,
-                                    crate::wire::protocol::Event::StepInterrupted => {
-                                        success = false;
-                                        failure_reason =
-                                            Some("wire step interrupted before turn_end".to_string());
-                                        break;
+                            match ev.params {
+                                crate::wire::Event::TurnEnd => break,
+                                crate::wire::Event::StepInterrupted => {
+                                    success = false;
+                                    failure_reason =
+                                        Some("wire step interrupted before turn_end".to_string());
+                                    break;
+                                }
+                                crate::wire::Event::HookTriggered { event, target, hook_count } => {
+                                    let hook_event = Event::new(self.run_id.clone(), EventKind::HookTriggered)
+                                        .with_actor(&self.spec.name)
+                                        .with_payload(serde_json::json!({
+                                            "task_id": task.id,
+                                            "worker_id": self.spec.name,
+                                            "event": event,
+                                            "target": target,
+                                            "hook_count": hook_count,
+                                        }))?;
+                                    if let Err(e) = self.event_writer.append(&hook_event).await {
+                                        warn!(error = %e, "Failed to emit hook_triggered event");
                                     }
-                                    crate::wire::protocol::Event::HookTriggered { event, target, hook_count } => {
-                                        let hook_event = Event::new(self.run_id.clone(), EventKind::HookTriggered)
-                                            .with_actor(&self.spec.name)
-                                            .with_payload(serde_json::json!({
-                                                "task_id": task.id,
-                                                "worker_id": self.spec.name,
-                                                "event": event,
-                                                "target": target,
-                                                "hook_count": hook_count,
-                                            }))?;
-                                        if let Err(e) = self.event_writer.append(&hook_event).await {
-                                            warn!(error = %e, "Failed to emit hook_triggered event");
-                                        }
+                                }
+                                crate::wire::Event::HookResolved { event, target, action, reason, duration_ms } => {
+                                    let hook_event = Event::new(self.run_id.clone(), EventKind::HookResolved)
+                                        .with_actor(&self.spec.name)
+                                        .with_payload(serde_json::json!({
+                                            "task_id": task.id,
+                                            "worker_id": self.spec.name,
+                                            "event": event,
+                                            "target": target,
+                                            "action": action,
+                                            "reason": reason,
+                                            "duration_ms": duration_ms,
+                                        }))?;
+                                    if let Err(e) = self.event_writer.append(&hook_event).await {
+                                        warn!(error = %e, "Failed to emit hook_resolved event");
                                     }
-                                    crate::wire::protocol::Event::HookResolved { event, target, action, reason, duration_ms } => {
-                                        let hook_event = Event::new(self.run_id.clone(), EventKind::HookResolved)
-                                            .with_actor(&self.spec.name)
-                                            .with_payload(serde_json::json!({
-                                                "task_id": task.id,
-                                                "worker_id": self.spec.name,
-                                                "event": event,
-                                                "target": target,
-                                                "action": action,
-                                                "reason": reason,
-                                                "duration_ms": duration_ms,
-                                            }))?;
-                                        if let Err(e) = self.event_writer.append(&hook_event).await {
-                                            warn!(error = %e, "Failed to emit hook_resolved event");
-                                        }
-                                    }
-                                    crate::wire::protocol::Event::ContentPart { text, chunk } => {
-                                        if let Some(t) = text {
-                                            summary_parts.push(t);
-                                        } else if let Some(c) = chunk {
-                                            summary_parts.push(c);
-                                        }
-                                    }
-                                    _ => {}
-                                },
-                                Err(_) => {
+                                }
+                                crate::wire::Event::ContentPart(crate::wire::ContentPart::Text(ref part)) => {
+                                    summary_parts.push(part.text.clone());
+                                }
+                                crate::wire::Event::ContentPart(crate::wire::ContentPart::Think(ref part)) => {
+                                    summary_parts.push(part.think.clone());
+                                }
+                                _ => {
                                     match ev.params.normalized_event_type().as_str() {
                                         "turn_end" => break,
                                         "step_interrupted" => {
@@ -185,11 +210,11 @@ impl WireWorkerAdapter {
                                         }
                                         "thinking" | "text" | "content" => {
                                             if let Some(text) =
-                                                ev.params.payload.get("text").and_then(|v| v.as_str())
+                                                ev.params.payload().get("text").and_then(|v| v.as_str())
                                             {
                                                 summary_parts.push(text.to_string());
                                             } else if let Some(chunk) =
-                                                ev.params.payload.get("chunk").and_then(|v| v.as_str())
+                                                ev.params.payload().get("chunk").and_then(|v| v.as_str())
                                             {
                                                 summary_parts.push(chunk.to_string());
                                             }
@@ -197,7 +222,7 @@ impl WireWorkerAdapter {
                                         "turn_begin" | "step_begin" | "tool_call" | "tool_call_part"
                                         | "tool_result" | "status_update" | "approval_response" => {}
                                         "hook_triggered" | "hook_resolved" => {
-                                            tracing::debug!(event_type = %ev.params.event_type, "Known hook event failed deserialization");
+                                            tracing::debug!(event_type = %ev.params.event_type(), "Known hook event failed deserialization");
                                         }
                                         other => warn!(event_type = %other, "Unknown wire event kind"),
                                     }
@@ -207,17 +232,17 @@ impl WireWorkerAdapter {
                         Ok(WireMessage::Request(req)) if req.method != "request" => {
                             warn!(method = %req.method, "Unknown wire request method, skipping");
                         }
-                        Ok(WireMessage::Request(req)) => match req.params.to_request() {
-                            Ok(request) => {
+                        Ok(WireMessage::Request(req)) => {
+                            let request = req.params;
                                 context_guard::warn_if_request_exceeds_threshold(&request, &self.spec.name, &task.id);
-                                if let crate::wire::protocol::Request::HookRequest(ref hook_req) = request {
+                                if let crate::wire::Request::HookRequest(ref hook_req) = request {
                                     let hook_result = if let Some(dir) = project_dir {
                                         match HookExecutor::new(dir).run(hook_req).await {
                                             Ok(result) => result,
                                             Err(e) => {
                                                 warn!(error = %e, "Hook execution failed");
                                                 HookResult {
-                                                    action: crate::wire::protocol::HookAction::Block,
+                                                    action: crate::wire::HookAction::Block,
                                                     reason: format!("hook execution failed: {e}"),
                                                 }
                                             }
@@ -227,7 +252,7 @@ impl WireWorkerAdapter {
                                     };
                                     let response = hook_result.to_response_value(&hook_req.id);
                                     client.send_response(&req.id, &response).await?;
-                                    if let Err(e) = self.record_wire_request(task, &req.id, &req.params, &request, &response).await {
+                                    if let Err(e) = self.record_wire_request(task, &req.id, &request, &response).await {
                                         warn!(error = %e, "Failed to record hook wire request");
                                     }
                                     info!(
@@ -240,7 +265,7 @@ impl WireWorkerAdapter {
                                     );
                                     continue;
                                 }
-                                if let crate::wire::protocol::Request::ToolCallRequest(ref tool_call) = request {
+                                if let crate::wire::Request::ToolCallRequest(ref tool_call) = request {
                                     if let Some(bridge) = &self.mcp_bridge {
                                         if bridge.is_mcp_tool(&tool_call.name).await {
                                             let args = match &tool_call.arguments {
@@ -251,30 +276,26 @@ impl WireWorkerAdapter {
                                             let response = match result {
                                                 Ok(value) => serde_json::json!({
                                                     "tool_call_id": tool_call.id,
-                                                    "return_value": crate::wire::protocol::ToolReturnValue {
+                                                    "return_value": crate::wire::ToolReturnValue {
                                                         is_error: false,
-                                                        output: serde_json::to_string(&value).unwrap_or_default(),
+                                                        output: crate::wire::ToolOutput::Text(serde_json::to_string(&value).unwrap_or_default()),
                                                         message: String::new(),
-                                                        display: None,
+                                                        display: vec![],
                                                         extras: None,
                                                     }
                                                 }),
                                                 Err(e) => serde_json::json!({
                                                     "tool_call_id": tool_call.id,
-                                                    "return_value": crate::wire::protocol::ToolReturnValue {
+                                                    "return_value": crate::wire::ToolReturnValue {
                                                         is_error: true,
-                                                        output: String::new(),
+                                                        output: crate::wire::ToolOutput::Text(String::new()),
                                                         message: e.to_string(),
-                                                        display: Some(vec![crate::wire::protocol::DisplayBlock::Brief(
-                                                            crate::wire::protocol::BriefDisplayBlock {
-                                                                text: "MCP tool call failed".to_string(),
-                                                            }
-                                                        )]),
+                                                        display: vec![crate::wire::DisplayBlock::brief("MCP tool call failed")],
                                                         extras: None,
                                                     }
                                                 }),
                                             };
-                                            self.record_wire_request(task, &req.id, &req.params, &request, &response).await?;
+                                            self.record_wire_request(task, &req.id, &request, &response).await?;
                                             client.send_response(&req.id, response).await?;
                                             info!(
                                                 worker = %self.spec.name,
@@ -293,7 +314,7 @@ impl WireWorkerAdapter {
                                     }
                                     _ => {
                                         let resp = request.default_response();
-                                        self.record_wire_request(task, &req.id, &req.params, &request, &resp)
+                                        self.record_wire_request(task, &req.id, &request, &resp)
                                             .await?;
                                         client.send_response(&req.id, resp).await?;
                                         info!(
@@ -305,12 +326,6 @@ impl WireWorkerAdapter {
                                     }
                                 }
                             }
-                            Err(_) => {
-                                client
-                                    .send_error(&req.id, -32601, "Unknown request type")
-                                    .await?;
-                            }
-                        },
                         Ok(WireMessage::SuccessResponse(_)) => {}
                         Ok(WireMessage::ErrorResponse(err)) => {
                             warn!(error = ?err.error, "Wire error response");

@@ -3,7 +3,7 @@ use tracing::{debug, warn};
 use super::config::WebhookConfig;
 use super::payload::{format_discord, format_slack, format_telegram, NotificationEvent};
 use super::transport::{ReqwestWebhookTransport, WebhookTransport};
-use crate::wire::protocol::scrub_secret_patterns;
+use crate::wire::scrub_secret_patterns;
 
 /// Send a notification to all configured webhooks using the default
 /// `ReqwestWebhookTransport`.

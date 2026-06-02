@@ -139,18 +139,18 @@ fn test_wire_stall_mode() {
     .unwrap();
     stdin.flush().unwrap();
 
-    // Read until we see turn_begin
+    // Read until we see TurnBegin
     let mut saw_turn_begin = false;
     for line in reader.lines() {
         let line = line.unwrap();
-        if line.contains("turn_begin") {
+        if line.contains("TurnBegin") {
             saw_turn_begin = true;
             break;
         }
     }
     assert!(
         saw_turn_begin,
-        "Expected turn_begin event before entering stall"
+        "Expected TurnBegin event before entering stall"
     );
 
     // Give it a moment to enter the stall loop
@@ -203,18 +203,18 @@ fn test_wire_stall_mode_with_flag() {
     .unwrap();
     stdin.flush().unwrap();
 
-    // Read until we see turn_begin
+    // Read until we see TurnBegin
     let mut saw_turn_begin = false;
     for line in reader.lines() {
         let line = line.unwrap();
-        if line.contains("turn_begin") {
+        if line.contains("TurnBegin") {
             saw_turn_begin = true;
             break;
         }
     }
     assert!(
         saw_turn_begin,
-        "Expected turn_begin event before entering stall"
+        "Expected TurnBegin event before entering stall"
     );
 
     // Wait briefly
@@ -265,14 +265,14 @@ fn test_wire_crash_after_turn_begin_mode() {
     let mut saw_turn_begin = false;
     for line in reader.lines() {
         let line = line.unwrap();
-        if line.contains("turn_begin") {
+        if line.contains("TurnBegin") {
             saw_turn_begin = true;
             break;
         }
     }
     assert!(
         saw_turn_begin,
-        "Expected turn_begin event before crash in crash-after-turn-begin mode"
+        "Expected TurnBegin event before crash in crash-after-turn-begin mode"
     );
 
     let status = child.wait().expect("Failed to wait on child");
@@ -326,7 +326,7 @@ fn test_wire_slow_mode_emits_delayed_event() {
     let started = Instant::now();
     line.clear();
     reader.read_line(&mut line).unwrap();
-    assert!(line.contains("turn_begin"));
+    assert!(line.contains("TurnBegin"));
     assert!(started.elapsed() >= Duration::from_millis(800));
 
     child.kill().expect("Failed to kill child");
@@ -368,13 +368,17 @@ fn test_wire_malformed_mode_emits_invalid_json() {
 
 #[tokio::test]
 async fn test_wire_control_methods() {
-    use omk::wire::client::{ProcessWireClient, WireClient};
-    use omk::wire::protocol::InitializeParams;
+    use omk::wire::InitializeParams;
+    use omk::wire::{
+        ChildProcessTransport, ProcessWireClient, ReplayStatus, SteerStatus, WireClient,
+    };
 
     let bin = mock_kimi_path_string();
-    let mut client = ProcessWireClient::spawn(&bin, None, None, None)
-        .await
-        .unwrap();
+    let mut client = ProcessWireClient::new(
+        ChildProcessTransport::spawn(&bin, None, None, None)
+            .await
+            .unwrap(),
+    );
 
     let init = client
         .initialize(InitializeParams {
@@ -389,15 +393,15 @@ async fn test_wire_control_methods() {
     assert_eq!(init.protocol_version, "1.9");
 
     let replay = client.replay().await.unwrap();
-    assert_eq!(replay.status, "finished");
-    assert_eq!(replay.events.unwrap().len(), 0);
-    assert_eq!(replay.requests.unwrap().len(), 0);
+    assert_eq!(replay.status, ReplayStatus::Finished);
+    assert_eq!(replay.events, 0);
+    assert_eq!(replay.requests, 0);
 
     let steer = client.steer("keep it concise").await.unwrap();
-    assert_eq!(steer.status, "steered");
+    assert_eq!(steer.status, SteerStatus::Steered);
 
     let plan = client.set_plan_mode(true).await.unwrap();
-    assert_eq!(plan.plan_mode, Some(true));
+    assert!(plan.plan_mode);
 
     client.cancel().await.unwrap();
     client.shutdown().await.unwrap();

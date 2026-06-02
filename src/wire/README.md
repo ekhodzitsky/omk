@@ -2,89 +2,86 @@
 schema_version: 1
 module: wire
 level: root
-purpose: Kimi Wire Protocol client and JSON-RPC types
+purpose: 'Re-export and compatibility layer for the `kimi-wire` crate'
 status: stable
 surface:
   - name: WireClient
     kind: trait
     visibility: pub
-    contract: Contract for wire protocol clients. All high-level methods (prompt, replay, steer, cancel, set_plan_mode) have default impls built on low-level primitives.
+    contract: 'Re-exported from `kimi-wire::client::WireClient`. Protocol methods (prompt, replay, steer, cancel, set_plan_mode) have default impls.'
     proof:
       kind: unit-test
-      target: wire::client
-      command: cargo test --lib wire::client
+      target: kimi-wire::client
+      command: cargo test --lib -p kimi-wire
   - name: ProcessWireClient
-    kind: struct
+    kind: type alias
     visibility: pub
-    contract: Child-process implementation of WireClient. Spawns `kimi` binary and communicates over stdin/stdout.
+    contract: '`TransportWireClient<ChildProcessTransport>`. Production wire client that spawns `kimi --wire`.'
     proof:
-      kind: unit-test
-      target: wire::client
-      command: cargo test --lib wire::client
+      kind: integration-test
+      target: tests/mock_kimi_test.rs
+      command: cargo test --test mock_kimi_test
   - name: InMemoryWireClient
     kind: struct
-    visibility: pub(crate)
-    contract: In-memory mock for deterministic unit tests. No child process, no filesystem I/O.
+    visibility: pub
+    contract: 'Re-exported from `kimi-wire::client::InMemoryWireClient`. In-memory mock for deterministic unit tests.'
     proof:
       kind: unit-test
-      target: wire::client
-      command: cargo test --lib wire::client
+      target: kimi-wire::client
+      command: cargo test --lib -p kimi-wire
   - name: process_messages
     kind: fn
-    visibility: pub(crate)
-    contract: Generic message dispatch loop over impl WireClient. Not bound to any concrete client type.
+    visibility: pub
+    contract: 'Re-exported from `kimi-wire::dispatch::process_messages`. Generic dispatch loop over `impl WireClient`.'
     proof:
       kind: unit-test
-      target: wire::client::dispatch
-      command: cargo test --lib wire::client::dispatch
+      target: kimi-wire::dispatch
+      command: cargo test --lib -p kimi-wire
   - name: WireMessage
     kind: enum
     visibility: pub
-    contract: Union of all incoming wire messages (request, response, event, error).
+    contract: 'Re-exported from `kimi-wire::message::WireMessage`. Union of all incoming wire messages.'
     proof:
       kind: unit-test
-      target: wire::protocol
-      command: cargo test --lib wire::protocol
+      target: kimi-wire::message
+      command: cargo test --lib -p kimi-wire
   - name: WireResponse
     kind: struct
     visibility: pub
-    contract: Response envelope sent back to the agent over the wire.
+    contract: 'Re-exported from `kimi-wire::dispatch::WireResponse`. Response envelope sent back to the agent.'
     proof:
       kind: unit-test
-      target: wire::protocol
-      command: cargo test --lib wire::protocol
+      target: kimi-wire::dispatch
+      command: cargo test --lib -p kimi-wire
 dependencies:
   internal: []
-  external: []
+  external:
+    - name: kimi-wire
+      scope: external
+      reason: All wire protocol types, traits, and dispatch logic live in the external crate.
 consumers:
-  - path: runtime/wire_worker/task.rs
-    uses: [ProcessWireClient, process_messages]
+  - path: runtime/wire_worker/task/process.rs
+    uses: [ProcessWireClient, WireClientExt, WireMessage, RequestExt, EventExt]
   - path: runtime/scheduler/decompose.rs
-    uses: [ProcessWireClient, process_messages]
+    uses: [ProcessWireClient, WireClient, parse_wire_message, WireMessage, RequestExt]
 invariants:
+  - id: thin-layer
+    rule: This module contains no logic; it only re-exports and provides OMK-specific compatibility aliases.
+    proof:
+      kind: manual
+      target: src/wire/mod.rs
   - id: generic-dispatch
     rule: process_messages is generic over WireClient, not bound to concrete type.
     proof:
       kind: unit-test
-      target: wire::client::dispatch
-      command: cargo test --lib wire::client::dispatch
-  - id: default-impls
-    rule: All protocol methods have default impl in trait using low-level primitives.
-    proof:
-      kind: unit-test
-      target: wire::client
-      command: cargo test --lib wire::client
-  - id: mock-tests
-    rule: Unit tests use InMemoryWireClient; only spawn integration tests use ProcessWireClient.
-    proof:
-      kind: unit-test
-      target: wire::client
-      command: cargo test --lib wire::client
+      target: kimi-wire::dispatch
+      command: cargo test --lib -p kimi-wire
 verification:
   pre_change:
-    - cargo test --lib wire::client
+    - cargo check --lib
   full:
-    - cargo test --test wire_protocol_test
+    - cargo test --lib
+    - cargo test --test mock_kimi_test
     - cargo clippy --all-targets --all-features -- -D warnings
 ---
 
@@ -92,55 +89,55 @@ verification:
 
 ## Architecture
 
+`src/wire/` is a **thin re-export layer** over the external `kimi-wire` crate.
+All protocol types, the `WireClient` trait, the dispatch loop, and extension
+traits live in `kimi-wire`; OMK's module only preserves a few compatibility
+aliases (`ProcessWireClient`, `ApprovalResponseType`, `redact_wire_secrets`)
+so existing call sites keep compiling.
+
 ```
-┌──────────────────────┐
-│   process_messages   │  ← generic over WireClient
-│   <C: WireClient>    │
-└──────────┬───────────┘
-           │ trait WireClient
-      ┌────┴──────┐
-      ▼             ▼
-ProcessWire   InMemoryWire
-Client        Client
-(child proc)  (test mock)
+┌─────────────────────────────────────────┐
+│  OMK crates (runtime, cli, mcp, ...)   │
+│         use crate::wire::{...};         │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│      src/wire/mod.rs (re-exports)       │
+│  pub use kimi_wire::{WireClient, ...}; │
+└─────────────────┬───────────────────────┘
+                  │
+┌─────────────────▼───────────────────────┐
+│          kimi-wire crate                │
+│  client, protocol, dispatch, message,   │
+│  transport, redact, client_ext          │
+└─────────────────────────────────────────┘
 ```
 
 ## Files
 
 | File | Owns |
 | --- | --- |
-| `mod.rs` | Wire module exports. |
-| `protocol.rs` | JSON-RPC request/response/event types, protocol version helpers, parsing. |
-| `client/client_trait.rs` | `WireClient` trait + `InMemoryWireClient` (test mock). |
-| `client.rs` | `ProcessWireClient` — child-process implementation. |
-| `client/dispatch.rs` | Generic `process_messages` loop over `impl WireClient`. |
-| `client/io.rs` | `ProcessWireClient` I/O helper (`read_message_from_stdout`). |
-| `client/spawn.rs` | `ProcessWireClient::spawn` constructor. |
-| `client/process_impl.rs` | `impl WireClient for ProcessWireClient` (all trait methods). |
-| `client/tests.rs` | Unit tests. Shell scripts only for spawn smoke; everything else uses `InMemoryWireClient`. |
+| `mod.rs` | Re-exports from `kimi-wire` + OMK compatibility aliases. |
+| `README.md` | This file. |
+| `AGENTS.md` | Editing rules for this module. |
+| `TODO.md` | Known gaps / planned features. |
 
 ## Edit Rules
 
-- Check the official Kimi Wire docs before changing protocol fields, method names, or fallback behavior.
-- Record Kimi CLI version and negotiated Wire protocol version when the runtime observes them.
-- Prefer strongly typed protocol structs over ad hoc JSON strings.
-- Keep prompt-scraping as a fallback path, not the primary contract.
-- Preserve the legacy/no-handshake fallback for older upstream behavior.
-- Add fixtures when changing parse behavior.
-- Any new protocol method goes into the `WireClient` trait with a default impl.
+- **Do not add logic here.** Generic wire logic belongs in the `kimi-wire` crate.
+- OMK-specific wire behaviour (e.g. worker auto-approval policy) belongs in the
+  consumer module (`runtime/wire_worker/`), not in `src/wire/`.
+- Check the official Kimi Wire docs before changing protocol fields or fallback
+  behaviour in the upstream `kimi-wire` crate.
+- Preserve compatibility aliases until all call sites are migrated.
 
 ## Tests
 
 ```bash
-cargo test --lib wire::client
-cargo test --test wire_protocol_test
-bash -n scripts/kimi-wire-smoke.sh
+# Unit tests for the upstream crate
+cargo test --lib -p kimi-wire
+
+# Integration tests for OMK wire usage
+cargo test --test mock_kimi_test
+cargo test --test goal_cmd_test
 ```
-
-If a local authenticated `kimi` binary is available, also run:
-
-```bash
-scripts/kimi-wire-smoke.sh
-```
-
-The smoke script is intentionally outside `cargo test` because it depends on the user's Kimi installation and auth state.

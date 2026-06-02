@@ -5,7 +5,7 @@ use tracing::{debug, info, warn};
 
 use crate::runtime::gates::circuit_breaker::{global_registry, CircuitCheck};
 use crate::runtime::gates::types::{GateDef, GateResult, VerificationConfig, SKIPPED_GATE_COMMAND};
-use crate::wire::protocol::scrub_secret_patterns;
+use crate::wire::scrub_secret_patterns;
 
 /// Run all configured gates and return results.
 pub async fn run_gates(config: &VerificationConfig, dir: &Path) -> Vec<GateResult> {

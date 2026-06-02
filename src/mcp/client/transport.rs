@@ -1,5 +1,5 @@
 use super::transport_trait::McpTransport;
-use crate::wire::protocol::scrub_secret_patterns;
+use crate::wire::scrub_secret_patterns;
 use anyhow::{Context, Result};
 use std::future::Future;
 use std::pin::Pin;

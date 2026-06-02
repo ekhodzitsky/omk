@@ -65,12 +65,9 @@ dependencies:
     - module: runtime::worker
       scope: WorkerSpec, WorkerTask, WorkerResult, ResultStatus
       reason: The adapter consumes and produces the worker IPC types defined by the runtime.
-    - module: wire::client
-      scope: ProcessWireClient, WireClient, WireMessage
-      reason: Drives the kimi child process via the Wire client abstraction.
-    - module: wire::protocol
-      scope: redact_wire_secrets, Request, RequestParams, KIMI_WIRE_PROTOCOL_VERSION, InitializeParams, ClientInfo, Event
-      reason: Must speak the Kimi Wire Protocol and redact secrets before logging or event emission.
+    - module: wire
+      scope: ProcessWireClient, WireClient, WireClientExt, WireMessage, WireResponse, parse_wire_message, Request, RequestExt, Event, EventExt, redact_wire_secrets, KIMI_WIRE_PROTOCOL_VERSION, InitializeParams, ClientInfo, ContentPart, DisplayBlock, ToolReturnValue, ToolOutput, HookAction, HookRequest, WireHookSubscription, ExternalTool
+      reason: Drives the kimi child process via the Wire client abstraction and speaks the Kimi Wire Protocol.
   external:
     - name: tokio / tokio_util
       scope: async runtime, CancellationToken, async file I/O
@@ -134,8 +131,8 @@ invariants:
     rule: Wire request payloads and responses are passed through redact_wire_secrets before event emission.
     proof:
       kind: static-check
-      target: src/runtime/wire_worker/task.rs
-      command: grep -n "redact_wire_secrets" src/runtime/wire_worker/task.rs
+      target: src/runtime/wire_worker/task/process.rs
+      command: grep -n "redact_wire_secrets" src/runtime/wire_worker/task/process.rs
 verification:
   pre_change:
     - cargo test --lib runtime::wire_worker
