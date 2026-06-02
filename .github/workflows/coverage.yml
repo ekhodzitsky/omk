@@ -28,9 +28,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Clone kimi-wire dependency
-        run: git clone --depth=1 https://github.com/ekhodzitsky/kimi-wire.git ../kimi-wire
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
