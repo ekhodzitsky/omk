@@ -39,10 +39,9 @@ impl WireWorkerAdapter {
         let mut client = ProcessWireClient::new(
             ChildProcessTransport::spawn(kimi_bin, project_dir, None, None).await?,
         );
-        let external_tools: Option<Vec<crate::wire::ExternalTool>> = if let Some(bridge) =
-            &self.mcp_bridge
-        {
-            Some(
+        let external_tools: Option<Vec<crate::wire::ExternalTool>> =
+            if let Some(bridge) = &self.mcp_bridge {
+                Some(
                 bridge
                     .external_tools()
                     .await
@@ -56,9 +55,9 @@ impl WireWorkerAdapter {
                     })
                     .collect(),
             )
-        } else {
-            self.spec.external_tools.clone().map(|tools| {
-                tools
+            } else {
+                self.spec.external_tools.clone().map(|tools| {
+                    tools
                     .into_iter()
                     .filter_map(|t| match serde_json::from_value(t) {
                         Ok(v) => Some(v),
@@ -68,8 +67,8 @@ impl WireWorkerAdapter {
                         }
                     })
                     .collect()
-            })
-        };
+                })
+            };
         let hooks = discover_hook_subscriptions(project_dir).await;
         let init_params = crate::wire::InitializeParams {
             protocol_version: crate::wire::WIRE_PROTOCOL_VERSION.to_string(),
