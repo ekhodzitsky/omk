@@ -2,13 +2,13 @@
 schema_version: 1
 module: wire
 level: root
-purpose: Re-export and compatibility layer for the `kimi-wire` crate
+purpose: 'Re-export and compatibility layer for the `kimi-wire` crate'
 status: stable
 surface:
   - name: WireClient
     kind: trait
     visibility: pub
-    contract: Re-exported from `kimi-wire::client::WireClient`. Protocol methods (prompt, replay, steer, cancel, set_plan_mode) have default impls.
+    contract: 'Re-exported from `kimi-wire::client::WireClient`. Protocol methods (prompt, replay, steer, cancel, set_plan_mode) have default impls.'
     proof:
       kind: unit-test
       target: kimi-wire::client
@@ -16,7 +16,7 @@ surface:
   - name: ProcessWireClient
     kind: type alias
     visibility: pub
-    contract: `TransportWireClient<ChildProcessTransport>`. Production wire client that spawns `kimi --wire`.
+    contract: '`TransportWireClient<ChildProcessTransport>`. Production wire client that spawns `kimi --wire`.'
     proof:
       kind: integration-test
       target: tests/mock_kimi_test.rs
@@ -24,7 +24,7 @@ surface:
   - name: InMemoryWireClient
     kind: struct
     visibility: pub
-    contract: Re-exported from `kimi-wire::client::InMemoryWireClient`. In-memory mock for deterministic unit tests.
+    contract: 'Re-exported from `kimi-wire::client::InMemoryWireClient`. In-memory mock for deterministic unit tests.'
     proof:
       kind: unit-test
       target: kimi-wire::client
@@ -32,7 +32,7 @@ surface:
   - name: process_messages
     kind: fn
     visibility: pub
-    contract: Re-exported from `kimi-wire::dispatch::process_messages`. Generic dispatch loop over `impl WireClient`.
+    contract: 'Re-exported from `kimi-wire::dispatch::process_messages`. Generic dispatch loop over `impl WireClient`.'
     proof:
       kind: unit-test
       target: kimi-wire::dispatch
@@ -40,7 +40,7 @@ surface:
   - name: WireMessage
     kind: enum
     visibility: pub
-    contract: Re-exported from `kimi-wire::message::WireMessage`. Union of all incoming wire messages.
+    contract: 'Re-exported from `kimi-wire::message::WireMessage`. Union of all incoming wire messages.'
     proof:
       kind: unit-test
       target: kimi-wire::message
@@ -48,7 +48,7 @@ surface:
   - name: WireResponse
     kind: struct
     visibility: pub
-    contract: Re-exported from `kimi-wire::dispatch::WireResponse`. Response envelope sent back to the agent.
+    contract: 'Re-exported from `kimi-wire::dispatch::WireResponse`. Response envelope sent back to the agent.'
     proof:
       kind: unit-test
       target: kimi-wire::dispatch
@@ -56,8 +56,8 @@ surface:
 dependencies:
   internal: []
   external:
-    - crate: kimi-wire
-      path: ../kimi-wire
+    - name: kimi-wire
+      scope: external
       reason: All wire protocol types, traits, and dispatch logic live in the external crate.
 consumers:
   - path: runtime/wire_worker/task/process.rs
@@ -68,7 +68,7 @@ invariants:
   - id: thin-layer
     rule: This module contains no logic; it only re-exports and provides OMK-specific compatibility aliases.
     proof:
-      kind: inspection
+      kind: manual
       target: src/wire/mod.rs
   - id: generic-dispatch
     rule: process_messages is generic over WireClient, not bound to concrete type.
