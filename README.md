@@ -1,165 +1,117 @@
 <div align="center">
 
-<img src="assets/omk-kimi-hero.png" alt="OMK banner" width="920">
+<img src="assets/omk-kimi-hero.png" alt="oh-my-kimi banner" width="920">
 
-# OMK
+# oh-my-kimi (`omk`) — Archived
 
 **Local, proof-driven autonomous engineering runtime powered by Kimi.**
-*Beta MVP (0.5.x, pre-1.0).*
+*Archived as of June 2026. This repository is read-only.*
 
-[![CI](https://github.com/ekhodzitsky/omk/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/omk/actions/workflows/ci.yml)
-[![Coverage](https://github.com/ekhodzitsky/omk/actions/workflows/coverage.yml/badge.svg?branch=master)](https://github.com/ekhodzitsky/omk/actions/workflows/coverage.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/ekhodzitsky/omk?label=release&sort=semver)](https://github.com/ekhodzitsky/omk/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.78%2B-orange.svg)](https://www.rust-lang.org)
-
-[Install](#install) · [Quick Start](#quick-start) · [Docs](#docs)
 
 </div>
 
 ---
 
-## What is OMK?
+## ⚠️ Why Archived
 
-OMK is a terminal-native autonomous agent that turns one high-level goal into planned, verified, and delivered repository changes. It runs entirely locally, requires no cloud control plane, and produces a `proof.json` artifact for every outcome.
+OMK was built around the **Kimi Wire Protocol** — a programmatic JSON-RPC interface that allowed external orchestrators to spawn, control, and intercept Kimi agents. This protocol enabled OMK's core capabilities:
 
-- **Chat-first surface** — run `omk` to open a REPL. The classifier automatically escalates from quick answers through small edits to full goals. A visible engine pane shows what is happening under the hood.
-- **Headless when you need it** — `omk goal run "..." --until-ready` drives planning, execution, verification, and review without blocking your terminal.
-- **Proof-backed delivery** — every large goal decomposes into slices, passes a review wall, and lands as a PR with evidence. `ready`, `not_ready`, or `blocked` are the only terminal states.
+- **Approval Proxy** — intercept and policy-gate every tool call
+- **Lifecycle Hooks** — inject scripts at PreToolUse, Stop, and other checkpoints
+- **Replay** — re-run a goal timeline from persisted events
+- **Steer** — programmatically influence agent decisions
 
-## Install
+In mid-2026, MoonshotAI released **kimi-code** (v0.14.0), a TypeScript rewrite of the CLI that replaces the Wire Protocol with **ACP** (Agent Client Protocol). ACP is designed for IDE integration (editors like Zed and JetBrains driving a chat session), not for external orchestration.
 
-**Fastest for Rust developers:**
+**ACP does not provide:**
+- Interception of tool calls (they auto-execute or use internal TUI flows)
+- External hook injection
+- Replay or steer methods
+- Programmatic cancel of a running turn
 
-```bash
-cargo install omk
-```
+Without these primitives, OMK cannot function as designed. A hotfix using `kimi-legacy` (the old Python CLI, v1.43.0) is possible but is a dead end — that CLI is no longer maintained.
 
-**macOS (Homebrew):**
+The codebase remains a useful reference for several standalone components (see below).
 
-```bash
-brew install ekhodzitsky/oh-my-kimi/omk
-```
+---
 
-**Universal installer:**
+## What OMK Was
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/ekhodzitsky/omk/master/install.sh | bash
-```
+OMK was an attempt to build a **local, proof-driven autonomous engineering runtime** — turning a high-level goal like *"Add OAuth and rate-limiting to the API"* into planned, verified, and delivered repository changes, entirely locally, with no cloud control plane.
 
-**Build from source (Rust 1.78+):**
+Key differentiators that (at the time) no other tool offered:
 
-```bash
-git clone https://github.com/ekhodzitsky/omk.git && cd omk
-cargo build --release
-```
-
-Also available via [AUR](aur/).
-
-Supported platforms: macOS (arm64 / x86_64) and Linux x86_64. Windows is not supported yet.
-
-## Quick Start
-
-```bash
-omk setup                 # create config, state, and data directories
-omk doctor                # verify Kimi CLI and environment
-
-omk                       # open the chat REPL
-# type a request and watch the engine pane (Tab to expand)
-```
-
-Run a goal headless:
-
-```bash
-omk goal run "Add OAuth and rate-limiting to the API" --until-ready
-omk goal proof latest
-omk goal replay latest
-```
-
-## How it works
-
-**Single command surface.** `omk` with no arguments opens a chat REPL. There is no separate "agent mode" to learn. The same session handles quick questions, file edits, and large goals.
-
-**Autonomous escalation.** A classifier routes every request to the right backend: trivial answers, small edits, medium plans, or large goals. You see progress in the engine pane and can expand it with Tab. The default autonomous mode does not block on confirmation dialogs.
-
-**Proof-backed delivery.** Large goals become durable tasks with planning artifacts, verification gates, and bounded agent waves. The controller runs a review wall (architect, code, test, security, performance, anti-slop), records an honest `ready` or `not_ready` verdict, and writes `proof.json` as the artifact. Slices run in isolated git worktrees with conflict detection. Circuit breakers prevent infinite gate retry loops; agent pools enforce concurrency limits; stagnation recovery detects stuck loops before budget exhaustion.
-
-## What you can do
-
-| Command | What it does |
+| Capability | Description |
 |---|---|
-| `omk` | Open the unified chat REPL (default) |
-| `omk chat` | Open the unified chat REPL (alias `c`) |
-| `omk goal run "..."` | Create a goal scaffold; add `--until-ready` to drive to completion |
-| `omk goal plan "..."` | Create a plan scaffold without execution |
-| `omk goal list` | List recorded goals |
-| `omk goal status latest` | Compact status of the latest goal |
-| `omk goal show latest` | Full goal state (add `--json` for machine output) |
-| `omk goal proof latest` | Inspect the current proof artifact |
-| `omk goal replay latest` | Replay the persisted goal timeline |
-| `omk goal budget latest` | Show persisted budget checkpoints |
-| `omk goal budget-add latest` | Extend an existing goal's budget |
-| `omk goal verify latest` | Run local verification gates |
-| `omk goal review latest` | Attach controller review evidence |
-| `omk goal open-pr latest --dry-run --draft` | Render a PR draft from proof evidence |
-| `omk goal accept latest --summary "..."` | Accept a proof-backed goal locally |
-| `omk goal reject latest --reason "..."` | Reject a goal with a reason |
-| `omk goal pause / resume / cancel latest` | Lifecycle controls |
-| `omk goal merge latest` | Merge the GitHub PR for a ready goal |
-| `omk goal diagnose latest` | Detect stagnation patterns in goal execution |
-| `omk goal recover latest` | Propose a recovery plan for a stuck goal |
-| `omk goal rollback latest` | Roll back to the last recovery checkpoint |
-| `omk gates status` | Inspect circuit breaker state for all gates |
-| `omk gates reset --gate <name>` | Reset a tripped circuit breaker |
-| `omk pools status` | Show agent pool utilization and queue depth |
-| `omk pools cleanup` | Clear stale entries from agent pools |
-| `omk mcp list` | List configured MCP servers |
-| `omk mcp doctor` | Diagnose configured MCP servers |
-| `omk mcp call <server> <tool>` | Call an MCP tool |
-| `omk doctor` | Diagnose environment and dependencies |
-| `omk setup` | Install hooks, skills, and config |
-| `omk config show` | Show current config paths and values |
-| `omk config validate` | Validate config.toml and environment |
-| `omk config set` | Set a configuration value |
+| **Multi-agent team scheduler** | Run N workers in parallel with role packs, task claims, leases, and inbox/outbox IPC |
+| **Proof-driven delivery** | Every goal produced `proof.json` with gate results, readiness verdicts (`ready` / `not_ready` / `blocked`), and failure artifacts |
+| **Durable goal state** | Goals survived process crashes. Pause, resume, cancel, replay from SQLite + JSONL state |
+| **Git worktree isolation** | Parallel slice execution in isolated worktrees with conflict detection and auto-rebase |
+| **Six-review wall** | Architect, code, test, security, performance, and anti-slop reviews before any PR |
+| **Approval policy engine** | `Never` / `Safe` / `Yolo` / `Pattern` policies with timeouts and human-in-the-loop channels |
+| **Cost tracking & budgets** | Token, USD, and time budgets with enforcement and reporting |
+| **Verification gates** | Configurable gate runner (`cargo test`, `clippy`, `fmt`, security checks) with evidence capture |
 
-## Goal execution flags
+---
 
-`omk goal run` accepts flags that control budgets, agents, and delivery:
+## 🔧 Extractable Components
 
-| Flag | Description |
+The following components from the OMK codebase can be reused as standalone utilities or libraries. Each links to the relevant crate or module in this repository.
+
+| Component | Source | Description | Standalone Value |
+|-----------|--------|-------------|-----------------|
+| **Gate Runner** | [`crates/omk-gates/`](crates/omk-gates/), [`crates/omk-proof/`](crates/omk-proof/) | Configurable verification gate execution (`test`, `lint`, `fmt`, `security`) with structured `proof.json` output | Drop-in CI quality gate. Like `pre-commit` but with machine-readable artifacts |
+| **Task Graph** | [`crates/omk-scheduler/`](crates/omk-scheduler/), [`crates/omk-db/`](crates/omk-db/) | Task dependency graph with claims, leases, retries, ownership, and SQLite persistence | Lightweight embedded alternative to Temporal or Airflow |
+| **Event Log** | [`crates/omk-events/`](crates/omk-events/) | Append-only JSONL event envelopes with typed readers, writers, and sinks | Universal event-sourcing primitive for any Rust project |
+| **Budget Tracker** | [`crates/omk-cost/`](crates/omk-cost/), [`crates/omk-db/`](crates/omk-db/) | Token/USD/time cost estimation and budget enforcement with SQLite storage | Attach to any LLM API client (OpenAI, Anthropic, etc.) |
+| **Worktree Manager** | [`src/cli/team/worktree.rs`](src/cli/team/worktree.rs) (and related) | Git worktree creation, isolation, auto-rebase, and conflict detection | Parallel feature development without merge conflicts |
+| **Approval Policy Engine** | [`crates/omk-wire-worker/src/approval/`](crates/omk-wire-worker/src/approval/) | Pattern-matching approval policies with timeouts and human channels | Can be adapted as a pre-hook for any agentic tool |
+
+---
+
+## 📚 Reference Documentation
+
+The design and architecture documents remain valid references for building agent orchestration systems:
+
+- [`SPEC.md`](SPEC.md) — Product spec, delivery contract, and goal lifecycle
+- [`ROADMAP.md`](ROADMAP.md) — Staged roadmap (Stage 0–8) from foundation to long-horizon reliability
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — System design, module boundaries, and data flow
+- [`docs/COMPETITIVE_POSITIONING.md`](docs/COMPETITIVE_POSITIONING.md) — Market map vs Devin, OpenHands, Claude Code, Aider
+- [`AGENTS.md`](AGENTS.md) — Multi-agent workflow rules, Rust safety rules, async architecture, error handling doctrine
+- [`docs/API.md`](docs/API.md) — Machine-readable CLI output contracts
+- [`docs/TUTORIAL.md`](docs/TUTORIAL.md) — Step-by-step first run (historical reference)
+
+---
+
+## 🚀 Migration Paths
+
+If you were using OMK or considering it, here are practical alternatives:
+
+| Your Need | Alternative |
 |---|---|
-| `--until-ready` | Drive plan, verify, execute, and review until ready or blocked |
-| `--budget-time <DURATION>` | Wall-clock budget (for example `8h`, `7d`) |
-| `--budget-tokens <N>` | Maximum estimated tokens |
-| `--budget-usd <N>` | Maximum estimated USD cost |
-| `--max-agents <N>` | Maximum number of agents |
-| `--policy <POLICY>` | Delivery policy: `local`, `draft-pr`, `auto-pr` |
-| `--merge-policy <POLICY>` | Merge policy: `disabled`, `manual`, `gated` |
-| `--slice-execution` | Run agents in per-slice git worktrees |
-| `--enforce-protection` | Enforce branch protection on main/master before integrator PR |
-| `--no-llm-planner` | Disable the LLM planner; fall back to heuristic stub |
-| `--planner-token-budget <N>` | Token budget per planner call (default: 8000) |
+| Interactive AI coding in terminal | [**kimi-code**](https://github.com/MoonshotAI/kimi-code) — the official TypeScript CLI from MoonshotAI. Open source, MIT, ACP-based. |
+| Multi-agent orchestration | [**OpenHands**](https://github.com/All-Hands-AI/OpenHands) or [**Devin**](https://devin.ai/) |
+| Git worktree isolation | Use `git worktree` natively, or build on the reference logic in this repo |
+| CI verification gates | Extract `omk-gates` logic, or use [`cargo-husky`](https://github.com/rhysd/cargo-husky) + custom JSON output |
+| Cost tracking | Build on `omk-cost` crate, or use provider dashboards |
 
-## Positioning
+---
 
-OMK is inspired by `oh-my-claudecode` and market-informed by the broader agentic coding landscape, including Devin, OpenHands, Claude Code, Aider, Dify, and Cody. It competes on durable goal state, explicit verification gates, and proof artifacts — not on feature breadth. See [`docs/COMPETITIVE_POSITIONING.md`](docs/COMPETITIVE_POSITIONING.md) for the full market map.
+## 🤝 Contributing Ideas Upstream
 
-## Configuration
+**kimi-code** is open source (`github.com/MoonshotAI/kimi-code`, MIT, TypeScript). Several ideas explored in OMK may be valuable there:
 
-- Set `KIMI_API_KEY` in your environment.
-- Config directory: `~/.config/omk/` (or `$XDG_CONFIG_HOME/omk/`).
-- State directory: `~/.local/state/omk/` (or `$XDG_STATE_HOME/omk/`).
-- Manage settings with `omk config show`, `validate`, and `set`.
+- **Cost tracking & budgets** — token/USD visibility and enforcement per session
+- **Approval policy engine** — pattern-based approvals with timeouts (beyond the current `default`/`auto`/`yolo` modes)
+- **Structured proof artifacts** — a machine-readable completion report after each task
+- **Verification gates** — optional post-task test/lint gate runner
 
-## Roadmap & docs
+If you are interested in carrying any of these forward, the OMK codebase is a fully working reference implementation.
 
-- [`ROADMAP.md`](ROADMAP.md) — where we are headed
-- [`SPEC.md`](SPEC.md) — product spec and delivery contract
-- [`AGENTS.md`](AGENTS.md) — multi-agent workflow and contributing rules
-- [`docs/TUTORIAL.md`](docs/TUTORIAL.md) — step-by-step first run
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system design
-- [`docs/API.md`](docs/API.md) — machine-readable CLI outputs
+---
 
 ## License
 
-MIT © omk contributors
+MIT © oh-my-kimi contributors

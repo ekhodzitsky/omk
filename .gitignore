@@ -1,6 +1,15 @@
 /target
 *.log
 .omk/
+.omc/
+.omx/
+
+# Local dev artifacts
+.gortex/
+.vscode/
+.mcp.json
+.mcp.json.bak
+debug_*.sh
 
 # Local Beads/worktree state. Sync Beads through bd/Dolt, not feature PRs.
 /.beads/
